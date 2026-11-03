@@ -186,6 +186,36 @@ describe("KeymapStore", () => {
     expect(puts.at(-1)).toEqual({ version: KEYMAP_VERSION, bindings: [...store.overrides] });
   });
 
+  test("after a failed read, an update never overwrites the stored keymap", async () => {
+    const puts: unknown[] = [];
+    const store = new KeymapStore({
+      get: async () => {
+        throw new Error("IndexedDB read failed");
+      },
+      put: async (_key, value) => void puts.push(value),
+    });
+    await store.update((current) => new Map([...current, ["ctrl+alt+x", "tab.close"]]));
+    expect(puts).toEqual([]);
+    expect(store.error?.message).toBe("IndexedDB read failed");
+    expect(store.overrides.size).toBe(0);
+  });
+
+  test("a failed migration lets no later update apply on an empty snapshot", async () => {
+    const old = { version: 0, bindings: [["super+shift+n", "tab.new"]] };
+    const puts: unknown[] = [];
+    const store = new KeymapStore({
+      get: async () => old,
+      put: async (key, value) => {
+        if (key.startsWith("keymap.backup")) throw new Error("backup write failed");
+        puts.push(value);
+      },
+    });
+    await store.update((current) => new Map([...current, ["ctrl+alt+x", "tab.close"]]));
+    await store.update((current) => new Map([...current, ["ctrl+alt+y", "tab.new"]]));
+    expect(puts).toEqual([]);
+    expect(store.error?.message).toBe("backup write failed");
+  });
+
   test("a keymap from a newer build is left untouched", async () => {
     const storage = memoryStore();
     const newer = { version: KEYMAP_VERSION + 1, bindings: [["super+shift+n", "tab.new"]] };

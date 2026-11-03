@@ -33,18 +33,27 @@ function migrate(stored: Stored): Overrides {
 export class KeymapStore {
   #overrides: Overrides = NO_OVERRIDES;
   #queue: Promise<void>;
+  #error: Error | null = null;
   #listeners = new Set<() => void>();
   readonly #storage: KeyValueStore;
   readonly loaded: Promise<void>;
 
   constructor(storage: KeyValueStore) {
     this.#storage = storage;
-    this.loaded = this.#load();
+    this.loaded = this.#load().catch((cause: unknown) => {
+      this.#error = cause instanceof Error ? cause : new Error(String(cause));
+      for (const listener of this.#listeners) listener();
+    });
     this.#queue = this.loaded;
   }
 
   get overrides(): Overrides {
     return this.#overrides;
+  }
+
+  /** Set when the stored value could not be read; writes are refused so nothing stored is overwritten. */
+  get error(): Error | null {
+    return this.#error;
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -60,6 +69,7 @@ export class KeymapStore {
   }
 
   async #apply(change: (current: Overrides) => Overrides): Promise<void> {
+    if (this.#error !== null) return;
     const next = change(this.#overrides);
     for (const [trigger, action] of next) {
       const checked = checkBinding(trigger, action);
@@ -71,7 +81,7 @@ export class KeymapStore {
   }
 
   async #load(): Promise<void> {
-    const raw = await this.#storage.get(KEY).catch(() => undefined);
+    const raw = await this.#storage.get(KEY);
     if (!isStored(raw)) return;
     // A newer build's keymap is left as it is, so going back a version never rewrites it.
     if (raw.version > KEYMAP_VERSION) return;
@@ -95,4 +105,8 @@ export const keymapStore = new KeymapStore(typeof indexedDB === "undefined" ? me
 
 export function useOverrides(store: KeymapStore = keymapStore): Overrides {
   return useSyncExternalStore(store.subscribe, () => store.overrides);
+}
+
+export function useKeymapError(store: KeymapStore = keymapStore): Error | null {
+  return useSyncExternalStore(store.subscribe, () => store.error);
 }

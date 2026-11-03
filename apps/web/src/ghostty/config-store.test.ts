@@ -33,6 +33,34 @@ describe("TerminalConfigStore", () => {
     ]);
   });
 
+  test("after a failed read, an update never overwrites what is stored", async () => {
+    const puts: unknown[] = [];
+    const store = new TerminalConfigStore({
+      get: async () => {
+        throw new Error("IndexedDB read failed");
+      },
+      put: async (_key, value) => void puts.push(value),
+    });
+    await store.update((current) => new Map([...current, ["cursor-style", ["bar"]]]));
+    expect(puts).toEqual([]);
+    expect(store.error?.message).toBe("IndexedDB read failed");
+    expect(single(store.config, "cursor-style")).toBe("block");
+  });
+
+  test("a failed initial load lets no later update apply on an empty snapshot", async () => {
+    const puts: unknown[] = [];
+    const store = new TerminalConfigStore(
+      { get: async () => undefined, put: async (_key, value) => void puts.push(value) },
+      () => {
+        throw new Error("legacy settings unreadable");
+      },
+    );
+    await store.update((current) => new Map([...current, ["cursor-style", ["bar"]]]));
+    await store.update((current) => new Map([...current, ["font-size", ["20"]]]));
+    expect(puts).toEqual([]);
+    expect(store.error?.message).toBe("legacy settings unreadable");
+  });
+
   test("an old appearance font size moves into font-size once", async () => {
     const gated = gatedStore(undefined);
     const store = new TerminalConfigStore(gated.storage, () => 18);
