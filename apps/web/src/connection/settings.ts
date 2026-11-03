@@ -8,6 +8,8 @@ export interface ConnectionSettings {
   readonly directUrl: string;
   /** The paired host to reach over the relay or directly. */
   readonly hostId: string;
+  /** base64url of the paired host's Noise static key, which every IK handshake to it needs. */
+  readonly hostKey: string;
   /** Loopback dev: the host's plaintext /v1/hc WebSocket URL and its token. */
   readonly loopbackUrl: string;
   readonly token: string;
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: ConnectionSettings = {
   relayUrl: DEFAULT_RELAY_URL,
   directUrl: "",
   hostId: "",
+  hostKey: "",
   loopbackUrl: "ws://127.0.0.1:7766/v1/hc",
   token: "",
 };
@@ -46,6 +49,7 @@ export function loadSettings(storage: Storage = localStorage): ConnectionSetting
     relayUrl: text(get("relayUrl"), d.relayUrl),
     directUrl: text(get("directUrl"), d.directUrl),
     hostId: text(get("hostId"), d.hostId),
+    hostKey: text(get("hostKey"), d.hostKey),
     loopbackUrl: text(get("loopbackUrl"), d.loopbackUrl),
     token: text(get("token"), d.token),
   };
@@ -57,9 +61,7 @@ export function saveSettings(settings: ConnectionSettings, storage: Storage = lo
 
 /** Whether these settings name something to connect to. */
 export function isConfigured(settings: ConnectionSettings): boolean {
-  return settings.mode === "loopback" ? settings.token !== "" && settings.loopbackUrl !== "" : settings.hostId !== "";
-}
-
-export function relayClientUrl(settings: ConnectionSettings): string {
-  return `${settings.relayUrl.replace(/\/+$/, "")}/v1/client/${settings.hostId}`;
+  return settings.mode === "loopback"
+    ? settings.token !== "" && settings.loopbackUrl !== ""
+    : settings.hostId !== "" && settings.hostKey !== "";
 }
