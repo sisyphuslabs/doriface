@@ -21,7 +21,10 @@ const BODY: Readonly<Record<SettingsSection, () => ReactNode>> = {
   keyboard: () => <KeyboardSection />,
 };
 
-/** List-detail settings: section navigation beside one section's form, which scrolls on its own. */
+/**
+ * List-detail settings: section navigation beside the section's form. Every section stays mounted in its own
+ * scroller, so switching back keeps both its scroll position and its choices.
+ */
 export function SettingsScreen({ section: initial = "connection" }: { readonly section?: SettingsSection }) {
   const [section, setSection] = useState<SettingsSection>(initial);
   return (
@@ -69,11 +72,17 @@ export function SettingsScreen({ section: initial = "connection" }: { readonly s
           </Button>
         ))}
       </nav>
-      <ScrollArea slot="settings-body" className="flex-1">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 pt-6 pb-[max(1.5rem,var(--safe-bottom))] md:px-8">
-          {BODY[section]()}
-        </div>
-      </ScrollArea>
+      {SECTIONS.map((entry) => (
+        <ScrollArea
+          key={entry.id}
+          {...(entry.id === section ? { slot: "settings-body" } : {})}
+          className={cn("flex-1", entry.id !== section && "hidden")}
+        >
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 pt-6 pb-[max(1.5rem,var(--safe-bottom))] md:px-8">
+            {BODY[entry.id]()}
+          </div>
+        </ScrollArea>
+      ))}
     </div>
   );
 }
