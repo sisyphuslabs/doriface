@@ -132,11 +132,12 @@ function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>, log: (
 function e2eeDeps(stateDir: string, options: HostOptions) {
   const devices = new DeviceStore(stateDir);
   const pairing = new PairingStore(stateDir);
+  const identity = loadHostIdentity(stateDir);
   return {
-    identity: loadHostIdentity(stateDir),
+    identity,
     devices,
     pairing,
-    slots: new PairingSlots(pairing, options.pairingSlots, options.log),
+    slots: new PairingSlots(pairing, identity.noise.publicKey, options.pairingSlots, options.log),
     sessions: new LiveSessions(devices, options.log),
     rekeyInterval: options.rekeyInterval,
     log: options.log,

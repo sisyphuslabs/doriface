@@ -1,6 +1,6 @@
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { base64urlDecode, base64urlEncode, utf8 } from "./encoding.ts";
+import { base64urlDecode, base64urlEncode, concatBytes, utf8 } from "./encoding.ts";
 import { hostIdOf } from "./identity.ts";
 
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
@@ -87,6 +87,17 @@ export class PairingGuard {
     return true;
   }
 }
+
+/** PAIR_SLOT (uplink control frame 4) payload: the 3 ASCII slot characters, then the host's noiseStaticPub. */
+export function encodePairSlot(slot: string, noiseStaticPub: Uint8Array): Uint8Array {
+  const validSlot = slot.length === PAIRING_SLOT_LENGTH && [...slot].every((char) => PAIRING_ALPHABET.includes(char));
+  if (!validSlot || noiseStaticPub.byteLength !== 32)
+    throw new Error("PAIR_SLOT carries a 3-character slot and a 32-byte key");
+  return concatBytes(utf8(slot), noiseStaticPub);
+}
+
+/** An empty PAIR_SLOT payload clears the host's slot. */
+export const PAIR_SLOT_CLEAR = new Uint8Array(0);
 
 /** Message 1's payload for the pairing session: UTF-8 JSON `{"name": "<device name>"}`. */
 export const encodePairingHello = (name: string): Uint8Array => utf8(JSON.stringify({ name: deviceName(name) }));

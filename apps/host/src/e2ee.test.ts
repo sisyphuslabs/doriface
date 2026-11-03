@@ -38,7 +38,7 @@ function nextLog(pattern: RegExp): Promise<string> {
   return promise;
 }
 /** A relay stand-in: the first slot collides (409), later ones register. */
-const slots = { asked: [] as string[], released: [] as string[] };
+const slots = { asked: [] as string[], keys: [] as Uint8Array[], released: [] as string[] };
 const releaseWaiters = new Map<string, () => void>();
 /** Resolves when the host releases `slot`; subscribe before the action that should release it. */
 function released(slot: string): Promise<void> {
@@ -51,8 +51,9 @@ function released(slot: string): Promise<void> {
   return promise;
 }
 const registrar = {
-  register: (slot: string) => {
+  register: (slot: string, noiseStaticPub: Uint8Array) => {
     slots.asked.push(slot);
+    slots.keys.push(noiseStaticPub);
     return Promise.resolve(slots.asked.length === 1 ? ("collision" as const) : ("registered" as const));
   },
   release: (slot: string) => {
@@ -138,6 +139,7 @@ describe("/v1/e2ee against a real hc", () => {
   test("a relay slot collision draws a new code before pair prints it", () => {
     expect(slots.asked).toHaveLength(2);
     expect(slots.asked[1]).toBe(pairingSlotOf(pairing.code));
+    expect(slots.keys.every((key) => key.toHex() === pairing.noiseStaticPub.toHex())).toBe(true);
     expect(pairOutput).toContain(`\ncode        ${formatPairingCode(pairing.code)}\n`);
   });
 
