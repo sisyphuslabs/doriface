@@ -43,9 +43,9 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
     const health = await fetch(endpoint.url.replace(/^ws:/, "http:").replace(/\/v1\/hc$/, "/healthz"));
     expect(health.status).toBe(200);
     expect(await openSocket(endpoint.url, ["doriface.v1", `doriface.token.${endpoint.token}`])).toBe("doriface.v1");
-    expect(openSocket(endpoint.url, ["doriface.v1", "doriface.token.wrong-token-wrong-token-xx"])).rejects.toThrow(
-      "refused",
-    );
+    await expect(
+      openSocket(endpoint.url, ["doriface.v1", "doriface.token.wrong-token-wrong-token-xx"]),
+    ).rejects.toThrow("refused");
   });
 
   test("a stopped host starts again on a fresh token", async () => {
@@ -63,7 +63,7 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
       env: process.env,
       log: () => {},
     });
-    expect(broken.start()).rejects.toThrow(/exited before listening \(code 3\):\nboom/);
-    expect(broken.start()).rejects.toThrow("exited before listening");
+    await expect(broken.start()).rejects.toThrow(/exited before listening \(code 3\):\nboom/);
+    await expect(broken.start()).rejects.toThrow("exited before listening");
   });
 });
