@@ -1,7 +1,8 @@
 import { Button, EmptyState, Notice, Spinner } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { PlugZap } from "lucide-react";
-import { useConnection } from "../connection/store.ts";
+import { hostFailure } from "../connection/host-failure.ts";
+import { connectionStore, useConnection } from "../connection/store.ts";
 import { FirstRun } from "../pair/first-run.tsx";
 import { useOnline } from "../pwa/use-online.ts";
 import { lazy, Suspense } from "react";
@@ -48,10 +49,21 @@ export function WorkspaceRoute() {
             title="Cannot reach your host"
             description={
               state.retryInMs === null
-                ? state.error.message
-                : `${state.error.message}. Trying again in ${Math.round(state.retryInMs / 1000)} s.`
+                ? hostFailure(state.error)
+                : `${hostFailure(state.error)} Trying again in ${Math.round(state.retryInMs / 1000)} s.`
             }
-            actions={settings}
+            actions={
+              state.retryInMs === null ? (
+                settings
+              ) : (
+                <>
+                  <Button variant="primary" onClick={() => connectionStore.start()}>
+                    Try now
+                  </Button>
+                  {settings}
+                </>
+              )
+            }
           />
         ) : null}
       </div>
