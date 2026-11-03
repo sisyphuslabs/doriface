@@ -16,6 +16,7 @@ import {
 } from "./testing/fixtures.ts";
 
 const CHANNEL = 2;
+const PAINT_BYTES = new TextEncoder().encode(FIRST_PAINT).byteLength;
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const next = <T>(register: (resolve: (value: T) => void) => void): Promise<T> =>
   new Promise((resolve) => register(resolve));
@@ -50,7 +51,7 @@ describe("TerminalStream", () => {
     expect(paint[0]).toBe(0x18);
     expect(text(paint)).toBe(FIRST_PAINT);
     const credit = await core.waitFrame(isOnChannel(FrameKind.Credit));
-    expect(readCredit(credit.payload)).toBe(277);
+    expect(readCredit(credit.payload)).toBe(PAINT_BYTES);
   });
 
   test("sends input, resize, focus and facts frames as hc 0.1.17 expects them", async () => {
@@ -106,9 +107,15 @@ describe("TerminalStream", () => {
     stream.focus(false);
     await core.waitFrame(isOnChannel(FrameKind.Focus));
     expect(core.frames.some(isOnChannel(FrameKind.Credit))).toBe(false);
-    expect(() => stream.consumed(277 + OUTPUT_OK.length + 1)).toThrow(RangeError);
-    stream.consumed(277);
-    expect(readCredit((await core.waitFrame(isOnChannel(FrameKind.Credit))).payload)).toBe(277);
+    expect(() => stream.consumed(PAINT_BYTES + OUTPUT_OK.length + 1)).toThrow(RangeError);
+    stream.consumed(PAINT_BYTES);
+    expect(readCredit((await core.waitFrame(isOnChannel(FrameKind.Credit))).payload)).toBe(PAINT_BYTES);
+  });
+
+  test("lets an onData listener report consumption of the chunk it is rendering", async () => {
+    const { core, stream } = await attached({ autoCredit: false });
+    stream.onData((bytes) => stream.consumed(bytes.byteLength));
+    expect(readCredit((await core.waitFrame(isOnChannel(FrameKind.Credit))).payload)).toBe(PAINT_BYTES);
   });
 
   test("applies an observer RESIZE before the data that follows it", async () => {
@@ -123,7 +130,7 @@ describe("TerminalStream", () => {
     );
     core.push(concatBytes(frame(CHANNEL, FrameKind.Resize, new Uint8Array([90, 0, 20, 0])), frame(CHANNEL, 0, "x")));
     await output;
-    expect(seen).toEqual(["data 277", "resize 90x20", "data 1"]);
+    expect(seen).toEqual([`data ${PAINT_BYTES}`, "resize 90x20", "data 1"]);
     expect(stream.size).toEqual({ cols: 90, rows: 20 });
   });
 

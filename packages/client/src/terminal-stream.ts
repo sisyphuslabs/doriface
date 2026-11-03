@@ -169,8 +169,8 @@ export class TerminalStream implements ChannelHandler {
   #emit(item: Queued): void {
     switch (item.kind) {
       case "data":
-        this.#data.emit(item.bytes);
         this.#credit(item.bytes.byteLength);
+        this.#data.emit(item.bytes);
         return;
       case "resize":
         this.#size = item.size;
