@@ -138,9 +138,11 @@ describe("KeymapStore", () => {
   test("refuses an invalid write and keeps what it had", async () => {
     const store = new KeymapStore(memoryStore());
     await store.loaded;
+    const kept = new Map([["shift+super+n", "tab.new"]]);
+    await store.update(kept);
     await expect(store.update(new Map([["super", "tab.new"]]))).rejects.toThrow("not a key combination");
     await expect(store.update(new Map([["super+t", "nope"]]))).rejects.toThrow("not an action");
-    expect(store.overrides.size).toBe(0);
+    expect(store.overrides).toEqual(kept);
     expect(checkBinding("super+t", null).ok).toBe(true);
   });
 
