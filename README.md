@@ -37,7 +37,8 @@ The host never parses what `hc` says; it pipes the stream. The client SDK speaks
 
 ```sh
 doriface-host pair                                         # on machine B: prints a link and a code
-doriface-host connect '<link or code>' < /dev/null         # on machine A, once: pairs A as a device of B
+doriface-host connect '<link>' < /dev/null                 # on machine A, once: pairs A as a device of B
+#   or, with the typed code: doriface-host connect <code> --fingerprint '<first 4 groups B printed>' < /dev/null
 hc machine add --via 'doriface-host connect <B hostId>' --name b   # on A: B's terminals appear as b/t1, ...
 ```
 
