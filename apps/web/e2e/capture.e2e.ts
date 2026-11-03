@@ -66,6 +66,19 @@ const SHOTS: readonly Shot[] = [
         .click();
     },
   },
+  ...(["Terminal", "Keybindings"] as const).map((label): Shot => ({
+    name: `settings-${label.toLowerCase()}`,
+    connected: true,
+    run: async (page) => {
+      await page.goto("/settings");
+      await page
+        .getByRole("tab", { name: label })
+        .or(page.getByRole("button", { name: label }))
+        .first()
+        .click();
+      await expect(page.getByRole("heading", { name: label, level: 2 })).toBeVisible();
+    },
+  })),
 ];
 
 test.skip(process.env["CAPTURE"] !== "1", "captures run only with CAPTURE=1");

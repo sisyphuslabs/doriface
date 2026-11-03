@@ -12,7 +12,7 @@ test("rebinding New tab makes the new shortcut open a tab", async ({ page }) => 
   await page.keyboard.press("Control+Alt+N");
   await expect(page.getByText("Changed")).toBeVisible();
 
-  await page.goto("/");
+  await page.getByRole("link", { name: "Back to workspace" }).first().click();
   await expect(
     page
       .getByRole("button", { name: "New tab" })
