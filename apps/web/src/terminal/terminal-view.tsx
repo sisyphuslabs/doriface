@@ -13,6 +13,7 @@ import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
+import { type CoreAnswer, type Settled, settled } from "./terminal-settle.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
 /** Typed text, or the bytes a bound key sends. */
@@ -116,6 +117,12 @@ export function TerminalView(props: TerminalViewProps) {
   const reportUnsent = (why: "restarted" | "ended"): void => {
     toasts.add({ type: "warning", title: `Typed input was not sent because the program ${why}` });
   };
+  /** The core's answer about this terminal over `over`, as a CoreAnswer. */
+  const askCore = (over: HcConnection): Promise<CoreAnswer> =>
+    over.call("terminal.get", { terminal: address }).then(
+      (terminal) => ({ terminal }),
+      (cause: unknown) => ({ error: cause }),
+    );
   // Input still queued when this view goes away (its program restarted or ended while the line was down) was never
   // sent; say so once the core says which, unless the reattach below already did.
   useEffect(() => {
@@ -135,20 +142,21 @@ export function TerminalView(props: TerminalViewProps) {
     isFocused.current = focused;
   }, [focused]);
 
-  /** The core ended the stream, or refused a reattach, with the program not known to be over: ask it what is left. */
-  const settle = (ready: WTerm, failed: string | null): void => {
-    void connection.call("terminal.get", { terminal: address }).then(
-      (terminal) => {
-        // A program that ended while the connection was down sent no CLOSE: its tab closes as that CLOSE would have.
-        if (terminal.state !== "live")
-          return failed !== null && !attachedBefore.current ? setError(failed) : onEnd?.(address, "finished");
-        // Lost and waiting for its new shell; the restarted program's pid gives it a new view (see pid).
-        if (terminal.pid === null || terminal.pid === undefined) return setRestarting(true);
-        if (terminal.pid !== program.current) return undefined;
-        return failed === null ? attach(ready) : setError(failed);
-      },
-      () => (connection.closed ? undefined : onEnd?.(address, "finished")),
-    );
+  /** The core ended the stream, or refused an attach, with the program not known to be over: ask it what is left. */
+  const settle = (ready: WTerm, refusal: { readonly cause: unknown } | null): void => {
+    void askCore(connection).then((answer) => {
+      // The line dropped again: the next connection attaches anew.
+      if (connection.closed || unmounted.current) return undefined;
+      const then: Record<Settled, () => void> = {
+        finished: () => onEnd?.(address, "finished"),
+        restarting: () => setRestarting(true),
+        reattach: () => attach(ready),
+        replaced: () => undefined,
+        error: () =>
+          setError(`Could not open ${address}: ${String("error" in answer ? answer.error : refusal?.cause)}`),
+      };
+      return then[settled(answer, program.current, !attachedBefore.current, refusal !== null)]();
+    });
   };
 
   const attach = (ready: WTerm): void => {
@@ -203,7 +211,7 @@ export function TerminalView(props: TerminalViewProps) {
         (cause: unknown) => {
           // The connection dropped mid-attach: the next one attaches again (below).
           if (connection.closed || unmounted.current) return;
-          settle(ready, `Could not open ${address}: ${String(cause)}`);
+          settle(ready, { cause });
         },
       );
   };
