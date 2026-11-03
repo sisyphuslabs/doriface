@@ -1,5 +1,8 @@
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 
+// The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
+test.use({ serviceWorkers: "block" });
+
 test("a live terminal echoes what you type", async ({ page }, info) => {
   await page.goto("/");
   const terminal = await openNewTerminal(page);
