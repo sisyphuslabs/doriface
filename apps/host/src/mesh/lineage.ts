@@ -36,7 +36,7 @@ function admittersOf(records: readonly Signed[], view: View): ReadonlyMap<string
 export function subtreeOf(records: readonly Signed[], view: View, root: string): readonly string[] {
   const admitters = admittersOf(records, view);
   const tree = new Set([root]);
-  for (let grew = true; grew; ) {
+  for (let grew = true; grew;) {
     grew = false;
     for (const key of admittedKeys(view)) {
       if (tree.has(key) || ![...(admitters.get(key) ?? [])].some((by) => tree.has(by))) continue;
