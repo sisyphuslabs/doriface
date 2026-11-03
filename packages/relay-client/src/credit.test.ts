@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SendWindow } from "./send-window.ts";
-import {
-  CREDIT_QUERY,
-  decodeMux,
-  encodeCredit,
-  encodeCreditText,
-  MuxError,
-  MuxType,
-  parseCreditText,
-} from "./wire/index.ts";
+import { decodeMux, encodeCredit, encodeCreditText, MuxError, MuxType, parseCreditText } from "./wire/index.ts";
 
 describe("credit wire", () => {
   test("CREDIT is a u32 LE byte count for one session", () => {
@@ -22,7 +14,6 @@ describe("credit wire", () => {
     expect(parseCreditText("c:65536")).toBe(65_536);
     for (const bad of ["c:", "c:-1", "c:01", "a:5", "c:5 ", "c:99999999999"])
       expect(parseCreditText(bad)).toBeUndefined();
-    expect(CREDIT_QUERY).toEqual(["credit", "1"]);
   });
 });
 
