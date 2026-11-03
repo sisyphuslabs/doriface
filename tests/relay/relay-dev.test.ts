@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { defer, runDeferred } from "./support/cleanup.ts";
+import { liveAmong, liveDescendants } from "./support/processes.ts";
 import { BindRace, type LocalRelayOptions, startLocalRelay } from "./support/relay-dev.ts";
 
 /** Linux's default ephemeral range starts here; macOS's starts higher. */
@@ -60,5 +61,13 @@ describe("startLocalRelay", () => {
     expect(picker.picks()).toBe(3);
     expect(failure).toBeInstanceOf(BindRace);
     expect(failure instanceof BindRace ? failure.port : undefined).toBe(ports[2]);
+  }, 120_000);
+
+  test("stop() returns only once every process wrangler dev started has exited", async () => {
+    const relay = await startLocalRelay();
+    const started = await liveDescendants(process.pid);
+    expect(started.length).toBeGreaterThanOrEqual(3);
+    await relay.stop();
+    expect(await liveAmong(started)).toEqual([]);
   }, 120_000);
 });
