@@ -1,10 +1,5 @@
-import { CloseCode, MAX_UNACKED_BYTES, parseAck, SESSION_WINDOW_BYTES } from "@doriface/relay-client/wire";
-import { MAX_ACTIVE_SESSIONS, MAX_PENDING_SESSIONS } from "./admission.ts";
+import { CloseCode, MAX_UNACKED_BYTES, parseAck } from "@doriface/relay-client/wire";
 import { type Attachment, attach, attachmentOf } from "./attachment.ts";
-
-/** Every session to a credit uplink keeps at most a window in flight, so the uplink may hold all of them at once. */
-export const CREDIT_HOST_UNACKED =
-  MAX_UNACKED_BYTES + (MAX_ACTIVE_SESSIONS + MAX_PENDING_SESSIONS) * SESSION_WINDOW_BYTES;
 import { closeIfOpen, isOpen } from "./sockets.ts";
 
 function sendCounted(ws: WebSocket, attachment: Attachment, bytes: Uint8Array<ArrayBuffer>): void {
@@ -20,8 +15,7 @@ function sendCounted(ws: WebSocket, attachment: Attachment, bytes: Uint8Array<Ar
 export function forward(ws: WebSocket, bytes: Uint8Array<ArrayBuffer>): boolean {
   const attachment = attachmentOf(ws);
   if (attachment === undefined) return false;
-  const cap = attachment.role === "host" && attachment.credit === true ? CREDIT_HOST_UNACKED : MAX_UNACKED_BYTES;
-  if (attachment.sent + bytes.byteLength - attachment.acked > cap) return false;
+  if (attachment.sent + bytes.byteLength - attachment.acked > MAX_UNACKED_BYTES) return false;
   sendCounted(ws, attachment, bytes);
   return true;
 }
