@@ -79,7 +79,7 @@ async function serve(args: readonly string[]): Promise<void> {
   log(`doriface-host ${HOST_VERSION} listening on ${host.url} (hc ${host.hcVersion}${session})`);
   const e2ee = host.e2ee;
   if (e2ee !== undefined) {
-    const lan = e2ee.lanUrl === undefined ? "" : ` and ${e2ee.lanUrl}`;
+    const lan = e2ee.lanUrls.length === 0 ? "" : ` and ${e2ee.lanUrls.join(", ")}`;
     log(`end-to-end encrypted at ${e2ee.url}${lan}; host ${e2ee.hostId}, fingerprint ${e2ee.fingerprint}`);
   }
   if (values["print-token"]) process.stdout.write(`${token}\n`);
