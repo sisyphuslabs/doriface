@@ -44,7 +44,8 @@ export function AgentRow({
 }: AgentRowProps) {
   const quiet = agent.status === "idle" && !selected;
   const row = useRef<HTMLButtonElement | null>(null);
-  useRowFloors(row, [agent.name, agent.detail, agent.machine].join("\u0000"));
+  // The age is in the key too: a wider age (59m after <1m) leaves less room for the parts.
+  useRowFloors(row, [agent.name, agent.detail, agent.machine, agent.age].join("\u0000"));
   return (
     <button
       {...props}

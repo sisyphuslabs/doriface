@@ -65,8 +65,17 @@ test("a space named like one on another machine is selected, and opened, on its 
   await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
 });
 
+/** Every row of the Idle and Spaces lists ends inside its content box, so every age ends at one edge. */
+async function expectRowsInside(page: Page): Promise<void> {
+  const idleRows = await rowEdges(page.getByRole("region", { name: "Idle" }).getByRole("button"));
+  const spaceRows = await rowEdges(page.getByRole("region", { name: "Spaces" }).getByRole("button"));
+  for (const row of [...idleRows, ...spaceRows]) expect(row.overflow).toBeLessThanOrEqual(0.5);
+  const ages = idleRows.map((row) => row.age ?? Number.NaN);
+  expect(Math.max(...ages) - Math.min(...ages), "every age ends at the same edge").toBeLessThanOrEqual(0.5);
+}
+
 /**
- * Every row of the Idle and Spaces lists stays inside its list, and every cut text keeps a share before its ellipsis:
+ * Every row stays inside its list (see expectRowsInside), and every cut text keeps a share before its ellipsis:
  * the name five characters; when the row cannot hold five of each, the machine gives way to three first, then the
  * detail, then the name. `nameFive` says the list is wide enough for every name to keep five; `fiveEach` holds rows
  * whose texts and machine always fit five each.
@@ -76,14 +85,10 @@ async function expectRowsKeepFloors(
   nameFive: boolean,
   fiveEach: (narrow: boolean) => boolean,
 ): Promise<void> {
+  await expectRowsInside(page);
   const idle = page.getByRole("region", { name: "Idle" });
   const spaces = page.getByRole("region", { name: "Spaces" });
   const remote = idle.getByRole("button").filter({ hasText: "OmO - Verify bun" });
-  const idleRows = await rowEdges(idle.getByRole("button"));
-  const spaceRows = await rowEdges(spaces.getByRole("button"));
-  for (const row of [...idleRows, ...spaceRows]) expect(row.overflow).toBeLessThanOrEqual(0.5);
-  const ages = idleRows.map((row) => row.age ?? Number.NaN);
-  expect(Math.max(...ages) - Math.min(...ages), "every age ends at the same edge").toBeLessThanOrEqual(0.5);
 
   const rows = [
     { row: remote, name: "OmO - Verify bun benchmarks on the box", detail: SHARED_SPACE, narrow: true },
@@ -170,15 +175,47 @@ for (const { name, use } of VIEWPORTS) {
       const machines = page.getByRole("region", { name: "Machines" });
       await expect(machines.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
 
-      // Narrower than where the floors were fitted, still wide enough for three of each: without a refit the parts keep
-      // widths the row no longer holds and run past its edge.
+      // Narrower than where the floors were fitted: without a refit the parts keep widths the row no longer holds and run
+      // past its edge.
       if (phoneList) await page.setViewportSize({ width: 320, height: 640 });
       else await page.evaluate(() => document.documentElement.style.setProperty("--sidebar-width", "15.5rem"));
       await settle(page);
-      await expectRowsKeepFloors(page, phoneList, () => phoneList);
+      await expectRowsInside(page);
     });
   });
 }
+
+test.describe("with an age wider than its 28 px column, as Linux fonts draw <1m", () => {
+  test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+
+  test("every age still ends at one edge, down to a list too narrow for three characters of each part", async ({
+    page,
+  }) => {
+    // Wider glyphs from the first render, so the rows are fitted around the wide ages as they are on Linux.
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const style = document.createElement("style");
+        style.textContent = "aside time { letter-spacing: 3px; }";
+        document.head.append(style);
+      });
+    });
+    await page.goto("/");
+    const idle = page.getByRole("region", { name: "Idle" });
+    await expect(idle.getByRole("button").filter({ hasText: "OmO - Verify bun" })).toBeVisible({ timeout: 20_000 });
+    const widest = await idle.locator("time").evaluateAll((ages) => Math.max(...ages.map((age) => age.scrollWidth)));
+    expect(widest, "the case is exercised: an age is wider than 28 px").toBeGreaterThan(28);
+    await expectRowsInside(page);
+    // Each width in turn: a list too narrow for three characters of each part shrinks them instead of spilling.
+    const narrowTo = async (width: string): Promise<void> => {
+      await page.evaluate((value) => document.documentElement.style.setProperty("--sidebar-width", value), width);
+      await settle(page);
+      await expectRowsInside(page);
+    };
+    await narrowTo("15.5rem");
+    await narrowTo("14rem");
+    await narrowTo("12rem");
+  });
+});
 
 test("a hidden sidebar comes back from a named button at the window's left edge, by click, keyboard or shortcut", async ({
   page,
