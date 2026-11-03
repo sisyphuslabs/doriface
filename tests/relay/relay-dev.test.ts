@@ -66,8 +66,12 @@ describe("startLocalRelay", () => {
 
   test("stop() returns only once every process wrangler dev started has exited", async () => {
     const relay = await startLocalRelay();
+    defer(() => relay.stop());
     const started = await liveDescendants(process.pid);
     expect(started.length).toBeGreaterThanOrEqual(3);
+    // Every process below the launcher is stopped, and a stopped process ignores SIGTERM until it is continued: only a
+    // stop that reaches the whole group and escalates to SIGKILL ends them, whatever wrangler's own shutdown does.
+    for (const pid of started.slice(1)) process.kill(pid, "SIGSTOP");
     await relay.stop();
     expect(await liveAmong(started)).toEqual([]);
   }, 120_000);
