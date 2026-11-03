@@ -52,4 +52,6 @@ test("the fetch suite leaves the repository that runs it alone, even with git's 
   const failed = report.split("\n").filter((line) => line.startsWith("(fail)"));
   expect({ code, failed }).toEqual({ code: 0, failed: [] });
   expect(await state()).toBe(before);
-}, 180_000);
+  // No budget of its own: the child bun test bounds each of its tests and hooks, so it ends within the sum of those
+  // budgets, and a fixed total below that sum failed on loaded hosts while every row was still within its own budget.
+}, 0);
