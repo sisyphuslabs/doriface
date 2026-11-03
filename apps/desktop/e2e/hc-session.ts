@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -16,6 +16,13 @@ export function scratchHcSession(): { readonly env: Record<string, string>; disp
     XDG_RUNTIME_DIR: join(dir, "run"),
     HC_SOCKET: join(dir, "c.sock"),
   };
+  // A neutral core name, so the status bar does not show this machine's name in screenshots.
+  const coreDir = join(env.XDG_STATE_HOME, "herdr-core", name);
+  mkdirSync(coreDir, { recursive: true });
+  writeFileSync(
+    join(coreDir, "core.json"),
+    JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: "studio" }),
+  );
   const dispose = async (): Promise<void> => {
     const control = spawn(hc, ["connect", "--session", name], { env: { ...process.env, ...env } });
     const exited = new Promise<void>((resolve) => control.once("exit", () => resolve()));
