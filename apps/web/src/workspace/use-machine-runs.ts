@@ -1,7 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import type { TerminalRunParams } from "@doriface/protocol";
 import { useCallback, useMemo, useState } from "react";
-import { type RunFailure, type Started, startOn, startTerminal } from "./start-on.ts";
+import { type RunFailure, type Started, startTerminal } from "./start-on.ts";
 
 export interface MachineRuns {
   readonly newTerminalOn: (machine: string) => void;
@@ -29,15 +29,6 @@ export function useMachineRuns(
     },
     [opened, refresh],
   );
-  const newTerminalOn = useCallback(
-    (machine: string): void => {
-      setFailure(undefined);
-      startOn((params) => connection.call("terminal.run", params), machine).then(settle, (error: unknown) =>
-        setFailure({ machine, kind: "connection", message: String(error) }),
-      );
-    },
-    [connection, settle],
-  );
   const start = useCallback(
     (params: TerminalRunParams): void => {
       setFailure(undefined);
@@ -47,6 +38,7 @@ export function useMachineRuns(
     },
     [connection, settle],
   );
+  const newTerminalOn = useCallback((machine: string): void => start({ on: machine }), [start]);
   const dismissFailure = useCallback(() => setFailure(undefined), []);
   return useMemo(
     () => ({ newTerminalOn, start, failure, dismissFailure }),

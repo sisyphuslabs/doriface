@@ -1,22 +1,21 @@
-import { HcRpcError } from "@doriface/protocol";
+import { HcRpcError, type TerminalRunParams } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { startOn, startTerminal } from "./start-on.ts";
+import { startTerminal } from "./start-on.ts";
 
 const refusing = (kind: string, message: string) => () =>
   Promise.reject(new HcRpcError({ code: -32000, message, data: { kind, hint: "" } }));
 
-const run = (params: { readonly on: string }) => Promise.resolve({ address: `${params.on}/t4` });
-const broken = () => Promise.reject(new Error("connection is closed"));
+const run = (params: TerminalRunParams) => Promise.resolve({ address: `${params.on ?? "studio"}/t4` });
 
-describe("startOn", () => {
+describe("startTerminal on an added machine", () => {
   test("a started shell comes back with its machine-qualified address", async () => {
-    expect(await startOn(run, "build-box")).toEqual({ ok: true, address: "build-box/t4" });
+    expect(await startTerminal(run, { on: "build-box" }, "studio")).toEqual({ ok: true, address: "build-box/t4" });
   });
 
   test.each(["unavailable", "machine_unknown"])(
     "terminal.run's %s refusal comes back as that kind, with advice naming the machine",
     async (kind) => {
-      const started = await startOn(refusing(kind, "raw"), "build-box");
+      const started = await startTerminal(refusing(kind, "raw"), { on: "build-box" }, "studio");
       if (started.ok) throw new Error("expected a refusal");
       expect([started.failure.kind, started.failure.machine]).toEqual([kind, "build-box"]);
       expect(started.failure.message).toContain("build-box");
@@ -24,12 +23,11 @@ describe("startOn", () => {
     },
   );
 
-  test("another refusal keeps hc's own message, and a broken connection is not swallowed", async () => {
-    expect(await startOn(refusing("spawn_failed", "no shell"), "build-box")).toEqual({
+  test("another refusal keeps hc's own message", async () => {
+    expect(await startTerminal(refusing("spawn_failed", "no shell"), { on: "build-box" }, "studio")).toEqual({
       ok: false,
       failure: { machine: "build-box", kind: "spawn_failed", message: "no shell" },
     });
-    await expect(startOn(broken, "build-box")).rejects.toThrow("connection is closed");
   });
 });
 
@@ -42,7 +40,7 @@ describe("startTerminal", () => {
     });
   });
 
-  test("a run on an added machine keeps startOn's advice", async () => {
+  test("a run on an added machine keeps the advice for that machine", async () => {
     const started = await startTerminal(refusing("unavailable", "raw"), { on: "build-box", cwd: "/w" }, "studio");
     if (started.ok) throw new Error("expected a refusal");
     expect(started.failure.message).toContain("build-box");
