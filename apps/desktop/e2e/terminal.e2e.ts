@@ -14,6 +14,9 @@ interface Scratch {
 let scratch: Scratch | undefined;
 let launched: ElectronApplication | undefined;
 
+// The column test types into the terminal the first test opens.
+test.describe.configure({ mode: "serial" });
+
 test.beforeAll(async () => {
   const hc = scratchHcSession();
   // A scratch profile, so the app always starts on first run with nothing saved.
@@ -84,4 +87,28 @@ test("Use this computer attaches a live terminal that echoes", async () => {
   const screenshot = test.info().outputPath("terminal.png");
   await page.screenshot({ path: screenshot });
   console.log(`screenshot ${screenshot}`);
+});
+
+test("wide cells and styled runs keep their columns under the app's CSP", async () => {
+  if (launched === undefined) throw new Error("the app did not launch");
+  const page = await launched.firstWindow();
+  const terminal = page.locator('[data-focused="true"] [data-terminal]');
+  await terminal.getByRole("textbox").focus();
+  // Two-column cells (U+AC00 and U+65E5, typed as UTF-8 octal) between runs split by SGR: each run takes its
+  // width from its own span style, which the app's CSP must not drop.
+  await page.keyboard.type("printf 'ab\\352\\260\\200\\033[1mcd\\033[0m\\346\\227\\245ef\\033[36mgh\\033[0m\\n'");
+  await page.keyboard.press("Enter");
+  const row = terminal.locator(".term-row").filter({ hasText: /^ab\u{AC00}cd\u{65E5}efgh/u });
+  await expect(row).toHaveCount(1, { timeout: 15_000 });
+  const columns = await row.evaluate((element) => {
+    const cell = Number.parseFloat(getComputedStyle(element).getPropertyValue("--term-cell-width"));
+    const left = element.getBoundingClientRect().left;
+    return Object.fromEntries(
+      Array.from(element.children, (span) => [
+        span.textContent?.trim() ?? "",
+        Math.round((span.getBoundingClientRect().left - left) / cell),
+      ]).filter(([text]) => text !== ""),
+    );
+  });
+  expect(columns).toEqual({ ab: 0, "\u{AC00}": 2, cd: 4, "\u{65E5}": 6, ef: 8, gh: 10 });
 });
