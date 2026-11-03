@@ -132,7 +132,14 @@ export function TerminalView(props: TerminalViewProps) {
       },
       (cause: unknown) => {
         // The connection dropped mid-attach: the next one attaches again (below).
-        if (!connection.closed) setError(`Could not open ${address}: ${String(cause)}`);
+        if (connection.closed) return;
+        const message = `Could not open ${address}: ${String(cause)}`;
+        if (!attachedBefore.current) return setError(message);
+        // A program that ended while the connection was down sent no CLOSE; its tab closes as that CLOSE would have.
+        void connection.call("terminal.get", { terminal: address }).then(
+          (terminal) => (terminal.state === "live" ? setError(message) : onClosed?.(address)),
+          () => (connection.closed ? undefined : onClosed?.(address)),
+        );
       },
     );
   };

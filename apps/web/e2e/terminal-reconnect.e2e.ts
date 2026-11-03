@@ -1,4 +1,5 @@
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { writeFileSync } from "node:fs";
+import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -45,4 +46,41 @@ test("a connection blip keeps the terminal on screen and runs what was typed mea
   expect(text.match(/typed-42/g)).toHaveLength(1);
   // The reattach replays history into the same view; it must replace what was shown, not append a second copy.
   expect((await lines()) - linesBefore).toBeLessThan(20);
+});
+
+test("a terminal whose program ends while the connection is down closes its tab once it is back", async ({
+  page,
+  context,
+}) => {
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  const terminal = await openNewTerminal(page);
+  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+  const tabsBefore = await tabs.count();
+  // The program ends only once the test creates this file, so it ends while the page is offline.
+  const go = test.info().outputPath("go");
+  await terminal.getByRole("textbox").focus();
+  await page.keyboard.type(`echo armed-$((3*3)); until [ -e '${go}' ]; do sleep 0.1; done; exit`);
+  await page.keyboard.press("Enter");
+  await expect(terminal).toContainText("armed-9", { timeout: 15_000 });
+
+  await socket.drop(true);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
+  // A second page on its own connection sees the program end before this one is back.
+  const watcher = await context.newPage();
+  await watcher.goto("/");
+  const live = await terminalCount(watcher);
+  writeFileSync(go, "");
+  await expect(watcher.getByRole("contentinfo").getByText(new RegExp(`^${live.before - 1} terminals?\\b`))).toBeVisible(
+    {
+      timeout: 15_000,
+    },
+  );
+
+  const opened = socket.opened();
+  socket.restore();
+  await expect.poll(socket.opened, { timeout: 15_000 }).toBeGreaterThan(opened);
+  await expect(tabs).toHaveCount(tabsBefore - 1, { timeout: 15_000 });
+  await expect(page.getByText(/has finished/)).toHaveCount(0);
 });
