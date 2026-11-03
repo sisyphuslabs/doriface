@@ -2,7 +2,6 @@ import {
   CloseCode,
   connectRelayClient,
   MAX_SESSION_SEND_BYTES,
-  RELAY_MESSAGE_CAP,
   type SessionLink,
   type WebSocketLink,
 } from "@doriface/relay-client";
@@ -49,7 +48,8 @@ describe("client sessions through the relay", () => {
       expect(await atHost.take()).toEqual(up);
       expect(await atClient.take()).toEqual(down);
     });
-    const capped = crypto.getRandomValues(new Uint8Array(RELAY_MESSAGE_CAP));
+    // The largest client message is the largest host payload, so every uplink frame stays within the 1 MiB cap.
+    const capped = new Uint8Array(MAX_SESSION_SEND_BYTES).fill(7);
     client.send(capped);
     expect(await atHost.take()).toEqual(capped);
     const burst = Array.from({ length: 200 }, (_, i) => crypto.getRandomValues(new Uint8Array(1 + i)));
@@ -119,14 +119,14 @@ describe("client sessions through the relay", () => {
     host.uplink.stop();
   });
 
-  test("a message over 1 MiB is rejected with 1009", async () => {
+  test("a client message whose uplink frame would exceed 1 MiB is rejected with 1009", async () => {
     const ip = testIp();
     const host = await startTestHost(relay.url, ip);
     const probe = new Probe(clientUrl(host.uplink.hostId), ip);
     await probe.opened();
     const session = await host.sessions.take();
     const sessionClosed = closedWith(session);
-    probe.socket.send(new Uint8Array(RELAY_MESSAGE_CAP + 1));
+    probe.socket.send(new Uint8Array(MAX_SESSION_SEND_BYTES + 1));
     expect((await probe.closed).code).toBe(CloseCode.MessageTooBig);
     expect(await sessionClosed).toBe(CloseCode.MessageTooBig);
     host.uplink.stop();

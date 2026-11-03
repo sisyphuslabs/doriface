@@ -8,7 +8,7 @@ import {
   RelayCloseError,
   type Unsubscribe,
 } from "./link.ts";
-import { RELAY_MESSAGE_CAP } from "./limits.ts";
+import { MAX_SESSION_SEND_BYTES } from "./limits.ts";
 import { closeSocket, isOpen } from "./socket.ts";
 import { CloseCode, PING_INTERVAL_MS, PONG } from "./wire/index.ts";
 
@@ -47,8 +47,8 @@ export class WebSocketLink implements ByteLink {
 
   send(bytes: Uint8Array): void {
     if (this.#closed.fired || !isOpen(this.#ws)) throw new LinkClosedError("relay socket is closed");
-    if (bytes.byteLength > RELAY_MESSAGE_CAP) {
-      throw new RangeError(`${bytes.byteLength} bytes exceed the relay's ${RELAY_MESSAGE_CAP}-byte message cap`);
+    if (bytes.byteLength > MAX_SESSION_SEND_BYTES) {
+      throw new RangeError(`${bytes.byteLength} bytes exceed the relay's ${MAX_SESSION_SEND_BYTES}-byte session cap`);
     }
     this.#ws.send(bytes);
   }

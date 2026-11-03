@@ -6,10 +6,12 @@ import {
   encodeData,
   encodeOpen,
   HOST_ID_PATTERN,
+  MAX_SESSION_SEND_BYTES,
   MuxError,
   MuxType,
   PING,
   PONG,
+  RELAY_MESSAGE_CAP,
   relayOriginOf,
   sendableCloseCode,
 } from "@doriface/relay-client/wire";
@@ -25,7 +27,7 @@ import {
 } from "./attachment.ts";
 import { verifyAuthAnswer } from "./auth.ts";
 import { applyAck, forward, sendControl } from "./flow.ts";
-import { AUTH_TIMEOUT_MS, MAX_MESSAGE_BYTES } from "./limits.ts";
+import { AUTH_TIMEOUT_MS } from "./limits.ts";
 import type { PairSlotsEnv } from "./pair-slot.ts";
 import { handlePairSlot } from "./pairing.ts";
 import { alarmBy, overdue, type TimeoutVars, timeoutsOf } from "./reaper.ts";
@@ -84,7 +86,9 @@ export class Room extends DurableObject<RoomEnv> {
       if (!applyAck(ws, message)) ws.close(CloseCode.UnsupportedData, "binary messages, pings and acks only");
       return;
     }
-    if (message.byteLength > MAX_MESSAGE_BYTES) return ws.close(CloseCode.MessageTooBig, "message too big");
+    // A client's message becomes an uplink frame with a 5-byte header, which must fit the same 1 MiB cap.
+    const cap = attachment.role === "client" ? MAX_SESSION_SEND_BYTES : RELAY_MESSAGE_CAP;
+    if (message.byteLength > cap) return ws.close(CloseCode.MessageTooBig, "message too big");
     const bytes = new Uint8Array(message);
     if (attachment.role === "client") return this.#fromClient(ws, attachment, bytes);
     if (attachment.state === "online") return this.#fromHost(ws, attachment, bytes);
