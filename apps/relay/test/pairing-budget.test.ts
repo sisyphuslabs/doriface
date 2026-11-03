@@ -1,7 +1,6 @@
 import {
   CloseCode,
   connectRelayClient,
-  CROCKFORD_ALPHABET,
   decodePairSlotAck,
   lookupPairSlot,
   MuxType,
@@ -17,6 +16,7 @@ import { socketFrom, testIp } from "./support/probe.ts";
 import { startRawHost } from "./support/raw-host.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { inOrder, times } from "./support/sequential.ts";
+import { uniqueSlot } from "./support/slots.ts";
 import { startTestHost, type TestHost } from "./support/test-host.ts";
 
 let relay: LocalRelay;
@@ -29,12 +29,9 @@ afterAll(() => relay.stop());
 
 afterEach(runDeferred);
 
-const randomSlot = (): string =>
-  [...crypto.getRandomValues(new Uint8Array(3))].map((byte) => CROCKFORD_ALPHABET[byte % 32]).join("");
-
 async function pairingHost(): Promise<{ readonly host: TestHost; readonly slot: string }> {
   const host = await startTestHost(relay.url, testIp());
-  const slot = randomSlot();
+  const slot = uniqueSlot();
   expect(await host.uplink.registerPairSlot(slot, crypto.getRandomValues(new Uint8Array(32)))).toBe("registered");
   return { host, slot };
 }
@@ -142,7 +139,7 @@ describe("pairing budget and quotas", () => {
 
   test("a pairing session to a host that does not hold the slot is closed with 4410", async () => {
     const { host } = await pairingHost();
-    expect(await closedWith(await dialPairing(host, randomSlot(), testIp()))).toBe(CloseCode.PairSlotUnknown);
+    expect(await closedWith(await dialPairing(host, uniqueSlot(), testIp()))).toBe(CloseCode.PairSlotUnknown);
   });
 
   test("a PAIR_SLOT with a readable slot but a bad payload is acked as malformed", async () => {
