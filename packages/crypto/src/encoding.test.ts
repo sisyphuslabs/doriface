@@ -16,7 +16,7 @@ describe("base32 (RFC 4648 section 10, lowercase, no padding)", () => {
     expect(base32Decode(encoded.toUpperCase())).toEqual(utf8(plain));
   });
 
-  test.each(["mzxw6ytboi=", "m1", "mz", "a"])("rejects %p", (bad) => {
+  test.each(["mzxw6ytboi=", "m1", "mz", "a", "mzxw6ytbo\u212a"])("rejects %p", (bad) => {
     expect(() => base32Decode(bad)).toThrow();
   });
 });

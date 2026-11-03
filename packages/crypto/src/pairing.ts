@@ -26,6 +26,7 @@ export function generatePairingCode(): string {
  * I and L to 1). Throws unless 8 alphabet characters remain.
  */
 export function normalizePairingCode(input: string): string {
+  if (input.length > 4 * PAIRING_CODE_LENGTH) throw new Error("a pairing code is 8 characters");
   const code = input.toUpperCase().replaceAll(/[\s-]/g, "").replaceAll("O", "0").replaceAll(/[IL]/g, "1");
   if (code.length !== PAIRING_CODE_LENGTH || [...code].some((char) => !PAIRING_ALPHABET.includes(char))) {
     throw new Error(`a pairing code is ${PAIRING_CODE_LENGTH} characters of ${PAIRING_ALPHABET}`);
@@ -57,12 +58,12 @@ export const createPairingOffer = (now = Date.now()): PairingOffer => ({
   expiresAt: now + PAIRING_TTL_MS,
 });
 
-export type PairingGuardState = "open" | "claimed" | "used" | "burned";
+export type PairingGuardState = "open" | "used" | "burned" | "expired";
 
 /**
- * One offer's single-use lifecycle on the host. A handshake claims it, so a concurrent second attempt is refused,
- * then either uses it up on success or counts a failure and reopens it; the third failure burns it. An expired offer
- * never yields a psk.
+ * One offer's single-use lifecycle on the host. Claiming only reads the psk, so an unauthenticated message 1 cannot
+ * lock a real attempt out; the first confirmed handshake uses the code up, and the third failed one burns it. Expiry is
+ * latched, so a clock that later goes back cannot revive the code.
  */
 export class PairingGuard {
   readonly offer: PairingOffer;
@@ -84,20 +85,22 @@ export class PairingGuard {
   }
 
   claim(now = Date.now()): Uint8Array | undefined {
-    if (this.#state !== "open" || now >= this.offer.expiresAt) return undefined;
-    this.#state = "claimed";
-    return pairingPsk(this.offer.code);
+    if (this.#state === "open" && now >= this.offer.expiresAt) this.#state = "expired";
+    return this.#state === "open" ? pairingPsk(this.offer.code) : undefined;
   }
 
-  /** The claimed handshake failed: reopen the code, or burn it on the third failure. */
+  /** A handshake with this code failed; the third failure burns it. */
   fail(): void {
-    if (this.#state !== "claimed") return;
+    if (this.#state !== "open") return;
     this.#failures++;
-    this.#state = this.#failures >= MAX_PAIRING_FAILURES ? "burned" : "open";
+    if (this.#failures >= MAX_PAIRING_FAILURES) this.#state = "burned";
   }
 
-  use(): void {
+  /** A handshake with this code completed; true only for the first, which uses the code up. */
+  use(): boolean {
+    if (this.#state !== "open") return false;
     this.#state = "used";
+    return true;
   }
 }
 
@@ -117,10 +120,15 @@ export function decodePairingHello(payload: Uint8Array): string {
   return deviceName(parsed.name);
 }
 
+/** Control, format and bidi characters could rewrite a terminal or a UI line that shows the name. */
+const UNSAFE_NAME_CHARACTER = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
 function deviceName(name: string): string {
   const trimmed = name.trim();
-  if (trimmed === "" || trimmed.length > MAX_DEVICE_NAME)
+  if (trimmed === "" || trimmed.length > MAX_DEVICE_NAME) {
     throw new Error(`a device name is 1-${MAX_DEVICE_NAME} characters`);
+  }
+  if (UNSAFE_NAME_CHARACTER.test(trimmed)) throw new Error("a device name cannot contain control characters");
   return trimmed;
 }
 
@@ -142,7 +150,11 @@ export function buildPairingUrl(link: PairingLink): string {
     c: link.code,
     r: link.relayUrl,
   });
-  return `${new URL(link.webOrigin).origin}/pair#${fragment.toString()}`;
+  const webOrigin = new URL(link.webOrigin);
+  if (webOrigin.protocol !== "https:" && webOrigin.protocol !== "http:") {
+    throw new Error("the web origin must be an HTTP(S) URL");
+  }
+  return `${webOrigin.origin}/pair#${fragment.toString()}`;
 }
 
 /** Parses and checks a pairing URL: key lengths, the code's shape, and that `h` is the hostId of `s`. */
@@ -154,8 +166,13 @@ export function parsePairingUrl(url: string): PairingLink {
     if (value === null || value === "") throw new Error(`the pairing URL lacks ${key}=`);
     return value;
   };
-  const noiseStaticPub = base64urlDecode(get("k"));
-  const signPub = base64urlDecode(get("s"));
+  const key = (name: string): Uint8Array => {
+    const encoded = get(name);
+    if (encoded.length !== 43) throw new Error("the pairing URL has a bad key");
+    return base64urlDecode(encoded);
+  };
+  const noiseStaticPub = key("k");
+  const signPub = key("s");
   if (noiseStaticPub.byteLength !== 32 || signPub.byteLength !== 32) throw new Error("the pairing URL has a bad key");
   const hostId = get("h");
   if (hostIdOf(signPub) !== hostId) throw new Error("the pairing URL's hostId does not match its signing key");

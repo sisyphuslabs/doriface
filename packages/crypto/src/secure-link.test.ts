@@ -21,10 +21,11 @@ interface Setup {
   readonly name?: string;
   /** Rewrites the client's first message (message 1) in flight. */
   readonly tamperHello?: (bytes: Uint8Array) => Uint8Array;
+  readonly synchronous?: boolean;
 }
 
 function connect(setup: Setup = {}) {
-  const [clientEnd, hostEnd] = memoryLinkPair();
+  const [clientEnd, hostEnd] = memoryLinkPair(setup.synchronous);
   const tamperHello = setup.tamperHello;
   if (tamperHello !== undefined) tamperNext(clientEnd, (bytes) => [tamperHello(bytes)]);
   const responder = secureLink(hostEnd, {
@@ -108,6 +109,24 @@ describe("secureLink", () => {
     expect(concatBytes(...atServer)).toEqual(big);
   });
 
+  test("completes over a link that delivers inside send() and keeps the first records", async () => {
+    const { client, server } = await established({ synchronous: true });
+    const atServer = collect(server);
+    client.send(Uint8Array.of(7));
+    expect(atServer).toEqual([Uint8Array.of(7)]);
+  });
+
+  test("a late onClose subscription can still be cancelled", async () => {
+    const { client } = await established();
+    client.close();
+    let called = false;
+    client.onClose(() => {
+      called = true;
+    })();
+    await flush();
+    expect(called).toBe(false);
+  });
+
   test("data that arrives before the first onData listener is held for it", async () => {
     const { client, server } = await established();
     client.send(Uint8Array.of(1, 2, 3));
@@ -149,6 +168,16 @@ describe("secureLink failures", () => {
     client.send(Uint8Array.of(9, 9, 9, 9, 9, 9));
     expect(await closed).toBeInstanceOf(SecureLinkError);
     expect(hostEnd.closeCode).toBe(CloseCode.CryptoFailure);
+  });
+
+  test("a tampered record over a synchronously closing link still reports 4400 to onClose", async () => {
+    const { client, server, clientEnd } = await established({ synchronous: true });
+    const reasons: (Error | undefined)[] = [];
+    server.onClose((error) => reasons.push(error));
+    tamperNext(clientEnd, (bytes) => [bytes.map((byte, i) => (i === 0 ? byte ^ 1 : byte))]);
+    client.send(Uint8Array.of(1));
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatchObject({ code: CloseCode.CryptoFailure });
   });
 
   test("a replayed record closes the link with 4400", async () => {

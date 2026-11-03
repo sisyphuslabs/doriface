@@ -48,6 +48,7 @@ export class Handshake {
   #step = 0;
 
   constructor(options: HandshakeOptions) {
+    if (options.psk !== undefined) assertPsk(options.psk);
     this.#options = options;
     this.#psk = options.psk;
     this.#symmetric = new SymmetricState(PROTOCOL_NAMES[options.pattern]);
@@ -67,7 +68,7 @@ export class Handshake {
   }
 
   setPsk(psk: Uint8Array): void {
-    if (psk.byteLength !== KEY_LENGTH) throw new Error("a psk is 32 bytes");
+    assertPsk(psk);
     this.#psk = psk;
   }
 
@@ -156,6 +157,10 @@ export class Handshake {
     if (value === undefined) throw new Error(`handshake is missing the ${what}`);
     return value;
   }
+}
+
+function assertPsk(psk: Uint8Array): void {
+  if (psk.byteLength !== KEY_LENGTH) throw new Error("a psk is 32 bytes");
 }
 
 /** X25519; noble rejects low-order points (an all-zero shared secret), which aborts the handshake. */
