@@ -54,7 +54,7 @@ So msg1 carries nothing secret, and the typed-code UI requires the fingerprint c
 
 - Default public relay: `https://relay-doriface.omo.dev`. Self-hosting is one `wrangler deploy`.
 - `GET /healthz` -> `{ok:true, version}`.
-- Host uplink: `GET /v1/host/<hostId>` (WebSocket). The relay sends a 32-byte random challenge as the first binary message. The host answers with `signPub(32) || Ed25519-signature(64)` over `"doriface-relay-v1" || relayOrigin || hostId || challenge`, where `relayOrigin` is the exact `wss://host[:port]` the host dialed. The relay rebuilds `relayOrigin` from its own request URL and checks the signature and that `hostId` matches signPub; otherwise it closes with 4403. Binding the origin stops a second relay from replaying a challenge from this one. One uplink per hostId; a newer authenticated uplink replaces the old one.
+- Host uplink: `GET /v1/host/<hostId>` (WebSocket). The relay sends a 32-byte random challenge as the first binary message. The host answers with `signPub(32) || Ed25519-signature(64)` over `"doriface-relay-v1" || relayOrigin || hostId || challenge`, where `relayOrigin` is the exact `wss://host[:port]` the host dialed. The relay rebuilds `relayOrigin` from its own request URL and checks the signature and that `hostId` matches signPub; otherwise it closes with 4403. Binding the origin stops a second relay from replaying a challenge from this one. One uplink per hostId; a newer authenticated uplink replaces the old one, which the relay closes with 4409.
 - Client: `GET /v1/client/<hostId>` (WebSocket). There is no relay-level auth (E2EE authenticates). An offline host closes the socket with 4404. A pairing session adds `?pair=<slot>`: the relay charges it to that slot's pairing budget, refuses it with 4410 when the slot is not registered to this hostId, and sends the host an OPEN whose payload is the 3 slot characters (an ordinary OPEN has no payload).
 - Session admission: a client session counts against the 32-session cap only after the host has sent its first DATA on it. Before that it is pending: at most 8 pending sessions per host, with 10 s to the host's first DATA (else close 4408). When the pending cap is full, the relay evicts the pending socket from the source IP that holds the most pending sockets. Connections are also rate limited per IP (4429).
 - One Durable Object per hostId (`idFromName(hostId)`), using the WebSocket Hibernation API. Socket attachments carry `{role, sessionId}`.
@@ -97,10 +97,12 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 - 4404: host offline
 - 4410: pairing slot not registered to this host (expired or never opened)
 - 4408: idle or backpressure timeout
+- 4409: uplink replaced by a newer authenticated uplink for this hostId; the replaced host must not reconnect
 - 4429: rate limited
 
 ## Change log
 
+- v1.2.1: close code 4409 (uplink replaced), which the relay already sends when a newer uplink authenticates for the same hostId.
 - v1.2: pending-session admission; the `a:<n>` backpressure acknowledgement; the relay origin in the uplink signature; non-extractable device keys with a raw fallback; `ping`/`pong` keepalive; the pairing budget moved to the relay, with codes burned only on success or expiry (replacing "burn after 3 failed handshakes"); PAIR_SLOT carrying the Noise static key, acknowledged by PAIR_SLOT_ACK; pairing sessions marked with `?pair=<slot>`; monotonic acknowledgements, rejected with 4402 when out of range; per-source quotas on pairing lookups and sessions, with the slot's session budget charged only after the host answers; close codes 4402 and 4410; direct-path keepalive; pinned prologue, payload and nonce rules. Resume without a repaint is deferred.
 - v1.1: the 8-character typed code with a relay pairing slot; the SHA-256 hex fingerprint; the `doriface-host pair` and `doriface-host fingerprint` command names.
 - v1: initial contract.
