@@ -7,5 +7,5 @@
     "resolveJsonModule": true
   },
   "include": ["src", "scripts", "package.json"],
-  "references": [{ "path": "../../packages/protocol" }]
+  "references": [{ "path": "../../packages/protocol" }, { "path": "../../packages/crypto" }]
 }
