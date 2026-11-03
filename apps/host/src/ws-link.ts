@@ -21,6 +21,8 @@ export class WsLink<T> implements Link {
   readonly #closeHandlers: (() => void)[] = [];
   readonly #idleMs: number | undefined;
   #idle: ReturnType<typeof setTimeout> | undefined;
+  /** While the host itself holds reads back, the peer's pings go unread, so the idle deadline waits too. */
+  #readsPaused = false;
   #drain: PromiseWithResolvers<void> | undefined;
   #closed = false;
 
@@ -29,9 +31,15 @@ export class WsLink<T> implements Link {
     this.#idleMs = options.keepaliveIdleMs;
     this.#touch();
     this.#inbox = new ByteQueue({
-      onBacklog: () => ws.pause(),
+      onBacklog: () => {
+        ws.pause();
+        this.#readsPaused = true;
+        clearTimeout(this.#idle);
+      },
       onDrained: () => {
         if (ws.isPaused) ws.resume();
+        this.#readsPaused = false;
+        this.#touch();
       },
       onError: () => this.close(1011, "internal error"),
     });
@@ -87,7 +95,7 @@ export class WsLink<T> implements Link {
 
   /** Restarts the idle deadline: anything received keeps the socket alive. */
   #touch(): void {
-    if (this.#idleMs === undefined || this.#closed) return;
+    if (this.#idleMs === undefined || this.#closed || this.#readsPaused) return;
     clearTimeout(this.#idle);
     this.#idle = setTimeout(() => this.close(IDLE_CLOSE, "idle"), this.#idleMs);
   }
