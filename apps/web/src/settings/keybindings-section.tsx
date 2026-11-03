@@ -1,7 +1,7 @@
-import { Badge, Button, Dialog, Input } from "@doriface/ui";
+import { Badge, Button, Dialog, Input, Notice } from "@doriface/ui";
 import { useMemo, useState } from "react";
 import { ACTIONS, actionFor, type ActionDef, type Scope } from "../keys/actions.ts";
-import { keymapStore, useOverrides } from "../keys/keymap-store.ts";
+import { keymapStore, useKeymapError, useOverrides } from "../keys/keymap-store.ts";
 import {
   importKeybinds,
   isChanged,
@@ -79,6 +79,7 @@ function matches(action: ActionDef, query: string): boolean {
 export function KeybindingsSection() {
   const platform = currentPlatform();
   const overrides = useOverrides();
+  const storageError = useKeymapError();
   const keymap = useMemo(() => resolveKeymap(platform, overrides), [platform, overrides]);
   const [query, setQuery] = useState("");
   const [parsed, setParsed] = useState<ParsedKeybinds | null>(null);
@@ -97,6 +98,11 @@ export function KeybindingsSection() {
   };
   return (
     <div className="flex flex-col gap-5">
+      {storageError === null ? null : (
+        <Notice tone="error" title="Keybindings could not be read from this browser's storage">
+          Changes are not saved, so the stored keybindings stay as they are. {storageError.message}
+        </Notice>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Search keybindings"

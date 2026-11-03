@@ -1,8 +1,8 @@
-import { Badge, Button, IconButton, Input, SettingRow, TerminalPreview, type TerminalLine } from "@doriface/ui";
+import { Badge, Button, IconButton, Input, Notice, SettingRow, TerminalPreview, type TerminalLine } from "@doriface/ui";
 import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { EMPTY_CONFIG, effective, isDefault, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
-import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
+import { terminalConfigStore, useTerminalConfig, useTerminalConfigError } from "../ghostty/config-store.ts";
 import { KEYS } from "../ghostty/keys.ts";
 import { GROUP_LABEL, type Group, type KeyDef } from "../ghostty/schema.ts";
 import { KeyControl } from "./terminal-control.tsx";
@@ -93,10 +93,16 @@ function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: Termin
 /** Every Ghostty key the renderer knows, grouped, searchable, with a live preview above. */
 export function TerminalSection() {
   const config = useTerminalConfig();
+  const storageError = useTerminalConfigError();
   const [query, setQuery] = useState("");
   const shown = KEYS.filter((def) => matches(def, query));
   return (
     <div className="flex flex-col gap-5">
+      {storageError === null ? null : (
+        <Notice tone="error" title="Terminal settings could not be read from this browser's storage">
+          Changes are not saved, so the stored terminal settings stay as they are. {storageError.message}
+        </Notice>
+      )}
       <div className="wterm overflow-hidden rounded-lg border border-border" data-terminal-preview>
         <TerminalPreview
           label="Preview of the terminal with these settings"

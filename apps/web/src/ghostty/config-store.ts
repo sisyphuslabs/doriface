@@ -51,18 +51,27 @@ const pxToPt = (px: number): string => String(Math.round(px * 1.5) / 2);
 export class TerminalConfigStore {
   #config: TerminalConfig = EMPTY_CONFIG;
   #queue: Promise<void>;
+  #error: Error | null = null;
   #listeners = new Set<() => void>();
   readonly #storage: KeyValueStore;
   readonly loaded: Promise<void>;
 
   constructor(storage: KeyValueStore, legacyFontSize: () => number | null = () => null) {
     this.#storage = storage;
-    this.loaded = this.#load(legacyFontSize);
+    this.loaded = this.#load(legacyFontSize).catch((cause: unknown) => {
+      this.#error = cause instanceof Error ? cause : new Error(String(cause));
+      for (const listener of this.#listeners) listener();
+    });
     this.#queue = this.loaded;
   }
 
   get config(): TerminalConfig {
     return this.#config;
+  }
+
+  /** Set when the stored value could not be read; writes are refused so nothing stored is overwritten. */
+  get error(): Error | null {
+    return this.#error;
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -77,19 +86,20 @@ export class TerminalConfigStore {
   }
 
   async #apply(change: (current: TerminalConfig) => TerminalConfig): Promise<void> {
+    if (this.#error !== null) return;
     const next = change(this.#config);
     this.#set(next);
     await this.#storage.put(KEY, [...next]);
   }
 
   async #load(legacyFontSize: () => number | null): Promise<void> {
-    const stored = await this.#storage.get(KEY).catch(() => undefined);
+    const stored = await this.#storage.get(KEY);
     if (stored !== undefined) return this.#set(revive(stored));
     const px = legacyFontSize();
     if (px === null) return;
     const migrated: TerminalConfig = new Map([["font-size", [pxToPt(px)]]]);
     this.#set(migrated);
-    await this.#storage.put(KEY, [...migrated]).catch(() => undefined);
+    await this.#storage.put(KEY, [...migrated]);
   }
 
   #set(config: TerminalConfig): void {
@@ -105,4 +115,8 @@ export const terminalConfigStore =
 
 export function useTerminalConfig(store: TerminalConfigStore = terminalConfigStore): TerminalConfig {
   return useSyncExternalStore(store.subscribe, () => store.config);
+}
+
+export function useTerminalConfigError(store: TerminalConfigStore = terminalConfigStore): Error | null {
+  return useSyncExternalStore(store.subscribe, () => store.error);
 }
