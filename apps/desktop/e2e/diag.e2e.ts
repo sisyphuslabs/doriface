@@ -36,7 +36,20 @@ test("diag screenshot", async () => {
     Object.entries({ ...process.env, ...hc.env }).filter((e): e is [string, string] => e[1] !== undefined),
   );
   const t0 = Date.now();
-  const app = await electron.launch({ executablePath: wrapper, args: [`--user-data-dir=${profile}`], env });
+  const traceFile = test.info().outputPath("startup-trace.json");
+  const cold = test.info().repeatEachIndex === 0;
+  const traceArgs = cold
+    ? [
+        "--trace-startup=gpu,viz,cc,toplevel,ui,views,renderer,renderer_host,blink,loading,navigation,electron,benchmark,startup,disabled-by-default-devtools.timeline,disabled-by-default-gpu.service",
+        `--trace-startup-file=${traceFile}`,
+        "--trace-startup-duration=12",
+      ]
+    : [];
+  const app = await electron.launch({
+    executablePath: wrapper,
+    args: [`--user-data-dir=${profile}`, ...traceArgs],
+    env,
+  });
   try {
     const launchedMs = Date.now() - t0;
     // record when the window becomes visible, from now on
@@ -57,6 +70,15 @@ test("diag screenshot", async () => {
     const page = await app.firstWindow();
     const s0 = await state(app);
     console.log(
+      `DIAG-PROC ${JSON.stringify(await app.evaluate(({ app: a }) => ({ now: Date.now(), procs: a.getAppMetrics().map((p) => [p.type, p.pid, p.creationTime]) })))}`,
+    );
+    await app.evaluate(({ app: a }) => {
+      const log: unknown[] = [];
+      Reflect.set(globalThis, "__diagProc", log);
+      a.on("child-process-gone", (_e, d) => log.push(["gone", Date.now(), d.type, d.reason, d.exitCode]));
+      a.on("gpu-info-update", () => log.push(["gpu-info", Date.now()]));
+    });
+    console.log(
       `DIAG-GPU ${JSON.stringify(await app.evaluate(({ app: electronApp }) => electronApp.getGPUFeatureStatus()))}`,
     );
     if (MODE === "early") {
@@ -72,7 +94,18 @@ test("diag screenshot", async () => {
     if (MODE !== "noreload") await page.reload();
     await page.waitForSelector("#root > *");
     const s1 = await state(app);
-    const doc = await page.evaluate(() => ({ vis: document.visibilityState, focus: document.hasFocus() }));
+    const doc = await page.evaluate(() => ({
+      vis: document.visibilityState,
+      focus: document.hasFocus(),
+      origin: performance.timeOrigin,
+      paints: performance.getEntriesByType("paint").map((e) => [e.name, e.startTime]),
+      nav: performance
+        .getEntriesByType("navigation")
+        .map((e) => e.toJSON())
+        .map((e) => [e.domContentLoadedEventEnd, e.loadEventEnd]),
+    }));
+    const raf = page.evaluate(() => new Promise<number>((resolve) => requestAnimationFrame(() => resolve(Date.now()))));
+    void raf.then((t) => console.log(`DIAG-RAF first rAF at ${t}`));
     if (TRACE)
       await app.evaluate(({ contentTracing }) =>
         contentTracing
@@ -120,6 +153,10 @@ test("diag screenshot", async () => {
         ({ contentTracing }, p) => contentTracing.stopRecording(p),
         test.info().outputPath("trace.json"),
       );
+    console.log(
+      `DIAG-PROCLOG ${JSON.stringify(await app.evaluate(() => Reflect.get(globalThis, "__diagProc")))} ${JSON.stringify(await app.evaluate(({ app: a }) => ({ now: Date.now(), procs: a.getAppMetrics().map((p) => [p.type, p.pid, p.creationTime]) })))}`,
+    );
+    if (cold) await new Promise((resolve) => setTimeout(resolve, 14_000));
     console.log(`DIAG ${JSON.stringify({ mode: MODE, launchedMs, s0, s1, doc, shot, shotMs, s2, tracePath })}`);
   } finally {
     await app.close();
