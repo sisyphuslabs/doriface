@@ -1,6 +1,6 @@
 import { x25519 } from "@noble/curves/ed25519.js";
 import { describe, expect, test } from "bun:test";
-import { memoryStore } from "../storage/idb.ts";
+import { memoryStore, type KeyValueStore } from "../storage/idb.ts";
 import { loadDeviceKey } from "./device-key.ts";
 
 describe("loadDeviceKey", () => {
@@ -13,6 +13,21 @@ describe("loadDeviceKey", () => {
     expect(shared).toEqual(x25519.getSharedSecret(peerPrivate, key.publicKey));
     const again = await loadDeviceKey(storage, null);
     expect(again.publicKey).toEqual(key.publicKey);
+  });
+
+  test("a failed load is retried on the next call", async () => {
+    const backing = memoryStore();
+    let failing = true;
+    const storage: KeyValueStore = {
+      get: async (key) => {
+        if (failing) throw new Error("IndexedDB is busy");
+        return backing.get(key);
+      },
+      put: (key, value) => backing.put(key, value),
+    };
+    await expect(loadDeviceKey(storage, null)).rejects.toThrow("IndexedDB is busy");
+    failing = false;
+    expect((await loadDeviceKey(storage, null)).kind).toBe("raw");
   });
 
   test("concurrent first calls share one identity", async () => {
