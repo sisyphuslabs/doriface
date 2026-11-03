@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
+import { addMachine } from "./machine.ts";
 import { seed } from "./seed.ts";
 
 const hc = process.env["HC_BIN"] || Bun.which("hc");
@@ -53,17 +54,20 @@ async function stopCore(): Promise<void> {
 }
 
 let stopping = false;
+let stopMachine: (() => Promise<void>) | undefined;
 async function shutdown(): Promise<void> {
   if (stopping) return;
   stopping = true;
   host.kill("SIGTERM");
   await host.exited;
   await stopCore();
+  await stopMachine?.();
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);
 }
 if (process.env["CAPTURE"] === "1") {
   await seed(hc, env, join(dir, "work"));
+  stopMachine = await addMachine(hc, env, join(dir, "machine"));
 }
 process.once("SIGTERM", () => void shutdown());
 process.once("SIGINT", () => void shutdown());
