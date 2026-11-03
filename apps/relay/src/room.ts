@@ -49,13 +49,19 @@ import {
 
 export interface RoomEnv extends PairSlotsEnv, TimeoutVars {}
 
+interface PendingAuth {
+  readonly settled: PromiseWithResolvers<void>;
+  /** Cleared on settle; a pending timer keeps the object from hibernating. */
+  readonly timer: ReturnType<typeof setTimeout>;
+}
+
 /**
  * One room per hostId: the host's uplink and every client session to it. All state lives in socket attachments,
  * so the object can hibernate between messages. Payloads are forwarded as they arrive and never inspected.
  */
 export class Room extends DurableObject<RoomEnv> {
   /** Hosts that have not finished the challenge yet; a client arriving meanwhile waits for them to settle. */
-  readonly #authenticating = new Map<WebSocket, PromiseWithResolvers<void>>();
+  readonly #authenticating = new Map<WebSocket, PendingAuth>();
 
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
@@ -120,12 +126,11 @@ export class Room extends DurableObject<RoomEnv> {
     const challenge = crypto.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
     const openedAt = Date.now();
     attach(server, { role: "host", hostId, relayOrigin, challenge, state: "challenged", sent: 0, acked: 0, openedAt });
-    this.#authenticating.set(server, Promise.withResolvers());
-    setTimeout(() => {
-      if (!this.#authenticating.has(server)) return;
+    const timer = setTimeout(() => {
       closeIfOpen(server, CloseCode.RelayAuthFailed, "relay auth timed out");
       this.#settle(server);
     }, AUTH_TIMEOUT_MS);
+    this.#authenticating.set(server, { settled: Promise.withResolvers(), timer });
     sendControl(server, challenge);
     await alarmBy(this.ctx, openedAt + timeoutsOf(this.env).idleMs);
     return new Response(null, { status: 101, webSocket: client });
@@ -135,12 +140,15 @@ export class Room extends DurableObject<RoomEnv> {
   async #settledHost(): Promise<WebSocket | undefined> {
     const host = onlineHost(this.ctx);
     if (host !== undefined || this.#authenticating.size === 0) return host;
-    await Promise.race([...this.#authenticating.values()].map(({ promise }) => promise));
+    await Promise.race([...this.#authenticating.values()].map(({ settled }) => settled.promise));
     return this.#settledHost();
   }
 
   #settle(ws: WebSocket): void {
-    this.#authenticating.get(ws)?.resolve();
+    const pending = this.#authenticating.get(ws);
+    if (pending === undefined) return;
+    clearTimeout(pending.timer);
+    pending.settled.resolve();
     this.#authenticating.delete(ws);
   }
 
