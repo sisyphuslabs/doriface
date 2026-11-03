@@ -115,6 +115,8 @@ export interface PairingLink {
   readonly signPub: Uint8Array;
   readonly linkSecret: Uint8Array;
   readonly relayUrl: string;
+  /** A mesh offer (`&m=1`): the link admits a host into the mesh with `doriface-host mesh join`, not a device. */
+  readonly mesh?: boolean | undefined;
 }
 
 const WEBSOCKET_SCHEME: Readonly<Record<string, string>> = {
@@ -148,6 +150,7 @@ export function buildPairingUrl(link: PairingLink): string {
     s: base64urlEncode(link.signPub),
     p: base64urlEncode(link.linkSecret),
     r: relayWebSocketUrl(link.relayUrl),
+    ...(link.mesh === true ? { m: "1" } : {}),
   });
   return `${pairingWebOrigin(link.webOrigin)}/pair#${fragment.toString()}`;
 }
@@ -176,5 +179,13 @@ export function parsePairingUrl(url: string): PairingLink {
   if (hostIdOf(signPub) !== hostId) throw new Error("the pairing URL's hostId does not match its signing key");
   const linkSecret = key("p");
   const relayUrl = relayWebSocketUrl(get("r"));
-  return { webOrigin: parsed.origin, hostId, noiseStaticPub, signPub, linkSecret, relayUrl };
+  return {
+    webOrigin: parsed.origin,
+    hostId,
+    noiseStaticPub,
+    signPub,
+    linkSecret,
+    relayUrl,
+    mesh: fragment.get("m") === "1",
+  };
 }

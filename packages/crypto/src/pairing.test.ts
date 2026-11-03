@@ -100,7 +100,15 @@ describe("pairing URL", () => {
       ...link,
       webOrigin: "https://doriface.omo.dev",
       relayUrl: "wss://relay-doriface.omo.dev",
+      mesh: false,
     });
+  });
+
+  test("a mesh offer's link carries m=1 and parses back as a mesh link", () => {
+    const meshUrl = buildPairingUrl({ ...link, mesh: true });
+    expect(fragment(meshUrl).get("m")).toBe("1");
+    expect(parsePairingUrl(meshUrl).mesh).toBe(true);
+    expect(fragment(url).has("m")).toBe(false);
   });
 
   test("carries the link secret as 43 base64url characters and never the typed code", () => {
