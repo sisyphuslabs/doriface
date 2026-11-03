@@ -1,5 +1,5 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
-import { ArrowLeft, Keyboard, Link2, Network, Palette, SquareTerminal } from "lucide-react";
+import { ArrowLeft, Keyboard, Link2, Network, Palette, Server, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { currentPlatform, triggerKeys } from "../keys/trigger.ts";
 import { AppearanceSection } from "../settings/appearance-section.tsx";
@@ -7,12 +7,14 @@ import { ConnectionSection } from "../settings/connection-section.tsx";
 import { DevicesSection } from "../settings/devices-section.tsx";
 import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { MeshSection } from "../settings/mesh-section.tsx";
+import { MachinesSection } from "../settings/machines-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 import { useCloseSettings } from "../settings/use-close-settings.ts";
 
 const SECTIONS = [
   { id: "connections", label: "Connections", icon: <Link2 /> },
   { id: "mesh", label: "Mesh", icon: <Network /> },
+  { id: "machines", label: "Machines", icon: <Server /> },
   { id: "appearance", label: "Appearance", icon: <Palette /> },
   { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
   { id: "keybindings", label: "Keybindings", icon: <Keyboard /> },
@@ -96,6 +98,10 @@ export function SettingsRoute() {
           ) : section === "mesh" ? (
             <Group title="Mesh">
               <MeshSection />
+            </Group>
+          ) : section === "machines" ? (
+            <Group title="Machines">
+              <MachinesSection />
             </Group>
           ) : section === "appearance" ? (
             <Group title="Appearance">
