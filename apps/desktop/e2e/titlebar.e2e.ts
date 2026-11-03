@@ -33,7 +33,7 @@ test.beforeAll(async () => {
   );
   const args = [`--user-data-dir=${profile}`];
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: appArgs(args) } : { executablePath, args }),
+    ...(executablePath === undefined ? { args: appArgs(args) } : { executablePath, args: appArgs(args) }),
     env,
   });
 });

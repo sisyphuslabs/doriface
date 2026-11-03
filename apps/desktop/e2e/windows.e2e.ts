@@ -38,7 +38,7 @@ test.beforeAll(async () => {
   launched = await electron.launch({
     ...(packagedExecutable === undefined
       ? { args: appArgs([profileArg(profile)]) }
-      : { executablePath: attachAfterFirstLoad, args: [profileArg(profile)] }),
+      : { executablePath: attachAfterFirstLoad, args: appArgs([profileArg(profile)]) }),
     env,
   });
 });
@@ -85,11 +85,10 @@ test("the app is named doriface", async () => {
 test("a second launch and a Dock click bring back the one window", async () => {
   await appPage();
   if (scratch === undefined) throw new Error("no scratch profile");
-  const second = spawn(
-    packagedExecutable ?? String(electronBinary),
-    packagedExecutable === undefined ? appArgs([profileArg(scratch.profile)]) : [profileArg(scratch.profile)],
-    { env: scratch.env, stdio: "ignore" },
-  );
+  const second = spawn(packagedExecutable ?? String(electronBinary), appArgs([profileArg(scratch.profile)]), {
+    env: scratch.env,
+    stdio: "ignore",
+  });
   const code = await new Promise<number | null>((resolve) => second.once("exit", resolve));
   expect(code).toBe(0);
   expect(await windowCount()).toBe(1);
