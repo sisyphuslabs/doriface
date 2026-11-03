@@ -16,6 +16,9 @@
       "path": "../../packages/client"
     },
     {
+      "path": "../../packages/ghostty-wasm"
+    },
+    {
       "path": "../../packages/ui"
     }
   ]

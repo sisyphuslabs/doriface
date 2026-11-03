@@ -1,7 +1,7 @@
 import type { HcConnection, TerminalStream } from "@doriface/client";
 import { cn } from "@doriface/ui";
-import { GhosttyCore } from "@wterm/ghostty";
-import ghosttyWasm from "@wterm/ghostty/ghostty-vt.wasm?url";
+import { loadGhosttyCore } from "@doriface/ghostty-wasm";
+import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
 import { useEffect, useRef, useState } from "react";
 import { readDisplay } from "./display.ts";
@@ -30,7 +30,7 @@ export function TerminalView(props: TerminalViewProps) {
 
   useEffect(() => {
     let live = true;
-    GhosttyCore.load({ wasmPath: ghosttyWasm }).then(
+    loadGhosttyCore().then(
       (loaded) => (live ? setCore(loaded) : loaded.dispose()),
       (cause: unknown) => setError(`The terminal renderer failed to load: ${String(cause)}`),
     );

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@doriface/client": "workspace:*",
+    "@doriface/ghostty-wasm": "workspace:*",
     "@doriface/protocol": "workspace:*",
     "@doriface/ui": "workspace:*",
     "@noble/hashes": "2.4.0",
