@@ -1,4 +1,4 @@
-import { CloseCode, generateX25519 } from "@doriface/crypto";
+import { CloseCode, generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { memoryLinkPair, type MemoryEnd } from "@doriface/crypto/testing";
 import { MAX_MESH_MEMBERS, parseRecord, type Signed, signCard } from "@doriface/mesh";
 import { rmSync } from "node:fs";
@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cardBody } from "../state/mesh.ts";
 import {
+  admitMembers,
   failure,
   inviteDeps,
   joinerContext,
@@ -15,7 +16,7 @@ import {
   side,
   type Side,
 } from "../testing/join-harness.ts";
-import { cardFor, machine, signPubOf } from "../testing/mesh-history.ts";
+import { machine, signPubOf } from "../testing/mesh-history.ts";
 import { serveJoin } from "./invite.ts";
 import { INVITER_EXPECTS, JOINER_EXPECTS, type MeshLine, MeshLines } from "./lines.ts";
 import { PendingJoins } from "./pending-joins.ts";
@@ -98,6 +99,28 @@ describe("section 4.4 step 3: a member re-joins through any member", () => {
 });
 
 describe("the inviter checks the card before the owner is asked (section 4.4 step 3)", () => {
+  test("a new signing key with a member's Noise key is refused before the owner is asked, and nothing is admitted", async () => {
+    const [a, b, twinSide] = [side("alpha"), side("beta"), side("twin")];
+    await joined(a, b);
+    const before = types(a);
+    const twin = { ...generateHostIdentity(), noise: b.m.identity.noise };
+    const pending = new PendingJoins();
+    const controller = new AbortController();
+    const asked = pending.next(controller.signal).then(
+      () => "asked",
+      () => "not asked",
+    );
+    const run = runJoin(
+      inviteDeps(a, pending),
+      { ...joinerContext(twinSide, a), identity: twin },
+      twin.noise.publicKey,
+    );
+    expect(await failure(run.invited)).toBe("this Noise key is another mesh member's");
+    controller.abort(new Error("done"));
+    expect(await asked).toBe("not asked");
+    expect(types(a)).toEqual(before);
+  });
+
   test("a card replayed from another offer is refused, and the owner is never asked", async () => {
     const a = side("alpha");
     const pending = new PendingJoins();
@@ -134,19 +157,10 @@ describe("the inviter checks the card before the owner is asked (section 4.4 ste
   test("a mesh that is already full refuses before the owner is asked", async () => {
     const a = side("alpha");
     a.mesh.found(a.m.identity, ownOf(a));
-    const meshId = a.mesh.read()?.meshId ?? "";
-    for (let i = 1; i < MAX_MESH_MEMBERS; i++) {
-      const card = cardFor(machine(`member${i}`), meshId, a.m);
-      a.mesh.sign(a.m.identity, (n, prev) => ({
-        v: 2,
-        mesh: meshId,
-        type: "admit",
-        by: signPubOf(a.m),
-        n,
-        prev,
-        subject: { card },
-      }));
-    }
+    admitMembers(
+      a,
+      Array.from({ length: MAX_MESH_MEMBERS - 1 }, (_, i) => `member${i + 1}`),
+    );
     const pending = new PendingJoins();
     const b = side("beta");
     const run = runJoin(inviteDeps(a, pending), joinerContext(b, a), b.m.identity.noise.publicKey);
