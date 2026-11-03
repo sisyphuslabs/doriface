@@ -14,6 +14,9 @@ import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
+/** Typed text, or the bytes a bound key sends. */
+export type TerminalInput = string | Uint8Array;
+
 export interface TerminalViewProps {
   readonly connection: HcConnection;
   readonly address: string;
@@ -22,7 +25,8 @@ export interface TerminalViewProps {
   readonly className?: string;
   /** Rewrites typed input before it is sent (latched phone modifiers). */
   readonly transformInput?: (data: string) => string;
-  readonly onStream?: (stream: TerminalStream | null) => void;
+  /** The view's input path for keys pressed outside it (the phone's extra keys); null once it unmounts. */
+  readonly onSend?: (send: ((data: TerminalInput) => void) | null) => void;
   readonly onClosed?: (address: string) => void;
 }
 
@@ -32,7 +36,7 @@ const FULL_RESET = "\u001bc";
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
-  const { connection, address, focused, label, className, transformInput, onStream, onClosed } = props;
+  const { connection, address, focused, label, className, transformInput, onSend, onClosed } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const [core, setCore] = useState<GhosttyCore | null>(null);
@@ -56,13 +60,7 @@ export function TerminalView(props: TerminalViewProps) {
     };
   }, []);
 
-  useEffect(
-    () => () => {
-      void stream.current?.close();
-      onStream?.(null);
-    },
-    [onStream],
-  );
+  useEffect(() => () => void stream.current?.close(), []);
 
   useEffect(() => {
     if (focused) handle.current?.focus();
@@ -84,15 +82,19 @@ export function TerminalView(props: TerminalViewProps) {
   }, [wt, config]);
 
   const onUnsafePaste = useCallback((pending: PendingPaste) => setPaste(pending), []);
-  useBehaviors(wt, stream, options, onUnsafePaste);
-  useTerminalActions(wt, stream, focused);
-  useFocusAfterSelect(wt);
-
-  // Input typed while no stream is open (attaching, or the connection dropped) waits here for the next stream.
-  const pending = useRef<string[]>([]);
-  const send = (data: string): void => {
+  // Input while no stream is open (attaching, or the connection dropped) waits here for the next stream.
+  // Every human-input write goes through send, so keys pressed during a reconnect replay in the order pressed.
+  const pending = useRef<TerminalInput[]>([]);
+  const send = useCallback((data: TerminalInput): void => {
     if (stream.current?.write(data) !== true) pending.current.push(data);
-  };
+  }, []);
+  useEffect(() => {
+    onSend?.(send);
+    return () => onSend?.(null);
+  }, [onSend, send]);
+  useBehaviors(wt, stream, options, onUnsafePaste);
+  useTerminalActions(wt, send, focused);
+  useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
 
@@ -108,7 +110,6 @@ export function TerminalView(props: TerminalViewProps) {
         stream.current = attached;
         // A fit while the attach was in flight had no stream to resize.
         if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
-        onStream?.(attached);
         // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
         if (attachedBefore.current) handle.current?.write(FULL_RESET);
         attachedBefore.current = true;

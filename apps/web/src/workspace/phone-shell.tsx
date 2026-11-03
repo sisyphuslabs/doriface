@@ -1,4 +1,4 @@
-import type { HcConnection, TerminalStream } from "@doriface/client";
+import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
 import { ExtraKeysBar, IconButton, ScrollArea, StatusBar, StatusBarItem, StatusChip } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
@@ -7,7 +7,7 @@ import { useCallback, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { NEW_TAB } from "../keys/actions.ts";
 import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
-import { TerminalView } from "../terminal/terminal-view.tsx";
+import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
@@ -63,10 +63,10 @@ function PhoneTerminal(props: {
   readonly onBack: () => void;
 }) {
   const { connection, terminal, onBack } = props;
-  const stream = useRef<TerminalStream | null>(null);
+  const send = useRef<((data: TerminalInput) => void) | null>(null);
   const [latched, setLatched] = useState<ReadonlySet<string>>(new Set());
-  const onStream = useCallback((next: TerminalStream | null) => {
-    stream.current = next;
+  const onSend = useCallback((next: ((data: TerminalInput) => void) | null) => {
+    send.current = next;
   }, []);
   const transform = (data: string): string => {
     if (latched.size === 0) return data;
@@ -83,7 +83,7 @@ function PhoneTerminal(props: {
       return;
     }
     const sequence = keySequence(id);
-    if (sequence !== undefined) stream.current?.write(transform(sequence));
+    if (sequence !== undefined) send.current?.(transform(sequence));
   };
   const title = terminalTitle(terminal);
 
@@ -107,7 +107,7 @@ function PhoneTerminal(props: {
         focused
         label={`${title} output`}
         transformInput={transform}
-        onStream={onStream}
+        onSend={onSend}
         onClosed={onBack}
       />
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
