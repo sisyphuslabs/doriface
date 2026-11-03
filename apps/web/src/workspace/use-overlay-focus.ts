@@ -1,9 +1,5 @@
 import { useEffect, type RefObject } from "react";
 
-/** Another modal still open once this overlay is gone, such as the terminal's paste dialog. */
-const OPEN_MODAL = '[role="dialog"][aria-modal="true"], [role="alertdialog"]';
-const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
-
 function isUsable(element: Element | null): element is HTMLElement {
   return (
     element instanceof HTMLElement &&
@@ -15,10 +11,12 @@ function isUsable(element: Element | null): element is HTMLElement {
   );
 }
 
-/** Where focus goes back: into a modal that is still open first, otherwise the terminal, then the opener. */
+/**
+ * Where focus goes back, first usable wins: the focused pane's terminal, any shown terminal, then
+ * the opener. A modal still open behind the overlay (the paste dialog) has hidden the terminals, so
+ * isUsable skips them and focus returns to the opener inside that dialog.
+ */
 function restoreTargets(opener: Element | null): (Element | null)[] {
-  const modal = [...document.querySelectorAll(OPEN_MODAL)].at(-1);
-  if (modal !== undefined) return [modal.contains(opener) ? opener : null, ...modal.querySelectorAll(FOCUSABLE)];
   return [
     document.querySelector('[data-focused="true"] [data-terminal] textarea'),
     ...document.querySelectorAll("[data-terminal] textarea"),
