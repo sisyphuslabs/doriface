@@ -1,6 +1,6 @@
 import { CloseCode, generateX25519, PAIRING_CODE_ATTEMPTS, pairingSlotOf, rawStaticKey } from "@doriface/crypto";
 import { sameSlotDecoys } from "@doriface/crypto/testing";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { chmodSync, rmSync } from "node:fs";
 import { codeOf, linkOf, pairingHost, type PairingHost, runSession } from "../testing/pairing-harness.ts";
 import type { E2eeTransport } from "./accept.ts";
@@ -12,6 +12,7 @@ const newHost = (): PairingHost => {
   return host;
 };
 afterEach(() => {
+  mock.restore();
   for (const host of hosts.splice(0)) {
     chmodSync(host.dir, 0o700);
     rmSync(host.dir, { recursive: true, force: true });
@@ -67,6 +68,20 @@ describe("the transport gate", () => {
     const run = runSession(host, transportFor(host), codeOf(host));
     expect(await refusal(run)).toEqual({ code: CloseCode.UnknownDevice, sent: 0 });
     expect(host.pairing.read()?.codeAttempts).toBe(0);
+  });
+
+  test.each([
+    ["the direct path", { kind: "lan" } satisfies E2eeTransport],
+    ["a relay session without ?pair", { kind: "relay" } satisfies E2eeTransport],
+  ])("a typed-code pairing on %s is refused 4401 without consulting the pairing store", async (_, transport) => {
+    const host = newHost();
+    spyOn(host.pairing, "claimCode").mockImplementation(() => {
+      throw new Error("the pairing store was consulted");
+    });
+    expect(await refusal(runSession(host, transport, codeOf(host)))).toEqual({
+      code: CloseCode.UnknownDevice,
+      sent: 0,
+    });
   });
 
   test("a paired device's session (0x01) is refused 4401 unanswered on a ?pair session, and accepted directly", async () => {
