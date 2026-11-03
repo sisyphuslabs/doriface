@@ -62,6 +62,12 @@ export class LocalHost {
     const tail: string[] = [];
     return new Promise<LocalHostEndpoint>((resolve, reject) => {
       let ready = false;
+      let exit: string | undefined;
+      let stderrEnded = false;
+      // The exit event can come before the last stderr lines are read; the reason is final once both have happened.
+      const failOnExit = (): void => {
+        if (exit !== undefined && stderrEnded) fail(`exited before listening (${exit})`);
+      };
       const fail = (reason: string): void => {
         if (ready) return;
         ready = true;
@@ -69,8 +75,16 @@ export class LocalHost {
         child.kill("SIGTERM");
         reject(new Error(`doriface-host ${reason}${tail.length === 0 ? "" : `:\n${tail.join("\n")}`}`));
       };
-      const timer = setTimeout(() => fail("did not start in time"), this.#options.readyTimeoutMs ?? 15_000);
-      createInterface({ input: child.stderr }).on("line", (line) => {
+      const timer = setTimeout(
+        () => fail(exit === undefined ? "did not start in time" : `exited before listening (${exit})`),
+        this.#options.readyTimeoutMs ?? 15_000,
+      );
+      const stderr = createInterface({ input: child.stderr });
+      stderr.once("close", () => {
+        stderrEnded = true;
+        failOnExit();
+      });
+      stderr.on("line", (line) => {
         log(`doriface-host: ${line}`);
         tail.push(line);
         if (tail.length > STDERR_TAIL) tail.shift();
@@ -82,12 +96,13 @@ export class LocalHost {
       });
       child.once("error", (error) => fail(`could not start (${error.message})`));
       child.once("exit", (code, signal) => {
-        fail(`exited before listening (${signal ?? `code ${String(code)}`})`);
+        exit = signal ?? `code ${String(code)}`;
+        failOnExit();
         if (this.#child === child) {
           this.#child = undefined;
           this.#starting = undefined;
         }
-        log(`doriface-host exited (${signal ?? `code ${String(code)}`})`);
+        log(`doriface-host exited (${exit})`);
       });
     });
   }
