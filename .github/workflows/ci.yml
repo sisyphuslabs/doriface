@@ -161,6 +161,13 @@ jobs:
       - name: Package (electron-builder --dir)
         working-directory: apps/desktop
         run: bun run pack
+      - name: DIAG(#80) fontconfig cold vs warm
+        run: |
+          fc-list | wc -l
+          ls -la ~/.cache/fontconfig 2>&1 | head -5 || true
+          ls -la /var/cache/fontconfig 2>&1 | head -5 || true
+          /usr/bin/time -v fc-match sans-serif 2>&1 | grep -E 'Elapsed|sans' || true
+          /usr/bin/time -v fc-match sans-serif 2>&1 | grep -E 'Elapsed' || true
       - name: Launch the packaged app
         working-directory: apps/desktop
         env:
