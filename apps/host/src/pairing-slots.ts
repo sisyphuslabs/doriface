@@ -88,12 +88,22 @@ export class PairingSlots {
 
   /** Re-reads the offer and brings the relay in line; runs one sync at a time. */
   sync(): void {
-    this.#running = this.#running
-      .then(() => this.#sync())
-      .catch((error: unknown) => {
-        this.#log(`pairing slot: ${String(error)}; retrying`);
-        this.#scheduleRetry();
-      });
+    this.#enqueue(() => this.#sync());
+  }
+
+  /** A fresh uplink holds no slot, so the pending offer registers again. */
+  relayConnected(): void {
+    this.#enqueue(() => {
+      this.#forget();
+      return this.#sync();
+    });
+  }
+
+  #enqueue(step: () => Promise<void>): void {
+    this.#running = this.#running.then(step).catch((error: unknown) => {
+      this.#log(`pairing slot: ${String(error)}; retrying`);
+      this.#scheduleRetry();
+    });
   }
 
   async #sync(): Promise<void> {
@@ -150,9 +160,13 @@ export class PairingSlots {
   }
 
   #release(): void {
+    const registered = this.#forget();
+    if (registered !== undefined) this.#registrar?.release(pairingSlotOf(registered));
+  }
+
+  #forget(): string | undefined {
     const registered = this.#registered;
-    if (registered === undefined) return;
     this.#registered = undefined;
-    this.#registrar?.release(pairingSlotOf(registered));
+    return registered;
   }
 }
