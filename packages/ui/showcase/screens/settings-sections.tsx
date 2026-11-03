@@ -47,7 +47,11 @@ export function ConnectionSection() {
       <Group title="Connection">
         <SettingRow
           title="Connect through"
-          description="The relay works from anywhere and only forwards encrypted traffic."
+          description={
+            route === "relay"
+              ? "The relay works from anywhere and only forwards encrypted traffic."
+              : "Only on the same network as the host. No relay involved."
+          }
           control={
             <SegmentedControl
               label="Connect through"
