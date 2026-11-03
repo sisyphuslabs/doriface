@@ -9,12 +9,14 @@ const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
   idle: "idle",
 };
 
-/** The OSC 7501 word a terminal reported, mapped onto the agent states. */
+/**
+ * The one status selector every surface uses (sidebar section, pane chip, tab glyph, space attention).
+ * A program that never reported OSC 7501, or reported a word outside the protocol's, reads as idle.
+ */
 export function agentStatus(terminal: Terminal): AgentStatus {
   if (terminal.state === "finished") return "done";
   const word = terminal.status?.state;
-  if (word !== undefined) return OSC_STATES[word] ?? "unknown";
-  return terminal.reported === true ? "idle" : "unknown";
+  return word === undefined ? "idle" : (OSC_STATES[word] ?? "idle");
 }
 
 export function terminalTitle(terminal: Terminal): string {
@@ -74,8 +76,7 @@ export function groupAgents(terminals: readonly Terminal[], nowMs: number): Agen
   for (const terminal of terminals) {
     if (terminal.state !== "live") continue;
     const agent = toAgent(terminal, nowMs);
-    const key = agent.status === "unknown" ? "idle" : agent.status;
-    groups[key].push(agent);
+    if (agent.status !== "unknown") groups[agent.status].push(agent);
   }
   return groups;
 }
