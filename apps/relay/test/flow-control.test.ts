@@ -149,15 +149,22 @@ describe("backpressure (C3)", () => {
     host.probe.socket.close();
   });
 
-  test("a credit uplink that never acks is held to the same 4 MiB: the overflowing client is closed with 4408", async () => {
+  test("a credit uplink that never acks is held to the same 4 MiB: a client ignoring its credit is closed with 4408", async () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip, { credit: true });
-    const client = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
+    const client = new Probe(`${clientUrl(host.hostId)}?credit=1`, ip);
+    defer(() => client.socket.close());
+    const creditStarted = new Promise<string>((resolve) =>
+      client.socket.addEventListener("message", (event: MessageEvent<unknown>) => {
+        if (typeof event.data === "string") resolve(event.data);
+      }),
+    );
     expect((await host.frame()).type).toBe(MuxType.Open);
     expect((await host.frame()).type).toBe(MuxType.Credit);
-    const clientClosed = closedWith(client);
-    for (const index of times(5)) client.send(new Uint8Array(MAX_SESSION_SEND_BYTES).fill(index));
-    expect(await clientClosed).toBe(CloseCode.IdleTimeout);
+    // The relay has told this client its window; it sends 5 MiB anyway, as a client ignoring credit would.
+    expect(await creditStarted).toBe("c:0");
+    for (const index of times(5)) client.socket.send(new Uint8Array(MAX_SESSION_SEND_BYTES).fill(index));
+    expect((await client.closed).code).toBe(CloseCode.IdleTimeout);
     const frames = await untilClose(() => host.frame());
     // The challenge, OPEN and the zero CREDIT count against the uplink's window too.
     const control = CHALLENGE_BYTES + 2 * MUX_HEADER_BYTES + 4;
