@@ -101,6 +101,22 @@ describe("keybind import and export", () => {
     expect([...keymap]).toEqual([["shift+super+n", "tab.new"]]);
   });
 
+  test("text: decodes Zig string escapes and rejects unknown ones", () => {
+    const parsed = parseKeybinds(
+      [
+        "keybind = shift+enter=text:\\x1b\\r",
+        "keybind = super+j=text:\\n",
+        "keybind = super+k=text:a\\tb\\\\c\\u{1F600}",
+        "keybind = super+l=text:\\q",
+      ].join("\n"),
+    );
+    expect(parsed.lines.map((line) => line.status)).toEqual(["applies", "applies", "applies", "invalid"]);
+    expect(parsed.overrides.get("shift+enter")).toBe("send:\u001b\r");
+    expect(parsed.overrides.get("super+j")).toBe("send:\n");
+    expect(parsed.overrides.get("super+k")).toBe("send:a\tb\\c\u{1F600}");
+    expect(parsed.overrides.has("super+l")).toBe(false);
+  });
+
   test("a parameter doriface does not have is unknown, not another action", () => {
     expect(parseKeybinds("keybind = super+x=goto_tab:12").lines[0]?.status).toBe("unknown");
     expect(parseKeybinds("keybind = super+x=new_split:down").lines[0]?.status).toBe("unknown");

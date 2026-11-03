@@ -84,15 +84,44 @@ function escapeGhostty(text: string): string {
     .join("");
 }
 
-function unescapeGhostty(text: string): string {
-  return text.replace(/\\x([0-9a-f]{2})|\\(.)/gi, (_, hex: string | undefined, other: string | undefined) =>
-    hex === undefined ? (other ?? "") : String.fromCharCode(Number.parseInt(hex, 16)),
-  );
+const SIMPLE_ESCAPES: Readonly<Record<string, string>> = { n: "\n", r: "\r", t: "\t", "\\": "\\", "'": "'", '"': '"' };
+
+/** Decodes Ghostty's text: payload, which uses Zig string escapes; null when an escape is not one of them. */
+export function decodeZigString(text: string): string | null {
+  let out = "";
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index] ?? "";
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+    const next = text[index + 1] ?? "";
+    const simple = SIMPLE_ESCAPES[next];
+    if (simple !== undefined) {
+      out += simple;
+      index += 1;
+    } else if (next === "x" && /^[0-9a-f]{2}$/i.test(text.slice(index + 2, index + 4))) {
+      out += String.fromCharCode(Number.parseInt(text.slice(index + 2, index + 4), 16));
+      index += 3;
+    } else if (next === "u") {
+      const match = /^\{([0-9a-f]{1,6})\}/i.exec(text.slice(index + 2));
+      const code = match === null ? Number.NaN : Number.parseInt(match[1] ?? "", 16);
+      if (match === null || code > 0x10ffff) return null;
+      out += String.fromCodePoint(code);
+      index += 1 + match[0].length;
+    } else {
+      return null;
+    }
+  }
+  return out;
 }
 
 /** Our id for a Ghostty action name; `text:` becomes `send:`, `unbind` is null, unknown is undefined. */
 export function actionFromGhostty(name: string): string | null | undefined {
   if (name === "unbind") return null;
-  if (name.startsWith("text:")) return `send:${unescapeGhostty(name.slice(5))}`;
+  if (name.startsWith("text:")) {
+    const decoded = decodeZigString(name.slice(5));
+    return decoded === null ? undefined : `send:${decoded}`;
+  }
   return ACTION_BY_GHOSTTY.get(name)?.id;
 }
