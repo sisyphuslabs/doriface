@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { generateHostIdentity, generateX25519 } from "../identity.ts";
+import { rawStaticKey } from "../static-key.ts";
 import { CipherState } from "./cipher-state.ts";
 import { Handshake } from "./handshake.ts";
 
@@ -15,7 +16,7 @@ describe("Noise state guards", () => {
         pattern: "IKpsk2",
         role: "initiator",
         prologue: new Uint8Array(0),
-        staticKey: generateX25519(),
+        staticKey: rawStaticKey(generateX25519()),
         remoteStatic: host.noise.publicKey,
         psk: new Uint8Array(length),
       });

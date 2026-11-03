@@ -1,24 +1,25 @@
 import { generateHostIdentity, generateX25519 } from "../src/identity.ts";
 import { Handshake } from "../src/noise/handshake.ts";
+import { rawStaticKey } from "../src/static-key.ts";
 import { MAX_PLAINTEXT, Transport } from "../src/transport.ts";
 
 /** Encrypts and then decrypts TOTAL bytes in full-size records through one established Noise IK session. */
 const TOTAL = 64 * 1024 * 1024;
 const ROUNDS = 5;
 
-function session(): readonly [Transport, Transport] {
+async function session(): Promise<readonly [Transport, Transport]> {
   const host = generateHostIdentity();
   const prologue = new Uint8Array(0);
   const initiator = new Handshake({
     pattern: "IK",
     role: "initiator",
     prologue,
-    staticKey: generateX25519(),
+    staticKey: rawStaticKey(generateX25519()),
     remoteStatic: host.noise.publicKey,
   });
-  const responder = new Handshake({ pattern: "IK", role: "responder", prologue, staticKey: host.noise });
-  responder.readMessage(initiator.writeMessage(new Uint8Array(0)));
-  initiator.readMessage(responder.writeMessage(new Uint8Array(0)));
+  const responder = new Handshake({ pattern: "IK", role: "responder", prologue, staticKey: rawStaticKey(host.noise) });
+  await responder.readMessage(await initiator.writeMessage(new Uint8Array(0)));
+  await initiator.readMessage(await responder.writeMessage(new Uint8Array(0)));
   const i = initiator.finish();
   const r = responder.finish();
   return [new Transport(i.send, i.receive), new Transport(r.send, r.receive)];
@@ -26,9 +27,9 @@ function session(): readonly [Transport, Transport] {
 
 const mib = (bytes: number, ms: number): string => ((bytes / 1024 / 1024 / ms) * 1000).toFixed(1);
 const chunk = crypto.getRandomValues(new Uint8Array(MAX_PLAINTEXT));
+const sessions = await Promise.all(Array.from({ length: ROUNDS }, () => session()));
 const results: { readonly seal: number; readonly open: number }[] = [];
-for (let round = 0; round < ROUNDS; round++) {
-  const [sender, receiver] = session();
+for (const [sender, receiver] of sessions) {
   const records: Uint8Array[] = [];
   let start = performance.now();
   for (let sent = 0; sent < TOTAL; sent += MAX_PLAINTEXT) {

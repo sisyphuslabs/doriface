@@ -55,4 +55,11 @@ export {
   type SecureLinkOptions,
 } from "./secure-link.ts";
 export type { SecureLink, SessionInfo } from "./secured-link.ts";
+export {
+  generateWebCryptoStaticKey,
+  rawStaticKey,
+  supportsWebCryptoX25519,
+  webCryptoStaticKey,
+  type StaticKey,
+} from "./static-key.ts";
 export { MAX_PLAINTEXT, REKEY_INTERVAL } from "./transport.ts";

@@ -4,6 +4,7 @@ import {
   CloseCode,
   decodePairingHello,
   type HostIdentity,
+  rawStaticKey,
   type SecureLink,
   secureLink,
 } from "@doriface/crypto";
@@ -45,7 +46,7 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
     secure = await secureLink(link, {
       role: "responder",
       hostId: deps.identity.hostId,
-      staticKey: deps.identity.noise,
+      staticKey: rawStaticKey(deps.identity.noise),
       authorize,
       rekeyInterval: deps.rekeyInterval,
     });

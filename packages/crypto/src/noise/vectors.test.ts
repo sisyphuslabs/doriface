@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { Handshake, type Pattern, PROTOCOL_NAMES } from "./handshake.ts";
 import { x25519FromSecret } from "../identity.ts";
+import { rawStaticKey } from "../static-key.ts";
 
 interface Vector {
   readonly source: string;
@@ -57,14 +58,14 @@ describe("Noise test vectors", () => {
     ]);
   });
 
-  test.each(vectors.map((v) => [`${v.source} ${PROTOCOL_NAMES[v.pattern]}`, v] as const))("%s", (_, vector) => {
+  test.each(vectors.map((v) => [`${v.source} ${PROTOCOL_NAMES[v.pattern]}`, v] as const))("%s", async (_, vector) => {
     const psk = (value: string | undefined) => (value === undefined ? undefined : hex(value));
     expect(vector.initPsk === undefined).toBe(vector.pattern === "IK");
     const initiator = new Handshake({
       pattern: vector.pattern,
       role: "initiator",
       prologue: field(vector, "init_prologue"),
-      staticKey: x25519FromSecret(field(vector, "init_static")),
+      staticKey: rawStaticKey(x25519FromSecret(field(vector, "init_static"))),
       remoteStatic: field(vector, "init_remote_static"),
       ephemeralSecret: field(vector, "init_ephemeral"),
       psk: psk(vector.initPsk),
@@ -73,18 +74,18 @@ describe("Noise test vectors", () => {
       pattern: vector.pattern,
       role: "responder",
       prologue: field(vector, "resp_prologue"),
-      staticKey: x25519FromSecret(field(vector, "resp_static")),
+      staticKey: rawStaticKey(x25519FromSecret(field(vector, "resp_static"))),
       ephemeralSecret: field(vector, "resp_ephemeral"),
       psk: psk(vector.respPsk),
     });
     const [m1, m2, ...transport] = vector.messages;
     if (m1 === undefined || m2 === undefined) throw new Error("vector lacks handshake messages");
-    const c1 = initiator.writeMessage(hex(m1.payload));
+    const c1 = await initiator.writeMessage(hex(m1.payload));
     expect(c1.toHex()).toBe(m1.ciphertext);
-    expect(responder.readMessage(c1).toHex()).toBe(m1.payload);
-    const c2 = responder.writeMessage(hex(m2.payload));
+    expect((await responder.readMessage(c1)).toHex()).toBe(m1.payload);
+    const c2 = await responder.writeMessage(hex(m2.payload));
     expect(c2.toHex()).toBe(m2.ciphertext);
-    expect(initiator.readMessage(c2).toHex()).toBe(m2.payload);
+    expect((await initiator.readMessage(c2)).toHex()).toBe(m2.payload);
 
     const i = initiator.finish();
     const r = responder.finish();
