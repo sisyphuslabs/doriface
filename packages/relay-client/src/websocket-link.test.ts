@@ -53,7 +53,12 @@ function fakeRelay(): FakeRelay {
 async function openLink(relay: FakeRelay): Promise<WebSocketLink> {
   const ws = new WebSocket(relay.url);
   const link = new WebSocketLink(ws);
-  await new Promise((resolve) => ws.addEventListener("open", resolve, { once: true }));
+  await new Promise<void>((resolve, reject) => {
+    ws.addEventListener("open", () => resolve(), { once: true });
+    ws.addEventListener("close", (event: CloseEvent) => reject(new Error(`closed with ${event.code} before opening`)), {
+      once: true,
+    });
+  });
   return link;
 }
 
