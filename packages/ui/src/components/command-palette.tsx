@@ -1,0 +1,124 @@
+import { Search } from "lucide-react";
+import { useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { cn } from "../lib/cn.ts";
+import { Kbd } from "./kbd.tsx";
+import { overlaySurface } from "./overlay.ts";
+
+export interface Command {
+  readonly id: string;
+  readonly label: string;
+  readonly group: string;
+  readonly icon?: ReactNode;
+  readonly keys?: readonly string[];
+  /** Right-aligned context, e.g. the machine or the agent state. */
+  readonly hint?: ReactNode;
+}
+
+export interface CommandPaletteProps {
+  readonly commands: readonly Command[];
+  readonly placeholder?: string;
+  readonly defaultQuery?: string;
+  readonly onRun?: (id: string) => void;
+  readonly className?: string;
+}
+
+function matches(command: Command, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  return q === "" || command.label.toLowerCase().includes(q) || command.group.toLowerCase().includes(q);
+}
+
+/**
+ * Type to filter, arrows to move, Enter to run, Escape (handled by the host dialog) to close.
+ * The list is a listbox owned by the input through aria-activedescendant.
+ */
+export function CommandPalette({
+  commands,
+  placeholder = "Type a command or agent",
+  defaultQuery = "",
+  onRun,
+  className,
+}: CommandPaletteProps) {
+  const [query, setQuery] = useState(defaultQuery);
+  const [active, setActive] = useState(0);
+  const listId = useId();
+  const visible = useMemo(() => commands.filter((command) => matches(command, query)), [commands, query]);
+  const groups = useMemo(() => [...new Set(visible.map((command) => command.group))], [visible]);
+  const current = visible[Math.min(active, visible.length - 1)];
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActive((index) => (index + step + visible.length) % Math.max(visible.length, 1));
+    } else if (event.key === "Enter" && current !== undefined) {
+      onRun?.(current.id);
+    }
+  };
+
+  return (
+    <div className={cn(overlaySurface, "flex w-[min(40rem,100%)] flex-col overflow-hidden", className)}>
+      <div className="flex items-center gap-2.5 border-b border-border px-3">
+        <Search aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <input
+          role="combobox"
+          aria-expanded
+          aria-controls={listId}
+          aria-activedescendant={current === undefined ? undefined : `${listId}-${current.id}`}
+          aria-label="Command"
+          value={query}
+          placeholder={placeholder}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setActive(0);
+          }}
+          onKeyDown={onKeyDown}
+          className="h-12 min-w-0 flex-1 bg-transparent text-lg text-foreground outline-none placeholder:text-muted-foreground"
+        />
+        <Kbd keys={["esc"]} />
+      </div>
+      <div
+        id={listId}
+        role="listbox"
+        aria-label="Results"
+        data-slot="palette-list"
+        className="max-h-[min(24rem,60dvh)] overflow-y-auto p-1.5"
+      >
+        {visible.length === 0 ? (
+          <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nothing matches "{query}".</p>
+        ) : (
+          groups.map((group) => (
+            <div key={group} role="group" aria-label={group} className="pb-1">
+              <p className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">{group}</p>
+              {visible
+                .filter((command) => command.group === group)
+                .map((command) => {
+                  const selected = command.id === current?.id;
+                  return (
+                    <div
+                      key={command.id}
+                      id={`${listId}-${command.id}`}
+                      role="option"
+                      aria-selected={selected}
+                      onPointerMove={() => setActive(visible.indexOf(command))}
+                      onClick={() => onRun?.(command.id)}
+                      className={cn(
+                        "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-base text-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground",
+                        selected && "bg-selected",
+                      )}
+                    >
+                      {command.icon}
+                      <span className="min-w-0 flex-1 truncate">{command.label}</span>
+                      {command.hint === undefined ? null : (
+                        <span className="shrink-0 text-sm text-muted-foreground">{command.hint}</span>
+                      )}
+                      {command.keys === undefined ? null : <Kbd keys={command.keys} />}
+                    </div>
+                  );
+                })}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

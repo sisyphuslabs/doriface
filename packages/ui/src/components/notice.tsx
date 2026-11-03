@@ -1,0 +1,42 @@
+import type { ReactNode } from "react";
+import { cn } from "../lib/cn.ts";
+import { CircleAlert, Info, TriangleAlert } from "lucide-react";
+
+export interface NoticeProps {
+  readonly tone?: "info" | "warning" | "error";
+  readonly title: ReactNode;
+  readonly children?: ReactNode;
+  readonly actions?: ReactNode;
+  readonly className?: string;
+}
+
+const TINT = {
+  info: "bg-selected",
+  warning: "bg-status-working/12",
+  error: "bg-status-blocked/12",
+} as const;
+
+const ICON = { info: Info, warning: TriangleAlert, error: CircleAlert } as const;
+const ICON_TONE = {
+  info: "text-muted-foreground",
+  warning: "text-status-working-text",
+  error: "text-status-blocked-text",
+} as const;
+
+/** An inline problem next to the thing it affects: a tonal wash, a glyph, words and the fix. */
+export function Notice({ tone = "info", title, children, actions, className }: NoticeProps) {
+  const Icon = ICON[tone];
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      className={cn("flex items-start gap-3 rounded-lg p-3", TINT[tone], className)}
+    >
+      <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", ICON_TONE[tone])} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        {children === undefined ? null : <div className="mt-0.5 text-sm text-muted-foreground">{children}</div>}
+      </div>
+      {actions === undefined ? null : <div className="flex shrink-0 gap-2">{actions}</div>}
+    </div>
+  );
+}
