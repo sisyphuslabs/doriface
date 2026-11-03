@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { APP_ORIGIN } from "../src/config/origin.ts";
+import { openPairingLink, takePairingLink } from "../src/main/deep-link.ts";
 import { ipcHandlers, type IpcSender } from "../src/main/ipc-handlers.ts";
 
 const endpoint = { url: "ws://127.0.0.1:1/v1/hc", token: "t".repeat(43) };
@@ -15,13 +16,8 @@ const setup = () => {
   const painted: string[] = [];
   let starts = 0;
   let closes = 0;
-  let waiting: string | undefined = "#p=waiting";
   const handlers = ipcHandlers({
-    takePairingLink: () => {
-      const link = waiting;
-      waiting = undefined;
-      return link;
-    },
+    takePairingLink,
     origin: APP_ORIGIN,
     startLocalHost: async () => {
       starts += 1;
@@ -40,9 +36,12 @@ const setup = () => {
   return { handlers, opened, painted, starts: () => starts, closes: () => closes };
 };
 
+afterEach(() => void takePairingLink());
+
 describe("IPC sender gate", () => {
   test("refuses foreign and detached frames before touching the shell or the host", async () => {
     const { handlers, opened, starts } = setup();
+    openPairingLink("#p=waiting");
     await Promise.all(
       foreign.flatMap((event) => [
         expect(handlers.openExternal(event, "https://github.com/")).rejects.toThrow("refused IPC"),
@@ -59,6 +58,7 @@ describe("IPC sender gate", () => {
 
   test("the app origin takes a waiting pairing link once", () => {
     const { handlers } = setup();
+    openPairingLink("#p=waiting");
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
     expect(handlers.takePairingLink(app)).toBeNull();
   });
