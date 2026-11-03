@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { BuildInfo, PatchRecord } from "../src/build-info.ts";
 import { run, sha256Hex } from "./artifacts.ts";
@@ -43,7 +43,7 @@ async function build(work: string): Promise<BuildInfo> {
   const ghostty = await fetchGhostty(revision, work);
   await assertZigMatchesGhostty(ghostty.dir);
   const wrapper = await fetchWrapper(work);
-  const zig = values.zig ?? (await installZig(work));
+  const zig = values.zig === undefined ? await installZig(work) : resolve(values.zig);
 
   const ghosttyPatches = await listPatches(PATCH_ROOT, "ghostty");
   const wtermPatches = await listPatches(PATCH_ROOT, "wterm");
