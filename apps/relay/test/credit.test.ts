@@ -72,6 +72,21 @@ describe("end-to-end session credit (v1.4)", () => {
     expect(await client.messages.take()).toBe("c:1000");
   });
 
+  test("credit split into tiny CREDITs reaches the client as one c:<n>, not one text per frame", async () => {
+    const ip = testIp();
+    const host = await startRawHost(relay.url, ip, { credit: true });
+    const client = await rawClient(host.hostId, ip, true);
+    const sessionId = await opened(host);
+    await host.frame();
+    expect(await client.messages.take()).toBe("c:0");
+    client.socket.send(new Uint8Array(1000));
+    await host.frame();
+    for (const _ of Array.from({ length: 1000 })) host.probe.socket.send(encodeCredit(sessionId, 1));
+    host.probe.socket.send(encodeData(sessionId, new Uint8Array(7)));
+    expect(await client.messages.take()).toBe("c:1000");
+    expect(await client.messages.take()).toBe(7);
+  });
+
   test("a CREDIT for more than the relay forwarded closes the uplink with 4402", async () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip, { credit: true });

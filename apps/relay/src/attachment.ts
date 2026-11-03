@@ -37,6 +37,8 @@ export interface ClientAttachment extends Flow {
   /** Session bytes forwarded to a credit host, and how many of them it has credited back. */
   readonly toHost?: number | undefined;
   readonly hostCredited?: number | undefined;
+  /** Host credit not yet passed on to the client: it goes on a credit step at a time, or once nothing is in flight. */
+  readonly creditPending?: number | undefined;
 }
 
 export type Attachment = HostAttachment | ClientAttachment;
@@ -73,7 +75,7 @@ function parse(value: unknown): Attachment | undefined {
     return { ...flow, role, hostId, relayOrigin, challenge, state, signPub, credit: credit === true };
   }
   if (role === "client") {
-    const { sessionId, ended, pending, ip, pairSlot, credit, toHost, hostCredited } = value;
+    const { sessionId, ended, pending, ip, pairSlot, credit, toHost, hostCredited, creditPending } = value;
     if (typeof sessionId !== "number" || typeof ended !== "boolean") return undefined;
     if (typeof pending !== "boolean" || typeof ip !== "string") return undefined;
     if (pairSlot !== undefined && typeof pairSlot !== "string") return undefined;
@@ -88,6 +90,7 @@ function parse(value: unknown): Attachment | undefined {
       credit: credit === true,
       toHost: counted(toHost),
       hostCredited: counted(hostCredited),
+      creditPending: counted(creditPending),
     };
   }
   return undefined;

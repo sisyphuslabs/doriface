@@ -1,4 +1,10 @@
-import { CloseCode, CREDIT_QUERY, encodeCredit, encodeCreditText } from "@doriface/relay-client/wire";
+import {
+  ACK_INTERVAL_BYTES,
+  CloseCode,
+  CREDIT_QUERY,
+  encodeCredit,
+  encodeCreditText,
+} from "@doriface/relay-client/wire";
 import { type Attachment, attachmentOf, type ClientAttachment, patchClient } from "./attachment.ts";
 import { applyAck, sendControl } from "./flow.ts";
 import { clientSocket, isOpen, onlineHost } from "./sockets.ts";
@@ -30,8 +36,10 @@ export function creditFromHost(ctx: DurableObjectState, host: WebSocket, session
   if (client === undefined || session?.role !== "client" || session.ended) return;
   const credited = (session.hostCredited ?? 0) + bytes;
   if (credited > (session.toHost ?? 0)) return host.close(CloseCode.RelayProtocolError, "credit for unsent bytes");
-  patchClient(client, { hostCredited: credited });
-  if (session.credit === true && bytes > 0) client.send(encodeCreditText(bytes));
+  const pending = (session.creditPending ?? 0) + bytes;
+  const due = pending >= ACK_INTERVAL_BYTES || (pending > 0 && credited === session.toHost);
+  patchClient(client, { hostCredited: credited, creditPending: due ? 0 : pending });
+  if (session.credit === true && due) client.send(encodeCreditText(pending));
 }
 
 /** Text from either side: an `a:<n>` ack; a client's ack also becomes CREDIT for a credit host. */
