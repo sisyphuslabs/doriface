@@ -48,8 +48,7 @@ function revocationsOf(parsed: readonly Parsed[], view: View): ReadonlyMap<strin
       const subject = body.subject;
       return body.type === "revoke" && subject !== undefined && "signPubs" in subject && subject.signPubs.includes(key);
     });
-    const effective = naming.filter(({ hash }) => view.eff.has(hash));
-    const revokes = effective.length > 0 ? effective : naming;
+    const revokes = naming.filter(({ hash }) => view.eff.has(hash));
     const latest = revokes.at(-1)?.body;
     const card = cardsOf(parsed, key).at(-1);
     if (latest?.subject === undefined || !("reason" in latest.subject) || card === undefined) continue;
@@ -107,16 +106,19 @@ function localOf(file: MeshFile, view: View, self: string, live: MeshLiveFacts):
 }
 
 export function meshSourcesOf(file: MeshFile, view: View, self: string, live: MeshLiveFacts): MeshSources {
+  const parsed = parsedOf(file.records);
+  /** The founder is admitted by its own found record; PR 7's ViewFacts gives it no admitter. */
+  const foundHash = parsed.find(({ body }) => body.type === "found")?.hash;
   return {
     view: {
       members: view.members,
       overCap: view.overCap,
       revoked: view.revoked,
       noise: view.noise,
-      admitter: new Map([...view.admitter].filter(([key, admitter]) => key !== admitter)),
+      admitter: new Map([...view.admitter].filter(([key]) => view.governing.get(key) !== foundHash)),
       name: view.name,
     },
-    revocations: revocationsOf(parsedOf(file.records), view),
+    revocations: revocationsOf(parsed, view),
     failClosed: [],
     local: localOf(file, view, self, live),
     pending: live.pending,
