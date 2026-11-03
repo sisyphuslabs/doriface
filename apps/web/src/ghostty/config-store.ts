@@ -24,20 +24,38 @@ function revive(stored: unknown): TerminalConfig {
   return config;
 }
 
-/** The terminal font size older builds kept in the appearance settings, in pixels, removed once read. */
-export function takeLegacyFontSize(storage: Pick<Storage, "getItem" | "setItem"> = localStorage): number | null {
-  let parsed: unknown;
+/** The terminal font size older builds kept in the appearance settings, in pixels. */
+export interface LegacyFontSize {
+  /** The size worth carrying over, or null when there is none or it was the old default. */
+  read(): number | null;
+  /** Drops it from the appearance record; called only once the migrated value is stored. */
+  clear(): void;
+}
+
+export const NO_LEGACY_FONT_SIZE: LegacyFontSize = { read: () => null, clear: () => undefined };
+
+function parseAppearance(storage: Pick<Storage, "getItem">): Record<string, unknown> | null {
   try {
-    parsed = JSON.parse(storage.getItem(LEGACY_APPEARANCE) ?? "null");
+    const parsed: unknown = JSON.parse(storage.getItem(LEGACY_APPEARANCE) ?? "null");
+    return typeof parsed === "object" && parsed !== null ? Object.fromEntries(Object.entries(parsed)) : null;
   } catch {
     return null;
   }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const size: unknown = Reflect.get(parsed, "fontSize");
-  if (typeof size !== "number") return null;
-  const { fontSize: _dropped, ...rest } = Object.fromEntries(Object.entries(parsed));
-  storage.setItem(LEGACY_APPEARANCE, JSON.stringify(rest));
-  return size === LEGACY_DEFAULT_PX ? null : size;
+}
+
+export function legacyFontSize(storage: Pick<Storage, "getItem" | "setItem"> = localStorage): LegacyFontSize {
+  return {
+    read: () => {
+      const size = parseAppearance(storage)?.["fontSize"];
+      return typeof size === "number" && size !== LEGACY_DEFAULT_PX ? size : null;
+    },
+    clear: () => {
+      const appearance = parseAppearance(storage);
+      if (appearance === null || !("fontSize" in appearance)) return;
+      const { fontSize: _dropped, ...rest } = appearance;
+      storage.setItem(LEGACY_APPEARANCE, JSON.stringify(rest));
+    },
+  };
 }
 
 /** Ghostty sizes fonts in points; 1 px is 0.75 pt, kept to the half-point steps the control offers. */
@@ -56,9 +74,9 @@ export class TerminalConfigStore {
   readonly #storage: KeyValueStore;
   readonly loaded: Promise<void>;
 
-  constructor(storage: KeyValueStore, legacyFontSize: () => number | null = () => null) {
+  constructor(storage: KeyValueStore, legacy: LegacyFontSize = NO_LEGACY_FONT_SIZE) {
     this.#storage = storage;
-    this.loaded = this.#load(legacyFontSize).catch((cause: unknown) => {
+    this.loaded = this.#load(legacy).catch((cause: unknown) => {
       this.#error = cause instanceof Error ? cause : new Error(String(cause));
       for (const listener of this.#listeners) listener();
     });
@@ -92,14 +110,15 @@ export class TerminalConfigStore {
     await this.#storage.put(KEY, [...next]);
   }
 
-  async #load(legacyFontSize: () => number | null): Promise<void> {
+  async #load(legacy: LegacyFontSize): Promise<void> {
     const stored = await this.#storage.get(KEY);
     if (stored !== undefined) return this.#set(revive(stored));
-    const px = legacyFontSize();
-    if (px === null) return;
+    const px = legacy.read();
+    if (px === null) return legacy.clear();
     const migrated: TerminalConfig = new Map([["font-size", [pxToPt(px)]]]);
-    this.#set(migrated);
     await this.#storage.put(KEY, [...migrated]);
+    this.#set(migrated);
+    legacy.clear();
   }
 
   #set(config: TerminalConfig): void {
@@ -111,7 +130,7 @@ export class TerminalConfigStore {
 export const terminalConfigStore =
   typeof indexedDB === "undefined"
     ? new TerminalConfigStore(memoryStore())
-    : new TerminalConfigStore(deviceStore, () => takeLegacyFontSize());
+    : new TerminalConfigStore(deviceStore, legacyFontSize());
 
 export function useTerminalConfig(store: TerminalConfigStore = terminalConfigStore): TerminalConfig {
   return useSyncExternalStore(store.subscribe, () => store.config);
