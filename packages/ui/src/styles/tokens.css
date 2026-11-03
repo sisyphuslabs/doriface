@@ -14,13 +14,6 @@
     @slot;
   }
 }
-@custom-variant fine {
-  @media (pointer: fine) {
-    &:not(:where([data-density="coarse"], [data-density="coarse"] *)) {
-      @slot;
-    }
-  }
-}
 
 @theme inline {
   --color-background: var(--background);
