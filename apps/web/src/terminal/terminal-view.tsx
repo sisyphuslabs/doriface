@@ -86,30 +86,30 @@ export function TerminalView(props: TerminalViewProps) {
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
+    // wterm starts every grid at 80x24 and fits it later; the pty starts at the size the view renders.
+    ready.fit();
+    const { cols, rows } = ready;
     const display = readDisplay(ready.element);
-    connection
-      .attach(
-        { terminal: address, cols: ready.cols, rows: ready.rows, history: HISTORY_LINES, display },
-        { autoCredit: false },
-      )
-      .then(
-        (attached) => {
-          stream.current = attached;
-          onStream?.(attached);
-          const resets = new CursorResets();
-          attached.onData((bytes) => {
-            handle.current?.write(bytes);
-            attached.consumed(bytes.byteLength);
-            // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
-            if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
-          });
-          attached.onClose(() => onClosed?.(address));
-          // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
-          if (focused) ready.focus();
-          return attached;
-        },
-        (cause: unknown) => setError(`Could not open ${address}: ${String(cause)}`),
-      );
+    connection.attach({ terminal: address, cols, rows, history: HISTORY_LINES, display }, { autoCredit: false }).then(
+      (attached) => {
+        stream.current = attached;
+        // A fit while the attach was in flight had no stream to resize.
+        if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
+        onStream?.(attached);
+        const resets = new CursorResets();
+        attached.onData((bytes) => {
+          handle.current?.write(bytes);
+          attached.consumed(bytes.byteLength);
+          // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
+          if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
+        });
+        attached.onClose(() => onClosed?.(address));
+        // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
+        if (focused) ready.focus();
+        return attached;
+      },
+      (cause: unknown) => setError(`Could not open ${address}: ${String(cause)}`),
+    );
   };
 
   if (error !== null) return <p className="p-4 text-sm text-destructive">{error}</p>;
