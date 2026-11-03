@@ -5,6 +5,7 @@ import { DEVICES_USAGE, devicesCommand } from "./commands/devices.ts";
 import { PAIR_USAGE, pairCommand } from "./commands/pair.ts";
 import { HOST_VERSION, startHost } from "./host.ts";
 import { parseListen } from "./listen.ts";
+import { defaultStateDir } from "./state/files.ts";
 
 const USAGE = `usage: doriface-host [options]
        doriface-host pair [options]
@@ -16,6 +17,8 @@ const USAGE = `usage: doriface-host [options]
   --token <token>       the client token (default $DORIFACE_HOST_TOKEN, else 32 random bytes)
   --print-token         print the token on stdout once listening
   --unsafe-listen       allow a non-loopback --listen (plaintext: anyone who can reach it gets a shell)
+  --lan-listen <h:p>    also serve the end-to-end encrypted /v1/e2ee (only) here; any address is fine
+  --state-dir <dir>     host keys and paired devices (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   -h, --help            show this help`;
 
 const log = (line: string): void => {
@@ -48,6 +51,8 @@ async function serve(args: readonly string[]): Promise<void> {
       token: { type: "string" },
       "print-token": { type: "boolean", default: false },
       "unsafe-listen": { type: "boolean", default: false },
+      "lan-listen": { type: "string" },
+      "state-dir": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -63,10 +68,17 @@ async function serve(args: readonly string[]): Promise<void> {
     hc: values.hc,
     session: values.session,
     unsafeListen: values["unsafe-listen"],
+    lanListen: values["lan-listen"] === undefined ? undefined : parseListen(values["lan-listen"]),
+    stateDir: values["state-dir"] ?? defaultStateDir(),
     log,
   });
   const session = values.session === undefined ? "" : `, session ${values.session}`;
   log(`doriface-host ${HOST_VERSION} listening on ${host.url} (hc ${host.hcVersion}${session})`);
+  const e2ee = host.e2ee;
+  if (e2ee !== undefined) {
+    const lan = e2ee.lanUrl === undefined ? "" : ` and ${e2ee.lanUrl}`;
+    log(`end-to-end encrypted at ${e2ee.url}${lan}; host ${e2ee.hostId}, fingerprint ${e2ee.fingerprint}`);
+  }
   if (values["print-token"]) process.stdout.write(`${token}\n`);
   else if (given === "") log("generated a token; pass --print-token to see it");
 
