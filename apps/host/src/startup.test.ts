@@ -16,22 +16,40 @@ function freePort(): number {
   return port;
 }
 
+/**
+ * Starts a host whose LAN port is taken and returns the main port it had bound. Another process can grab the probed
+ * main port first; that attempt fails on the main port instead, so it is retried with a fresh port.
+ */
+async function mainPortWhenLanFails(lanPort: number, stateDir: string, attempts = 5): Promise<number> {
+  if (attempts === 0) throw new Error("the main port was taken on every attempt");
+  const main = freePort();
+  const error: unknown = await startHost({
+    listen: { hostname: "127.0.0.1", port: main },
+    lanListen: { hostname: "127.0.0.1", port: lanPort },
+    token: generateToken(),
+    hc: resolveHcBin(),
+    stateDir,
+    log: () => {},
+  }).then(
+    async (host) => {
+      await host.stop();
+      return new Error("startHost succeeded although the LAN port is taken");
+    },
+    (reason: unknown) => reason,
+  );
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes(String(main))) return mainPortWhenLanFails(lanPort, stateDir, attempts - 1);
+  expect(message).toContain(String(lanPort));
+  return main;
+}
+
 describe("startHost", () => {
   test("a LAN listener that cannot bind stops the main listener before rejecting", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "dh-start-"));
     const taken = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
-    const main = freePort();
+    const lanPort = taken.port ?? 0;
     try {
-      const start = startHost({
-        listen: { hostname: "127.0.0.1", port: main },
-        lanListen: { hostname: "127.0.0.1", port: taken.port ?? 0 },
-        token: generateToken(),
-        hc: resolveHcBin(),
-        stateDir,
-        log: () => {},
-      });
-      expect(start).rejects.toThrow();
-      await start.catch(() => {});
+      const main = await mainPortWhenLanFails(lanPort, stateDir);
       const again = Bun.serve({ hostname: "127.0.0.1", port: main, fetch: () => new Response() });
       await again.stop(true);
     } finally {
@@ -86,9 +104,14 @@ describe("cli", () => {
   });
 
   test("a malformed devices command fails without touching the state dir", async () => {
-    const stateDir = join(mkdtempSync(join(tmpdir(), "dh-cli-")), "never");
-    const proc = Bun.spawn([process.execPath, CLI, "devices", "lsit", "--state-dir", stateDir], { stderr: "pipe" });
-    expect(await proc.exited).toBe(2);
-    expect(Bun.spawnSync(["test", "-e", stateDir]).exitCode).toBe(1);
+    const parent = mkdtempSync(join(tmpdir(), "dh-cli-"));
+    const stateDir = join(parent, "never");
+    try {
+      const proc = Bun.spawn([process.execPath, CLI, "devices", "lsit", "--state-dir", stateDir], { stderr: "pipe" });
+      expect(await proc.exited).toBe(2);
+      expect(Bun.spawnSync(["test", "-e", stateDir]).exitCode).toBe(1);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 });
