@@ -16,8 +16,10 @@ const T = ":root .wterm.wterm.wterm";
 
 type Declarations = Record<string, string>;
 
-const family = (names: readonly string[]): string =>
-  [...names.map((name) => `"${name.replace(/"/g, "")}"`), "var(--font-term)"].join(", ");
+const cssString = (name: string): string => `"${name.replace(/[\\"]/g, (char) => `\\${char}`)}"`;
+
+const family = (names: readonly string[], fallback = "var(--font-term)"): string =>
+  [...names.map(cssString), fallback].join(", ");
 
 function cellColor(value: string, fallback: string): string {
   if (value === "cell-foreground") return "var(--term-cell-fg, var(--term-fg))";
@@ -117,7 +119,7 @@ function styleRules(config: TerminalConfig): string[] {
   ] as const;
   const rules = styles.map(([key, selector]) => {
     const names = effective(config, key);
-    return names.length === 0 ? "" : block(selector, { "font-family": family(names) });
+    return names.length === 0 ? "" : block(selector, { "font-family": family(names, "var(--term-font-family)") });
   });
   if (single(config, "font-thicken") === "true")
     rules.push(block(`${T} .term-row`, { "-webkit-text-stroke": "0.25px currentColor" }));
