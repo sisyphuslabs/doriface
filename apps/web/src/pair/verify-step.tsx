@@ -1,11 +1,10 @@
-import { base64urlEncode } from "@doriface/crypto";
 import { Button, Fingerprint, Notice } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { deviceName } from "./device-name.ts";
 import type { PairingOffer } from "./fragment.ts";
-import { pairWithHost } from "./handshake.ts";
+import { pairAndRemember } from "./handshake.ts";
 import { Steps } from "./steps.tsx";
 
 type Outcome =
@@ -21,18 +20,13 @@ export function VerifyStep({ offer }: { readonly offer: PairingOffer }) {
   const match = async (): Promise<void> => {
     setOutcome({ kind: "pairing" });
     try {
-      await pairWithHost(offer, deviceName());
+      await pairAndRemember(offer, deviceName(), (host) =>
+        connectionStore.update({ ...connectionStore.settings, mode: "relay", ...host }),
+      );
     } catch (error) {
       setOutcome({ kind: "failed", reason: error instanceof Error ? error.message : String(error) });
       return;
     }
-    connectionStore.update({
-      ...connectionStore.settings,
-      mode: "relay",
-      hostId: offer.hostId,
-      hostKey: base64urlEncode(offer.noiseStaticPub),
-      relayUrl: offer.relayUrl,
-    });
     setOutcome({ kind: "paired" });
   };
   return (
