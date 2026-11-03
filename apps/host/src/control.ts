@@ -33,6 +33,18 @@ export interface ControlListener {
   stop(): void;
 }
 
+/** Whether a running host answers on this state dir's control socket (a stale socket file refuses connections). */
+export async function controlIsLive(stateDir: string): Promise<boolean> {
+  try {
+    const socket = await Bun.connect({ unix: controlSocketPath(stateDir), socket: { data() {} } });
+    socket.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Listens on the state dir's socket, replacing a stale file; check {@link controlIsLive} first. */
 export function listenControl(stateDir: string, handle: ControlHandler): ControlListener {
   const unix = controlSocketPath(stateDir);
   rmSync(unix, { force: true });
