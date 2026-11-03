@@ -35,11 +35,12 @@ export interface UrlScope {
 /**
  * On /pair, rewrites the current history entry to a bare /pair and keeps the fragment in memory. The spec puts the
  * link only in the fragment, so a query (which has already reached the server that served the page) is dropped
- * from the history entry too but never read.
+ * from the history entry too but never read. The router shows /pair/ as the pair page as well, so it is taken alike.
  */
 export function capturePairingLink(scope: UrlScope = window): void {
   const url = new URL(scope.location.href);
-  if (url.pathname !== PAIR_PATH || (url.hash === "" && url.search === "")) return;
+  const path = url.pathname.replace(/\/+$/, "");
+  if (path !== PAIR_PATH || (url.hash === "" && url.search === "")) return;
   scope.history.replaceState(scope.history.state, "", PAIR_PATH);
   if (url.hash.length > 1) pairingLink.set(url.hash);
 }

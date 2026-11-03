@@ -51,8 +51,24 @@ describe("capturePairingLink", () => {
     expect(queryOnly.location.href).toBe("https://doriface.omo.dev/pair");
   });
 
+  test("takes /pair/ with a trailing slash, which the router shows as the pair page, the same way", () => {
+    for (const path of ["/pair/", "/pair//"]) {
+      const window = browser(`https://doriface.omo.dev${path}${FRAGMENT}`);
+      capturePairingLink(window);
+      expect(window.location.href).toBe("https://doriface.omo.dev/pair");
+      expect(window.entries.filter((entry) => entry.includes(SECRET))).toEqual([]);
+      expect(pairingLink.get()).toBe(FRAGMENT);
+      pairingLink.set(null);
+    }
+  });
+
   test("leaves other routes and a bare /pair alone", () => {
-    for (const href of [`https://doriface.omo.dev/settings${FRAGMENT}`, "https://doriface.omo.dev/pair"]) {
+    for (const href of [
+      `https://doriface.omo.dev/settings${FRAGMENT}`,
+      `https://doriface.omo.dev/pairx${FRAGMENT}`,
+      "https://doriface.omo.dev/pair",
+      "https://doriface.omo.dev/pair/",
+    ]) {
       const window = browser(href);
       capturePairingLink(window);
       expect(window.location.href).toBe(href);
