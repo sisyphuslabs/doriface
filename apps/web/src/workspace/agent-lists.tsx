@@ -3,7 +3,8 @@ import { AgentRow, SidebarSection, SpaceRow, cn, type Agent } from "@doriface/ui
 import { useMemo } from "react";
 import { useNow } from "./use-now.ts";
 import { MachineList } from "./machine-list.tsx";
-import { firstInSpace, groupAgents, machineOf, spaceName, toSpaces } from "./model.ts";
+import { activeMachineId } from "./machines.ts";
+import { firstInSpace, groupAgents, spaceName, toSpaces } from "./model.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
 export interface AgentListsProps {
@@ -29,7 +30,7 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
   const activeTerminal = terminals.find((terminal) => terminal.address === active);
   const activeSpace = activeTerminal === undefined ? undefined : spaceName(activeTerminal);
   const machines = useMachinesContext();
-  const activeMachine = active === null ? undefined : (machineOf(active) ?? machines.entries[0]?.name);
+  const activeMachine = active === null ? undefined : activeMachineId(active);
   const openSpace = (id: string): void => {
     const address = firstInSpace(terminals, id);
     if (address !== undefined) onOpen(address);
