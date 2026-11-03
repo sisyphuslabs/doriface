@@ -109,7 +109,7 @@ export function VerifyStep() {
           <code className="text-foreground">doriface-host fingerprint</code>.
         </p>
       </div>
-      <div className="rounded-lg border border-border bg-raised p-4">
+      <div className="rounded-lg bg-raised p-4">
         <Fingerprint
           label="studio · host key fingerprint (SHA-256, truncated to 160 bits)"
           value="3fa94c0e7b21d8559e04a6c17f3bd2a08c4e6f19"

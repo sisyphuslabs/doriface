@@ -30,9 +30,7 @@ export function EmptyState({
       className={cn("mx-auto flex w-full max-w-md flex-col items-center gap-3 px-6 py-10 text-center", className)}
     >
       {icon === undefined ? null : (
-        <span className="flex size-10 items-center justify-center rounded-lg bg-raised text-muted-foreground [&_svg]:size-5">
-          {icon}
-        </span>
+        <span className="flex text-muted-foreground [&_svg]:size-8 [&_svg]:stroke-[1.5]">{icon}</span>
       )}
       {size === "screen" ? (
         <h1 className="text-2xl font-semibold text-balance text-foreground">{title}</h1>
