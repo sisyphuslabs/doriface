@@ -3,6 +3,10 @@ import type { Signed } from "@doriface/mesh";
 
 /** Section 5.2: every mesh stream line is at most 256 KiB, LF included. */
 export const MAX_LINE_BYTES = 256 * 1024;
+/** Unread lines a session holds before it closes with 4400: a reader takes each line on the next microtask. */
+export const MAX_QUEUED_LINES = 256;
+/** Unread bytes a session holds before it closes with 4400, the same bound the secure link keeps on its plaintext. */
+export const MAX_QUEUED_BYTES = 4 * 1024 * 1024;
 
 export type MeshLine =
   | { readonly t: "offer"; readonly mesh: string; readonly inviter: string; readonly nonce: string }
@@ -10,6 +14,12 @@ export type MeshLine =
   | { readonly t: "records"; readonly records: readonly Signed[] }
   | { readonly t: "done"; readonly mesh: string }
   | { readonly t: "refused"; readonly reason: string };
+
+export type LineType = MeshLine["t"];
+
+/** What each side of a join reads first (section 4.4): the inviter a card, the joiner the offer; or a refusal. */
+export const INVITER_EXPECTS: readonly LineType[] = ["card", "refused"];
+export const JOINER_EXPECTS: readonly LineType[] = ["offer", "refused"];
 
 /** The decrypted session as the mesh stream sees it. */
 export interface LineLink {
@@ -22,9 +32,26 @@ export interface LineLink {
 const encoder = new TextEncoder();
 const isObject = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const strings = (value: Readonly<Record<string, unknown>>, ...keys: string[]): boolean =>
-  keys.every((key) => typeof value[key] === "string");
-const isSigned = (value: unknown): value is Signed => isObject(value) && strings(value, "body", "sig");
+const stringOf = (value: Readonly<Record<string, unknown>>, key: string): string | undefined => {
+  const field = value[key];
+  return typeof field === "string" ? field : undefined;
+};
+const signedOf = (value: unknown): Signed | undefined => {
+  if (!isObject(value)) return undefined;
+  const [body, sig] = [stringOf(value, "body"), stringOf(value, "sig")];
+  return body === undefined || sig === undefined ? undefined : { body, sig };
+};
+
+function recordsOf(value: unknown): Signed[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const records: Signed[] = [];
+  for (const item of value) {
+    const record = signedOf(item);
+    if (record === undefined) return undefined;
+    records.push(record);
+  }
+  return records;
+}
 
 /** A known line, `"unknown"` for a `t` this host does not know (ignored), or undefined when malformed. */
 function parseLine(text: string): MeshLine | "unknown" | undefined {
@@ -34,23 +61,33 @@ function parseLine(text: string): MeshLine | "unknown" | undefined {
   } catch {
     return undefined;
   }
-  if (!isObject(value) || typeof value["t"] !== "string") return undefined;
-  const line = value as MeshLine;
-  switch (line.t) {
-    case "offer":
-      return strings(value, "mesh", "inviter", "nonce") ? line : undefined;
-    case "card":
-      return strings(value, "body", "sig") ? line : undefined;
-    case "records": {
-      const records = value["records"];
-      return Array.isArray(records) && records.every(isSigned) ? line : undefined;
+  if (!isObject(value)) return undefined;
+  const get = (key: string): string | undefined => stringOf(value, key);
+  switch (value["t"]) {
+    case "offer": {
+      const [mesh, inviter, nonce] = [get("mesh"), get("inviter"), get("nonce")];
+      return mesh === undefined || inviter === undefined || nonce === undefined
+        ? undefined
+        : { t: "offer", mesh, inviter, nonce };
     }
-    case "done":
-      return strings(value, "mesh") ? line : undefined;
-    case "refused":
-      return strings(value, "reason") ? line : undefined;
+    case "card": {
+      const card = signedOf(value);
+      return card === undefined ? undefined : { t: "card", ...card };
+    }
+    case "records": {
+      const records = recordsOf(value["records"]);
+      return records === undefined ? undefined : { t: "records", records };
+    }
+    case "done": {
+      const mesh = get("mesh");
+      return mesh === undefined ? undefined : { t: "done", mesh };
+    }
+    case "refused": {
+      const reason = get("reason");
+      return reason === undefined ? undefined : { t: "refused", reason };
+    }
     default:
-      return "unknown";
+      return typeof value["t"] === "string" ? "unknown" : undefined;
   }
 }
 
@@ -76,20 +113,39 @@ export function recordLines(records: readonly Signed[], maxBytes = MAX_LINE_BYTE
 
 /**
  * LF-terminated JSON lines over a session (section 10.2). A line over the limit or malformed closes the session with
- * 4400; a line of an unknown type is skipped. `next` rejects once the session closed with nothing left to read.
+ * 4400, and so does a known line the protocol state does not expect (see {@link expect}) and a reader that falls
+ * {@link MAX_QUEUED_LINES} or {@link MAX_QUEUED_BYTES} behind; a line of an unknown type is skipped. `next` rejects
+ * once the session closed with nothing left to read.
  */
 export class MeshLines {
+  /** Resolves with the reason once the session closed or the lines were detached. */
+  readonly ended: Promise<Error>;
   readonly #link: LineLink;
-  readonly #queue: MeshLine[] = [];
+  readonly #queue: { readonly line: MeshLine; readonly bytes: number }[] = [];
   readonly #waiters: PromiseWithResolvers<MeshLine>[] = [];
+  readonly #ended = Promise.withResolvers<Error>();
+  readonly #unsubscribe: readonly Unsubscribe[];
+  #expected: ReadonlySet<LineType>;
+  #queuedBytes = 0;
   #buffer = "";
   #closed: Error | undefined;
 
-  constructor(link: LineLink) {
+  constructor(link: LineLink, expected: readonly LineType[]) {
+    this.ended = this.#ended.promise;
     this.#link = link;
+    this.#expected = new Set(expected);
     const decoder = new TextDecoder();
-    link.onData((bytes) => this.#receive(decoder.decode(bytes, { stream: true })));
-    link.onClose((error) => this.#end(error ?? new Error("the session closed")));
+    this.#unsubscribe = [
+      link.onData((bytes) => this.#receive(decoder.decode(bytes, { stream: true }))),
+      link.onClose((error) => this.#end(error ?? new Error("the session closed"))),
+    ];
+  }
+
+  /** The line types the protocol state consumes from now on; any other known line closes the session with 4400. */
+  expect(...types: LineType[]): void {
+    this.#expected = new Set(types);
+    const stray = this.#queue.find(({ line }) => !this.#expected.has(line.t));
+    if (stray !== undefined) this.#unexpected(stray.line.t);
   }
 
   send(line: MeshLine): void {
@@ -99,8 +155,11 @@ export class MeshLines {
   }
 
   next(): Promise<MeshLine> {
-    const line = this.#queue.shift();
-    if (line !== undefined) return Promise.resolve(line);
+    const queued = this.#queue.shift();
+    if (queued !== undefined) {
+      this.#queuedBytes -= queued.bytes;
+      return Promise.resolve(queued.line);
+    }
     if (this.#closed !== undefined) return Promise.reject(this.#closed);
     const waiter = Promise.withResolvers<MeshLine>();
     this.#waiters.push(waiter);
@@ -118,29 +177,55 @@ export class MeshLines {
     this.#end(new Error(reason));
   }
 
+  /** The join is over: stops reading the session, which stays open for whoever serves it next. */
+  detach(): void {
+    for (const unsubscribe of this.#unsubscribe) unsubscribe();
+    this.#end(new Error("the join is over"));
+  }
+
   #receive(text: string): void {
+    if (this.#closed !== undefined) return;
     this.#buffer += text;
-    for (let end = this.#buffer.indexOf("\n"); end !== -1; end = this.#buffer.indexOf("\n")) {
-      const raw = this.#buffer.slice(0, end);
-      this.#buffer = this.#buffer.slice(end + 1);
-      const line = encoder.encode(raw).byteLength < MAX_LINE_BYTES ? parseLine(raw) : undefined;
+    let start = 0;
+    for (let end = this.#buffer.indexOf("\n"); end !== -1; end = this.#buffer.indexOf("\n", start)) {
+      const raw = this.#buffer.slice(start, end);
+      start = end + 1;
+      const bytes = encoder.encode(raw).byteLength;
+      const line = bytes < MAX_LINE_BYTES ? parseLine(raw) : undefined;
       if (line === undefined) return this.close(CloseCode.CryptoFailure, "malformed mesh line");
-      if (line !== "unknown") this.#deliver(line);
+      if (line !== "unknown" && !this.#deliver(line, bytes)) return;
     }
+    this.#buffer = this.#buffer.slice(start);
     if (encoder.encode(this.#buffer).byteLength >= MAX_LINE_BYTES) {
       this.close(CloseCode.CryptoFailure, "a mesh line exceeds 256 KiB");
     }
   }
 
-  #deliver(line: MeshLine): void {
+  #deliver(line: MeshLine, bytes: number): boolean {
+    if (!this.#expected.has(line.t)) return this.#unexpected(line.t);
     const waiter = this.#waiters.shift();
-    if (waiter === undefined) this.#queue.push(line);
-    else waiter.resolve(line);
+    if (waiter !== undefined) {
+      waiter.resolve(line);
+      return true;
+    }
+    if (this.#queue.length >= MAX_QUEUED_LINES || this.#queuedBytes + bytes > MAX_QUEUED_BYTES) {
+      this.close(CloseCode.CryptoFailure, "too many unread mesh lines");
+      return false;
+    }
+    this.#queue.push({ line, bytes });
+    this.#queuedBytes += bytes;
+    return true;
+  }
+
+  #unexpected(type: LineType): false {
+    this.close(CloseCode.CryptoFailure, `unexpected ${type} line`);
+    return false;
   }
 
   #end(error: Error): void {
     if (this.#closed !== undefined) return;
     this.#closed = error;
+    this.#ended.resolve(error);
     for (const waiter of this.#waiters.splice(0)) waiter.reject(error);
   }
 }

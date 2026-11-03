@@ -7,6 +7,8 @@ export interface HcCoreOptions {
   readonly hc: string;
   readonly session?: string | undefined;
   readonly env?: Readonly<Record<string, string | undefined>> | undefined;
+  /** How long `hc connect` may take to answer the hello before it is killed (default 10 s). */
+  readonly timeoutMs?: number | undefined;
 }
 
 const HELLO = '{"jsonrpc":"2.0","id":0,"method":"hello","params":{}}\n';
@@ -37,10 +39,11 @@ export async function readHcCore(options: HcCoreOptions): Promise<HcCore> {
     stdout: "pipe",
     stderr: "ignore",
   });
-  proc.stdin.write(HELLO);
-  await proc.stdin.flush();
+  const timer = setTimeout(() => proc.kill(), options.timeoutMs ?? 10_000);
   let text = "";
   try {
+    proc.stdin.write(HELLO);
+    await proc.stdin.flush();
     for await (const chunk of proc.stdout.pipeThrough(new TextDecoderStream())) {
       text += chunk;
       for (const line of text.split("\n").slice(0, -1)) {
@@ -49,7 +52,18 @@ export async function readHcCore(options: HcCoreOptions): Promise<HcCore> {
       }
     }
   } finally {
+    clearTimeout(timer);
     proc.kill();
   }
   throw new Error(`\`${options.hc} connect\` answered no hello with a core`);
+}
+
+/** Reads the core once and reuses it; a failed read is not kept, so the next call asks `hc connect` again. */
+export function hcCoreReader(options: HcCoreOptions): () => Promise<HcCore> {
+  let core: Promise<HcCore> | undefined;
+  return () =>
+    (core ??= readHcCore(options).catch((error: unknown) => {
+      core = undefined;
+      throw error;
+    }));
 }

@@ -11,13 +11,15 @@ export const controlSocketPath = (stateDir: string): string => join(stateDir, "h
 
 export type { ControlRequest } from "./control-requests.ts";
 
-export type ControlHandler = (request: ControlRequest) => Promise<unknown>;
+/** `closed` aborts when the requesting connection goes away, so a long wait (`mesh-pending`) can stop. */
+export type ControlHandler = (request: ControlRequest, closed: AbortSignal) => Promise<unknown>;
 
 /** A request is one short JSON line; anything longer without a newline is refused. */
 const MAX_REQUEST_BYTES = 4096;
 
 interface ConnectionState {
   buffer: string;
+  readonly closed: AbortController;
 }
 
 export interface ControlListener {
@@ -47,7 +49,10 @@ export function listenControl(stateDir: string, handle: ControlHandler): Control
     unix,
     socket: {
       open(socket) {
-        socket.data = { buffer: "" };
+        socket.data = { buffer: "", closed: new AbortController() };
+      },
+      close(socket) {
+        socket.data.closed.abort(new Error("the control connection closed"));
       },
       data(socket, chunk) {
         socket.data.buffer += chunk.toString();
@@ -61,7 +66,7 @@ export function listenControl(stateDir: string, handle: ControlHandler): Control
         }
         const line = socket.data.buffer.slice(0, newline);
         Promise.resolve()
-          .then(() => handle(parseRequest(line)))
+          .then(() => handle(parseRequest(line), socket.data.closed.signal))
           .then(
             (result) => reply(socket, { ok: true, result }),
             (error: unknown) =>

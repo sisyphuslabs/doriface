@@ -23,7 +23,7 @@ interface Waiting {
  */
 export class PendingJoins {
   readonly #waiting = new Map<string, Waiting>();
-  readonly #watchers: ((join: PendingJoin) => void)[] = [];
+  readonly #watchers = new Set<(join: PendingJoin) => void>();
   #autoUntil = 0;
 
   /** Approves every join until `until` (the `--auto` offer's expiry); 0 turns it off. */
@@ -37,8 +37,20 @@ export class PendingJoins {
     const decided = Promise.withResolvers<JoinDecision>();
     const timer = setTimeout(() => this.#settle(join.nonce, "expired"), join.expiresAt - now);
     this.#waiting.set(join.nonce, { join, decided, timer });
-    for (const watcher of this.#watchers.splice(0)) watcher(join);
+    const watchers = [...this.#watchers];
+    this.#watchers.clear();
+    for (const watcher of watchers) watcher(join);
     return decided.promise;
+  }
+
+  /** Expires the pending join with this nonce: its session ended before anyone decided. */
+  expire(nonce: string): boolean {
+    return this.#settle(nonce, "expired");
+  }
+
+  /** Expires every pending join: the offer they came on was replaced, and they expire with it. */
+  expireAll(): void {
+    for (const nonce of this.#waiting.keys()) this.#settle(nonce, "expired");
   }
 
   /** Approves or denies the pending join with this nonce; false when there is none (decided, expired, unknown). */
@@ -50,11 +62,33 @@ export class PendingJoins {
     return [...this.#waiting.values()].map((waiting) => waiting.join);
   }
 
-  /** The oldest pending join, or the next one asked; this is what a foreground `mesh pair` waits on. */
-  next(): Promise<PendingJoin> {
+  /**
+   * The oldest pending join, or the next one asked; this is what a foreground `mesh pair` waits on. Rejects with the
+   * signal's reason once it aborts (the control connection that asked closed), and stops watching then.
+   */
+  next(signal?: AbortSignal): Promise<PendingJoin> {
     const [first] = this.list();
     if (first !== undefined) return Promise.resolve(first);
-    return new Promise((resolve) => this.#watchers.push(resolve));
+    const { promise, resolve, reject } = Promise.withResolvers<PendingJoin>();
+    const stop = (): void => {
+      this.#watchers.delete(watcher);
+      reject(signal?.reason);
+    };
+    const watcher = (join: PendingJoin): void => {
+      signal?.removeEventListener("abort", stop);
+      resolve(join);
+    };
+    if (signal?.aborted === true) stop();
+    else {
+      this.#watchers.add(watcher);
+      signal?.addEventListener("abort", stop, { once: true });
+    }
+    return promise;
+  }
+
+  /** How many `next` calls wait for a join. */
+  get watching(): number {
+    return this.#watchers.size;
   }
 
   #settle(nonce: string, decision: JoinDecision): boolean {

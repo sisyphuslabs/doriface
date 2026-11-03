@@ -180,7 +180,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
 
 /** The control socket is how `devices revoke` closes live sessions, so a host that cannot open it does not start. */
 function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
-  return listenControl(stateDir, async (request) => {
+  return listenControl(stateDir, async (request, closed) => {
     switch (request.op) {
       case "devices-changed":
       case "mesh-changed":
@@ -190,7 +190,7 @@ function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
       case "mesh-pair":
         return pendingToWire(await e2ee.hostMesh.pair(request.auto));
       case "mesh-pending":
-        return e2ee.hostMesh.pending.next();
+        return e2ee.hostMesh.pending.next(closed);
       case "mesh-approve":
         return { decided: e2ee.hostMesh.pending.decide(request.nonce, request.approve) };
       case "mesh-join":

@@ -1,14 +1,15 @@
 import { DEFAULT_RELAY_URL, type HostIdentity, PAIRING_TTL_MS, type SecureLink, SessionKind } from "@doriface/crypto";
+import { PairingStore } from "../state/pairing.ts";
 import type { CreateSocket } from "@doriface/relay-client";
 import { parseTarget } from "../connect/target.ts";
 import type { LiveSessions } from "../e2ee/sessions.ts";
 import type { PairingSlots } from "../pairing-slots.ts";
 import type { MeshStore, OwnCard } from "../state/mesh.ts";
 import type { PendingPairing } from "../state/pairing.ts";
-import { type HcCore, type HcCoreOptions, readHcCore } from "./hc-core.ts";
+import { type HcCore, type HcCoreOptions, hcCoreReader } from "./hc-core.ts";
 import { serveJoin } from "./invite.ts";
 import { joinMesh } from "./join-dial.ts";
-import { MeshLines } from "./lines.ts";
+import { INVITER_EXPECTS, MeshLines } from "./lines.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 export interface HostMeshOptions {
@@ -38,16 +39,22 @@ export interface MeshJoinRequest {
 export class HostMesh {
   readonly pending = new PendingJoins();
   readonly #options: HostMeshOptions;
-  readonly #kept = new Set<SecureLink>();
-  #core: Promise<HcCore> | undefined;
-  #offerExpiresAt = 0;
+  readonly #core: () => Promise<HcCore>;
+  #offerExpiresAt: number;
 
   constructor(options: HostMeshOptions) {
     this.#options = options;
+    this.#core = hcCoreReader(options.hc);
+    const offer = new PairingStore(options.stateDir).read();
+    this.#offerExpiresAt = offer?.mesh === true ? offer.expiresAt : 0;
   }
 
-  /** Opens a mesh offer (replacing any pending offer); with `auto`, its joins are admitted without asking. */
+  /**
+   * Opens a mesh offer (replacing any pending offer, whose pending joins expire with it); with `auto`, its joins are
+   * admitted without asking.
+   */
   async pair(auto: boolean): Promise<PendingPairing> {
+    this.pending.expireAll();
     const offer = await this.#options.slots.open(true);
     this.#offerExpiresAt = offer.expiresAt;
     this.pending.setAuto(auto ? offer.expiresAt : 0);
@@ -58,9 +65,9 @@ export class HostMesh {
   serve(secure: SecureLink): void {
     if (secure.kind === SessionKind.Session) return secure.close(1000, "this host serves no mesh sync session yet");
     const { identity, mesh, log } = this.#options;
-    const expiresAt = this.#offerExpiresAt > Date.now() ? this.#offerExpiresAt : Date.now() + PAIRING_TTL_MS;
+    const expiresAt = this.#offerExpiresAt > 0 ? this.#offerExpiresAt : Date.now() + PAIRING_TTL_MS;
     const deps = { identity, mesh, pending: this.pending, own: () => this.#own(undefined), expiresAt, log };
-    serveJoin(new MeshLines(secure), secure.remoteStatic, deps).then(
+    serveJoin(new MeshLines(secure, INVITER_EXPECTS), secure.remoteStatic, deps).then(
       () => this.#keep(secure),
       () => undefined,
     );
@@ -90,15 +97,12 @@ export class HostMesh {
 
   /** The session a join ran on stays open as a sync session, registered so a revoke closes it. */
   #keep(secure: SecureLink): void {
-    this.#kept.add(secure);
-    secure.onClose(() => this.#kept.delete(secure));
     this.#options.sessions.add(secure);
     this.#options.log("mesh: keeping the join's session for sync");
   }
 
   async #own(name: string | undefined): Promise<OwnCard> {
-    this.#core ??= readHcCore(this.#options.hc);
-    const core = await this.#core;
+    const core = await this.#core();
     return { name: name ?? core.name, hcId: core.id };
   }
 }
