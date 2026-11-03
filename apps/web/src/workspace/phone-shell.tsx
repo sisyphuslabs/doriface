@@ -1,5 +1,4 @@
 import type { HcConnection } from "@doriface/client";
-import type { Terminal } from "@doriface/protocol";
 import { ExtraKeysBar, IconButton, ScrollArea, StatusBar, StatusBarItem, StatusChip } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Monitor, Plus, Search, Settings } from "lucide-react";
@@ -12,7 +11,7 @@ import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx"
 import { AgentLists } from "./agent-lists.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
-import { agentStatus, machineOf, spaceName, terminalTitle, UNREACHABLE } from "./model.ts";
+import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
@@ -21,7 +20,7 @@ import { useMachinesContext } from "./use-machines.ts";
 
 export interface PhoneShellProps {
   readonly connection: HcConnection;
-  readonly terminals: readonly Terminal[];
+  readonly terminals: readonly Session[];
   readonly open: string | null;
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
@@ -76,7 +75,7 @@ export function PhoneShell(props: PhoneShellProps) {
 
 function PhoneTerminal(props: {
   readonly connection: HcConnection;
-  readonly terminal: Terminal;
+  readonly terminal: Session;
   readonly onBack: () => void;
 }) {
   const { connection, terminal, onBack } = props;
@@ -125,7 +124,7 @@ function PhoneTerminal(props: {
           </p>
         </div>
       </header>
-      {terminal.state === UNREACHABLE && machine !== undefined ? (
+      {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />
       ) : (
         <TerminalView

@@ -1,5 +1,5 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
-import { idOfMachine, machineOf } from "./model.ts";
+import { idOfMachine, machineOf, type Session } from "./model.ts";
 
 export interface MachineEntry {
   /** Unique even when an added machine is named like this one. */
@@ -27,15 +27,16 @@ export const showMachines = (entries: readonly MachineEntry[], listError: string
 /** Only this machine is listed: the section ends in an Add a machine row instead of a header action. */
 export const onlyThisMachine = (entries: readonly MachineEntry[]): boolean => entries.every((machine) => machine.local);
 
-function entry(name: string, local: boolean, state: string, terminals: readonly Terminal[]): MachineEntry {
-  const own = terminals.filter((t) => t.state === "live" && machineOf(t.address) === (local ? undefined : name));
+function entry(name: string, local: boolean, state: string, terminals: readonly Session[]): MachineEntry {
+  const live = terminals.filter((t) => t.state === "live" && t.offline !== true);
+  const own = live.filter((t) => machineOf(t.address) === (local ? undefined : name));
   return { id: idOfMachine(local ? undefined : name), name, local, state, live: own.length, first: own[0]?.address };
 }
 
 export function machineEntries(
   localName: string,
   machines: readonly MachineView[],
-  terminals: readonly Terminal[],
+  terminals: readonly Session[],
 ): MachineEntry[] {
   return [
     entry(localName, true, "connected", terminals),
