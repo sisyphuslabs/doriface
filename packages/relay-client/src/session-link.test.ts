@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { LinkClosedError } from "./link.ts";
 import { SessionLink } from "./session-link.ts";
-import { MAX_UNACKED_BYTES } from "./wire/index.ts";
+import { decodeMux, MAX_UNACKED_BYTES, MuxType, SESSION_WINDOW_BYTES } from "./wire/index.ts";
 
 const MiB = 1024 * 1024;
 
@@ -18,6 +18,8 @@ function recordingLink(): { readonly link: SessionLink; readonly frames: Uint8Ar
     frames,
   };
 }
+
+const typesOf = (frames: readonly Uint8Array[]): number[] => frames.map((frame) => decodeMux(frame).type);
 
 describe("SessionLink", () => {
   test("a write the uplink can no longer carry rejects instead of vanishing", async () => {
@@ -79,5 +81,36 @@ describe("SessionLink", () => {
     expect(closeCodes(frames)).toEqual([]);
     link.deliver(new Uint8Array(1));
     expect(closeCodes(frames)).toEqual([4408]);
+  });
+
+  test("after the relay's zero CREDIT, sends past the window wait and go in order as CREDIT returns", async () => {
+    const { link, frames } = recordingLink();
+    const half = new Uint8Array(SESSION_WINDOW_BYTES / 2 + 1);
+    expect(link.credited(0)).toBe(true);
+    const sends = [link.send(half), link.send(half), link.send(half)];
+    await sends[0];
+    expect(frames).toHaveLength(1);
+    expect(link.credited(half.byteLength)).toBe(true);
+    await sends[1];
+    expect(frames).toHaveLength(2);
+    expect(link.credited(2 * half.byteLength)).toBe(false);
+    link.close();
+    expect(await sends[2]?.catch((error: unknown) => error)).toBeInstanceOf(LinkClosedError);
+  });
+
+  test("once credit flows, the bytes its consumer took are credited back every 64 KiB", async () => {
+    const { link, frames } = recordingLink();
+    link.credited(0);
+    const taken: number[] = [];
+    const allTaken = Promise.withResolvers<void>();
+    link.onData((bytes) => {
+      if (taken.push(bytes.byteLength) === 3) allTaken.resolve();
+    });
+    for (const size of [40_000, 40_000, 40_000]) link.deliver(new Uint8Array(size));
+    await allTaken.promise;
+    expect(taken).toEqual([40_000, 40_000, 40_000]);
+    const credits = frames.map((frame) => decodeMux(frame)).filter((frame) => frame.type === MuxType.Credit);
+    expect(credits).toEqual([{ type: MuxType.Credit, sessionId: 5, bytes: 80_000 }]);
+    expect(typesOf(frames)).toEqual([MuxType.Credit]);
   });
 });

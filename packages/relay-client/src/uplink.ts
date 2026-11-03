@@ -10,6 +10,7 @@ import {
   authMessage,
   CHALLENGE_BYTES,
   CloseCode,
+  CREDIT_QUERY,
   decodeMux,
   encodeAuthAnswer,
   encodePairSlotClear,
@@ -39,6 +40,8 @@ export interface UplinkOptions {
   readonly createSocket?: CreateSocket;
   readonly random?: () => number;
   readonly pingIntervalMs?: number;
+  /** Ask the relay for session credit (contract v1.3); default true. */
+  readonly credit?: boolean;
 }
 
 /** Reconnecting cannot fix these: the key is wrong, or another uplink for this host took over. */
@@ -71,7 +74,8 @@ export class Uplink {
   private constructor(hostId: string, options: UplinkOptions) {
     this.hostId = hostId;
     this.#options = options;
-    this.#url = relaySocketUrl(options.relayUrl, `/v1/host/${hostId}`);
+    const query = options.credit === false ? "" : `?${CREDIT_QUERY.join("=")}`;
+    this.#url = relaySocketUrl(options.relayUrl, `/v1/host/${hostId}${query}`);
     this.#relayOrigin = relayOriginOf(this.#url);
     this.stopped = this.#stop.promise;
   }
@@ -192,7 +196,12 @@ export class Uplink {
     }
     if (frame.type === MuxType.PairSlot)
       return closeSocket(ws, CloseCode.RelayProtocolError, "PAIR_SLOT is host to relay");
-    if (frame.type === MuxType.Data || frame.type === MuxType.Credit) return;
+    if (frame.type === MuxType.Data) return;
+    if (frame.type === MuxType.Credit) {
+      if (session !== undefined && !session.credited(frame.bytes))
+        closeSocket(ws, CloseCode.RelayProtocolError, `credit for unsent bytes on session ${frame.sessionId}`);
+      return;
+    }
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
     if (session !== undefined)
       return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
