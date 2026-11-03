@@ -6,6 +6,7 @@ export interface CspOptions {
 /**
  * The renderer's Content-Security-Policy. Terminals render through WebAssembly, and the client reaches the
  * loopback host, a LAN host or a relay over ws:/wss:, where every byte past the loopback is end-to-end encrypted.
+ * Plain fetches stay on the loopback host; there is no blanket https: source to carry data anywhere else.
  */
 export function contentSecurityPolicy(options: CspOptions = {}): string {
   const dev = options.devServer !== undefined;
@@ -16,7 +17,7 @@ export function contentSecurityPolicy(options: CspOptions = {}): string {
     ["style-src", "'self'", ...inline],
     ["img-src", "'self'", "data:", "blob:"],
     ["font-src", "'self'", "data:"],
-    ["connect-src", "'self'", "ws:", "wss:", "https:", "http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+    ["connect-src", "'self'", "ws:", "wss:", "http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
     ["worker-src", "'self'", "blob:"],
     ["manifest-src", "'self'"],
     ["media-src", "'none'"],
