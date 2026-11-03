@@ -10,6 +10,7 @@ import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
 import { agentStatus, terminalTitle } from "./model.ts";
+import { ReconnectStatus } from "./reconnect-status.tsx";
 import { usePhoneActions } from "./use-app-actions.ts";
 
 export interface PhoneShellProps {
@@ -44,7 +45,10 @@ export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew,
         </ScrollArea>
         <StatusBar
           start={
-            <StatusBarItem icon={<Monitor aria-hidden />}>{`${connection.hello.core.name} · ${route}`}</StatusBarItem>
+            <>
+              <StatusBarItem icon={<Monitor aria-hidden />}>{`${connection.hello.core.name} · ${route}`}</StatusBarItem>
+              <ReconnectStatus />
+            </>
           }
         />
       </div>

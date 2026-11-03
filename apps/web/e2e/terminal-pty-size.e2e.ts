@@ -36,13 +36,14 @@ test("a new terminal's pty has the size of the grid it renders", async ({ page }
 });
 
 test("a terminal re-attached after the link reconnects has the size of the grid it renders", async ({ page }) => {
-  const { link } = await openNewTerminalBehindLatency(page, RELAY_LATENCY_MS);
-  const reattached = page.locator('[data-focused="true"] [data-terminal]');
+  const { terminal, link } = await openNewTerminalBehindLatency(page, RELAY_LATENCY_MS);
+  const opened = link.opened();
   await link.drop(false);
-  // The workspace goes away while the link is down and comes back with the focused terminal attached again.
-  await expect(reattached).toHaveCount(0, { timeout: 15_000 });
-  await expect(reattached).toContainText("$", { timeout: 30_000 });
-  const { pty, view } = await sizes(page, reattached);
+  // The terminal stays on screen while the link is down and is attached again once the page has reconnected.
+  await expect(terminal).toBeVisible();
+  await expect.poll(link.opened, { timeout: 15_000 }).toBeGreaterThan(opened);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeHidden({ timeout: 15_000 });
+  const { pty, view } = await sizes(page, terminal);
   expect(pty).toBe(view);
 });
 

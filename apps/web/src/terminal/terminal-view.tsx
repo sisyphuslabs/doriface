@@ -26,6 +26,8 @@ export interface TerminalViewProps {
 }
 
 const HISTORY_LINES = 2_000;
+/** RIS: clears the screen and scrollback before an attach replay draws them again. */
+const FULL_RESET = "\u001bc";
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
@@ -84,8 +86,17 @@ export function TerminalView(props: TerminalViewProps) {
   useBehaviors(wt, stream, options, onUnsafePaste);
   useTerminalActions(wt, stream, focused);
 
+  // Input typed while no stream is open (attaching, or the connection dropped) waits here for the next stream.
+  const pending = useRef<string[]>([]);
+  const send = (data: string): void => {
+    if (stream.current?.write(data) !== true) pending.current.push(data);
+  };
+  const attachedTo = useRef(connection);
+  const attachedBefore = useRef(false);
+
   const attach = (ready: WTerm): void => {
     setWt(ready);
+    attachedTo.current = connection;
     // wterm starts every grid at 80x24 and fits it later; the pty starts at the size the view renders.
     ready.fit();
     const { cols, rows } = ready;
@@ -96,6 +107,9 @@ export function TerminalView(props: TerminalViewProps) {
         // A fit while the attach was in flight had no stream to resize.
         if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
         onStream?.(attached);
+        // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
+        if (attachedBefore.current) handle.current?.write(FULL_RESET);
+        attachedBefore.current = true;
         const resets = new CursorResets();
         attached.onData((bytes) => {
           handle.current?.write(bytes);
@@ -105,15 +119,24 @@ export function TerminalView(props: TerminalViewProps) {
         });
         // Only the program ending closes the tab; a detach (unmount) or a lost connection leaves it open.
         attached.onClose((close) => {
+          if (stream.current === attached) stream.current = null;
           if (close.by === "core") onClosed?.(address);
         });
+        for (const data of pending.current.splice(0)) attached.write(data);
         // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
         if (focused) ready.focus();
         return attached;
       },
-      (cause: unknown) => setError(`Could not open ${address}: ${String(cause)}`),
+      (cause: unknown) => {
+        // The connection dropped mid-attach: the next one attaches again (below).
+        if (!connection.closed) setError(`Could not open ${address}: ${String(cause)}`);
+      },
     );
   };
+
+  useEffect(() => {
+    if (wt !== null && attachedTo.current !== connection) attach(wt);
+  }, [wt, connection]);
 
   if (error !== null) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
@@ -129,7 +152,7 @@ export function TerminalView(props: TerminalViewProps) {
         data-terminal={address}
         className={cn("min-h-0 flex-1 bg-term-bg", options.hollowCursor && "cursor-hollow", className)}
         onReady={attach}
-        onData={(data) => stream.current?.write(transformInput === undefined ? data : transformInput(data))}
+        onData={(data) => send(transformInput === undefined ? data : transformInput(data))}
         onResize={(cols, rows) => stream.current?.resize(cols, rows)}
         onFocus={() => stream.current?.focus(true)}
         onBlur={() => stream.current?.focus(false)}
@@ -138,7 +161,7 @@ export function TerminalView(props: TerminalViewProps) {
         paste={paste}
         onCancel={() => setPaste(null)}
         onPaste={(text) => {
-          stream.current?.write(text);
+          send(text);
           setPaste(null);
         }}
       />
