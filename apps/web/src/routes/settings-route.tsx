@@ -19,7 +19,7 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 function Group({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return (
     <section className="flex flex-col">
-      <h2 className="pb-1 text-lg font-semibold text-foreground">{title}</h2>
+      <h2 className="pb-1 text-lg font-semibold text-foreground md:text-xl">{title}</h2>
       {children}
     </section>
   );
