@@ -1,0 +1,98 @@
+import { base64urlEncode, CloseCode, hostIdOf, base64urlDecode, type HostIdentity } from "@doriface/crypto";
+import { cardOf, door, hashOf, meshIdOf, parseRecord, type Signed, signCard, viewOf } from "@doriface/mesh";
+import { cardBody, type MeshStore, type OwnCard } from "../state/mesh.ts";
+import { JoinRefused } from "./invite.ts";
+import type { MeshLine, MeshLines } from "./lines.ts";
+
+export interface JoinerContext {
+  readonly identity: HostIdentity;
+  readonly mesh: MeshStore;
+  readonly own: OwnCard;
+  /** The member this host dialed: the hostId and Noise key it authenticated in the handshake. */
+  readonly dialed: { readonly hostId: string; readonly noisePub: Uint8Array };
+  readonly log: (line: string) => void;
+}
+
+type Offer = Extract<MeshLine, { t: "offer" }>;
+
+/** Reads `records` lines until `done`; a `refused` line ends the join with the inviter's reason. */
+async function welcome(
+  lines: MeshLines,
+  records: readonly Signed[] = [],
+): Promise<{ readonly records: readonly Signed[]; readonly mesh: string }> {
+  const line = await lines.next();
+  if (line.t === "records") return welcome(lines, [...records, ...line.records]);
+  if (line.t === "done") return { records, mesh: line.mesh };
+  if (line.t === "refused") throw new JoinRefused(`the inviting member refused: ${line.reason}`);
+  throw new JoinRefused(`unexpected ${line.t} line in the welcome`);
+}
+
+/**
+ * Section 4.4 step 5: every record passes the door in order; exactly one found, whose id is the offered mesh; the
+ * dialed member is in the view with the hostId and Noise key this host authenticated; and this host is a member,
+ * admitted by that member with exactly the card it sent. Trusts nothing else in the welcome.
+ */
+export function checkWelcome(
+  records: readonly Signed[],
+  doneMesh: string,
+  offer: Offer,
+  sent: Signed,
+  ctx: JoinerContext,
+): void {
+  const stored: Signed[] = [];
+  for (const record of records) {
+    const verdict = door(record, stored);
+    if (!verdict.ok) throw new JoinRefused(`the welcome's record ${hashOf(record)} was refused: ${verdict.reason}`);
+    stored.push(record);
+  }
+  const founds = stored.filter((record) => parseRecord(record)?.type === "found");
+  const [found] = founds;
+  if (founds.length !== 1 || found === undefined) throw new JoinRefused("the welcome does not hold exactly one found");
+  if (meshIdOf(found) !== offer.mesh || doneMesh !== offer.mesh)
+    throw new JoinRefused("the welcome is for another mesh");
+  const view = viewOf(stored);
+  const inviter = offer.inviter;
+  const inviterHost = hostIdOf(base64urlDecode(inviter));
+  if (!view.members.has(inviter) || inviterHost !== ctx.dialed.hostId) {
+    throw new JoinRefused("the dialed host is not the inviting member of this mesh");
+  }
+  if (view.noise.get(inviter) !== base64urlEncode(ctx.dialed.noisePub)) {
+    throw new JoinRefused("the inviting member's key in the mesh is not the key this host dialed");
+  }
+  const self = base64urlEncode(ctx.identity.sign.publicKey);
+  const admitted = stored.some((record) => {
+    const body = parseRecord(record);
+    return (
+      body?.type === "admit" && body.by === inviter && view.eff.has(hashOf(record)) && cardOf(body)?.body === sent.body
+    );
+  });
+  if (!view.members.has(self) || view.admitter.get(self) !== inviter || !admitted) {
+    throw new JoinRefused("the welcome does not admit this host with its own card");
+  }
+}
+
+/**
+ * The joiner's side of section 4.4 on an open mesh session: answers the offer with this host's card for exactly that
+ * mesh, inviter and nonce, checks the welcome, and stores it with `createPrivateJson` (a mesh.json that appeared
+ * meanwhile wins and the join fails). A failure closes 4401 (4400 when the inviter sent a malformed line) and stores
+ * nothing. Resolves with the mesh id.
+ */
+export async function runJoiner(lines: MeshLines, ctx: JoinerContext): Promise<string> {
+  try {
+    const offer = await lines.next();
+    if (offer.t !== "offer") throw new JoinRefused(`expected an offer, got ${offer.t}`);
+    const body = cardBody(ctx.identity, ctx.own, offer.mesh, offer.inviter, offer.nonce);
+    const sent = signCard(body, ctx.identity.sign.secretKey);
+    lines.send({ t: "card", ...sent });
+    const { records, mesh } = await welcome(lines);
+    checkWelcome(records, mesh, offer, sent, ctx);
+    if (!ctx.mesh.adopt(records, ctx.identity)) throw new JoinRefused("a mesh.json appeared on this host meanwhile");
+    ctx.log(`mesh: joined mesh ${offer.mesh} via ${ctx.dialed.hostId}`);
+    return offer.mesh;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    ctx.log(`mesh: join failed: ${reason}`);
+    lines.refuse(CloseCode.UnknownDevice, reason);
+    throw error instanceof JoinRefused ? error : new JoinRefused(reason, { cause: error });
+  }
+}
