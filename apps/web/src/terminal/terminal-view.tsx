@@ -8,7 +8,7 @@ import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
-import { resetsCursor } from "./cursor-reset.ts";
+import { CursorResets } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
@@ -96,11 +96,12 @@ export function TerminalView(props: TerminalViewProps) {
         (attached) => {
           stream.current = attached;
           onStream?.(attached);
+          const resets = new CursorResets();
           attached.onData((bytes) => {
             handle.current?.write(bytes);
             attached.consumed(bytes.byteLength);
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
-            if (resetsCursor(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
+            if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
           attached.onClose(() => onClosed?.(address));
           if (focused) ready.focus();
