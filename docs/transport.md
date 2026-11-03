@@ -1,4 +1,4 @@
-# doriface transport contract v1.3.1
+# doriface transport contract v1.4
 
 This is the binding wire contract for every doriface package. Each rule below is the current one; the change log at the end records what each revision changed.
 
@@ -97,6 +97,7 @@ Residual risk: `hostId` binds only `signPub`, so a lying lookup can return the r
   - 3 CLOSE: payload = u16 LE close code.
   - 4 PAIR_SLOT (host to relay only, sessionId 0): payload = `slot (3 ASCII) || noiseStaticPub (32)` = 35 bytes. An empty payload clears the host's slot; the host sends it when the offer ends and when it retires the typed code.
   - 5 PAIR_SLOT_ACK (relay to host only, sessionId 0): payload = `status u8` (0 registered, 1 slot taken by another host, 2 malformed) followed by the 3 slot characters. A host that gets status 1 draws a new code and sends PAIR_SLOT again.
+  - 6 CREDIT (both ways, only on an uplink that dialed `?credit=1`): payload = u32 LE count of that session's bytes the sender's consumer took since its last CREDIT. See "Session credit".
 - The relay assigns sessionIds. Client <-> relay messages are the raw opaque bytes, with no header.
 - Pairing budget: at most 10 `GET /v1/pair/<slot>` and 10 pairing sessions (client connections with `?pair=<slot>`) per slot per 10 minutes (429 / 4429 beyond). Ordinary sessions are never charged to a slot.
 - Per-source pairing quota: each source IP may make at most 3 `GET /v1/pair/<slot>` lookups and open at most 3 pairing sessions per slot per 10 minutes; a refused lookup gets HTTP 429 and a refused session is closed with 4429, the same responses as the slot budget. The slot's session budget is charged only when the host has answered the session's pairing message (its first DATA on that session); a session the host closes without answering is not charged. A single source therefore cannot drain either budget alone. Many independent sources still can, which denies typed-code pairing for that code but never reveals the secret, so the remedy is the QR/link or a new code. The host's own limit of 10 answered attempts per offer (see "Pairing") holds even against a relay that ignores these budgets.
@@ -106,14 +107,16 @@ Residual risk: `hostId` binds only `signPub`, so a lying lookup can return the r
 
 Exactly three text messages are allowed on relay sockets; everything else must be binary:
 
-| Message                    | Sender                                                                | Meaning                      |
-| -------------------------- | --------------------------------------------------------------------- | ---------------------------- |
-| `ping`                     | client or host, every 30 s                                            | keepalive                    |
-| `pong`                     | the relay, via `setWebSocketAutoResponse` (no Durable Object wake-up) | keepalive reply              |
-| `a:<total bytes received>` | the receiver of relay traffic (client or host uplink), every 64 KiB   | flow-control acknowledgement |
+| Message                    | Sender                                                                | Meaning                                                 |
+| -------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------- |
+| `ping`                     | client or host, every 30 s                                            | keepalive                                               |
+| `pong`                     | the relay, via `setWebSocketAutoResponse` (no Durable Object wake-up) | keepalive reply                                         |
+| `a:<total bytes received>` | the receiver of relay traffic (client or host uplink), every 64 KiB   | flow-control acknowledgement                            |
+| `c:<bytes>`                | the relay, to a client that dialed `?credit=1`                        | the host consumed this many more of the session's bytes |
 
 - Backpressure: the Durable Object keeps `sent - acked` per socket in its attachment and closes the sending side with 4408 when it exceeds 4 MiB. Acknowledgements are cumulative and must be monotonic: an `a:<n>` that is not a decimal integer, is smaller than the last acknowledgement, or is larger than the bytes actually sent to that socket is a protocol error and closes the socket with 4402, so a peer cannot ack bytes it never received to make the relay buffer without bound.
 - Host uplink flow control: the uplink carries every session of the host, so the host acks each frame when it arrives, whether or not that session's reader has taken it. Withholding acks for one slow session would stall the whole uplink and make the relay close it, and with it every other client's session, with 4408. Each session instead bounds its own undelivered bytes: once more than 4 MiB of one session's DATA payload is waiting for its reader (exactly 4 MiB is allowed), the host closes only that session with CLOSE 4408 and drops its later DATA, still acking it. The host therefore buffers at most 4 MiB per session, so at most (32 active + 8 pending) x 4 MiB = 160 MiB per uplink.
+- Session credit: the 4 MiB cap is per socket, so on its own a sender cannot see how far behind the peer on the other socket is, and a bulk transfer (a large `file.write`, a terminal printing fast) overruns it and loses the session to 4408. A host uplink and a client that both dial with `?credit=1` get end-to-end credit per session instead. Right after OPEN the relay sends the host a zero CREDIT and the client `c:0`, which says credit flows. The host then reports what its consumer took as CREDIT frames, at least every 64 KiB, and the relay passes each on as `c:<bytes>`. The client's `a:<n>` acks reach the host as CREDIT for that session. Each side keeps at most 512 KiB of a session in flight and holds further sends, in order, until credit returns. A host CREDIT for more bytes than the relay forwarded on that session closes the uplink with 4402, and so does a CREDIT from an uplink that did not ask for credit; a `c:<n>` crediting more than the client has in flight closes the client with 4402. A credit uplink's unacked cap is 4 MiB plus one window for each of the 40 sessions it may hold (24 MiB). A peer that does not dial `?credit=1` sees none of this and keeps the v1.2 behaviour.
 - Keepalive: an alarm reaps sockets whose auto-response timestamp is more than 90 s old, with 4408.
 - Direct path: there is no relay, so the host itself answers each text `ping` with a text `pong`, and closes a `/v1/e2ee` socket with 4408 when it has received nothing (no record and no `ping`) for 90 s. Clients send `ping` every 30 s on the direct path too.
 
@@ -127,7 +130,7 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 - 4400: crypto failure, including an unknown session kind, a malformed first message, an invalid CPace share, or a key confirmation that does not decrypt
 - 1011: the host failed internally (for example it could not record a typed-code attempt); nothing was answered
 - 4401: unknown device, or a pairing the host does not accept here: no live offer, an offer already used, a typed-code pairing on the direct path or without `?pair`, a slot that is not the offer's, or a session kind `0x01` on a `?pair` session
-- 4402: relay protocol error (for example an invalid `a:<n>` acknowledgement)
+- 4402: relay protocol error (for example an invalid `a:<n>` acknowledgement, or credit for bytes never sent)
 - 4403: relay auth failed
 - 4404: host offline
 - 4408: idle or backpressure timeout, a handshake that did not finish within 10 s, or a relay session whose undelivered bytes on the host exceeded 4 MiB
@@ -137,6 +140,7 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 
 ## Change log
 
+- v1.4: end-to-end session credit: the `?credit=1` opt-in, the CREDIT mux frame (type 6) and the relay's `c:<bytes>` text, with a 512 KiB per-session window, so a session survives transfers far past the relay's 4 MiB per-socket cap. Peers without the opt-in are unchanged.
 - v1.3.1: the host uplink acks each relay frame on arrival and bounds each session's undelivered bytes at 4 MiB, closing only that session with 4408 (at most 160 MiB per uplink); acks no longer wait for a session's reader, so one slow session cannot stall the uplink.
 - v1.3: typed-code pairing uses CPace (CPACE-RISTR255-SHA512, draft-irtf-cfrg-cpace-21) bound to hostId, the host Noise static key, the slot and a per-attempt session id; its key is the IKpsk2 psk, so every code guess costs one answer from the real host and no relay or observer can test a guess offline (v1.2 let one message 2 test every code). The pairing URL carries a 32-byte link secret (`p=`) instead of the code. Every session's first message starts with a kind byte (`0x01` session, `0x02` pair-code, `0x03` pair-link), bound into the prologue. The host retires a typed code after 10 answered attempts per offer and refuses typed-code pairing on the direct path. The handshake payload rules (`"v":1`, the message 2 `lan` reply, the 256-byte line, the 64-unit name and the 4096-byte early data) and the empty key-confirmation record are now written down. v1.2 pairing and session messages are refused.
 - v1.2.1: close code 4409 (uplink replaced), which the relay already sends when a newer uplink authenticates for the same hostId.

@@ -1,5 +1,5 @@
 /**
- * End-to-end session credit (contract v1.3). The relay's 4 MiB cap is per socket, so a sender cannot see how far
+ * End-to-end session credit (contract v1.4). The relay's 4 MiB cap is per socket, so a sender cannot see how far
  * behind the peer on the other socket is. With credit, each side reports the session bytes it consumed: the host as
  * a CREDIT mux frame (which the relay passes to the client as `c:<n>`), the client through its `a:<n>` acks (which
  * the relay passes to the host as CREDIT). A sender then keeps at most {@link SESSION_WINDOW_BYTES} in flight.
