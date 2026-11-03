@@ -23,10 +23,10 @@ export function withValues(config: TerminalConfig, key: string, values: readonly
   const next = new Map(config);
   const def = KEY_BY_NAME.get(key);
   const defaults = def?.defaults ?? [];
-  // A cleared single-value field is [] from the control and [""] in the schema; both mean "unset".
-  const normalized = def?.repeatable === false && values.length === 0 ? [""] : values;
-  const same = normalized.length === defaults.length && normalized.every((value, index) => value === defaults[index]);
-  if (same) next.delete(key);
+  // Clearing a single-value field means "use the default", whatever the default is.
+  const cleared = def?.repeatable === false && (values.length === 0 || (values.length === 1 && values[0] === ""));
+  const same = values.length === defaults.length && values.every((value, index) => value === defaults[index]);
+  if (cleared || same) next.delete(key);
   else next.set(key, values);
   return next;
 }
