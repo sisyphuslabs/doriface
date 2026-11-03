@@ -12,18 +12,21 @@ export interface NoticeProps {
 
 const TINT = {
   info: "bg-selected",
-  warning: "bg-status-working/12",
+  warning: "border border-border bg-raised",
   error: "bg-status-blocked/12",
 } as const;
 
 const ICON = { info: Info, warning: TriangleAlert, error: CircleAlert } as const;
 const ICON_TONE = {
   info: "text-muted-foreground",
-  warning: "text-status-working-text",
+  warning: "text-foreground",
   error: "text-status-blocked-text",
 } as const;
 
-/** An inline problem next to the thing it affects: a tonal wash, a glyph, words and the fix. */
+/**
+ * An inline problem next to the thing it affects: a tonal wash, a glyph, words and the fix.
+ * Warning stays neutral so amber keeps meaning "working".
+ */
 export function Notice({ tone = "info", title, children, actions, className }: NoticeProps) {
   const Icon = ICON[tone];
   return (

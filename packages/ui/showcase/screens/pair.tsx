@@ -29,9 +29,10 @@ function Steps({ current }: { readonly current: number }) {
 
 export function FirstRun() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10 lg:justify-start lg:pt-16">
       <Steps current={0} />
       <EmptyState
+        size="screen"
         icon={<Server />}
         title="Connect to a host"
         description="doriface shows the terminals and agents running on a computer with herdr-core. Start the host there, then pair this device."
@@ -55,11 +56,11 @@ export function FirstRun() {
 export function PairStep() {
   const [route, setRoute] = useState<"relay" | "direct">("relay");
   return (
-    <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-5 px-6 py-10">
+    <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-5 px-6 py-10 lg:justify-start lg:pt-16">
       <Steps current={1} />
       <div className="text-center">
         <h1 className="text-2xl font-semibold text-balance text-foreground">Pair this device</h1>
-        <p className="mt-1.5 text-base text-muted-foreground">
+        <p className="mt-1.5 text-base text-pretty text-muted-foreground">
           Scan the code shown by the host, or type its pairing code.
         </p>
       </div>
@@ -84,7 +85,7 @@ export function PairStep() {
             { value: "direct", label: "Direct on LAN" },
           ]}
         />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-pretty text-muted-foreground">
           {route === "relay"
             ? "Works from anywhere. The relay only sees encrypted traffic."
             : "Only on the same network as the host. No relay involved."}
@@ -99,17 +100,20 @@ export function PairStep() {
 
 export function VerifyStep() {
   return (
-    <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-5 px-6 py-10">
+    <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-5 px-6 py-10 lg:justify-start lg:pt-16">
       <Steps current={2} />
       <div className="text-center">
         <h1 className="text-2xl font-semibold text-balance text-foreground">Check the host's key</h1>
-        <p className="mt-1.5 text-base text-muted-foreground">
+        <p className="mt-1.5 text-base text-pretty text-muted-foreground">
           The host prints the same groups when you run{" "}
           <code className="text-foreground">doriface-host fingerprint</code>.
         </p>
       </div>
       <div className="rounded-lg border border-border bg-raised p-4">
-        <Fingerprint label="studio · host key (SHA-256)" value="3fa94c0e7b21d8559e04a6c17f3bd2a08c4e6f19" />
+        <Fingerprint
+          label="studio · host key fingerprint (SHA-256, 160 bits)"
+          value="3fa94c0e7b21d8559e04a6c17f3bd2a08c4e6f19"
+        />
       </div>
       <div className="flex flex-col gap-2">
         <Button variant="primary" size="lg">
