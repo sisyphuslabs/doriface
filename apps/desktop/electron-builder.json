@@ -4,7 +4,7 @@
   "productName": "doriface",
   "executableName": "doriface",
   "electronVersion": "45.2.1",
-  "directories": { "output": "dist/release", "buildResources": "build-resources" },
+  "directories": { "output": "dist/release" },
   "files": ["dist/app/**", "package.json"],
   "extraResources": [
     { "from": "test-fixtures/web", "to": "web" },
