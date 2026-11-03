@@ -2,16 +2,19 @@ import type { CloseListener, DataListener, Unsubscribe } from "./link.ts";
 
 /**
  * Delivers chunks to every data listener strictly in order. Chunks that arrive before the first listener are held,
- * and a chunk is handed on only after every listener's promise for the previous one settled.
+ * and a chunk is handed on only after every listener's promise for the previous one settled. `onConsumed` sees each
+ * chunk once its listeners are done with it or once it is dropped, which is when its bytes may be acked.
  */
 export class Inbox {
   readonly #chunks: Uint8Array[] = [];
   readonly #listeners = new Set<DataListener>();
   readonly #onError: (error: unknown) => void;
+  readonly #onConsumed: (chunk: Uint8Array) => void;
   #pumping = false;
 
-  constructor(onError: (error: unknown) => void) {
+  constructor(onError: (error: unknown) => void, onConsumed: (chunk: Uint8Array) => void = () => {}) {
     this.#onError = onError;
+    this.#onConsumed = onConsumed;
   }
 
   add(listener: DataListener): Unsubscribe {
@@ -26,8 +29,9 @@ export class Inbox {
   }
 
   clear(): void {
-    this.#chunks.length = 0;
+    const dropped = this.#chunks.splice(0);
     this.#listeners.clear();
+    for (const chunk of dropped) this.#onConsumed(chunk);
   }
 
   #pump(): void {
@@ -52,6 +56,7 @@ export class Inbox {
     const chunk = this.#listeners.size === 0 ? undefined : this.#chunks.shift();
     if (chunk === undefined) return;
     await Promise.all([...this.#listeners].map((listener) => listener(chunk)));
+    this.#onConsumed(chunk);
     return this.#deliver();
   }
 }

@@ -1,5 +1,9 @@
 import {
+  ACK_INTERVAL_BYTES,
   CHALLENGE_BYTES,
+  ed25519Signer,
+  generateSigningKey,
+  Uplink,
   CloseCode,
   connectRelayClient,
   MAX_SESSION_SEND_BYTES,
@@ -14,6 +18,7 @@ import {
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
+import { AsyncQueue } from "./support/queue.ts";
 import { startRawHost } from "./support/raw-host.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { inOrder, times } from "./support/sequential.ts";
@@ -114,6 +119,51 @@ describe("backpressure (C3)", () => {
     expect(frames.map((frame) => frame.type)).toEqual([...times(forwarded).map(() => MuxType.Data), MuxType.Close]);
     expect(frames.at(-1)).toMatchObject({ type: MuxType.Close, code: CloseCode.IdleTimeout });
     host.probe.socket.close();
+  });
+
+  test("an uplink acks a session's bytes only once the session's consumer has taken them", async () => {
+    const ip = testIp();
+    const acks = new AsyncQueue<string>();
+    const arrivals = new AsyncQueue<number>();
+    const sessions = new AsyncQueue<SessionLink>();
+    const uplink = await Uplink.start({
+      relayUrl: relay.url,
+      signer: ed25519Signer(generateSigningKey()),
+      onSession: (session) => sessions.push(session),
+      createSocket: (url) => {
+        const ws = socketFrom(ip)(url);
+        const send = ws.send.bind(ws);
+        ws.send = (...args: Parameters<WebSocket["send"]>) => {
+          if (typeof args[0] === "string" && args[0].startsWith("a:")) acks.push(args[0]);
+          send(...args);
+        };
+        // Registered after the uplink's own listener, so it sees each message after the uplink handled it.
+        queueMicrotask(() =>
+          ws.addEventListener("message", (event: MessageEvent<unknown>) => {
+            if (event.data instanceof ArrayBuffer) arrivals.push(event.data.byteLength);
+          }),
+        );
+        return ws;
+      },
+    });
+    const client = await connectRelayClient({
+      relayUrl: relay.url,
+      hostId: uplink.hostId,
+      createSocket: socketFrom(ip),
+    });
+    const session = await sessions.take();
+    const consumed = Promise.withResolvers<void>();
+    session.onData(() => consumed.promise);
+    client.send(new Uint8Array(ACK_INTERVAL_BYTES));
+    const dataArrived = async (): Promise<void> => {
+      if ((await arrivals.take()) !== MUX_HEADER_BYTES + ACK_INTERVAL_BYTES) return dataArrived();
+    };
+    await dataArrived();
+    expect(acks.size).toBe(0);
+    consumed.resolve();
+    expect(await acks.take()).toMatch(/^a:\d+$/);
+    client.close();
+    uplink.stop();
   });
 
   test("an ack for bytes the relay never sent closes the socket with 1003", async () => {

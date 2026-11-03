@@ -8,12 +8,14 @@ import {
   type Unsubscribe,
 } from "./link.ts";
 import { MAX_SESSION_SEND_BYTES } from "./limits.ts";
-import { CloseCode, encodeClose, encodeData } from "./wire/index.ts";
+import { CloseCode, encodeClose, encodeData, MUX_HEADER_BYTES } from "./wire/index.ts";
 
 /** What a session needs from the uplink socket it is multiplexed over. */
 export interface SessionTransport {
   sendFrame(frame: Uint8Array<ArrayBuffer>): void;
   release(sessionId: number): void;
+  /** A DATA frame of this many bytes was consumed or dropped, so the uplink may ack it. */
+  consumed(frameBytes: number): void;
 }
 
 /** One client session as the host sees it: DATA frames on the uplink, demultiplexed by sessionId. */
@@ -26,7 +28,10 @@ export class SessionLink implements ByteLink {
   constructor(sessionId: number, transport: SessionTransport) {
     this.sessionId = sessionId;
     this.#transport = transport;
-    this.#inbox = new Inbox((error) => this.#end(error instanceof Error ? error : new Error(String(error)), true));
+    this.#inbox = new Inbox(
+      (error) => this.#end(error instanceof Error ? error : new Error(String(error)), true),
+      (chunk) => transport.consumed(MUX_HEADER_BYTES + chunk.byteLength),
+    );
   }
 
   async send(bytes: Uint8Array): Promise<void> {
@@ -52,7 +57,8 @@ export class SessionLink implements ByteLink {
 
   /** Called by the uplink with each DATA payload for this session. */
   deliver(payload: Uint8Array): void {
-    if (!this.#closed.fired) this.#inbox.push(payload);
+    if (this.#closed.fired) this.#transport.consumed(MUX_HEADER_BYTES + payload.byteLength);
+    else this.#inbox.push(payload);
   }
 
   /** The client left (CLOSE from the relay) or the uplink dropped; nothing is sent back. */
