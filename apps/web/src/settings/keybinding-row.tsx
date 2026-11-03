@@ -40,6 +40,7 @@ function Recorder({
   return (
     <span
       role="status"
+      data-captures-keys
       className="inline-flex h-(--control) items-center rounded-md border border-ring px-2.5 text-sm text-foreground"
     >
       Press keys…
