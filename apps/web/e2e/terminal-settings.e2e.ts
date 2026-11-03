@@ -7,7 +7,7 @@ test("font-size and cursor-style apply to an open terminal", async ({ page }) =>
     .or(page.getByRole("button", { name: "New terminal" }))
     .first()
     .click();
-  const terminal = page.locator(".wterm").first();
+  const terminal = page.locator('[data-focused="true"] [data-terminal]');
   await expect(terminal).toContainText("$", { timeout: 20_000 });
   const fontSize = () => terminal.evaluate((el) => getComputedStyle(el).getPropertyValue("--term-font-size").trim());
   expect(await fontSize()).toBe("13pt");
@@ -27,9 +27,13 @@ test("font-size and cursor-style apply to an open terminal", async ({ page }) =>
     .click();
 
   await page.goto("/");
-  await expect(page.locator(".wterm").first()).toContainText("$", { timeout: 20_000 });
+  await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 20_000 });
   expect(await fontSize()).toBe("14pt");
-  await expect(page.locator("[data-cursor-shape]").first()).toHaveAttribute("data-cursor-shape", "bar", {
-    timeout: 10_000,
-  });
+  await expect(page.locator('[data-focused="true"] [data-terminal] [data-cursor-shape]')).toHaveAttribute(
+    "data-cursor-shape",
+    "bar",
+    {
+      timeout: 10_000,
+    },
+  );
 });
