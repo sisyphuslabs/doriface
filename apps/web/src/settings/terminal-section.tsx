@@ -74,7 +74,7 @@ function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: Termin
             disabled={unsupported}
             onCommit={(values) => {
               setInvalid(null);
-              void terminalConfigStore.update(withValues(config, def.key, values));
+              void terminalConfigStore.update((current) => withValues(current, def.key, values));
             }}
             onInvalid={setInvalid}
           />
@@ -82,7 +82,7 @@ function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: Termin
             label={`Reset ${def.key}`}
             icon={<RotateCcw />}
             className={changed ? "" : "invisible"}
-            onClick={() => void terminalConfigStore.update(withoutKey(config, def.key))}
+            onClick={() => void terminalConfigStore.update((current) => withoutKey(current, def.key))}
           />
         </>
       }
@@ -119,7 +119,7 @@ export function TerminalSection() {
           size="sm"
           variant="ghost"
           disabled={config.size === 0}
-          onClick={() => void terminalConfigStore.update(EMPTY_CONFIG)}
+          onClick={() => void terminalConfigStore.update(() => EMPTY_CONFIG)}
         >
           Reset all
         </Button>

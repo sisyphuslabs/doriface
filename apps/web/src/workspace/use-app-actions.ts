@@ -25,7 +25,7 @@ export function zoomedConfig(config: TerminalConfig, delta: number | null): Term
 }
 
 function zoom(delta: number | null): void {
-  void terminalConfigStore.update(zoomedConfig(terminalConfigStore.config, delta));
+  void terminalConfigStore.update((current) => zoomedConfig(current, delta));
 }
 
 function neighbour(list: readonly string[], current: string | null, step: 1 | -1): string | null {

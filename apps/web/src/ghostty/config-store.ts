@@ -45,11 +45,12 @@ const pxToPt = (px: number): string => String(Math.round(px * 1.5) / 2);
 
 /**
  * The device's terminal config: loaded from IndexedDB once, saved on every change, observed by open
- * terminals. A change made before the load finishes wins over the stored value.
+ * terminals. Changes are updaters applied in order on top of the loaded value, so one made before the
+ * load finishes keeps every stored setting.
  */
 export class TerminalConfigStore {
   #config: TerminalConfig = EMPTY_CONFIG;
-  #dirty = false;
+  #queue: Promise<void>;
   #listeners = new Set<() => void>();
   readonly #storage: KeyValueStore;
   readonly loaded: Promise<void>;
@@ -57,6 +58,7 @@ export class TerminalConfigStore {
   constructor(storage: KeyValueStore, legacyFontSize: () => number | null = () => null) {
     this.#storage = storage;
     this.loaded = this.#load(legacyFontSize);
+    this.#queue = this.loaded;
   }
 
   get config(): TerminalConfig {
@@ -68,15 +70,20 @@ export class TerminalConfigStore {
     return () => this.#listeners.delete(listener);
   };
 
-  update(config: TerminalConfig): Promise<void> {
-    this.#dirty = true;
-    this.#set(config);
-    return this.#storage.put(KEY, [...config]);
+  update(change: (current: TerminalConfig) => TerminalConfig): Promise<void> {
+    const applied = this.#queue.then(async () => this.#apply(change));
+    this.#queue = applied.catch(() => undefined);
+    return applied;
+  }
+
+  async #apply(change: (current: TerminalConfig) => TerminalConfig): Promise<void> {
+    const next = change(this.#config);
+    this.#set(next);
+    await this.#storage.put(KEY, [...next]);
   }
 
   async #load(legacyFontSize: () => number | null): Promise<void> {
     const stored = await this.#storage.get(KEY).catch(() => undefined);
-    if (this.#dirty) return;
     if (stored !== undefined) return this.#set(revive(stored));
     const px = legacyFontSize();
     if (px === null) return;

@@ -40,9 +40,7 @@ function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedKeybinds; r
             variant="primary"
             disabled={applied === 0}
             onClick={() => {
-              void keymapStore.loaded.then(() =>
-                keymapStore.update(importKeybinds(currentPlatform(), keymapStore.overrides, parsed)),
-              );
+              void keymapStore.update((current) => importKeybinds(currentPlatform(), current, parsed));
               onClose();
             }}
           >
@@ -118,7 +116,7 @@ export function KeybindingsSection() {
           size="sm"
           variant="ghost"
           disabled={overrides.size === 0}
-          onClick={() => void keymapStore.update(NO_OVERRIDES)}
+          onClick={() => void keymapStore.update(() => NO_OVERRIDES)}
         >
           Reset all
         </Button>
@@ -138,9 +136,11 @@ export function KeybindingsSection() {
                 keymap={keymap}
                 platform={platform}
                 changed={changed(action.id)}
-                onBind={(trigger) => void keymapStore.update(withBinding(platform, overrides, trigger, action.id))}
-                onUnbind={(trigger) => void keymapStore.update(withoutTrigger(platform, overrides, trigger))}
-                onReset={() => void keymapStore.update(resetAction(platform, overrides, action.id))}
+                onBind={(trigger) =>
+                  void keymapStore.update((current) => withBinding(platform, current, trigger, action.id))
+                }
+                onUnbind={(trigger) => void keymapStore.update((current) => withoutTrigger(platform, current, trigger))}
+                onReset={() => void keymapStore.update((current) => resetAction(platform, current, action.id))}
               />
             ))}
           </section>

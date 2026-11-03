@@ -19,14 +19,18 @@ function gatedStore(stored: unknown): {
 }
 
 describe("TerminalConfigStore", () => {
-  test("a change made before the stored config loads is kept", async () => {
+  test("a change made before the stored config loads applies on top of it", async () => {
     const gated = gatedStore([["font-size", ["20"]]]);
     const store = new TerminalConfigStore(gated.storage);
-    await store.update(new Map([["cursor-style", ["bar"]]]));
+    const early = store.update((current) => new Map([...current, ["cursor-style", ["bar"]]]));
     gated.release();
-    await store.loaded;
+    await early;
     expect(single(store.config, "cursor-style")).toBe("bar");
-    expect(single(store.config, "font-size")).toBe("13");
+    expect(single(store.config, "font-size")).toBe("20");
+    expect(gated.puts.at(-1)).toEqual([
+      ["font-size", ["20"]],
+      ["cursor-style", ["bar"]],
+    ]);
   });
 
   test("an old appearance font size moves into font-size once", async () => {
