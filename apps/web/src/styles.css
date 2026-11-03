@@ -35,6 +35,10 @@
   --term-color-15: inherit;
   --term-font-family: var(--font-term);
   --term-selection-bg: var(--term-selection);
+  /* IME preedit: dark text on the lighter terminal colour in every theme (Ghostty's inverse in dark), so it also
+     reads on the light highlight Chromium paints behind a composition that carries no IME spans. */
+  --term-preedit-fg: light-dark(var(--term-fg), var(--term-bg));
+  --term-preedit-bg: light-dark(var(--term-bg), var(--term-fg));
 }
 
 /* A two-cell glyph is usually narrower than its cells; centre it in the pair rather than leaving a gap after it. */
