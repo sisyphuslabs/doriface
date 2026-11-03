@@ -80,6 +80,9 @@ async function snapshot(parent: string): Promise<string> {
     worktrees: await git(parent, "worktree", "list", "--porcelain"),
     branch: await git(parent, "symbolic-ref", "--quiet", "HEAD"),
     status: await git(parent, "status", "--porcelain", "--untracked-files=no"),
+    untracked: (await git(parent, "status", "--porcelain", "--untracked-files=all"))
+      .split("\n")
+      .filter((line) => line.startsWith("?? ") && !line.startsWith("?? .relay/")),
     index: new Bun.CryptoHasher("sha256").update(readFileSync(join(gitDir, "index"))).digest("hex"),
     work: readFileSync(join(parent, "work.txt"), "utf8"),
     relayObjectAbsent: await gitFails(parent, "cat-file", "-e", `${standInRev}^{commit}`),
@@ -165,6 +168,15 @@ const variants: readonly Variant[] = [
     arrange: async (p) => {
       await emptyRepo(p);
       symlinkSync(join(p, ".git", "index"), join(relay(p), ".git", "index"));
+      return {};
+    },
+  },
+  {
+    name: "core.worktree in .relay/.git/config naming the parent",
+    outcome: "fetched",
+    arrange: async (p) => {
+      await emptyRepo(p);
+      await git(relay(p), "config", "core.worktree", p);
       return {};
     },
   },
