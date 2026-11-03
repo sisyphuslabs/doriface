@@ -11,7 +11,7 @@ export interface JsonRpcErrorObject {
 export type JsonRpcMessage =
   | {
       readonly kind: "request";
-      readonly id: JsonRpcId;
+      readonly id: JsonRpcId | null;
       readonly method: string;
       readonly params: JsonValue | undefined;
     }
@@ -93,8 +93,11 @@ function classify(value: JsonObject): JsonRpcMessage {
   const id = value["id"];
   if (typeof method === "string") {
     const params = value["params"];
+    if (params !== undefined && !Array.isArray(params) && !isJsonObject(params)) {
+      throw new JsonRpcParseError("params must be an array or an object");
+    }
     if (id === undefined) return { kind: "notification", method, params };
-    if (!isId(id)) throw new JsonRpcParseError("a request id must be a number or a string");
+    if (id !== null && !isId(id)) throw new JsonRpcParseError("a request id must be a number, a string or null");
     return { kind: "request", id, method, params };
   }
   if (method !== undefined) throw new JsonRpcParseError("method must be a string");

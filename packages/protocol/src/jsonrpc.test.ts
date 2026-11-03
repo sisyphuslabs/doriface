@@ -37,6 +37,15 @@ describe("JSON-RPC parsing", () => {
     });
   });
 
+  test("accepts a request whose id is null, as JSON-RPC 2.0 permits", () => {
+    expect(parseJsonRpc('{"jsonrpc":"2.0","id":null,"method":"x","params":[1]}')).toEqual({
+      kind: "request",
+      id: null,
+      method: "x",
+      params: [1],
+    });
+  });
+
   test("HcRpcError carries code, kind and hint from data", () => {
     const error = new HcRpcError(
       failure(
@@ -65,6 +74,7 @@ describe("JSON-RPC parsing", () => {
     ["not an object", "[1]"],
     ["wrong version", '{"jsonrpc":"1.0","id":1,"result":1}'],
     ["fractional id", '{"jsonrpc":"2.0","id":1.5,"method":"x"}'],
+    ["scalar params", '{"jsonrpc":"2.0","id":1,"method":"x","params":3}'],
     ["both result and error", '{"jsonrpc":"2.0","id":1,"result":1,"error":{"code":1,"message":"m"}}'],
     ["neither result nor error", '{"jsonrpc":"2.0","id":1}'],
     ["error without message", '{"jsonrpc":"2.0","id":1,"error":{"code":1}}'],
