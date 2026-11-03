@@ -65,7 +65,7 @@ function ready(): void {
   if (devUrl === undefined) serveApp(webRoot(), csp);
   else applyDevCsp(session.defaultSession, origin, csp);
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate({ platform, openExternal })));
-  registerIpc({ origin, startLocalHost: () => localHost.start() });
+  registerIpc({ origin, startLocalHost: () => localHost.start(), openExternal: (url) => shell.openExternal(url) });
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
