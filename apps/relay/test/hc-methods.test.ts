@@ -132,7 +132,7 @@ describe("every hc method family, client SDK -> Noise IK -> relay -> doriface-ho
 
   test("doc.set and doc.get round-trip a versioned document, and subscribers hear of it", async () => {
     const { hc, events } = started();
-    const name = "relay-doc";
+    const name = `relay-doc-${crypto.randomUUID().slice(0, 8)}`;
     expect((await hc.call("doc.get", { name })).version).toBe(0);
     const set = await hc.call("doc.set", { name, value: { panes: ["t1"] }, version: 0 });
     expect(set.version).toBe(1);
