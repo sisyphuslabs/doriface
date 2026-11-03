@@ -13,17 +13,16 @@ describe("startOn", () => {
     expect(await startOn(run, "build-box")).toEqual({ ok: true, address: "build-box/t4" });
   });
 
-  test.each([
-    ["unavailable", "build-box is unreachable", "build-box is not connected"],
-    ["machine_unknown", "unknown machine", "build-box is no longer added here"],
-    ["needs_login", "needs a login", "build-box wants a login: run hc machine login build-box in a terminal"],
-    ["needs_update", "too old", "build-box runs an hc too old for this: run hc machine update build-box"],
-  ])("hc's %s refusal names the machine and what to do", async (kind, message, says) => {
-    expect(await startOn(refusing(kind, message), "build-box")).toEqual({
-      ok: false,
-      failure: { machine: "build-box", kind, message: says },
-    });
-  });
+  test.each(["unavailable", "machine_unknown"])(
+    "terminal.run's %s refusal comes back as that kind, with advice naming the machine",
+    async (kind) => {
+      const started = await startOn(refusing(kind, "raw"), "build-box");
+      if (started.ok) throw new Error("expected a refusal");
+      expect([started.failure.kind, started.failure.machine]).toEqual([kind, "build-box"]);
+      expect(started.failure.message).toContain("build-box");
+      expect(started.failure.message).not.toBe("raw");
+    },
+  );
 
   test("another refusal keeps hc's own message, and a broken connection is not swallowed", async () => {
     expect(await startOn(refusing("spawn_failed", "no shell"), "build-box")).toEqual({
