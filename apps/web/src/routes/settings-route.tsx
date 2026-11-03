@@ -1,13 +1,13 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
 import { ArrowLeft, Keyboard, Link2, Palette, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { currentPlatform, triggerKeys } from "../keys/trigger.ts";
 import { AppearanceSection } from "../settings/appearance-section.tsx";
 import { ConnectionSection } from "../settings/connection-section.tsx";
 import { DevicesSection } from "../settings/devices-section.tsx";
 import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 import { useCloseSettings } from "../settings/use-close-settings.ts";
-import { triggerKeys, currentPlatform } from "../keys/trigger.ts";
 
 const SECTIONS = [
   { id: "connections", label: "Connections", icon: <Link2 /> },

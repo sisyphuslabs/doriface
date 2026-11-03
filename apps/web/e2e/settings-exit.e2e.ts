@@ -4,26 +4,38 @@ import { expect, terminalCount, test } from "./fixtures.ts";
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 
-/** Mirrored from apps/desktop/src/config/window.ts: the macOS window buttons and the inset the shell sets. */
-const TRAFFIC_LIGHTS = { x: 12, y: 16, width: 54, height: 16 } as const;
-const MAC_TITLEBAR_CSS = ":root { --titlebar-inset-start: 78px; }";
-
 const AIR_VIEWPORTS = [
   { width: 1470, height: 956 },
   { width: 1280, height: 800 },
 ] as const;
 
+/** The default close-tab shortcut on this platform's keymap (Cmd+W on macOS, Ctrl+Shift+W elsewhere). */
+const CLOSE_TAB = process.platform === "darwin" ? "Meta+KeyW" : "Control+Shift+KeyW";
+const SETTINGS = "ControlOrMeta+Comma";
+
 /** Opens Settings from the workspace the way a person does, so there is a view to return to. */
-async function openSettings(page: Page): Promise<void> {
+async function openSettings(page: Page, section?: string): Promise<void> {
   await page.goto("/");
   await terminalCount(page);
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings$/);
+  if (section !== undefined) await page.getByRole("button", { name: section, exact: true }).click();
 }
 
 async function expectWorkspace(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("complementary", { name: "Workspace" })).toBeVisible();
+}
+
+async function openImportDialog(page: Page) {
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Import keybinds…" }).click();
+  await (
+    await chooser
+  ).setFiles({ name: "keybinds", mimeType: "text/plain", buffer: Buffer.from("keybind = super+t=new_tab\n") });
+  const dialog = page.getByRole("dialog", { name: "Import these keybindings?" });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 const closeControl = (page: Page) => page.getByRole("button", { name: "Close settings" }).first();
@@ -40,30 +52,33 @@ for (const viewport of AIR_VIEWPORTS) {
 
     test("the settings shortcut toggles Settings closed", async ({ page }) => {
       await openSettings(page);
-      await page.keyboard.press("ControlOrMeta+Comma");
+      await page.keyboard.press(SETTINGS);
       await expectWorkspace(page);
     });
 
-    test("Escape closes an open dialog first, then Settings", async ({ page }) => {
+    test("the close-tab shortcut closes Settings", async ({ page }) => {
       await openSettings(page);
-      await page.getByRole("button", { name: "Keybindings", exact: true }).click();
-      const chooser = page.waitForEvent("filechooser");
-      await page.getByRole("button", { name: "Import keybinds…" }).click();
-      await (
-        await chooser
-      ).setFiles({ name: "keybinds", mimeType: "text/plain", buffer: Buffer.from("keybind = super+t=new_tab\n") });
-      const dialog = page.getByRole("dialog", { name: "Import these keybindings?" });
-      await expect(dialog).toBeVisible();
-      await page.keyboard.press("Escape");
-      await expect(dialog).toBeHidden();
-      await expect(page).toHaveURL(/\/settings$/);
-      await page.keyboard.press("Escape");
+      await page.keyboard.press(CLOSE_TAB);
       await expectWorkspace(page);
     });
+
+    for (const key of ["Escape", CLOSE_TAB, SETTINGS]) {
+      test(`${key} closes an open dialog's layer first and never Settings under it`, async ({ page }) => {
+        await openSettings(page, "Keybindings");
+        const dialog = await openImportDialog(page);
+        await page.keyboard.press(key);
+        await expect(page).toHaveURL(/\/settings$/);
+        if (key === "Escape") await expect(dialog).toBeHidden();
+        else await expect(dialog).toBeVisible();
+        if (key !== "Escape") await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await page.keyboard.press("Escape");
+        await expectWorkspace(page);
+      });
+    }
 
     test("Escape cancels a shortcut recording first, then closes Settings", async ({ page }) => {
-      await openSettings(page);
-      await page.getByRole("button", { name: "Keybindings", exact: true }).click();
+      await openSettings(page, "Keybindings");
       await page.getByRole("button", { name: "Record a shortcut for New tab" }).click();
       await expect(page.getByRole("status")).toHaveText("Press keys…");
       await page.keyboard.press("Escape");
@@ -74,23 +89,46 @@ for (const viewport of AIR_VIEWPORTS) {
       await expectWorkspace(page);
     });
 
-    test("the close control clears the macOS window buttons and names its shortcut", async ({ page }) => {
-      // The desktop shell injects this stylesheet under its hidden-inset titlebar.
-      await page.addInitScript((css) => {
+    for (const [key, owner] of [
+      [CLOSE_TAB, "Close tab"],
+      [SETTINGS, "Open settings"],
+    ] as const) {
+      test(`a recording takes ${key} as the new shortcut instead of leaving Settings`, async ({ page }) => {
+        await openSettings(page, "Keybindings");
+        await page.getByRole("button", { name: "Record a shortcut for New tab" }).click();
+        await expect(page.getByRole("status")).toHaveText("Press keys…");
+        await page.keyboard.press(key);
+        await expect(page).toHaveURL(/\/settings$/);
+        await expect(page.getByText(`is ${owner}.`)).toBeVisible();
+        await expect(page.getByRole("button", { name: "Replace" })).toBeVisible();
+      });
+    }
+
+    test("Escape in a search field with text clears it first, then closes Settings", async ({ page }) => {
+      await openSettings(page, "Terminal");
+      const search = page.getByRole("searchbox", { name: "Search terminal settings" });
+      await search.fill("cursor");
+      await page.keyboard.press("Escape");
+      await expect(search).toHaveValue("");
+      await expect(page).toHaveURL(/\/settings$/);
+      await page.keyboard.press("Escape");
+      await expectWorkspace(page);
+    });
+
+    test("the close control starts past the window-button inset and names its shortcut", async ({ page }) => {
+      // The desktop shell sets this variable under its hidden-inset titlebar; any value proves the control follows it.
+      await page.addInitScript(() => {
         document.addEventListener("DOMContentLoaded", () => {
           const style = document.createElement("style");
-          style.textContent = css;
+          style.textContent = ":root { --titlebar-inset-start: 91px; }";
           document.head.append(style);
         });
-      }, MAC_TITLEBAR_CSS);
+      });
       await page.goto("/settings");
       const control = closeControl(page);
       await expect(control).toBeVisible();
       const box = await control.boundingBox();
-      expect(box).not.toBeNull();
-      const lights = TRAFFIC_LIGHTS;
-      const clear = box === null || box.x >= lights.x + lights.width || box.y >= lights.y + lights.height;
-      expect(clear, `close control at ${JSON.stringify(box)} sits under the window buttons`).toBe(true);
+      expect(box?.x ?? 0).toBeGreaterThanOrEqual(91);
       await control.hover();
       await expect(page.getByText(/^Close settings\s*Esc$/)).toBeVisible();
       await control.click();
