@@ -1,18 +1,24 @@
-import { ChevronLeft, Link2, Palette, X } from "lucide-react";
+import { ChevronLeft, Keyboard, Link2, Palette, SquareTerminal, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "../../src/index.ts";
+import { KeyboardSection } from "./settings-keyboard.tsx";
 import { AppearanceSection, ConnectionSection } from "./settings-sections.tsx";
+import { TerminalSection } from "./settings-terminal.tsx";
 
-export type SettingsSection = "connection" | "appearance";
+export type SettingsSection = "connection" | "appearance" | "terminal" | "keyboard";
 
 const SECTIONS = [
   { id: "connection", label: "Connection", icon: <Link2 /> },
   { id: "appearance", label: "Appearance", icon: <Palette /> },
+  { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
+  { id: "keyboard", label: "Keyboard", icon: <Keyboard /> },
 ] as const;
 
 const BODY: Readonly<Record<SettingsSection, () => ReactNode>> = {
   connection: () => <ConnectionSection />,
   appearance: () => <AppearanceSection />,
+  terminal: () => <TerminalSection />,
+  keyboard: () => <KeyboardSection />,
 };
 
 /** List-detail settings: section navigation beside one section's form, which scrolls on its own. */
@@ -66,4 +72,12 @@ export function SettingsScreen({ section = "connection" }: { readonly section?: 
 
 export function SettingsAppearanceScreen() {
   return <SettingsScreen section="appearance" />;
+}
+
+export function SettingsTerminalScreen() {
+  return <SettingsScreen section="terminal" />;
+}
+
+export function SettingsKeyboardScreen() {
+  return <SettingsScreen section="keyboard" />;
 }

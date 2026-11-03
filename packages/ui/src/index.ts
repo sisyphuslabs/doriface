@@ -2,6 +2,7 @@ export { cn } from "./lib/cn.ts";
 export { AgentRow, type Agent, type AgentRowProps } from "./components/agent-row.tsx";
 export { Badge, badgeVariants, type BadgeProps } from "./components/badge.tsx";
 export { Button, buttonVariants, type ButtonProps } from "./components/button.tsx";
+export { ColorSwatch, type ColorSwatchProps } from "./components/color-swatch.tsx";
 export { CommandPalette, type Command, type CommandPaletteProps } from "./components/command-palette.tsx";
 export { Dialog, DialogClose, DialogPanel, type DialogPanelProps, type DialogProps } from "./components/dialog.tsx";
 export { EmptyState, type EmptyStateProps } from "./components/empty-state.tsx";
@@ -12,16 +13,19 @@ export {
   type ExtraKeysBarProps,
 } from "./components/extra-keys-bar.tsx";
 export { Fingerprint, type FingerprintProps } from "./components/fingerprint.tsx";
+export { FontFamilyList, type FontFamilyListProps } from "./components/font-family-list.tsx";
 export { IconButton, type IconButtonProps } from "./components/icon-button.tsx";
 export { Field, Input, inputClass, type FieldProps, type InputProps } from "./components/input.tsx";
 export { Kbd, type KbdProps } from "./components/kbd.tsx";
 export { Menu, MenuItem, MenuSeparator, type MenuItemProps, type MenuProps } from "./components/menu.tsx";
 export { Notice, type NoticeProps } from "./components/notice.tsx";
 export { NumberStepper, type NumberStepperProps } from "./components/number-stepper.tsx";
+export { PaletteEditor, type PaletteEditorProps } from "./components/palette-editor.tsx";
 export { Popover, type PopoverProps } from "./components/popover.tsx";
 export { QrCode, type QrCodeProps } from "./components/qr-code.tsx";
 export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area.tsx";
 export { SegmentedControl, type SegmentOption, type SegmentedControlProps } from "./components/segmented-control.tsx";
+export { ShortcutField, type ShortcutFieldProps, type ShortcutState } from "./components/shortcut-field.tsx";
 export { SettingRow, type SettingRowProps } from "./components/setting-row.tsx";
 export { Sheet, SheetPanel, type SheetProps } from "./components/sheet.tsx";
 export { SidebarSection, type SidebarSectionProps } from "./components/sidebar-section.tsx";

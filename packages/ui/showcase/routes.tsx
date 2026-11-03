@@ -3,7 +3,12 @@ import { MobileAgentsScreen, MobileScreen } from "./screens/mobile.tsx";
 import { PairScreen } from "./screens/pair.tsx";
 import { PaletteScreen } from "./screens/palette.tsx";
 import { PrimitivesScreen } from "./screens/primitives.tsx";
-import { SettingsAppearanceScreen, SettingsScreen } from "./screens/settings.tsx";
+import {
+  SettingsAppearanceScreen,
+  SettingsKeyboardScreen,
+  SettingsScreen,
+  SettingsTerminalScreen,
+} from "./screens/settings.tsx";
 import { ShellScreen } from "./screens/shell.tsx";
 import { StatesScreen } from "./screens/states.tsx";
 
@@ -14,6 +19,8 @@ export const ROUTES = [
   { id: "palette", title: "Command palette", render: PaletteScreen },
   { id: "settings", title: "Settings", render: SettingsScreen },
   { id: "settings-appearance", title: "Settings: appearance", render: SettingsAppearanceScreen },
+  { id: "settings-terminal", title: "Settings: terminal", render: SettingsTerminalScreen },
+  { id: "settings-keyboard", title: "Settings: keyboard", render: SettingsKeyboardScreen },
   { id: "mobile", title: "Phone", render: MobileScreen },
   { id: "mobile-agents", title: "Phone agents list", render: MobileAgentsScreen },
   { id: "states", title: "Empty, offline and error states", render: StatesScreen },
