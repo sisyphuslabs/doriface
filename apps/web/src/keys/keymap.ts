@@ -1,6 +1,6 @@
 import { actionFor, actionFromGhostty, decodeZigString } from "./actions.ts";
 import { defaultKeymap, type Keymap } from "./defaults.ts";
-import { normalizeTrigger, type Platform } from "./trigger.ts";
+import { normalizeTrigger, triggerKeys, type Platform } from "./trigger.ts";
 
 /** Only what the user changed: a trigger bound to an action, or null for a default the user removed. */
 export type Overrides = ReadonlyMap<string, string | null>;
@@ -23,6 +23,12 @@ export function resolveKeymap(
 
 export function triggersFor(keymap: Keymap, action: string): string[] {
   return [...keymap].filter(([, bound]) => bound === action).map(([trigger]) => trigger);
+}
+
+/** The key chips of an action's first binding on this platform, or undefined when nothing is bound to it. */
+export function actionKeys(keymap: Keymap, action: string, platform: Platform): string[] | undefined {
+  const [trigger] = triggersFor(keymap, action);
+  return trigger === undefined ? undefined : triggerKeys(trigger, platform);
 }
 
 export type Checked = { readonly ok: true; readonly trigger: string } | { readonly ok: false; readonly reason: string };

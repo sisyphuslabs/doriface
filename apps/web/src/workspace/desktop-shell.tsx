@@ -3,6 +3,7 @@ import type { Terminal } from "@doriface/protocol";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Monitor, PanelLeft } from "lucide-react";
 import { useState } from "react";
+import { useActionKeys } from "../keys/use-action-keys.ts";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
@@ -20,6 +21,8 @@ export interface DesktopShellProps {
 
 export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: DesktopShellProps) {
   const [sidebar, setSidebar] = useState(true);
+  const paletteKeys = useActionKeys("app.palette");
+  const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   useAppActions({ terminals, tabs, onNew, onToggleSidebar: () => setSidebar((shown) => !shown) });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
@@ -66,7 +69,7 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
                 {toggle}
                 <IconButton
                   label="Show sidebar"
-                  keys={["⌘", "B"]}
+                  {...(sidebarKeys === undefined ? {} : { keys: sidebarKeys })}
                   icon={<PanelLeft />}
                   onClick={() => setSidebar(true)}
                 />
@@ -101,7 +104,7 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
               onClick={onPalette}
               className="h-5 gap-1.5 px-1 text-xs text-muted-foreground"
             >
-              <Kbd keys={["⌘", "⇧", "P"]} />
+              {paletteKeys === undefined ? null : <Kbd keys={paletteKeys} />}
               Commands
             </Button>
           }
