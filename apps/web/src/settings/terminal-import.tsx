@@ -56,7 +56,7 @@ export function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedConf
             className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-2.5 py-1.5 last:border-b-0"
           >
             <span className="w-6 shrink-0 text-right text-2xs text-dim tabular-nums">{line.line}</span>
-            <span className="min-w-0 flex-1 truncate text-foreground">
+            <span title={`${line.key} = ${line.value}`} className="min-w-0 flex-1 truncate text-foreground">
               {line.key} = {line.value}
             </span>
             <Badge tone={STATUS[line.status].tone}>{STATUS[line.status].label}</Badge>
