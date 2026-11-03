@@ -1,6 +1,7 @@
 import type { Socket, UnixSocketListener } from "bun";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { type ControlRequest, parseRequest } from "./control-requests.ts";
 
 /**
  * A Unix socket in the state dir (0700) through which `doriface-host pair` and `devices revoke` reach the running
@@ -8,22 +9,9 @@ import { join } from "node:path";
  */
 export const controlSocketPath = (stateDir: string): string => join(stateDir, "host.sock");
 
-export type ControlRequest =
-  | { readonly op: "pair" }
-  | { readonly op: "devices-changed" }
-  | { readonly op: "mesh-changed" };
+export type { ControlRequest } from "./control-requests.ts";
 
 export type ControlHandler = (request: ControlRequest) => Promise<unknown>;
-
-function parseRequest(line: string): ControlRequest {
-  const value: unknown = JSON.parse(line);
-  if (typeof value === "object" && value !== null && "op" in value) {
-    if (value.op === "pair") return { op: "pair" };
-    if (value.op === "devices-changed") return { op: "devices-changed" };
-    if (value.op === "mesh-changed") return { op: "mesh-changed" };
-  }
-  throw new Error("unknown control request");
-}
 
 /** A request is one short JSON line; anything longer without a newline is refused. */
 const MAX_REQUEST_BYTES = 4096;
