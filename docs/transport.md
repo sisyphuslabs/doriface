@@ -72,7 +72,7 @@ Message sizes: a client's first message is at most 4449 bytes for kind `0x01`, 4
 
 So message 1 carries nothing secret, every code guess costs an answer from the real host, and the typed-code UI keeps the fingerprint confirmation step.
 
-Residual risk: `hostId` binds only `signPub`, so a lying lookup can return the real `hostId` and `signPub` with a substituted Noise static key and still pass the client's `hostId` check. The PAKE then gives the substitute one online guess per attempt and no way to reach the real host, and only the fingerprint check catches the substitution. Signing the PAIR_SLOT key with `signPub` would remove this row; it is a planned relay change.
+Residual risk: `hostId` binds only `signPub`, so a lying lookup can return the real `hostId` and `signPub` with a substituted Noise static key and still pass the client's `hostId` check. The PAKE then gives the substitute one online guess per attempt and no way to reach the real host, and only the fingerprint check catches the substitution. Signing the PAIR_SLOT key with `signPub` would remove this row; it is a planned relay change (#22).
 
 ## Record layer
 
