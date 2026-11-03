@@ -12,6 +12,7 @@ import { PhoneShell } from "./phone-shell.tsx";
 import type { SessionVerb } from "./use-app-actions.ts";
 import { useMachineRuns } from "./use-machine-runs.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
+import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
@@ -44,8 +45,10 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
   const runs = useMachineRuns(connection, opened, refresh);
   const toasts = useToastManager();
+  const inView = narrow ? phoneOpen : tabs.active;
   const newTerminal = (): void => {
-    void connection.call("terminal.run", {}).then(
+    const active = terminals.find((terminal) => terminal.address === inView);
+    void connection.call("terminal.run", runParamsFor(active)).then(
       (started) => {
         opened(started.address);
         return started;
@@ -66,7 +69,6 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPhoneOpen(address);
   };
   const onPalette = (): void => setPalette(true);
-  const inView = narrow ? phoneOpen : tabs.active;
   const onSession: SessionVerb = (verb) => {
     if (inView === null) return false;
     setAsk({ kind: verb, address: inView });
