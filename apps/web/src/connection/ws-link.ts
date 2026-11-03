@@ -24,7 +24,6 @@ export interface LinkOptions {
   readonly pingEveryMs?: number;
 }
 
-
 /** Opens a binary WebSocket and resolves once it is open; one message carries one chunk of bytes. */
 export function openWebSocketLink(
   url: string,

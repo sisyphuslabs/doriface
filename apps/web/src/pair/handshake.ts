@@ -1,7 +1,7 @@
 import { HcConnection } from "@doriface/client";
 import { closeCodeOf, type PairingSecret, secureLink } from "@doriface/crypto";
 import { CloseCode, connectRelayClient } from "@doriface/relay-client";
-import { loadDeviceKey } from "../connection/device-key.ts";
+import { BROWSER_DEPS, deviceKeyFor, type RelayDeps } from "../connection/relay-deps.ts";
 import { slotOf } from "./code.ts";
 import type { OfferSecret, PairingOffer } from "./fragment.ts";
 
@@ -41,17 +41,15 @@ function pairingOption(secret: OfferSecret, name: string): PairingSecret {
  * It resolves only after the host answered `hello` on that session, which the host does only once it stored this
  * device, so the next IK session is admitted.
  */
-export async function pairWithHost(offer: PairingOffer, name: string): Promise<void> {
+export async function pairWithHost(offer: PairingOffer, name: string, deps: RelayDeps = BROWSER_DEPS): Promise<void> {
   const { secret } = offer;
   const pairing = pairingOption(secret, name);
-  const [staticKey, link] = await Promise.all([
-    loadDeviceKey(),
-    connectRelayClient({
-      relayUrl: offer.relayUrl,
-      hostId: offer.hostId,
-      ...(secret.mode === "code" ? { pairSlot: slotOf(secret.code) } : {}),
-    }),
-  ]);
+  const link = await connectRelayClient({
+    relayUrl: offer.relayUrl,
+    hostId: offer.hostId,
+    ...(secret.mode === "code" ? { pairSlot: slotOf(secret.code) } : {}),
+  });
+  const staticKey = await deviceKeyFor(link, deps);
   try {
     const secure = await secureLink(link, {
       role: "initiator",
