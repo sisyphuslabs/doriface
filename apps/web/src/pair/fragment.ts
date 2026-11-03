@@ -20,8 +20,9 @@ export function base32(bytes: Uint8Array): string {
   return out;
 }
 
+/** Unpadded base64url, or null for anything that is not: a stray character, or a length of 1 mod 4. */
 export function fromBase64Url(text: string): Uint8Array | null {
-  if (!/^[A-Za-z0-9_-]*$/.test(text)) return null;
+  if (!/^[A-Za-z0-9_-]*$/.test(text) || text.length % 4 === 1) return null;
   const binary = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
