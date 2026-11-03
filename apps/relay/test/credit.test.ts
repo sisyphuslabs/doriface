@@ -49,7 +49,7 @@ async function opened(host: RawHost): Promise<number> {
   return open.sessionId;
 }
 
-describe("end-to-end session credit (v1.3)", () => {
+describe("end-to-end session credit (v1.4)", () => {
   test("a credit host gets a zero CREDIT after OPEN, and a credit client gets c:0", async () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip, { credit: true });

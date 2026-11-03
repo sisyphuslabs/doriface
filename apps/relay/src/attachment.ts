@@ -18,7 +18,7 @@ export interface HostAttachment extends Flow {
   readonly state: HostState;
   /** Set once the host has proved it holds the key. */
   readonly signPub?: Uint8Array | undefined;
-  /** The uplink dialed with `?credit=1` (contract v1.3). */
+  /** The uplink dialed with `?credit=1` (contract v1.4). */
   readonly credit?: boolean | undefined;
 }
 
@@ -32,7 +32,7 @@ export interface ClientAttachment extends Flow {
   readonly ip: string;
   /** Set for a pairing session (`?pair=<slot>`), which is charged to that slot once the host answers it. */
   readonly pairSlot?: string | undefined;
-  /** Both ends asked for session credit (contract v1.3), so the host's CREDIT reaches this client as `c:<n>`. */
+  /** Both ends asked for session credit (contract v1.4), so the host's CREDIT reaches this client as `c:<n>`. */
   readonly credit?: boolean | undefined;
   /** Session bytes forwarded to a credit host, and how many of them it has credited back. */
   readonly toHost?: number | undefined;
