@@ -8,7 +8,15 @@ import {
   type Unsubscribe,
 } from "./link.ts";
 import { MAX_SESSION_SEND_BYTES } from "./limits.ts";
-import { CloseCode, encodeClose, encodeData, MAX_UNACKED_BYTES } from "./wire/index.ts";
+import { SendWindow } from "./send-window.ts";
+import {
+  ACK_INTERVAL_BYTES,
+  CloseCode,
+  encodeClose,
+  encodeCredit,
+  encodeData,
+  MAX_UNACKED_BYTES,
+} from "./wire/index.ts";
 
 /** What a session needs from the uplink socket it is multiplexed over. */
 export interface SessionTransport {
@@ -17,7 +25,11 @@ export interface SessionTransport {
   release(sessionId: number): void;
 }
 
-/** One client session as the host sees it: DATA frames on the uplink, demultiplexed by sessionId. */
+/**
+ * One client session as the host sees it: DATA frames on the uplink, demultiplexed by sessionId. The uplink acks every
+ * frame on arrival (contract v1.3.1); this session bounds its own undelivered bytes instead, and once the relay grants
+ * credit (v1.4) it reports what its reader took, so a client that honours credit never gets near that bound.
+ */
 export class SessionLink implements ByteLink {
   readonly sessionId: number;
   /** The slot of an IKpsk2 pairing session (the client dialed `?pair=<slot>`); undefined for an ordinary session. */
@@ -25,7 +37,10 @@ export class SessionLink implements ByteLink {
   readonly #transport: SessionTransport;
   readonly #inbox: Inbox;
   readonly #closed = new CloseSignal();
+  readonly #window = new SendWindow();
   #backlog = 0;
+  #creditFlows = false;
+  #uncredited = 0;
 
   constructor(sessionId: number, pairSlot: string | undefined, transport: SessionTransport) {
     this.sessionId = sessionId;
@@ -33,20 +48,30 @@ export class SessionLink implements ByteLink {
     this.#transport = transport;
     this.#inbox = new Inbox(
       (error) => this.#end(error instanceof Error ? error : new Error(String(error)), true),
-      (chunk) => {
-        this.#backlog -= chunk.byteLength;
-      },
+      (chunk) => this.#taken(chunk.byteLength),
     );
   }
 
-  async send(bytes: Uint8Array): Promise<void> {
-    if (this.#closed.fired) throw new LinkClosedError(`session ${this.sessionId} is closed`);
+  send(bytes: Uint8Array): Promise<void> {
+    if (this.#closed.fired) return Promise.reject(new LinkClosedError(`session ${this.sessionId} is closed`));
     if (bytes.byteLength > MAX_SESSION_SEND_BYTES) {
-      throw new RangeError(`${bytes.byteLength} bytes exceed the relay's ${MAX_SESSION_SEND_BYTES}-byte message cap`);
+      const cap = `the relay's ${MAX_SESSION_SEND_BYTES}-byte message cap`;
+      return Promise.reject(new RangeError(`${bytes.byteLength} bytes exceed ${cap}`));
     }
-    if (!this.#transport.sendFrame(encodeData(this.sessionId, bytes))) {
-      throw new LinkClosedError(`the uplink carrying session ${this.sessionId} is closed`);
-    }
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    const go = (): void => {
+      if (this.#transport.sendFrame(encodeData(this.sessionId, bytes))) resolve();
+      else reject(new LinkClosedError(`the uplink carrying session ${this.sessionId} is closed`));
+    };
+    this.#window.admit(bytes.byteLength, go, reject);
+    return promise;
+  }
+
+  /** Called by the uplink with each CREDIT for this session; false when it credits bytes never sent. */
+  credited(bytes: number): boolean {
+    this.#creditFlows = true;
+    this.#reportCredit();
+    return this.#window.credit(bytes);
   }
 
   onData(listener: DataListener): Unsubscribe {
@@ -78,6 +103,18 @@ export class SessionLink implements ByteLink {
     this.#end(code === CloseCode.Normal ? undefined : new RelayCloseError(code, "session ended"), false);
   }
 
+  #taken(bytes: number): void {
+    this.#backlog -= bytes;
+    this.#uncredited += bytes;
+    this.#reportCredit();
+  }
+
+  #reportCredit(): void {
+    if (!this.#creditFlows || this.#closed.fired || this.#uncredited < ACK_INTERVAL_BYTES) return;
+    this.#transport.sendFrame(encodeCredit(this.sessionId, this.#uncredited));
+    this.#uncredited = 0;
+  }
+
   #end(error: Error | undefined, tellRelay: boolean, code?: number): void {
     if (this.#closed.fired) return;
     if (tellRelay) {
@@ -86,6 +123,7 @@ export class SessionLink implements ByteLink {
     }
     this.#transport.release(this.sessionId);
     this.#inbox.clear();
+    this.#window.drop(new LinkClosedError(`session ${this.sessionId} is closed`));
     this.#closed.fire(error);
   }
 }

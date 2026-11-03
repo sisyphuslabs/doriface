@@ -1,6 +1,6 @@
 import { type CreateSocket, defaultCreateSocket, relaySocketUrl } from "./socket.ts";
 import { WebSocketLink } from "./websocket-link.ts";
-import { HOST_ID_PATTERN, PAIR_SLOT_PATTERN, PING_INTERVAL_MS } from "./wire/index.ts";
+import { CREDIT_QUERY, HOST_ID_PATTERN, PAIR_SLOT_PATTERN, PING_INTERVAL_MS } from "./wire/index.ts";
 
 export interface ClientConnectOptions {
   /** e.g. `https://relay-doriface.omo.dev`. */
@@ -23,10 +23,11 @@ export async function connectRelayClient(options: ClientConnectOptions): Promise
   const { hostId, pairSlot } = options;
   if (!HOST_ID_PATTERN.test(hostId)) throw new Error(`invalid hostId ${hostId}`);
   if (pairSlot !== undefined && !PAIR_SLOT_PATTERN.test(pairSlot)) throw new Error(`invalid pairing slot ${pairSlot}`);
-  const query = pairSlot === undefined ? "" : `?pair=${pairSlot}`;
-  const url = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}${query}`);
+  const query = new URLSearchParams(pairSlot === undefined ? [] : [["pair", pairSlot]]);
+  query.set(...CREDIT_QUERY);
+  const url = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}?${query.toString()}`);
   const ws = (options.createSocket ?? defaultCreateSocket)(url);
-  const link = new WebSocketLink(ws, options.pingIntervalMs ?? PING_INTERVAL_MS);
+  const link = new WebSocketLink(ws, options.pingIntervalMs ?? PING_INTERVAL_MS, { credit: true });
   return new Promise((resolve, reject) => {
     ws.addEventListener("open", () => resolve(link), { once: true });
     link.onClose((error) => reject(error ?? new Error(`relay socket to ${url} closed before opening`)));
