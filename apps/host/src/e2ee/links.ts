@@ -2,12 +2,15 @@ import type { ByteLink, SecureLink, Unsubscribe } from "@doriface/crypto";
 import { ByteQueue, type DataHandler, type Link } from "../link.ts";
 import type { WsLink } from "../ws-link.ts";
 
+/** A transport a session's record layer runs on, with the backpressure `plaintextLink` needs: a socket or a relay session. */
+export interface E2eeWire extends ByteLink, Wire {}
+
 /**
  * A server WebSocket as the crypto layer's ByteLink. `send` is fire-and-forget there, so the socket writes stay
  * reachable through `flushed`, which settles once every write so far has; that is how the host waits for Bun's drain
  * before reading more.
  */
-export class WsByteLink<T> implements ByteLink {
+export class WsByteLink<T> implements E2eeWire {
   readonly #ws: WsLink<T>;
   #pending: Promise<void> = Promise.resolve();
   #gate: () => Promise<void> | undefined = () => undefined;
