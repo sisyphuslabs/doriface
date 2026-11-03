@@ -66,7 +66,7 @@ export function FingerprintMismatch() {
         }
       >
         <div className="flex flex-col gap-3 rounded-md bg-raised p-3">
-          <p className="text-xs font-medium text-foreground">Host key fingerprint (SHA-256, 160 bits)</p>
+          <p className="text-xs font-medium text-foreground">Host key fingerprint (SHA-256, truncated to 160 bits)</p>
           <Fingerprint label="Expected" value="3fa94c0e7b21d8559e04a6c17f3bd2a08c4e6f19" />
           <Fingerprint label="Received" value="3fa94c0e91c4d8559e04b0f27f3bd2a08c4e6f19" mismatched={[2, 5]} />
         </div>
