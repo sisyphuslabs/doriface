@@ -13,6 +13,8 @@ export interface KeybindingRowProps {
   readonly onBind: (trigger: string) => void;
   readonly onUnbind: (trigger: string) => void;
   readonly onReset: () => void;
+  /** Storage could not be read: nothing can be changed. */
+  readonly disabled: boolean;
 }
 
 /** Listens for the next key combination; a plain Escape cancels, a modified one is recorded. */
@@ -45,7 +47,16 @@ function Recorder({
   );
 }
 
-export function KeybindingRow({ action, keymap, platform, changed, onBind, onUnbind, onReset }: KeybindingRowProps) {
+export function KeybindingRow({
+  action,
+  keymap,
+  platform,
+  changed,
+  onBind,
+  onUnbind,
+  onReset,
+  disabled,
+}: KeybindingRowProps) {
   const [recording, setRecording] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const triggers = [...keymap].filter(([, bound]) => bound === action.id).map(([trigger]) => trigger);
@@ -95,6 +106,7 @@ export function KeybindingRow({ action, keymap, platform, changed, onBind, onUnb
               <Kbd keys={triggerKeys(trigger, platform)} />
               <IconButton
                 label={`Remove ${trigger} from ${action.label}`}
+                disabled={disabled}
                 icon={<X />}
                 onClick={() => onUnbind(trigger)}
               />
@@ -105,12 +117,14 @@ export function KeybindingRow({ action, keymap, platform, changed, onBind, onUnb
           ) : (
             <IconButton
               label={`Record a shortcut for ${action.label}`}
+              disabled={disabled}
               icon={<Plus />}
               onClick={() => setRecording(true)}
             />
           )}
           <IconButton
             label={`Reset ${action.label}`}
+            disabled={disabled}
             icon={<RotateCcw />}
             className={changed ? "" : "invisible"}
             onClick={onReset}

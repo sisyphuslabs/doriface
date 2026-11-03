@@ -71,7 +71,7 @@ export function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedConf
 }
 
 /** Choose a Ghostty config file to preview, or download the current settings as one. */
-export function ImportExport() {
+export function ImportExport({ readOnly }: { readonly readOnly: boolean }) {
   const [parsed, setParsed] = useState<ParsedConfig | null>(null);
   const pick = (): void => {
     const input = document.createElement("input");
@@ -84,7 +84,7 @@ export function ImportExport() {
   };
   return (
     <div className="flex flex-wrap gap-2">
-      <Button size="sm" onClick={pick}>
+      <Button size="sm" disabled={readOnly} onClick={pick}>
         Import Ghostty config…
       </Button>
       <Button
