@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -134,6 +134,20 @@ describe("cli", () => {
     const stderr = await new Response(proc.stderr).text();
     expect(await proc.exited).toBe(2);
     expect(stderr).toContain("--lan-listen wants host:port");
+  });
+
+  test("pair with an unusable --web-origin fails before it replaces the pending offer", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "dh-cli-"));
+    try {
+      const proc = Bun.spawn(
+        [process.execPath, CLI, "pair", "--no-qr", "--web-origin", "file:///x", "--state-dir", stateDir],
+        { stderr: "pipe" },
+      );
+      expect(await proc.exited).not.toBe(0);
+      expect(existsSync(join(stateDir, "pairing.json"))).toBe(false);
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
   });
 
   test("a malformed devices command fails without touching the state dir", async () => {
