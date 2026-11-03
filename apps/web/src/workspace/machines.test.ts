@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { machineEntries, machineKey } from "./machines.ts";
+import { activeMachineId, machineEntries, machineKey } from "./machines.ts";
 import { toSpaces } from "./model.ts";
 
 const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => ({
@@ -36,9 +36,9 @@ describe("machineEntries", () => {
       terminal("t2"),
     ];
     expect(machineEntries("studio", [view("boxb", "connected"), view("lab", "unreachable")], terminals)).toEqual([
-      { name: "studio", local: true, state: "connected", live: 2, first: "t1" },
-      { name: "boxb", local: false, state: "connected", live: 2, first: "boxb/t1" },
-      { name: "lab", local: false, state: "unreachable", live: 0, first: undefined },
+      { id: "local", name: "studio", local: true, state: "connected", live: 2, first: "t1" },
+      { id: "machine:boxb", name: "boxb", local: false, state: "connected", live: 2, first: "boxb/t1" },
+      { id: "machine:lab", name: "lab", local: false, state: "unreachable", live: 0, first: undefined },
     ]);
   });
 
@@ -51,6 +51,16 @@ describe("machineEntries", () => {
     ];
     expect(machineKey(dropped)).not.toBe(machineKey(live));
     expect(machineKey([...live, terminal("t9", { state: "finished" })])).toBe(machineKey(live));
+  });
+});
+
+describe("selection with an added machine named like this one", () => {
+  test("rows get distinct ids, and only the machine the active terminal is on is selected", () => {
+    const entries = machineEntries("boxb", [view("boxb", "connected")], [terminal("t1"), terminal("boxb/t1")]);
+    expect(new Set(entries.map((entry) => entry.id)).size).toBe(2);
+    const selected = (active: string) => entries.filter((entry) => entry.id === activeMachineId(active));
+    expect(selected("boxb/t1").map((entry) => entry.local)).toEqual([false]);
+    expect(selected("t1").map((entry) => entry.local)).toEqual([true]);
   });
 });
 
