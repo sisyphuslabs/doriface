@@ -46,8 +46,21 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
   const flows = (el: Element): boolean =>
     el instanceof HTMLElement && getComputedStyle(el).display === "inline" && !replaced.test(el.tagName);
 
+  // Visually hidden on purpose (the sr-only pattern: a box clipped to nothing), as a skip link is until it is focused:
+  // nothing of it shows, so nothing of it can overflow.
+  const clippedAway = { clipPath: "inset(50%)", clip: "rect(0px, 0px, 0px, 0px)" } as const;
+  const hidden = (el: Element): boolean => {
+    for (let node: Element | null = el; node !== null; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.clipPath === clippedAway.clipPath || style.clip === clippedAway.clip) return true;
+    }
+    return false;
+  };
   const elements = [...document.body.querySelectorAll("*")].filter(
-    (el) => !skip.some((selector) => el.closest(selector) !== null) && el.checkVisibility({ visibilityProperty: true }),
+    (el) =>
+      !skip.some((selector) => el.closest(selector) !== null) &&
+      el.checkVisibility({ visibilityProperty: true }) &&
+      !hidden(el),
   );
   for (const el of elements) {
     const style = getComputedStyle(el);
