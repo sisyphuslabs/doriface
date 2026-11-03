@@ -11,11 +11,19 @@ const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
 };
 
 /**
+ * A terminal on an added machine that is not connected: hc keeps the last picture it had of it, so the app marks it
+ * with this state (beside hc's "live" and "finished") instead of showing it as live. See `withReach`.
+ */
+export const UNREACHABLE = "unreachable";
+
+/**
  * The one status selector every surface uses (sidebar section, pane chip, tab glyph, space attention).
- * A program that never reported OSC 7501, or reported a word outside the protocol's, reads as idle.
+ * A program that never reported OSC 7501, or reported a word outside the protocol's, reads as idle; one on a machine
+ * that cannot be reached reads as unknown.
  */
 export function agentStatus(terminal: Terminal): AgentStatus {
   if (terminal.state === "finished") return "done";
+  if (terminal.state === UNREACHABLE) return "unknown";
   const word = terminal.status?.state;
   return word !== undefined && Object.hasOwn(OSC_STATES, word) ? (OSC_STATES[word] ?? "idle") : "idle";
 }
@@ -85,17 +93,21 @@ export interface AgentGroups {
   readonly done: readonly Agent[];
   readonly working: readonly Agent[];
   readonly idle: readonly Agent[];
+  /** On a machine that cannot be reached: their state is unknown until it is back. */
+  readonly offline: readonly Agent[];
 }
 
-/** Needs you, Done, Working, Idle; programs that never reported sit with Idle. */
+/** Needs you, Done, Working, Idle, then Offline; programs that never reported sit with Idle. */
 export function groupAgents(terminals: readonly Terminal[], nowMs: number): AgentGroups {
   const groups = { blocked: [] as Agent[], done: [] as Agent[], working: [] as Agent[], idle: [] as Agent[] };
+  const offline: Agent[] = [];
   for (const terminal of terminals) {
+    if (terminal.state === UNREACHABLE) offline.push(toAgent(terminal, nowMs));
     if (terminal.state !== "live") continue;
     const agent = toAgent(terminal, nowMs);
     if (agent.status !== "unknown") groups[agent.status].push(agent);
   }
-  return groups;
+  return { ...groups, offline };
 }
 
 const ATTENTION: readonly AgentStatus[] = ["blocked", "working", "done"];
