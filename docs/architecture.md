@@ -107,6 +107,8 @@ Measured on 2026-11-03 with `apps/host/scripts/latency-bench.ts` (`relay --relay
 | client SDK → Noise IK → local relay (`wrangler dev`) → doriface-host → hc    | 0.67 ms  | 2.67 ms  | 4.88 ms  | 0.38 ms  |
 | client SDK → `hc connect` over stdio (no host, no relay, no encryption)      | 0.064 ms | 0.133 ms | 0.177 ms | 0.040 ms |
 
+p99 here is nearest-rank over 200 samples, so it is the second-largest sample: a weak statistic, reported for its order of magnitude.
+
 What the numbers say:
 
 - Over the production relay, the network dominates. One edge round trip from this connection measured about 76 ms at p50; the relayed path being two of them, about 152 ms, is consistent with the measured 158-181 ms p50 (INFERRED). The p95 and p99 tails, 0.3 s and 0.5 s, are likely the edge's own spread, though the edge row has no p99 to show it (INFERRED).
