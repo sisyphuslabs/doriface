@@ -95,9 +95,14 @@ export async function startHost(options: HostOptions): Promise<Host> {
   if (lan !== undefined && lanServer !== undefined) {
     e2ee?.lanUrls.push(...lanUrlsFor(lan.hostname, lanServer.port ?? lan.port));
   }
+  let control: ReturnType<typeof openControl> | undefined;
+  try {
+    control = options.stateDir === undefined || e2ee === undefined ? undefined : openControl(options.stateDir, e2ee);
+  } catch (error) {
+    await Promise.all([server.stop(true), lanServer?.stop(true)]);
+    throw new Error(`cannot open the control socket that devices revoke uses: ${String(error)}`, { cause: error });
+  }
   e2ee?.slots.start();
-  const control =
-    options.stateDir === undefined || e2ee === undefined ? undefined : openControl(options.stateDir, e2ee, options.log);
   const boundPort = server.port ?? port;
   const base = `ws://${formatHost(hostname)}:${boundPort}`;
   let stopping: Promise<void> | undefined;
@@ -126,16 +131,12 @@ export async function startHost(options: HostOptions): Promise<Host> {
   };
 }
 
-function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>, log: (line: string) => void) {
-  try {
-    return listenControl(stateDir, async (request) => {
-      if (request.op === "devices-changed") return e2ee.sessions.closeRevoked();
-      return e2ee.slots.open();
-    });
-  } catch (error) {
-    log(`no control socket (pair and devices revoke will not reach this host): ${String(error)}`);
-    return undefined;
-  }
+/** The control socket is how `devices revoke` closes live sessions, so a host that cannot open it does not start. */
+function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
+  return listenControl(stateDir, async (request) => {
+    if (request.op === "devices-changed") return e2ee.sessions.closeRevoked();
+    return e2ee.slots.open();
+  });
 }
 
 function e2eeDeps(stateDir: string, options: HostOptions) {
