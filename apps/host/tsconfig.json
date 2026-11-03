@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "types",
+    "rootDir": ".",
+    "types": ["bun"],
+    "resolveJsonModule": true
+  },
+  "include": ["src", "scripts", "package.json"],
+  "references": [{ "path": "../../packages/protocol" }]
+}

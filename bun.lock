@@ -11,12 +11,18 @@
         "typescript": "7.0.2",
       },
     },
+    "apps/host": {
+      "name": "@doriface/host",
+      "version": "0.0.0",
+    },
     "packages/protocol": {
       "name": "@doriface/protocol",
       "version": "0.0.0",
     },
   },
   "packages": {
+    "@doriface/host": ["@doriface/host@workspace:apps/host"],
+
     "@doriface/protocol": ["@doriface/protocol@workspace:packages/protocol"],
 
     "@oxfmt/binding-android-arm-eabi": ["@oxfmt/binding-android-arm-eabi@0.75.0", "", { "os": "android", "cpu": "arm" }, "sha512-zHJ7LcTN46/5mtoLxsUu14pdF9ixFwDURtmxZ0CeNwqom5qB5NRVqU6o2GRZ7QPdNBW8G6j9UTJzQ+EDevMH0w=="],
