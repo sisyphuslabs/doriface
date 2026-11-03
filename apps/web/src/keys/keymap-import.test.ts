@@ -62,6 +62,11 @@ describe("keybind import and export", () => {
     expect(sendBytes("send:\u001bb")).toEqual(new Uint8Array([0x1b, 0x62]));
   });
 
+  test("send labels show control bytes as \\xNN", () => {
+    const parsed = parseKeybinds("keybind = super+j=text:\\x1b[A\\x7fz");
+    expect(actionFor(parsed.overrides.get("super+j") ?? "")?.label).toBe('Send "\\x1b[A\\x7fz"');
+  });
+
   test("send labels show UTF-8 text and \\xNN only for bytes that are not UTF-8", () => {
     const parsed = parseKeybinds("keybind = super+j=text:héllo 😀 世界\nkeybind = super+k=text:\\x80ok\\xc3");
     expect(actionFor(parsed.overrides.get("super+j") ?? "")?.label).toBe('Send "héllo 😀 世界"');
