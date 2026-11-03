@@ -3,8 +3,9 @@ import { defaultKeymap } from "./defaults.ts";
 import { triggersFor } from "./keymap.ts";
 import { GHOSTTY_DEFAULTS } from "./ghostty-defaults.ts";
 import { HERDR_APP_MAC, HERDR_APP_OTHER } from "./herdr-app-defaults.ts";
+import { PLATFORM_RESERVED } from "./platform-reserved.ts";
 
-/** Actions doriface adds on top of herdr-app and Ghostty; their triggers must be free in both. */
+/** Actions doriface adds on top of herdr-app and Ghostty; their triggers must be free in both, and in the OS and browsers. */
 const DORIFACE_ONLY = ["layout.focus:sidebar"];
 
 describe("doriface-only bindings", () => {
@@ -16,6 +17,11 @@ describe("doriface-only bindings", () => {
     const triggers = DORIFACE_ONLY.flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.length).toBeGreaterThan(0);
     expect(triggers.filter((trigger) => taken.has(trigger))).toEqual([]);
+  });
+
+  test.each(["mac", "other"] as const)("on %s they take no chord the OS or a browser reserves", (platform) => {
+    const triggers = DORIFACE_ONLY.flatMap((action) => triggersFor(defaultKeymap(platform), action));
+    expect(triggers.filter((trigger) => trigger in PLATFORM_RESERVED)).toEqual([]);
   });
 });
 
