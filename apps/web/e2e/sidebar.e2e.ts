@@ -1,5 +1,6 @@
 import { expect, test } from "./fixtures.ts";
 import { devices, type Locator, type Page } from "@playwright/test";
+import { rowEdges, visibleCharacters } from "./sidebar-measure.ts";
 import {
   KOREAN_SPACE,
   KOREAN_TITLE,
@@ -15,48 +16,6 @@ import {
 /** What the macOS app sets beside its window buttons (apps/desktop TITLEBAR_INSET_START), and removes in full screen. */
 const TITLEBAR_INSET_START = 78;
 const MAC_INSET_CSS = `:root { --titlebar-inset-start: ${TITLEBAR_INSET_START}px; }`;
-
-/** How far each row's content runs past the row's right edge, and where its age column ends. */
-const rowEdges = (rows: Locator) =>
-  rows.evaluateAll((buttons) =>
-    buttons.map((row) => {
-      const box = row.getBoundingClientRect();
-      const right = Math.max(...[...row.children].map((child) => child.getBoundingClientRect().right));
-      return { overflow: right - box.right, age: row.querySelector("time")?.getBoundingClientRect().right };
-    }),
-  );
-
-/**
- * How many characters of `title` are still drawn before the element's ellipsis, in graphemes, from the layout: a
- * character counts when it ends left of where the ellipsis starts. Text before the title (a separator) is not counted.
- */
-const visibleCharacters = (part: Locator, title: string) =>
-  part.evaluate((element, wanted) => {
-    const style = getComputedStyle(element);
-    const pen = document.createElement("canvas").getContext("2d");
-    if (pen !== null) pen.font = style.font;
-    const cut = element.scrollWidth > element.clientWidth;
-    const ellipsis = cut && pen !== null ? pen.measureText("\u2026").width : 0;
-    const end = element.getBoundingClientRect().right - Number.parseFloat(style.paddingRight) - ellipsis;
-    const segmenter = new Intl.Segmenter();
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    const nodes: Text[] = [];
-    while (walker.nextNode() !== null) if (walker.currentNode instanceof Text) nodes.push(walker.currentNode);
-    const range = document.createRange();
-    const rights = nodes.flatMap((node) =>
-      [...segmenter.segment(node.data)].map(({ index, segment }) => {
-        range.setStart(node, index);
-        range.setEnd(node, index + segment.length);
-        return range.getBoundingClientRect().right;
-      }),
-    );
-    const all = element.textContent ?? "";
-    const lead = all.indexOf(wanted);
-    if (lead === -1) return { visible: 0, total: [...segmenter.segment(wanted)].length };
-    const before = [...segmenter.segment(all.slice(0, lead))].length;
-    const drawn = rights.filter((right) => right <= end).length;
-    return { visible: Math.max(0, drawn - before), total: [...segmenter.segment(wanted)].length };
-  }, title);
 
 /** Hides the sidebar with its own button and returns the button that brings it back. */
 async function hideSidebar(page: Page): Promise<Locator> {
@@ -106,6 +65,77 @@ test("a space named like one on another machine is selected, and opened, on its 
   await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
 });
 
+/**
+ * Every row of the Idle and Spaces lists stays inside its list, and every cut text keeps a share before its ellipsis:
+ * the name five characters; when the row cannot hold five of each, the machine gives way to three first, then the
+ * detail, then the name. `nameFive` says the list is wide enough for every name to keep five; `fiveEach` holds rows
+ * whose texts and machine always fit five each.
+ */
+async function expectRowsKeepFloors(
+  page: Page,
+  nameFive: boolean,
+  fiveEach: (narrow: boolean) => boolean,
+): Promise<void> {
+  const idle = page.getByRole("region", { name: "Idle" });
+  const spaces = page.getByRole("region", { name: "Spaces" });
+  const remote = idle.getByRole("button").filter({ hasText: "OmO - Verify bun" });
+  const idleRows = await rowEdges(idle.getByRole("button"));
+  const spaceRows = await rowEdges(spaces.getByRole("button"));
+  for (const row of [...idleRows, ...spaceRows]) expect(row.overflow).toBeLessThanOrEqual(0.5);
+  const ages = idleRows.map((row) => row.age ?? Number.NaN);
+  expect(Math.max(...ages) - Math.min(...ages), "every age ends at the same edge").toBeLessThanOrEqual(0.5);
+
+  const rows = [
+    { row: remote, name: "OmO - Verify bun benchmarks on the box", detail: SHARED_SPACE, narrow: true },
+    {
+      row: idle.getByRole("button").filter({ hasText: "OmO - Draft the" }),
+      name: "OmO - Draft the onboarding docs",
+      detail: KOREAN_SPACE,
+      narrow: false,
+    },
+    {
+      row: idle.getByRole("button").filter({ hasText: KOREAN_TITLE.slice(0, 4) }),
+      name: KOREAN_TITLE,
+      detail: KOREAN_SPACE,
+      narrow: false,
+    },
+  ];
+  await Promise.all(
+    rows.map(async ({ row, name: title, detail, narrow }) => {
+      const kept = await Promise.all(
+        [title, detail, LONG_MACHINE].map(async (text) => {
+          const part = row.getByTitle(text, { exact: true });
+          await expect(part, `a part of the row carries "${text}" as its title`).toHaveCount(1);
+          await expect.soft(part).toHaveText(text);
+          const { visible, total } = await visibleCharacters(part, text);
+          return { text, visible, five: Math.min(5, total), three: Math.min(3, total) };
+        }),
+      );
+      const [named, detailed, machine] = kept;
+      for (const part of kept)
+        expect(part.visible, `"${part.text}" keeps three characters`).toBeGreaterThanOrEqual(part.three);
+      if (nameFive) expect(named?.visible, `"${title}" keeps five characters`).toBeGreaterThanOrEqual(named?.five ?? 5);
+      if ((machine?.visible ?? 0) >= 5) {
+        expect(detailed?.visible, `"${detail}" keeps as many as the machine`).toBeGreaterThanOrEqual(
+          detailed?.five ?? 5,
+        );
+      }
+      if (fiveEach(narrow)) {
+        for (const part of kept)
+          expect(part.visible, `"${part.text}" keeps five characters`).toBeGreaterThanOrEqual(part.five);
+      }
+    }),
+  );
+
+  const there = spaces.getByRole("button").filter({ hasText: SHARED_SPACE }).filter({ hasText: LONG_MACHINE });
+  await expect(there.getByTitle(SHARED_SPACE, { exact: true })).toHaveText(SHARED_SPACE);
+  await expect(there.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+}
+
+/** Waits two frames, so a ResizeObserver has reported and any refit has been laid out. */
+const settle = (page: Page) =>
+  page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 const VIEWPORTS = [
   { name: "1470x956@2", use: { viewport: { width: 1470, height: 956 }, deviceScaleFactor: 2 } },
@@ -117,70 +147,27 @@ for (const { name, use } of VIEWPORTS) {
   test.describe(`at ${name}`, () => {
     test.use(use);
 
-    test("rows naming a long machine stay inside the list, and every cut text keeps a share, an ellipsis and its tooltip", async ({
+    test("rows naming a long machine stay inside the list, every cut text keeps a share, an ellipsis and its tooltip, and they refit when the list narrows", async ({
       page,
     }) => {
       await page.goto("/");
-      const idle = page.getByRole("region", { name: "Idle" });
-      const spaces = page.getByRole("region", { name: "Spaces" });
-      const remote = idle.getByRole("button").filter({ hasText: "OmO - Verify bun" });
+      const remote = page
+        .getByRole("region", { name: "Idle" })
+        .getByRole("button")
+        .filter({ hasText: "OmO - Verify bun" });
       await expect(remote).toBeVisible({ timeout: 20_000 });
-      const idleRows = await rowEdges(idle.getByRole("button"));
-      const spaceRows = await rowEdges(spaces.getByRole("button"));
-      for (const row of [...idleRows, ...spaceRows]) expect(row.overflow).toBeLessThanOrEqual(0.5);
-      const ages = idleRows.map((row) => row.age ?? Number.NaN);
-      expect(Math.max(...ages) - Math.min(...ages), "every age ends at the same edge").toBeLessThanOrEqual(0.5);
-
-      // The name keeps five characters; when the row cannot hold five of each, the machine gives way to three first,
-      // then the detail. Two narrow texts and a narrow machine always fit five, and so does everything at 390.
-      const rows = [
-        { row: remote, name: "OmO - Verify bun benchmarks on the box", detail: SHARED_SPACE, narrow: true },
-        {
-          row: idle.getByRole("button").filter({ hasText: "OmO - Draft the" }),
-          name: "OmO - Draft the onboarding docs",
-          detail: KOREAN_SPACE,
-          narrow: false,
-        },
-        {
-          row: idle.getByRole("button").filter({ hasText: KOREAN_TITLE.slice(0, 4) }),
-          name: KOREAN_TITLE,
-          detail: KOREAN_SPACE,
-          narrow: false,
-        },
-      ];
-      const roomy = name === "390";
-      await Promise.all(
-        rows.map(async ({ row, name: title, detail, narrow }) => {
-          const kept = await Promise.all(
-            [title, detail, LONG_MACHINE].map(async (text) => {
-              const part = row.getByTitle(text, { exact: true });
-              await expect(part, `a part of the row carries "${text}" as its title`).toHaveCount(1);
-              await expect.soft(part).toHaveText(text);
-              const { visible, total } = await visibleCharacters(part, text);
-              return { text, visible, five: Math.min(5, total), three: Math.min(3, total) };
-            }),
-          );
-          const [named, detailed, machine] = kept;
-          for (const part of kept)
-            expect(part.visible, `"${part.text}" keeps three characters`).toBeGreaterThanOrEqual(part.three);
-          expect(named?.visible, `"${title}" keeps five characters`).toBeGreaterThanOrEqual(named?.five ?? 5);
-          if ((machine?.visible ?? 0) >= 5) {
-            expect(detailed?.visible, `"${detail}" keeps as many as the machine`).toBeGreaterThanOrEqual(
-              detailed?.five ?? 5,
-            );
-          }
-          if (narrow || roomy) {
-            for (const part of kept)
-              expect(part.visible, `"${part.text}" keeps five characters`).toBeGreaterThanOrEqual(part.five);
-          }
-        }),
-      );
-
-      const there = spaces.getByRole("button").filter({ hasText: SHARED_SPACE }).filter({ hasText: LONG_MACHINE });
-      await expect(there.getByTitle(SHARED_SPACE, { exact: true })).toHaveText(SHARED_SPACE);
-      await expect(there.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+      const phoneList = name === "390";
+      // Two narrow texts and a narrow machine always fit five, and so does everything on a phone.
+      await expectRowsKeepFloors(page, true, (narrow) => narrow || phoneList);
       const machines = page.getByRole("region", { name: "Machines" });
       await expect(machines.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+
+      // Narrower than where the floors were fitted, still wide enough for three of each: without a refit the parts keep
+      // widths the row no longer holds and run past its edge.
+      if (phoneList) await page.setViewportSize({ width: 320, height: 640 });
+      else await page.evaluate(() => document.documentElement.style.setProperty("--sidebar-width", "15.5rem"));
+      await settle(page);
+      await expectRowsKeepFloors(page, phoneList, () => phoneList);
     });
   });
 }
