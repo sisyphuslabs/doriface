@@ -1,5 +1,7 @@
-import type { Terminal } from "@doriface/protocol";
-import { useCallback, useEffect, useState } from "react";
+import type { MachineView, Terminal } from "@doriface/protocol";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { followTerminals, type KeyedTabs, NO_TABS } from "./tab-follow.ts";
+import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 export interface TabsState {
   readonly open: readonly string[];
@@ -19,17 +21,23 @@ export interface Tabs extends TabsState {
   focus(address: string): void;
 }
 
-const EMPTY: TabsState = { open: [], active: null, split: null };
-
 /** Per core, so leaving the workspace (Settings, a reconnect) and coming back finds the same tabs. */
-const kept = new Map<string, TabsState>();
+const kept = new Map<string, KeyedTabs>();
 
 /**
  * Open tabs follow live terminals: a removed terminal drops its tab, the first live one opens by default.
- * `terminals` is null until the core has listed them; until then the kept tabs stand as they are.
+ * `terminals` is null until the core has listed them; until then the kept tabs stand as they are. Tabs are kept by
+ * machine id (`tabKey`), so renaming a machine moves its tabs to the new addresses instead of closing them; `listed`
+ * counts machine.list reads, which is what tells a rename from a removal (`followTerminals`).
  */
-export function useTabs(core: string, terminals: readonly Terminal[] | null): Tabs {
-  const [state, setState] = useState<TabsState>(() => kept.get(core) ?? EMPTY);
+export function useTabs(
+  core: string,
+  terminals: readonly Terminal[] | null,
+  machines: readonly MachineView[],
+  listed: number,
+): Tabs {
+  const ids = useMemo(() => machineIds(machines), [machines]);
+  const [state, setState] = useState<KeyedTabs>(() => kept.get(core) ?? NO_TABS);
 
   useEffect(() => {
     kept.set(core, state);
@@ -37,49 +45,65 @@ export function useTabs(core: string, terminals: readonly Terminal[] | null): Ta
 
   useEffect(() => {
     if (terminals === null) return;
-    setState((prev) => {
-      const known = new Set(terminals.map((terminal) => terminal.address));
-      let open = prev.open.filter((address) => known.has(address));
-      const firstLive = terminals.find((terminal) => terminal.state === "live")?.address;
-      if (open.length === 0 && firstLive !== undefined) open = [firstLive];
-      const active = prev.active !== null && open.includes(prev.active) ? prev.active : (open[0] ?? null);
-      const split = prev.split !== null && open.includes(prev.split) && prev.split !== active ? prev.split : null;
-      const same = open.length === prev.open.length && active === prev.active && split === prev.split;
-      return same ? prev : { open, active, split };
-    });
-  }, [terminals]);
+    setState((prev) => followTerminals(prev, terminals, ids, listed));
+  }, [terminals, ids, listed]);
 
-  const select = useCallback((address: string) => {
-    setState((prev) => ({
-      open: prev.open.includes(address) ? prev.open : [...prev.open, address],
-      active: address,
-      split: prev.split === address ? null : prev.split,
-    }));
-  }, []);
+  const select = useCallback(
+    (address: string) => {
+      const key = tabKey(address, ids);
+      setState((prev) => ({
+        ...prev,
+        open: prev.open.includes(key) ? prev.open : [...prev.open, key],
+        active: key,
+        split: prev.split === key ? null : prev.split,
+      }));
+    },
+    [ids],
+  );
 
-  const close = useCallback((address: string) => {
-    setState((prev) => {
-      const open = prev.open.filter((entry) => entry !== address);
-      const active = prev.active === address ? (open.at(-1) ?? null) : prev.active;
-      return { open, active, split: prev.split === address || prev.split === active ? null : prev.split };
-    });
-  }, []);
+  const close = useCallback(
+    (address: string) => {
+      const key = tabKey(address, ids);
+      setState((prev) => {
+        const open = prev.open.filter((entry) => entry !== key);
+        const active = prev.active === key ? (open.at(-1) ?? null) : prev.active;
+        const split = prev.split === key || prev.split === active ? null : prev.split;
+        return { ...prev, open, active, split };
+      });
+    },
+    [ids],
+  );
 
   const toggleSplit = useCallback(() => {
     setState((prev) => {
       if (prev.split !== null) return { ...prev, split: null };
-      const other = prev.open.find((address) => address !== prev.active);
+      const other = prev.open.find((key) => key !== prev.active);
       // The new pane takes focus, like a new split in Ghostty; the focused pane is the left one.
       return other === undefined ? prev : { ...prev, active: other, split: prev.active };
     });
   }, []);
 
-  const focus = useCallback((address: string) => {
-    setState((prev) => {
-      if (prev.active === address || prev.split !== address) return prev;
-      return { ...prev, active: address, split: prev.active };
-    });
-  }, []);
+  const focus = useCallback(
+    (address: string) => {
+      const key = tabKey(address, ids);
+      setState((prev) => {
+        if (prev.active === key || prev.split !== key) return prev;
+        return { ...prev, active: key, split: prev.active };
+      });
+    },
+    [ids],
+  );
 
-  return { ...state, select, close, drop: close, toggleSplit, focus };
+  const resolve = (key: string | null): string | null => (key === null ? null : (tabAddress(key, ids) ?? null));
+  const open = state.open.flatMap((key) => tabAddress(key, ids) ?? []);
+  return {
+    open,
+    active: resolve(state.active),
+    split: resolve(state.split),
+    select,
+    close,
+    drop: close,
+    toggleSplit,
+    focus,
+  };
 }
