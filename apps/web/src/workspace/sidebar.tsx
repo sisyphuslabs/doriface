@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { PanelLeft, Search, Settings } from "lucide-react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { AgentLists } from "./agent-lists.tsx";
+import { RovingLists } from "./roving-lists.tsx";
 
 export interface SidebarProps {
   readonly terminals: readonly Terminal[];
@@ -40,7 +41,9 @@ export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: Sideba
         />
       </div>
       <ScrollArea slot="agents-list" className="flex-1">
-        <AgentLists terminals={terminals} active={active} onOpen={onOpen} />
+        <RovingLists>
+          <AgentLists terminals={terminals} active={active} onOpen={onOpen} />
+        </RovingLists>
       </ScrollArea>
       <div className="flex shrink-0 flex-col gap-px border-t border-sidebar-border p-2">
         <Button variant="ghost" className="justify-start gap-2.5 px-2 text-sm" render={<Link to="/settings" />}>

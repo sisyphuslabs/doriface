@@ -9,7 +9,9 @@ import { agentStatus, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { sidebarStop } from "./focus-targets.ts";
 import { Sidebar } from "./sidebar.tsx";
+import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions } from "./use-app-actions.ts";
 import type { Tabs } from "./use-tabs.ts";
 
@@ -57,6 +59,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
 
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background">
+      <SkipLinks onSidebar={() => sidebarStop()?.focus()} />
       {sidebar ? (
         <Sidebar
           terminals={terminals}

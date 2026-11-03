@@ -12,6 +12,7 @@ import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx"
 import { AgentLists } from "./agent-lists.tsx";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { RovingLists } from "./roving-lists.tsx";
 import { usePhoneActions } from "./use-app-actions.ts";
 
 export interface PhoneShellProps {
@@ -42,7 +43,9 @@ export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew,
           <IconButton label="Settings" icon={<Settings />} size="md" render={<Link to="/settings" />} />
         </header>
         <ScrollArea slot="agents-list" className="flex-1">
-          <AgentLists terminals={terminals} active={null} onOpen={onOpen} agentsFirst />
+          <RovingLists>
+            <AgentLists terminals={terminals} active={null} onOpen={onOpen} agentsFirst />
+          </RovingLists>
         </ScrollArea>
         <StatusBar
           start={
