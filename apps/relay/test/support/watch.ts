@@ -10,9 +10,13 @@ export function within<T>(promise: Promise<T>, what: string, ms = STEP_MS): Prom
 }
 
 /** Things pushed by a callback, with waits for the first one that matches, past or future. */
-class Matches<T> {
+export class Matches<T> {
   readonly seen: T[] = [];
   readonly #waiters = new Set<{ readonly test: (item: T) => boolean; readonly resolve: (item: T) => void }>();
+
+  get waiting(): number {
+    return this.#waiters.size;
+  }
 
   push(item: T): void {
     this.seen.push(item);
@@ -23,12 +27,13 @@ class Matches<T> {
     }
   }
 
-  next(test: (item: T) => boolean, what: string): Promise<T> {
+  next(test: (item: T) => boolean, what: string, ms?: number): Promise<T> {
     const found = this.seen.find(test);
     if (found !== undefined) return Promise.resolve(found);
     const { promise, resolve } = Promise.withResolvers<T>();
-    this.#waiters.add({ test, resolve });
-    return within(promise, what);
+    const waiter = { test, resolve };
+    this.#waiters.add(waiter);
+    return within(promise, what, ms).finally(() => this.#waiters.delete(waiter));
   }
 }
 
