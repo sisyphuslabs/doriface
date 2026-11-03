@@ -91,7 +91,7 @@ test("machines, connected", async ({ browser }) => {
 });
 
 for (const [mode, name, state] of [
-  ["off", "machines-unreachable", "unreachable"],
+  ["off", "machines-unreachable", "offline"],
   ["login", "machines-needs-login", "needs login"],
 ] as const) {
   test(`machines, ${state}`, async ({ browser }) => {
