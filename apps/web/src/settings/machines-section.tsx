@@ -1,10 +1,11 @@
 import type { HcConnection } from "@doriface/client";
 import type { MachineView, Terminal } from "@doriface/protocol";
-import { Button, Notice, SettingRow, cn } from "@doriface/ui";
+import { Notice, SettingRow, cn } from "@doriface/ui";
 import { Monitor, Server } from "lucide-react";
 import type { ReactNode } from "react";
 import { useConnection } from "../connection/store.ts";
 import { machineCause } from "../workspace/machine-cause.ts";
+import { RetryButton } from "../workspace/retry-button.tsx";
 import { formatAge } from "../workspace/model.ts";
 import { useMachines } from "../workspace/use-machines.ts";
 import { useNow } from "../workspace/use-now.ts";
@@ -35,10 +36,15 @@ function lastSeen(view: MachineView, now: number): string | undefined {
   return age === "<1m" ? "Last seen just now" : `Last seen ${age} ago`;
 }
 
-function AddedMachine({ view, now, onRetry }: { view: MachineView; now: number; onRetry: () => void }) {
+/** States that need the person: they get the attention hue and Try again; connecting is a routine redial. */
+const PROBLEMS = new Set(["unreachable", "needs_login"]);
+
+function AddedMachine(props: { view: MachineView; now: number; onRetry: () => Promise<void> }) {
+  const { view, now, onRetry } = props;
   const cause = machineCause(view);
   const seen = lastSeen(view, now);
-  const word = STATE_WORDS[view.state] ?? view.state;
+  const word = STATE_WORDS[view.state] ?? "Not connected";
+  const problem = PROBLEMS.has(view.state);
   return (
     <li>
       <SettingRow
@@ -47,18 +53,12 @@ function AddedMachine({ view, now, onRetry }: { view: MachineView; now: number; 
         title={title(<Server aria-hidden />, view.name)}
         description={
           <>
-            <span className={cn(cause !== undefined && "text-status-blocked-text")}>{word}</span>
+            <span className={cn(problem && "text-status-blocked-text")}>{word}</span>
             {seen === undefined ? null : ` · ${seen}`}
             {cause === undefined ? null : <span className="block">{cause.detail}</span>}
           </>
         }
-        control={
-          cause === undefined ? null : (
-            <Button size="sm" onClick={onRetry}>
-              Try again
-            </Button>
-          )
-        }
+        control={problem ? <RetryButton size="sm" onRetry={onRetry} /> : null}
       />
     </li>
   );
@@ -79,7 +79,7 @@ function MachineRows({ connection }: { readonly connection: HcConnection }) {
           />
         </li>
         {views.map((view) => (
-          <AddedMachine key={view.id} view={view} now={now} onRetry={() => void retry(view.name)} />
+          <AddedMachine key={view.id} view={view} now={now} onRetry={() => retry(view.name)} />
         ))}
       </ul>
       {listError === undefined ? null : (
