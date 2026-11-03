@@ -1,4 +1,4 @@
-import { actionFor, actionFromGhostty } from "./actions.ts";
+import { actionFor, actionFromGhostty, decodeZigString } from "./actions.ts";
 import { defaultKeymap, type Keymap } from "./defaults.ts";
 import { normalizeTrigger, type Platform } from "./trigger.ts";
 
@@ -95,7 +95,12 @@ export function parseKeybinds(text: string): ParsedKeybinds {
     const eq = body.indexOf("=", body.startsWith("+") ? 1 : 0);
     const split = body.endsWith("+=") ? -1 : eq;
     const [trigger, ghostty] = split === -1 ? [body, ""] : [body.slice(0, split), body.slice(split + 1)];
-    const action = actionFromGhostty(ghostty.trim());
+    const name = ghostty.trim();
+    if (name.startsWith("text:") && decodeZigString(name.slice(5)) === null) {
+      lines.push({ line, text: body, status: "invalid", reason: "the text has an escape Ghostty does not define" });
+      return;
+    }
+    const action = actionFromGhostty(name);
     if (action === undefined) {
       lines.push({ line, text: body, status: "unknown", reason: `"${ghostty.trim()}" is not an action doriface has` });
       return;
