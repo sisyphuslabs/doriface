@@ -14,6 +14,9 @@ function target(settings: ConnectionSettings) {
     start() {
       calls.push("start");
     },
+    restoring() {
+      calls.push("restoring");
+    },
   };
   return { state, calls };
 }
@@ -35,8 +38,25 @@ describe("desktop local host", () => {
       token: "old",
     });
     await bootConnection(bridge("ws://127.0.0.1:52012/v1/hc"), state);
-    expect(calls).toEqual(["update"]);
+    expect(calls).toEqual(["restoring", "update"]);
     expect(state.settings.loopbackUrl).toBe("ws://127.0.0.1:52012/v1/hc");
+  });
+
+  test("a connection chosen while the host is starting is not overwritten", async () => {
+    const saved = {
+      ...DEFAULT_SETTINGS,
+      mode: "loopback" as const,
+      loopbackUrl: "ws://127.0.0.1:1/v1/hc",
+      token: "old",
+    };
+    const { state, calls } = target(saved);
+    const answer = Promise.withResolvers<{ url: string; token: string }>();
+    const booting = bootConnection({ startLocalHost: () => answer.promise }, state);
+    state.update({ ...DEFAULT_SETTINGS, mode: "relay" });
+    answer.resolve({ url: "ws://127.0.0.1:2/v1/hc", token: "new" });
+    await booting;
+    expect(state.settings.mode).toBe("relay");
+    expect(calls).toEqual(["restoring", "update"]);
   });
 
   test("boot only starts the connection outside the desktop app or in relay mode", async () => {

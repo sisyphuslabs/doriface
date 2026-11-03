@@ -42,6 +42,12 @@ export class ConnectionStore {
     this.start();
   }
 
+  /** Shows the connecting state while the desktop app restarts its local host before the first attempt. */
+  restoring(): void {
+    this.stop();
+    this.#set({ phase: "connecting", attempt: 0 });
+  }
+
   start(): void {
     this.stop();
     if (!isConfigured(this.#settings)) {
