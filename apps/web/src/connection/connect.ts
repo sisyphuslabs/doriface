@@ -23,7 +23,12 @@ export async function connect(settings: ConnectionSettings, signal?: AbortSignal
   return HcConnection.open(link, signal === undefined ? {} : { signal });
 }
 
-/** A relay client socket: binary only, plus the `ping` text the relay's 90 s reaper expects. The device key is ready for the Noise handshake. */
+/**
+ * A relay client socket: binary only, plus the `ping` text the relay's 90 s reaper expects (contract
+ * v1.2 C6). The device key is loaded for the Noise handshake. The record layer that wraps this link owns
+ * the `a:<total bytes received>` text acks every 64 KiB (docs/transport.md); without them the relay
+ * closes the socket once 4 MiB is unacknowledged.
+ */
 export async function openRelayLink(url: string): Promise<ByteLink> {
   await loadDeviceKey();
   return openWebSocketLink(url, [], { pingEveryMs: RELAY_PING_MS });
