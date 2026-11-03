@@ -36,13 +36,18 @@ test("the packaged launch settles when the first navigation's commit event would
     } finally {
       await app.close();
     }
-    // The race was really forced. The shim held the GPU process; the browser launches the network service only after
-    // it, so at the moment a bare launch attaches the first navigation was in flight with no network service yet, and
-    // the service was running by the release (so its absence at attach means something). The proxy held the page's
-    // Page.enable. Without these, this pass would not show that the wrapper is needed.
+    // The race was really forced. The shim held the GPU process, and the attach a bare launch makes came while the hold
+    // was on; the browser launches the network service only after the GPU process, so at that attach the first
+    // navigation was in flight with no network service yet, and the service was running by the release (so its absence
+    // at attach means something). The proxy held the page's Page.enable. Without these, this pass would not show that
+    // the wrapper is needed.
     const forced = existsSync(raceReport) ? readFileSync(raceReport, "utf8") : "";
-    expect(forced).toMatch(/^gpu process held pid=\d+$/m);
-    expect(forced).toMatch(/^gpu process released pid=\d+$/m);
+    const at = (pattern: RegExp): number => Number(pattern.exec(forced)?.[1] ?? Number.NaN);
+    const held = at(/^gpu process held pid=\d+ at=(\d+)$/m);
+    const released = at(/^gpu process released pid=\d+ at=(\d+)$/m);
+    const attached = at(/^attached at=(\d+)$/m);
+    expect(held).toBeLessThanOrEqual(attached);
+    expect(attached).toBeLessThan(released);
     expect(forced).toContain("first navigation in flight at attach");
     expect(forced).toContain("network service not started at attach");
     expect(forced).toContain("network service running at release");

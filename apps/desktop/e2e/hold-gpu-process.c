@@ -2,8 +2,9 @@
 // child is the GPU process, that first child waits DORIFACE_E2E_HOLD_GPU_PROCESS_MS before it runs; nothing else is
 // held. The browser launches the network service only once the GPU process is up, so a launch's first attach lands
 // while the first navigation is in flight and cannot commit yet: the state in which a bare attach loses the commit
-// (#13). The held child writes "gpu process held pid=<pid>" when the hold starts and "gpu process released pid=<pid>"
-// when it ends to the file DORIFACE_E2E_RACE_REPORT names, so the spec can check that the hold covered the attach.
+// (#13). The held child writes "gpu process held pid=<pid> at=<ms>" when the hold starts and "gpu process released
+// pid=<pid> at=<ms>" when it ends (wall-clock milliseconds) to the file DORIFACE_E2E_RACE_REPORT names, so the spec can
+// check that the launch's attach happened while the hold was on.
 #define _GNU_SOURCE
 #include <fcntl.h>
 #include <pthread.h>
@@ -14,26 +15,39 @@
 #include <unistd.h>
 
 static long hold_ms;
+/* A copy: Chromium reuses the zygote's original environment block for its process title after startup. */
+static char report_path[4096];
 static atomic_int forks;
 
 static void count_fork(void) { atomic_fetch_add(&forks, 1); }
 
-/* write(2) of "<what> pid=<pid>\n"; only async-signal-safe calls, as this runs in a freshly forked child. */
+static size_t append_number(char *line, size_t n, long long value) {
+  char digits[24];
+  size_t d = 0;
+  do digits[d++] = (char)('0' + value % 10);
+  while ((value /= 10) > 0 && d < sizeof digits);
+  while (d > 0) line[n++] = digits[--d];
+  return n;
+}
+
+/*
+ * write(2) of "<what> pid=<pid> at=<ms>\n". This runs in a freshly forked child, so it makes only async-signal-safe
+ * calls; the report path was read by the constructor, before any fork.
+ */
 static void report(const char *what) {
-  const char *path = getenv("DORIFACE_E2E_RACE_REPORT");
-  if (path == NULL) return;
-  char line[96];
+  if (report_path[0] == 0) return;
+  char line[128];
   size_t n = strlen(what);
-  if (n > sizeof line - 32) return;
+  if (n > sizeof line - 64) return;
   memcpy(line, what, n);
   memcpy(line + n, " pid=", 5);
-  n += 5;
-  char digits[16];
-  size_t d = 0;
-  for (long pid = getpid(); pid > 0 && d < sizeof digits; pid /= 10) digits[d++] = (char)('0' + pid % 10);
-  while (d > 0) line[n++] = digits[--d];
+  n = append_number(line, n + 5, getpid());
+  struct timespec now;
+  clock_gettime(CLOCK_REALTIME, &now);
+  memcpy(line + n, " at=", 4);
+  n = append_number(line, n + 4, (long long)now.tv_sec * 1000 + now.tv_nsec / 1000000);
   line[n++] = '\n';
-  int fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+  int fd = open(report_path, O_WRONLY | O_CREAT | O_APPEND, 0600);
   if (fd < 0) return;
   ssize_t written = write(fd, line, n);
   (void)written;
@@ -65,5 +79,7 @@ __attribute__((constructor)) static void install(void) {
   const char *ms = getenv("DORIFACE_E2E_HOLD_GPU_PROCESS_MS");
   if (ms == NULL || !is_unsandboxed_zygote()) return;
   hold_ms = atol(ms);
+  const char *path = getenv("DORIFACE_E2E_RACE_REPORT");
+  if (path != NULL && strlen(path) < sizeof report_path) strcpy(report_path, path);
   if (hold_ms > 0) pthread_atfork(count_fork, NULL, hold_first_child);
 }
