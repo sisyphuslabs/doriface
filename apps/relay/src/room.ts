@@ -211,7 +211,8 @@ export class Room extends DurableObject<RoomEnv> {
     if (frame.type === MuxType.Open || frame.type === MuxType.PairSlotAck) {
       return host.close(CloseCode.RelayProtocolError, "OPEN and PAIR_SLOT_ACK go relay to host only");
     }
-    if (frame.type === MuxType.PairSlot) return handlePairSlot(this.env, host, attachment, frame.payload);
+    if (frame.type === MuxType.PairSlot)
+      return handlePairSlot(this.env, this.ctx.storage, host, attachment, frame.payload);
     const client = clientSocket(this.ctx, frame.sessionId);
     const session = client === undefined ? undefined : attachmentOf(client);
     // A session the relay or the client just ended: its CLOSE is already on the way to the host.

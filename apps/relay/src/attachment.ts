@@ -18,7 +18,6 @@ export interface HostAttachment extends Flow {
   readonly state: HostState;
   /** Set once the host has proved it holds the key. */
   readonly signPub?: Uint8Array | undefined;
-  readonly pairSlot?: string | undefined;
 }
 
 export interface ClientAttachment extends Flow {
@@ -57,13 +56,12 @@ function parse(value: unknown): Attachment | undefined {
   if (flow === undefined) return undefined;
   const { role } = value;
   if (role === "host") {
-    const { hostId, relayOrigin, challenge, signPub, pairSlot, state: rawState } = value;
+    const { hostId, relayOrigin, challenge, signPub, state: rawState } = value;
     const state = hostState(rawState);
     if (typeof hostId !== "string" || typeof relayOrigin !== "string") return undefined;
     if (!(challenge instanceof Uint8Array) || state === undefined) return undefined;
     if (signPub !== undefined && !(signPub instanceof Uint8Array)) return undefined;
-    if (pairSlot !== undefined && typeof pairSlot !== "string") return undefined;
-    return { ...flow, role, hostId, relayOrigin, challenge, state, signPub, pairSlot };
+    return { ...flow, role, hostId, relayOrigin, challenge, state, signPub };
   }
   if (role === "client") {
     const { sessionId, ended, pending, ip, pairSlot } = value;
