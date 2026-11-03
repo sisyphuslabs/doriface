@@ -9,11 +9,21 @@ export interface EmptyStateProps {
   readonly actions?: ReactNode;
   /** Extra evidence, e.g. a fingerprint comparison. */
   readonly children?: ReactNode;
+  /** "screen" makes the title a 2xl screen title, for empty states that are a whole step or page. */
+  readonly size?: "panel" | "screen";
   readonly className?: string;
 }
 
 /** What happened and what to do next, centred in the region that is empty. */
-export function EmptyState({ icon, title, description, actions, children, className }: EmptyStateProps) {
+export function EmptyState({
+  icon,
+  title,
+  description,
+  actions,
+  children,
+  size = "panel",
+  className,
+}: EmptyStateProps) {
   return (
     <div
       role="status"
@@ -24,7 +34,11 @@ export function EmptyState({ icon, title, description, actions, children, classN
           {icon}
         </span>
       )}
-      <h2 className="text-lg font-semibold text-balance text-foreground">{title}</h2>
+      {size === "screen" ? (
+        <h1 className="text-2xl font-semibold text-balance text-foreground">{title}</h1>
+      ) : (
+        <h2 className="text-lg font-semibold text-balance text-foreground">{title}</h2>
+      )}
       {description === undefined ? null : <p className="text-base text-pretty text-muted-foreground">{description}</p>}
       {children}
       {actions === undefined ? null : <div className="mt-2 flex flex-wrap justify-center gap-2">{actions}</div>}
