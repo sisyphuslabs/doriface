@@ -139,11 +139,36 @@ describe("KeymapStore", () => {
     const store = new KeymapStore(memoryStore());
     await store.loaded;
     const kept = new Map([["shift+super+n", "tab.new"]]);
-    await store.update(kept);
-    await expect(store.update(new Map([["super", "tab.new"]]))).rejects.toThrow("not a key combination");
-    await expect(store.update(new Map([["super+t", "nope"]]))).rejects.toThrow("not an action");
+    await store.update(() => kept);
+    await expect(store.update(() => new Map([["super", "tab.new"]]))).rejects.toThrow("not a key combination");
+    await expect(store.update(() => new Map([["super+t", "nope"]]))).rejects.toThrow("not an action");
     expect(store.overrides).toEqual(kept);
     expect(checkBinding("super+t", null).ok).toBe(true);
+  });
+
+  test("a binding made before the stored keymap loads applies on top of it", async () => {
+    const gate = Promise.withResolvers<void>();
+    const stored = {
+      version: KEYMAP_VERSION,
+      bindings: [
+        ["shift+super+n", "tab.new"],
+        ["super+t", null],
+      ],
+    };
+    const puts: unknown[] = [];
+    const store = new KeymapStore({
+      get: async () => (await gate.promise, stored),
+      put: async (_k, v) => void puts.push(v),
+    });
+    const early = store.update((current) => new Map([...current, ["ctrl+alt+x", "tab.close"]]));
+    gate.resolve();
+    await early;
+    expect([...store.overrides]).toEqual([
+      ["shift+super+n", "tab.new"],
+      ["super+t", null],
+      ["ctrl+alt+x", "tab.close"],
+    ]);
+    expect(puts.at(-1)).toEqual({ version: KEYMAP_VERSION, bindings: [...store.overrides] });
   });
 
   test("a keymap from a newer build is left untouched", async () => {
