@@ -17,7 +17,7 @@ export function contentSecurityPolicy(options: CspOptions = {}): string {
     ["style-src", "'self'", ...inline],
     ["img-src", "'self'", "data:", "blob:"],
     ["font-src", "'self'", "data:"],
-    ["connect-src", "'self'", "ws:", "wss:", "http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+    ["connect-src", "'self'", "ws:", "wss:", "http://127.0.0.1:*", "http://localhost:*"],
     ["worker-src", "'self'", "blob:"],
     ["manifest-src", "'self'"],
     ["media-src", "'none'"],
