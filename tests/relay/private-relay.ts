@@ -122,8 +122,14 @@ export async function fetchRelay(): Promise<string> {
 }
 
 async function main(command: string | undefined, rest: readonly string[]): Promise<number> {
+  if (command === "notice") {
+    console.log(
+      "tests/relay skipped: the relay suites need the private relay; run `bun run relay:test` to fetch it and run them.",
+    );
+    return 0;
+  }
   if (command !== "fetch" && command !== "test" && command !== "dev") {
-    console.error("usage: bun tests/relay/private-relay.ts fetch|test|dev [args]");
+    console.error("usage: bun tests/relay/private-relay.ts fetch|test|dev|notice [args]");
     return 2;
   }
   const dir = await fetchRelay();
