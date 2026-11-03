@@ -4,8 +4,8 @@ import { type BunWebSocketData, upgradeWebSocket } from "hono/bun";
 import type { WSEvents } from "hono/ws";
 import { checkHandshake } from "./auth.ts";
 import { bridge } from "./bridge.ts";
-import { acceptE2ee, type E2eeDeps } from "./e2ee/accept.ts";
-import { plaintextLink, WsByteLink } from "./e2ee/links.ts";
+import { acceptE2ee, type E2eeDeps, type E2eeTransport } from "./e2ee/accept.ts";
+import { type E2eeWire, plaintextLink, WsByteLink } from "./e2ee/links.ts";
 import type { LiveSessions } from "./e2ee/sessions.ts";
 import type { Link } from "./link.ts";
 import { DIRECT_IDLE_MS, WsLink } from "./ws-link.ts";
@@ -31,6 +31,11 @@ export interface Gateway {
   /** For a non-loopback listener: healthz and `/v1/e2ee` only, since every byte there is authenticated. */
   readonly lanApp: Hono;
   readonly websocket: WebSocketHandler<BunWebSocketData>;
+  /**
+   * Runs the responder handshake on `wire` and pipes the decrypted session to its own `hc connect`, as `/v1/e2ee`
+   * does; relay sessions come in here. Resolves once the session is piped or refused.
+   */
+  serveE2ee(wire: E2eeWire, transport: E2eeTransport): Promise<void>;
   /** Closes every client socket and resolves once every `hc connect` child has exited. */
   closeAll(): Promise<void>;
 }
@@ -88,11 +93,11 @@ export function createGateway(options: GatewayOptions): Gateway {
     void bridge(link, pipe, (error) => log(`connection closed: ${String(error)}`));
   };
 
-  const openE2ee = async (link: WsLink<BunWebSocketData>, deps: NonNullable<GatewayOptions["e2ee"]>): Promise<void> => {
-    const wire = new WsByteLink(link);
-    const secure = await acceptE2ee(wire, deps, { kind: "lan" });
+  const serveE2ee = async (wire: E2eeWire, transport: E2eeTransport): Promise<void> => {
+    if (e2ee === undefined) throw new Error("end-to-end encryption needs a state dir");
+    const secure = await acceptE2ee(wire, e2ee, transport);
     if (secure === undefined) return;
-    deps.sessions.add(secure);
+    e2ee.sessions.add(secure);
     pipeTo(plaintextLink(secure, wire), (code, reason) => secure.close(code, reason));
   };
 
@@ -105,7 +110,7 @@ export function createGateway(options: GatewayOptions): Gateway {
       sockets.add(link);
       link.onClose(() => sockets.delete(link));
       if (direct) {
-        openE2ee(link, e2ee).catch((error: unknown) => {
+        serveE2ee(new WsByteLink(link), { kind: "lan" }).catch((error: unknown) => {
           log(`e2ee session failed: ${String(error)}`);
           link.close(1011, "internal error");
         });
@@ -129,5 +134,5 @@ export function createGateway(options: GatewayOptions): Gateway {
     await Promise.all(children);
   };
 
-  return { app, lanApp, websocket, closeAll };
+  return { app, lanApp, websocket, serveE2ee, closeAll };
 }
