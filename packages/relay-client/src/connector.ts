@@ -1,11 +1,17 @@
 import { type CreateSocket, defaultCreateSocket, relaySocketUrl } from "./socket.ts";
 import { WebSocketLink } from "./websocket-link.ts";
-import { HOST_ID_PATTERN } from "./wire/index.ts";
+import { HOST_ID_PATTERN, PAIR_SLOT_PATTERN, PING_INTERVAL_MS } from "./wire/index.ts";
 
 export interface ClientConnectOptions {
   /** e.g. `https://relay-doriface.omo.dev`. */
   readonly relayUrl: string;
   readonly hostId: string;
+  /**
+   * The pairing slot when this session runs the IKpsk2 pairing handshake. The relay admits at most 10 pairing
+   * sessions per slot per 10 minutes, and only to the host that holds the slot.
+   */
+  readonly pairSlot?: string;
+  readonly pingIntervalMs?: number;
   readonly createSocket?: CreateSocket;
 }
 
@@ -14,10 +20,15 @@ export interface ClientConnectOptions {
  * offline, 4429 rate limited) arrive afterwards as the link's close, with the code on the RelayCloseError.
  */
 export function connectRelayClient(options: ClientConnectOptions): Promise<WebSocketLink> {
-  if (!HOST_ID_PATTERN.test(options.hostId)) return Promise.reject(new Error(`invalid hostId ${options.hostId}`));
-  const url = relaySocketUrl(options.relayUrl, `/v1/client/${options.hostId}`);
+  const { hostId, pairSlot } = options;
+  if (!HOST_ID_PATTERN.test(hostId)) return Promise.reject(new Error(`invalid hostId ${hostId}`));
+  if (pairSlot !== undefined && !PAIR_SLOT_PATTERN.test(pairSlot)) {
+    return Promise.reject(new Error(`invalid pairing slot ${pairSlot}`));
+  }
+  const query = pairSlot === undefined ? "" : `?pair=${pairSlot}`;
+  const url = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}${query}`);
   const ws = (options.createSocket ?? defaultCreateSocket)(url);
-  const link = new WebSocketLink(ws);
+  const link = new WebSocketLink(ws, options.pingIntervalMs ?? PING_INTERVAL_MS);
   return new Promise((resolve, reject) => {
     ws.addEventListener("open", () => resolve(link), { once: true });
     link.onClose((error) => reject(error ?? new Error(`relay socket to ${url} closed before opening`)));

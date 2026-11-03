@@ -1,4 +1,5 @@
 import { backoffDelay } from "./backoff.ts";
+import { AckCounter, keepAlive } from "./flow-control.ts";
 import { LinkClosedError } from "./link.ts";
 import { type PairSlotResult, PairSlotRequests } from "./pair-requests.ts";
 import { SessionLink } from "./session-link.ts";
@@ -10,10 +11,14 @@ import {
   CloseCode,
   decodeMux,
   encodeAuthAnswer,
+  encodePairSlotClear,
   encodePairSlotRequest,
   hostIdOf,
   MuxError,
   MuxType,
+  PING_INTERVAL_MS,
+  PONG,
+  relayOriginOf,
 } from "./wire/index.ts";
 
 export type UplinkState =
@@ -32,6 +37,7 @@ export interface UplinkOptions {
   readonly onState?: (state: UplinkState) => void;
   readonly createSocket?: CreateSocket;
   readonly random?: () => number;
+  readonly pingIntervalMs?: number;
 }
 
 /** Reconnecting cannot fix these: the key is wrong, or another uplink for this host took over. */
@@ -46,6 +52,7 @@ export class Uplink {
   readonly stopped: Promise<number>;
   readonly #options: UplinkOptions;
   readonly #url: string;
+  readonly #relayOrigin: string;
   readonly #sessions = new Map<number, SessionLink>();
   readonly #stop = Promise.withResolvers<number>();
   readonly #pairSlots = new PairSlotRequests();
@@ -53,12 +60,14 @@ export class Uplink {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #attempt = 0;
   #answeredAt: number | undefined;
+  #pairSlot: string | undefined;
   #done = false;
 
   private constructor(hostId: string, options: UplinkOptions) {
     this.hostId = hostId;
     this.#options = options;
     this.#url = relaySocketUrl(options.relayUrl, `/v1/host/${hostId}`);
+    this.#relayOrigin = relayOriginOf(this.#url);
     this.stopped = this.#stop.promise;
   }
 
@@ -72,15 +81,33 @@ export class Uplink {
    * Registers a pairing slot (the typed code's first 3 characters) so a client with only the code can find this
    * host. "taken" means another host holds the slot: draw a new code. Rejects if the uplink is not connected.
    */
-  registerPairSlot(slot: string, noiseStaticPub: Uint8Array): Promise<PairSlotResult> {
-    const ws = this.#socket;
-    if (ws === undefined || !isOpen(ws) || this.#answeredAt === undefined) {
-      return Promise.reject(new LinkClosedError("the uplink is not connected"));
-    }
+  async registerPairSlot(slot: string, noiseStaticPub: Uint8Array): Promise<PairSlotResult> {
+    const ws = this.#connected();
     const frame = encodePairSlotRequest(slot, noiseStaticPub);
     const result = this.#pairSlots.wait(slot);
     ws.send(frame);
-    return result;
+    const outcome = await result;
+    if (outcome === "registered") this.#pairSlot = slot;
+    return outcome;
+  }
+
+  /** Releases the slot this host registered last (an empty PAIR_SLOT), e.g. once pairing succeeded or expired. */
+  async clearPairSlot(): Promise<void> {
+    const ws = this.#connected();
+    const slot = this.#pairSlot;
+    if (slot === undefined) return;
+    const released = this.#pairSlots.wait(slot);
+    ws.send(encodePairSlotClear());
+    await released;
+    this.#pairSlot = undefined;
+  }
+
+  #connected(): WebSocket {
+    const ws = this.#socket;
+    if (ws === undefined || !isOpen(ws) || this.#answeredAt === undefined) {
+      throw new LinkClosedError("the uplink is not connected");
+    }
+    return ws;
   }
 
   /** Closes the uplink and every session on it, and stops reconnecting. */
@@ -96,8 +123,13 @@ export class Uplink {
     ws.binaryType = "arraybuffer";
     this.#socket = ws;
     let challenged = false;
+    const acks = new AckCounter();
+    keepAlive(ws, this.#options.pingIntervalMs ?? PING_INTERVAL_MS);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
+      if (event.data === PONG) return;
       if (!(event.data instanceof ArrayBuffer)) return ws.close(CloseCode.UnsupportedData, "binary messages only");
+      const ack = acks.ackFor(event.data.byteLength);
+      if (ack !== undefined && isOpen(ws)) ws.send(ack);
       const bytes = new Uint8Array(event.data);
       if (challenged) return this.#frame(ws, bytes);
       challenged = true;
@@ -109,7 +141,7 @@ export class Uplink {
   async #answer(ws: WebSocket, challenge: Uint8Array): Promise<void> {
     if (challenge.byteLength !== CHALLENGE_BYTES) return ws.close(CloseCode.ProtocolError, "bad challenge");
     const { signer } = this.#options;
-    const signature = await signer.sign(authMessage(this.hostId, challenge));
+    const signature = await signer.sign(authMessage(this.#relayOrigin, this.hostId, challenge));
     if (!isOpen(ws)) return;
     ws.send(encodeAuthAnswer(signer.publicKey, signature));
     this.#answeredAt = Date.now();
@@ -145,6 +177,7 @@ export class Uplink {
   #lost(ws: WebSocket, code: number): void {
     if (ws !== this.#socket) return;
     this.#socket = undefined;
+    this.#pairSlot = undefined;
     this.#endSessions(code);
     this.#pairSlots.failAll(`the uplink closed with ${code} before the relay answered`);
     if (this.#done) return;
