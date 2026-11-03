@@ -16,3 +16,19 @@ export {
   type KeyPair,
 } from "./identity.ts";
 export { PROTOCOL_NAMES, type Pattern } from "./noise/handshake.ts";
+export {
+  buildPairingUrl,
+  createPairingOffer,
+  decodePairingHello,
+  DEFAULT_RELAY_URL,
+  encodePairingHello,
+  generatePairingCode,
+  PAIRING_TTL_MS,
+  pairingCodeBytes,
+  pairingPsk,
+  PairingSlot,
+  parsePairingUrl,
+  type PairingLink,
+  type PairingOffer,
+  type PairingSlotState,
+} from "./pairing.ts";
