@@ -28,7 +28,8 @@ function restoreTargets(opener: Element | null): (Element | null)[] {
  * While the overlay is mounted it owns the keyboard: focus starts on its `selector` element, and
  * anything that takes focus outside it (a terminal whose renderer focuses itself as it starts)
  * hands it straight back. Once it unmounts, focus left on the page body (it closed under its own
- * input) goes back: see restoreTargets. A row that opened a terminal has already moved focus there.
+ * input) goes back through restoreTargets. After the New tab row that is first the old terminal;
+ * the new one then takes focus itself when it becomes ready.
  */
 export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: string): void {
   useEffect(() => {
