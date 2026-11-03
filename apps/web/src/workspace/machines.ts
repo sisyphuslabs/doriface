@@ -13,7 +13,7 @@ export interface MachineEntry {
   readonly first: string | undefined;
 }
 
-const LABELS: Readonly<Record<string, string>> = { needs_login: "needs login", needs_update: "needs update" };
+const LABELS: Readonly<Record<string, string>> = { needs_login: "needs login" };
 
 export const stateLabel = (state: string): string => LABELS[state] ?? state;
 

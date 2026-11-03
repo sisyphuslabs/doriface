@@ -17,7 +17,6 @@ export interface MachineListProps {
 const STATE_TONE: Readonly<Record<string, string>> = {
   unreachable: "text-status-blocked-text",
   needs_login: "text-status-blocked-text",
-  needs_update: "text-status-blocked-text",
 };
 
 /** Every machine this core reaches: this one, then the ones `hc machine add` added, with state and terminals. */
