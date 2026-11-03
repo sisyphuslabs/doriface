@@ -21,6 +21,7 @@ function deviceName(name: string): string {
     throw new PayloadError(`a device name is 1-${MAX_DEVICE_NAME} characters`);
   }
   if (UNSAFE_NAME_CHARACTER.test(trimmed)) throw new PayloadError("a device name cannot contain control characters");
+  if (!trimmed.isWellFormed()) throw new PayloadError("a device name cannot contain a lone surrogate");
   return trimmed;
 }
 
