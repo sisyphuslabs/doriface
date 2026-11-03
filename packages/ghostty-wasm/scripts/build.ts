@@ -8,6 +8,7 @@ import { GHOSTTY, OPTIMIZE, WTERM, ZIG_VERSION } from "./pins.ts";
 import {
   applyPatches,
   assertZigMatchesGhostty,
+  assertZigVersion,
   fetchGhostty,
   fetchWrapper,
   installZig,
@@ -37,13 +38,20 @@ async function patchRecords(patches: readonly string[]): Promise<readonly PatchR
   );
 }
 
+async function zigExecutable(work: string): Promise<string> {
+  if (values.zig === undefined) return installZig(work);
+  const zig = resolve(values.zig);
+  await assertZigVersion(zig);
+  return zig;
+}
+
 async function build(work: string): Promise<BuildInfo> {
   const revision = await resolveGhostty(values.ref);
   console.log(`ghostty ${revision.tag} (${revision.commit}), zig ${ZIG_VERSION}`);
   const ghostty = await fetchGhostty(revision, work);
   await assertZigMatchesGhostty(ghostty.dir);
   const wrapper = await fetchWrapper(work);
-  const zig = values.zig === undefined ? await installZig(work) : resolve(values.zig);
+  const zig = await zigExecutable(work);
 
   const ghosttyPatches = await listPatches(PATCH_ROOT, "ghostty");
   const wtermPatches = await listPatches(PATCH_ROOT, "wterm");

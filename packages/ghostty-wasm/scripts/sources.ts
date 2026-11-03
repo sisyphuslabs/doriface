@@ -65,6 +65,16 @@ export async function installZig(work: string): Promise<string> {
   return join(dir, "zig");
 }
 
+/** build.json records the pinned Zig, so an override must be that release. */
+export async function assertZigVersion(zig: string): Promise<void> {
+  const child = Bun.spawn([zig, "version"], { stdin: "ignore", stdout: "pipe", stderr: "inherit" });
+  const [output, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  const version = output.trim();
+  if (code !== 0 || version !== ZIG_VERSION) {
+    throw new BuildStepError("zig", `${zig} reports ${version || `exit ${code}`}, pinned ${ZIG_VERSION}`);
+  }
+}
+
 export async function assertZigMatchesGhostty(ghosttyDir: string): Promise<void> {
   const manifest = await Bun.file(join(ghosttyDir, "build.zig.zon")).text();
   const required = /\.minimum_zig_version\s*=\s*"([^"]+)"/.exec(manifest)?.[1];
