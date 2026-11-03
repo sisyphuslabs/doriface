@@ -97,7 +97,7 @@ Two shapes considered for the host (INFERRED): (A) pass-through, chosen; (B) hos
 
 ## 5. Latency budget and techniques
 
-Measured on 2026-11-03 with `latency-bench`: 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, the host's load average 17-22 on 18 cores), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink.
+Measured on 2026-11-03 with `latency-bench`: 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, the host's load average 17-22 on 18 cores), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink (INFERRED from the topology in section 6).
 
 | Path                                                                         | p50      | p95      | p99      | min      |
 | ---------------------------------------------------------------------------- | -------- | -------- | -------- | -------- |
@@ -109,9 +109,9 @@ Measured on 2026-11-03 with `latency-bench`: 200 sequential `terminal.list` roun
 
 What the numbers say:
 
-- Over the production relay, the network dominates. One edge round trip from this connection is about 76 ms at p50, and the relayed path is two of them, which matches the 158-181 ms p50. The p95 and p99 tails, 0.3 s and 0.5 s, follow the edge's own spread.
-- The software adds well under a millisecond. On loopback the whole relayed stack (Noise IK, the relay's Durable Object under workerd, the host's uplink and `hc connect`) costs 0.6 ms per round trip at p50 over talking to `hc connect` directly, so about 0.3 ms per direction. That misses the section 1 target of ~0.2 ms per direction by about 0.1 ms; the target stays as it was.
-- A host and a client far apart pay their own two edge legs. The direct LAN path (section 4) skips the relay entirely and was not measured here.
+- Over the production relay, the network dominates. One edge round trip from this connection measured about 76 ms at p50; the relayed path being two of them, about 152 ms, is consistent with the measured 158-181 ms p50 (INFERRED). The p95 and p99 tails, 0.3 s and 0.5 s, are likely the edge's own spread, though the edge row has no p99 to show it (INFERRED).
+- The software adds well under a millisecond. On loopback the whole relayed stack (Noise IK, the relay's Durable Object under workerd, the host's uplink and `hc connect`) costs 0.6 ms per round trip at p50 over talking to `hc connect` directly, so about 0.3 ms per direction (INFERRED: the round-trip difference split evenly between the two directions). That misses the section 1 target of ~0.2 ms per direction by about 0.1 ms; the target stays as it was.
+- A host and a client far apart pay their own two edge legs (INFERRED). The direct LAN path (section 4) skips the relay entirely and was not measured here.
 
 Seal cost per message, for scale: 1,742 ns per 64 B and 336 MiB/s on M4 for noble ChaCha20-Poly1305 (`https://raw.githubusercontent.com/paulmillr/noble-ciphers/main/README.md`, SOURCE).
 
