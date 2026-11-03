@@ -24,9 +24,12 @@ export class PairingSlots {
   readonly #registrar: PairingSlotRegistrar | undefined;
   readonly #noiseStaticPub: Uint8Array;
   readonly #log: (line: string) => void;
-  #registered: { readonly code: string; readonly timer: ReturnType<typeof setTimeout> } | undefined;
+  /** The code whose slot this instance registered; a `registered` status left by an earlier process is not ours. */
+  #registered: string | undefined;
+  #expiry: { readonly code: string; readonly timer: ReturnType<typeof setTimeout> } | undefined;
   #running: Promise<void> = Promise.resolve();
   #stopWatch: (() => void) | undefined;
+  #stopped = false;
 
   constructor(
     store: PairingStore,
@@ -42,6 +45,7 @@ export class PairingSlots {
 
   /** Follows the store's own changes and registers an offer left by `pair` while no host ran. */
   start(): void {
+    this.#stopped = false;
     this.#stopWatch ??= this.#store.onChange(() => this.sync());
     this.sync();
   }
@@ -54,9 +58,12 @@ export class PairingSlots {
     return this.#store.read() ?? offer;
   }
 
+  /** Stops following the store; a registration still in flight is released when it answers. */
   stop(): void {
+    this.#stopped = true;
     this.#stopWatch?.();
     this.#stopWatch = undefined;
+    this.#disarm();
     this.#release();
   }
 
@@ -68,21 +75,30 @@ export class PairingSlots {
   }
 
   async #sync(): Promise<void> {
+    if (this.#stopped) return;
     const pending = this.#store.read();
     const live = pending !== undefined && Date.now() < pending.expiresAt;
-    if (!live || pending.code !== this.#registered?.code) this.#release();
-    if (!live) return this.#store.expire();
-    if (pending.slot !== "pending") return;
+    if (!live || pending.code !== this.#registered) this.#release();
+    if (!live) {
+      this.#disarm();
+      return this.#store.expire();
+    }
+    this.#arm(pending);
+    if (pending.slot === "unavailable" || (pending.slot === "registered" && pending.code === this.#registered)) return;
     if (this.#registrar === undefined) return this.#store.setSlot(pending.code, "unavailable");
     return this.#register(this.#registrar, pending, 0);
   }
 
   async #register(registrar: PairingSlotRegistrar, pending: PendingPairing, redraws: number): Promise<void> {
     if (redraws >= MAX_REDRAWS) return this.#store.setSlot(pending.code, "unavailable");
-    const answer = await registrar.register(pairingSlotOf(pending.code), this.#noiseStaticPub);
+    const slot = pairingSlotOf(pending.code);
+    const answer = await registrar.register(slot, this.#noiseStaticPub);
+    if (this.#stopped) {
+      if (answer === "registered") registrar.release?.(slot);
+      return;
+    }
     if (answer === "registered") {
-      const timer = setTimeout(() => this.sync(), Math.max(0, pending.expiresAt - Date.now()));
-      this.#registered = { code: pending.code, timer };
+      this.#registered = pending.code;
       return this.#store.setSlot(pending.code, "registered");
     }
     const next = this.#store.redraw(pending.code);
@@ -90,11 +106,23 @@ export class PairingSlots {
     return this.#register(registrar, next, redraws + 1);
   }
 
+  /** Re-syncs when the live offer expires, whether or not its slot is registered. */
+  #arm(pending: PendingPairing): void {
+    if (this.#expiry?.code === pending.code) return;
+    this.#disarm();
+    const timer = setTimeout(() => this.sync(), Math.max(0, pending.expiresAt - Date.now()));
+    this.#expiry = { code: pending.code, timer };
+  }
+
+  #disarm(): void {
+    if (this.#expiry !== undefined) clearTimeout(this.#expiry.timer);
+    this.#expiry = undefined;
+  }
+
   #release(): void {
     const registered = this.#registered;
     if (registered === undefined) return;
     this.#registered = undefined;
-    clearTimeout(registered.timer);
-    this.#registrar?.release?.(pairingSlotOf(registered.code));
+    this.#registrar?.release?.(pairingSlotOf(registered));
   }
 }
