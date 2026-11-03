@@ -104,7 +104,7 @@ describe("a second host", () => {
     };
     const first = await startHost(options);
     try {
-      expect(startHost(options)).rejects.toThrow("already running");
+      await expect(startHost(options)).rejects.toThrow("already running");
     } finally {
       await first.stop();
       rmSync(stateDir, { recursive: true, force: true });
