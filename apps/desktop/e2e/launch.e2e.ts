@@ -1,0 +1,88 @@
+import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { DorifaceBridge } from "../src/shared/bridge.ts";
+import { scratchHcSession } from "./hc-session.ts";
+
+declare global {
+  interface Window {
+    readonly doriface?: DorifaceBridge;
+  }
+}
+
+const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+/** CI points this at the electron-builder --dir output so the packaged app is what launches. */
+const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
+const hc = scratchHcSession();
+/** Playwright wants a string-only environment. */
+const launchEnv = (): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries({ ...process.env, ...hc.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+let app: ElectronApplication;
+let page: Page;
+
+test.beforeAll(async () => {
+  app = await electron.launch({
+    ...(executablePath === undefined ? { args: [appDir] } : { executablePath, args: [] }),
+    env: launchEnv(),
+  });
+  page = await app.firstWindow();
+});
+
+test.afterAll(async () => {
+  await app.close();
+  await hc.dispose();
+});
+
+test("the window opens locked down and reaches a local host", async () => {
+  await page.waitForSelector('#root[data-bridge="ready"]');
+  expect(page.url()).toBe("app://doriface/");
+
+  // getLastWebPreferences is bound on every WebContents but missing from electron.d.ts.
+  const prefs = await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0]?.webContents;
+    const read: unknown = contents === undefined ? undefined : Reflect.get(contents, "getLastWebPreferences");
+    return typeof read === "function" ? Reflect.apply(read, contents, []) : null;
+  });
+  console.log(`webPreferences ${JSON.stringify(prefs, null, 2)}`);
+  expect(prefs).toMatchObject({
+    contextIsolation: true,
+    sandbox: true,
+    nodeIntegration: false,
+    webSecurity: true,
+    webviewTag: false,
+  });
+
+  const posture = await page.evaluate(async () => ({
+    csp: (await fetch(location.href)).headers.get("content-security-policy"),
+    node: "process" in globalThis || "require" in globalThis,
+    popup: window.open("https://example.com/") === null,
+    platform: window.doriface?.platform,
+  }));
+  console.log(`renderer posture ${JSON.stringify(posture, null, 2)}`);
+  expect(posture.csp).toContain("script-src 'self' 'wasm-unsafe-eval';");
+  expect(posture).toMatchObject({ node: false, popup: true, platform: process.platform });
+
+  const local = await page.evaluate(async () => {
+    const bridge = window.doriface;
+    if (bridge === undefined) throw new Error("no window.doriface");
+    const endpoint = await bridge.startLocalHost();
+    const protocol = await new Promise<string>((resolve, reject) => {
+      const socket = new WebSocket(endpoint.url, ["doriface.v1", `doriface.token.${endpoint.token}`]);
+      socket.addEventListener("open", () => {
+        resolve(socket.protocol);
+        socket.close();
+      });
+      socket.addEventListener("error", () => reject(new Error(`could not open ${endpoint.url}`)));
+    });
+    return { url: endpoint.url, protocol };
+  });
+  console.log(`local host ${JSON.stringify(local)}`);
+  expect(local.url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/v1\/hc$/);
+  expect(local.protocol).toBe("doriface.v1");
+
+  const screenshot = test.info().outputPath("launch.png");
+  await page.screenshot({ path: screenshot });
+  console.log(`screenshot ${screenshot}`);
+});
