@@ -15,6 +15,8 @@ interface Strip {
   /** Labels not wholly inside the strip, left to right. */
   readonly clipped: readonly string[];
   readonly width: number;
+  /** How far a paging cue's box reaches into the list's box, in device pixels. */
+  readonly cueOverlap: number;
 }
 
 const strip = (page: Page): Promise<Strip> =>
@@ -30,7 +32,10 @@ const strip = (page: Page): Promise<Strip> =>
       if (label.left < box.left - 0.5 && label.right > box.left) cutAtStart.push(tab.textContent ?? "");
       if (label.left < box.left - 0.5 || label.right > box.right + 0.5) clipped.push(tab.textContent ?? "");
       const y = label.top + label.height / 2;
-      for (let x = Math.max(label.left, box.left) + 0.5; x < Math.min(label.right, box.right); x += 2) {
+      // Hit-testing resolves to whole CSS pixels (measured on Linux Chromium at DPR 3: every point in the list's last
+      // pixel, 357..358, hit the cue that starts at 358), so the scan stays one CSS pixel inside each end of the list;
+      // cueOverlap checks the boxes themselves.
+      for (let x = Math.max(label.left, box.left) + 1; x < Math.min(label.right, box.right) - 1; x += 2) {
         const hit = document.elementFromPoint(x, y);
         if (hit === null || !tab.contains(hit)) {
           occluded.push(
@@ -40,7 +45,12 @@ const strip = (page: Page): Promise<Strip> =>
       }
     }
     const startCue = list.parentElement?.querySelector('[data-tab-edge="start"]') !== null;
-    return { scrollLeft: list.scrollLeft, startCue, occluded, cutAtStart, clipped, width: box.width };
+    const reach = [...(list.parentElement?.querySelectorAll("[data-tab-edge]") ?? [])].map((cue) => {
+      const edge = cue.getBoundingClientRect();
+      return Math.max(0, Math.min(edge.right, box.right) - Math.max(edge.left, box.left));
+    });
+    const cueOverlap = Math.max(0, ...reach) * devicePixelRatio;
+    return { scrollLeft: list.scrollLeft, startCue, occluded, cutAtStart, clipped, width: box.width, cueOverlap };
   });
 
 /** Clicks a paging cue and waits for the strip's scroll, snapping included, to end. */
@@ -63,16 +73,19 @@ test("no tab label is under a paging cue at rest, after paging to the end, or af
   await expect(tab.locator('[data-tab-edge="end"]')).toHaveCount(1);
 
   const rest = await strip(tab);
+  expect(rest.cueOverlap).toBeLessThanOrEqual(1);
   expect(rest).toMatchObject({ scrollLeft: 0, startCue: false, occluded: [], cutAtStart: [] });
   expect(rest.clipped).toContain("Keybindings");
 
   await pageTo(tab, "end");
   const end = await strip(tab);
+  expect(end.cueOverlap).toBeLessThanOrEqual(1);
   expect([end.startCue, end.occluded]).toEqual([true, []]);
   expect(end.clipped).not.toContain("Keybindings");
 
   await pageTo(tab, "start");
   const back = await strip(tab);
+  expect(back.cueOverlap).toBeLessThanOrEqual(1);
   expect(back).toMatchObject({ scrollLeft: 0, startCue: false, occluded: [], cutAtStart: [] });
   expect([end.width, back.width]).toEqual([rest.width, rest.width]);
 });
