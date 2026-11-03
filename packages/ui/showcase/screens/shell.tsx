@@ -126,7 +126,7 @@ export function Sidebar() {
 export function WorkspaceBody() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <TabBar tabs={TABS} activeId="t1" />
+      <TabBar tabs={TABS} activeId="t1" newTabKeys={["⌘", "T"]} />
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         <Pane title="Claude Code" status="blocked" meta="main · ⌘1" lines={CLAUDE_LINES} focused />
         <Pane title="Codex" status="done" meta="sync · ⌘2" lines={CODEX_LINES} />

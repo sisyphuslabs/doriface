@@ -17,23 +17,14 @@ export interface TabBarProps {
   readonly onSelect?: (id: string) => void;
   readonly onClose?: (id: string) => void;
   readonly onNew?: () => void;
-  /** The New tab shortcut as key chips; the app passes its live binding. Defaults to the macOS ⌘T. */
+  /** The New tab shortcut as key chips, from the app's live binding; none when it is unbound. */
   readonly newTabKeys?: readonly string[];
   readonly trailing?: ReactNode;
   readonly className?: string;
 }
 
 /** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars. */
-export function TabBar({
-  tabs,
-  activeId,
-  onSelect,
-  onClose,
-  onNew,
-  newTabKeys = ["⌘", "T"],
-  trailing,
-  className,
-}: TabBarProps) {
+export function TabBar({ tabs, activeId, onSelect, onClose, onNew, newTabKeys, trailing, className }: TabBarProps) {
   return (
     <div
       className={cn(
@@ -77,7 +68,12 @@ export function TabBar({
             </div>
           );
         })}
-        <IconButton label="New tab" keys={newTabKeys} icon={<Plus />} onClick={onNew} />
+        <IconButton
+          label="New tab"
+          {...(newTabKeys === undefined ? {} : { keys: newTabKeys })}
+          icon={<Plus />}
+          onClick={onNew}
+        />
       </div>
       {trailing}
     </div>
