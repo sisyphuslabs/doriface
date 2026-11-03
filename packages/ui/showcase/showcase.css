@@ -1,0 +1,14 @@
+@import "tailwindcss";
+@import "../src/styles/tokens.css";
+@import "../src/styles/base.css";
+
+@source "../src";
+@source "./";
+
+/*
+ * The showcase pins interaction states for review: an element with data-force="hover",
+ * "active" or "focus" renders that state without a pointer or keyboard.
+ */
+@custom-variant hover (&:hover, &[data-force~="hover"]);
+@custom-variant active (&:active, &[data-force~="active"]);
+@custom-variant focus-visible (&:focus-visible, &[data-force~="focus"]);

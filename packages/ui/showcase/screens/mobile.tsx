@@ -1,0 +1,49 @@
+import { ChevronLeft, Ellipsis } from "lucide-react";
+import { ExtraKeysBar, IconButton, StatusChip, TerminalPreview } from "../../src/index.ts";
+import { CLAUDE_LINES } from "../data.ts";
+import { PhoneFrame } from "./frames.tsx";
+import { CompactHome } from "./shell.tsx";
+
+export function MobileTerminal() {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome px-1.5 pt-[env(safe-area-inset-top)]">
+        <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h1 className="truncate text-base font-semibold text-foreground">Claude Code</h1>
+          <StatusChip status="blocked" />
+        </div>
+        <IconButton label="Terminal actions" icon={<Ellipsis />} size="md" />
+      </header>
+      <TerminalPreview lines={CLAUDE_LINES} cursor label="Claude Code output" className="flex-1 text-[0.75rem]" />
+      <ExtraKeysBar latched={["ctrl"]} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
+    </div>
+  );
+}
+
+/** At 390 the route is the terminal itself; wider, both phone screens sit side by side. */
+export function MobileScreen() {
+  return (
+    <>
+      <div className="h-dvh md:hidden">
+        <MobileTerminal />
+      </div>
+      <main className="hidden min-h-dvh items-center justify-center gap-12 bg-background p-10 md:flex">
+        <PhoneFrame label="Agents">
+          <CompactHome />
+        </PhoneFrame>
+        <PhoneFrame label="Terminal, with the extra keys bar">
+          <MobileTerminal />
+        </PhoneFrame>
+      </main>
+    </>
+  );
+}
+
+export function MobileAgentsScreen() {
+  return (
+    <div className="h-dvh">
+      <CompactHome />
+    </div>
+  );
+}

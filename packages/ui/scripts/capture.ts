@@ -1,0 +1,85 @@
+/**
+ * Renders the showcase and writes every mockup to docs/design:
+ *   bun run --filter @doriface/ui capture [-- --only shell,pair]
+ * Needs Playwright's Chromium (bunx playwright install chromium).
+ */
+import { chromium, devices, type Browser } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { build } from "vite";
+
+const SHOWCASE = join(import.meta.dirname, "../showcase");
+const DIST = join(SHOWCASE, "dist");
+const OUT = join(import.meta.dirname, "../../../docs/design");
+
+const SCREENS = ["shell", "pair", "palette", "settings", "mobile", "mobile-agents", "states"] as const;
+const THEMES = [
+  { name: "dark", palette: "night" },
+  { name: "light", palette: "day" },
+] as const;
+const WIDTHS = [1440, 390] as const;
+
+function contextFor(width: (typeof WIDTHS)[number]) {
+  if (width === 390) return { ...devices["iPhone 14"], deviceScaleFactor: 2 };
+  return { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 };
+}
+
+async function capture(
+  browser: Browser,
+  origin: string,
+  route: string,
+  file: string,
+  width: (typeof WIDTHS)[number],
+  palette: string,
+) {
+  const context = await browser.newContext({
+    ...contextFor(width),
+    colorScheme: palette === "day" ? "light" : "dark",
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto(`${origin}/?theme=${palette}#/${route}`);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  await page.waitForLoadState("networkidle");
+  await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
+  await context.close();
+}
+
+async function main() {
+  const onlyArg = process.argv.indexOf("--only");
+  const only = onlyArg === -1 ? undefined : new Set((process.argv[onlyArg + 1] ?? "").split(","));
+  await build({ configFile: join(SHOWCASE, "vite.config.ts"), logLevel: "warn" });
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      const file = Bun.file(join(DIST, path === "/" ? "index.html" : path));
+      return (await file.exists()) ? new Response(file) : new Response("not found", { status: 404 });
+    },
+  });
+  const browser = await chromium.launch();
+  try {
+    await mkdir(join(OUT, "mockups"), { recursive: true });
+    const jobs: { route: string; file: string; width: (typeof WIDTHS)[number]; palette: string }[] = [];
+    for (const theme of THEMES) {
+      for (const width of WIDTHS) {
+        const add = (route: string, file: string) => {
+          if (only === undefined || only.has(route)) jobs.push({ route, file, width, palette: theme.palette });
+        };
+        add("primitives", join(OUT, `showcase-${theme.name}-${width}.png`));
+        for (const screen of SCREENS) add(screen, join(OUT, "mockups", `${screen}-${theme.name}-${width}.png`));
+      }
+    }
+    await Promise.all(
+      jobs.map((job) => capture(browser, server.url.origin, job.route, job.file, job.width, job.palette)),
+    );
+    for (const job of jobs) console.log(job.file);
+  } finally {
+    await browser.close();
+    await server.stop(true);
+  }
+}
+
+await main();
