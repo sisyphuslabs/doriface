@@ -15,7 +15,7 @@ export interface KeybindingRowProps {
   readonly onReset: () => void;
 }
 
-/** Listens for the next key combination; Escape cancels. */
+/** Listens for the next key combination; a plain Escape cancels, a modified one is recorded. */
 function Recorder({
   onRecord,
   onCancel,
@@ -27,7 +27,8 @@ function Recorder({
     const onKeyDown = (event: KeyboardEvent): void => {
       event.preventDefault();
       event.stopPropagation();
-      if (event.key === "Escape") return onCancel();
+      const modified = event.ctrlKey || event.altKey || event.shiftKey || event.metaKey;
+      if (event.key === "Escape" && !modified) return onCancel();
       const trigger = triggerFromEvent(event);
       if (trigger !== null) onRecord(trigger);
     };
