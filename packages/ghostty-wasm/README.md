@@ -30,12 +30,19 @@ archive digest recorded rather than checked. Commit only a pinned build: to move
 | `ghostty/0002` | Counts evicted Kitty images for `getResourceState().graphics.evicted`.                                                                                     |
 | `ghostty/0003` | Counts scrollback rows pruned from the top, for `get_scrollback_discarded_count`.                                                                          |
 | `ghostty/0004` | Makes the stream's `print` and `csiDispatch` public for the export layer's fast paths.                                                                     |
-| `ghostty/0005` | Caps resident Kitty image and placement metadata at 4096 each on WebAssembly, whose memory never shrinks.                                                  |
+| `ghostty/0005` | Caps resident Kitty image and placement metadata at 4096 each on WebAssembly, whose memory never shrinks; see below for what happens at the cap.           |
 | `wterm/0001`   | Ports the export layer to Zig 0.17 and the Ghostty v1.4.0 API (`std.Io`, terminal stream effects, compressed pages, image data union, glyph protocol APC). |
 | `wterm/0002`   | Answers the OSC 7501 Program Status probe and keeps the root status record, readable through `get_program_status_*`.                                       |
 
 CI does not rebuild Zig. `scripts/verify.ts` checks that the committed wasm, its size, and every patch match
 `wasm/build.json`, and that `wasm/build.json` names the pinned revisions and Zig.
+
+## Kitty metadata cap
+
+At 4096 resident images (or placements), a command that would add a new one is refused with `ENOMEM` instead of
+evicting the oldest. This is the behavior of the stock 0.5.8 binary, whose wterm build patches its Ghostty the same
+way: it keeps a full byte-eviction scan off the path of every metadata-only overflow, so the resident set stays
+bounded until a program deletes images or byte-budget eviction frees room.
 
 ## Differences from the stock 0.5.8 binary
 
