@@ -94,7 +94,9 @@ export class MeshCommands {
       }
       const renamed = { member: memberRef(view, key), name: request.name };
       if (view.name.get(key) === request.name) return { reply: { written: false, ...renamed }, record: undefined };
-      const named = [...admittedKeys(view), ...view.revoked].find((other) => hostIdOfKey(other) === request.name);
+      const named = [...admittedKeys(view), ...view.revoked].find(
+        (other) => other !== key && hostIdOfKey(other) === request.name,
+      );
       if (named !== undefined) {
         throw new Error(`"${request.name}" is the hostId of ${memberRef(view, named).name}; choose another`);
       }

@@ -26,6 +26,15 @@ describe("mesh-rename (design 7.4, 7.5)", () => {
     expect(it.pushed).toHaveLength(1);
   });
 
+  test("a member may take its own hostId as its name (L9)", async () => {
+    const f = machine("f"),
+      a = machine("a");
+    const it = commandBench(f);
+    it.mesh.admit(f, a);
+    it.ready();
+    expect(await it.commands.rename({ member: "a", name: a.identity.hostId })).toMatchObject({ written: true });
+  });
+
   test("refuses herdr-invalid names and another member's name, and writes nothing for the same name", async () => {
     const f = machine("f"),
       a = machine("a");

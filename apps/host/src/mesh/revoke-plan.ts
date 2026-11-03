@@ -28,12 +28,18 @@ export const memberRef = (view: View, key: string, cardNames?: ReadonlyMap<strin
 });
 
 /**
- * The admitted key a member reference names in `view`: an exact hostId first, then a mesh name, so a member renamed
- * to another member's hostId cannot redirect a revoke of that host.
+ * The admitted key a member reference names in `view`: an exact hostId first, then a member's mesh name, then an
+ * over-cap key's card name (`cardNames`; over-cap keys have no mesh name), so a member renamed to another member's
+ * hostId cannot redirect a revoke of that host.
  */
-export const findMember = (view: View, ref: string): string | undefined =>
+export const findMember = (
+  view: View,
+  ref: string,
+  cardNames: ReadonlyMap<string, string> = new Map(),
+): string | undefined =>
   admittedKeys(view).find((key) => hostIdOfKey(key) === ref) ??
-  admittedKeys(view).find((key) => view.name.get(key) === ref);
+  admittedKeys(view).find((key) => view.name.get(key) === ref) ??
+  [...view.overCap].find((key) => cardNames.get(key) === ref);
 
 const names = (refs: readonly MemberRef[]): string => refs.map((ref) => ref.name).join(", ");
 
@@ -71,7 +77,8 @@ export function planRevoke(
   compromised: boolean,
   cache: ViewCache = new ViewCache(),
 ): RevokePlan {
-  const key = findMember(view, ref);
+  const cardNames = overCapNames(records, view);
+  const key = findMember(view, ref, cardNames);
   if (key === undefined) throw new Error(`no member "${ref}" in this host's view of the mesh`);
   if (key === self) throw new Error("that is this host: to take it out of the mesh, run doriface-host mesh leave");
   const subtree = subtreeOf(records, view, key);
@@ -79,7 +86,6 @@ export function planRevoke(
   if (keys.length > MAX_REVOKE_SUBJECTS) {
     throw new Error(`--compromised would name ${keys.length} keys; one revoke names at most ${MAX_REVOKE_SUBJECTS}`);
   }
-  const cardNames = overCapNames(records, view);
   const toRef = (k: string): MemberRef => memberRef(view, k, cardNames);
   const undecidable = [...undecidableFrom(records, view, self, keys, cache)].map(([subject, askFrom]) => ({
     subject: toRef(subject),
