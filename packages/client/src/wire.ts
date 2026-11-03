@@ -6,10 +6,13 @@ import {
   FrameKind,
   RPC_CHANNEL,
   type Frame,
+  isJsonObject,
   type HelloResult,
   type JsonRpcMessage,
   type JsonRpcNotification,
+  type JsonRpcResponse,
 } from "@doriface/protocol";
+import { PendingCalls } from "./calls.ts";
 import { HcConnectionClosedError } from "./errors.ts";
 import { HELLO_REQUEST_LINE, HelloReader } from "./hello.ts";
 import type { ByteLink } from "./link.ts";
@@ -27,6 +30,7 @@ export class Wire {
   readonly incoming = new Listeners<Frame>();
   readonly notifications = new Listeners<JsonRpcNotification>();
   readonly closed = new Listeners<Error | undefined>();
+  readonly calls = new PendingCalls();
   readonly hello: Promise<HelloResult>;
   readonly #link: ByteLink;
   readonly #helloReader = new HelloReader();
@@ -121,15 +125,25 @@ export class Wire {
         return;
       case "success":
       case "failure":
+        if (!this.calls.settle(message)) this.#orphanReply(message);
         return;
     }
+  }
+
+  /** A reply nobody waits for any more. If it opened a stream, close it so the core frees it. */
+  #orphanReply(response: JsonRpcResponse): void {
+    if (response.kind !== "success" || !isJsonObject(response.result)) return;
+    const channel = response.result["channel"];
+    if (typeof channel === "number" && channel !== RPC_CHANNEL) this.send(channel, FrameKind.Close);
   }
 
   #shutdown(error: Error | undefined): void {
     if (this.#closeState !== undefined) return;
     this.#closeState = { error };
     for (const unsubscribe of this.#linkListeners) unsubscribe();
-    this.#helloSettle.reject(error ?? new HcConnectionClosedError("closed before the hello reply"));
+    const reason = error ?? new HcConnectionClosedError("connection closed");
+    this.#helloSettle.reject(reason);
+    this.calls.failAll(reason);
     const handlers = [...this.#channels.values()];
     this.#channels.clear();
     for (const handler of handlers) handler.connectionClosed(error);
