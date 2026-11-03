@@ -1,13 +1,21 @@
 import type { Clock } from "./clock.ts";
 import type { Gossip } from "./gossip.ts";
+import type { MeshView } from "./mesh-view.ts";
+import type { Reconciler } from "./reconciler.ts";
 import { IDLE_MESH_HOOKS, type MeshHooks } from "./host-hooks.ts";
 
-/** The part of `HostSync` the mesh commands drive: its gossip once sync runs, starting it, and stopping it. */
+/** The part of `HostSync` the mesh commands drive: its gossip and runtime once sync runs, starting it, stopping it. */
 export interface SyncHandle {
   readonly gossip: Gossip | undefined;
+  readonly runtime:
+    | { readonly gossip: Pick<Gossip, "stop">; readonly reconciler: Pick<Reconciler, "reconcile"> }
+    | undefined;
   changed(): void;
-  stop(): void;
+  stop(): void | Promise<void>;
 }
+
+/** The view with no member: a reconcile against it removes every mesh machine from this host's core. */
+const NO_MEMBERS: MeshView = { members: [], overCap: [], revoked: [] };
 
 /** How often a confirmation wait looks at `owed()` again: confirmations arrive as the peers' next `hello`. */
 const CONFIRM_STEP_MS = 250;
@@ -41,9 +49,13 @@ export function syncHooks(sync: SyncHandle, clock: Clock): MeshHooks {
       const still = owed();
       return expected.filter((key) => !still.has(key));
     },
-    left: () => {
-      sync.stop();
-      return Promise.resolve();
+    async left() {
+      const runtime = sync.runtime;
+      if (runtime !== undefined) {
+        runtime.gossip.stop();
+        await runtime.reconciler.reconcile(NO_MEMBERS);
+      }
+      await sync.stop();
     },
     live: IDLE_MESH_HOOKS.live,
   };
