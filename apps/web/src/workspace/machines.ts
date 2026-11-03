@@ -47,8 +47,10 @@ export function machineEntries(
 }
 
 /**
- * Which added machines have live terminals: it changes when a machine's terminals appear, finish or go, which is
- * also what hc does to them when that machine's line drops, so it is one of the moments to read machine.list again.
+ * Which added machines have live terminals: it changes when a machine's terminals appear, finish or go, and each
+ * change triggers a machine.list read. It does not by itself catch a machine going offline: hc 0.1.17 marks that
+ * machine's terminals finished before it updates the machine's state, so the read it triggers can still say
+ * connected. The periodic read in useMachines (MACHINE_REFRESH_MS) is what brings the unreachable state in.
  */
 export function machineKey(terminals: readonly Terminal[]): string {
   const live = terminals.filter((terminal) => terminal.state === "live");
