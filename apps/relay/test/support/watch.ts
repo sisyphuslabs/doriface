@@ -39,13 +39,13 @@ export class Matches<T> {
 
 export interface ScreenWatch {
   text(): string;
-  /** Resolves once some output line, trimmed, is exactly `line`. */
-  line(line: string): Promise<string>;
+  /** Resolves once some output line, trimmed, is exactly `line`; `ms` overrides the default 15 s deadline. */
+  line(line: string, ms?: number): Promise<string>;
   /** Resolves once the output so far contains `text`, escape sequences and all (a first paint has no newlines). */
-  contains(text: string): Promise<string>;
+  contains(text: string, ms?: number): Promise<string>;
 }
 
-export function watchScreen(stream: TerminalStream): ScreenWatch {
+export function watchScreen(stream: Pick<TerminalStream, "onData">): ScreenWatch {
   const decoder = new TextDecoder();
   const lines = new Matches<string>();
   const snapshots = new Matches<string>();
@@ -61,9 +61,9 @@ export function watchScreen(stream: TerminalStream): ScreenWatch {
   });
   return {
     text: () => text,
-    line: (line) => lines.next((seen) => seen === line, `the line ${JSON.stringify(line)}`),
-    contains: (wanted) =>
-      snapshots.next((seen) => seen.includes(wanted), `output containing ${JSON.stringify(wanted)}`),
+    line: (line, ms) => lines.next((seen) => seen === line, `the line ${JSON.stringify(line)}`, ms),
+    contains: (wanted, ms) =>
+      snapshots.next((seen) => seen.includes(wanted), `output containing ${JSON.stringify(wanted)}`, ms),
   };
 }
 

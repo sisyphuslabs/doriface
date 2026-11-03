@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
-import { watchScreen, within } from "./support/watch.ts";
+import { watchScreen } from "./support/watch.ts";
 
 const phone = generateX25519();
 const MIB = 1024 * 1024;
@@ -47,7 +47,7 @@ describe("frames and streams far past one relay message, through the relay", () 
     const stream = await hc.attach({ terminal: run.address, cols: 120, rows: 40 });
     const screen = watchScreen(stream);
     stream.write("head -c 20971520 /dev/zero | tr '\\0' 'y'; echo; echo bulk-$((6 * 7))\r");
-    await within(screen.line("bulk-42"), "the line after 20 MiB", 50_000);
+    await screen.line("bulk-42", 50_000);
     expect([hc.closed, stream.state]).toEqual([false, "open"]);
     await hc.call("terminal.kill", { terminal: run.address });
   }, 60_000);
@@ -65,7 +65,7 @@ describe("frames and streams far past one relay message, through the relay", () 
       terminal: run.address,
       text: "head -c 20971520 /dev/zero | tr '\\0' 'y'; echo; echo both-$((6 * 7))",
     });
-    const [written] = await Promise.all([upload, within(screen.line("both-42"), "the line after 20 MiB", 50_000)]);
+    const [written] = await Promise.all([upload, screen.line("both-42", 50_000)]);
     expect(written.bytes).toBe(content.length);
     await hc.call("terminal.kill", { terminal: run.address });
   }, 60_000);
