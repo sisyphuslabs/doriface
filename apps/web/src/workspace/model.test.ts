@@ -24,6 +24,7 @@ describe("agentStatus", () => {
     ["error reads as needing you", { reported: true, status: { state: "error" } }, "blocked"],
     ["done", { reported: true, status: { state: "done" } }, "done"],
     ["a word outside the protocol", { reported: true, status: { state: "thinking" } }, "idle"],
+    ["an Object.prototype name", { reported: true, status: { state: "constructor" } }, "idle"],
     ["finished", { state: "finished" }, "done"],
   ] as const)("%s -> %s", (_name, fields, expected) => {
     expect(agentStatus(terminal(fields))).toBe(expected);
