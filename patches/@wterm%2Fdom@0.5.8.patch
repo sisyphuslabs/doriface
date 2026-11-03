@@ -1,3 +1,22 @@
+diff --git a/dist/input.js b/dist/input.js
+index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..86a22e9e75ad6795a9276dc9f033346cd4a9a6f8 100644
+--- a/dist/input.js
++++ b/dist/input.js
+@@ -472,9 +472,11 @@ export class InputHandler {
+         this.positionTextarea();
+         const s = this.textarea.style;
+         s.opacity = "1";
+-        s.color = "var(--term-fg, currentColor)";
+-        s.background = "var(--term-bg, transparent)";
+-        s.caretColor = "var(--term-fg, currentColor)";
++        // The host may give the preedit its own colors; the browser can paint
++        // its own highlight behind composed text.
++        s.color = "var(--term-preedit-fg, var(--term-fg, currentColor))";
++        s.background = "var(--term-preedit-bg, var(--term-bg, transparent))";
++        s.caretColor = "var(--term-preedit-fg, var(--term-fg, currentColor))";
+     }
+     handleCompositionEnd(e) {
+         this.composing = false;
 diff --git a/dist/renderer.js b/dist/renderer.js
 index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae35453c12 100644
 --- a/dist/renderer.js
