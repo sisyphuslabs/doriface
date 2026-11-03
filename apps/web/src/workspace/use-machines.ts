@@ -2,6 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { machineEntries, machineKey, type MachineEntry } from "./machines.ts";
+import { withReach } from "./reach.ts";
 
 export interface Machines {
   readonly entries: readonly MachineEntry[];
@@ -31,6 +32,8 @@ export const MACHINE_REFRESH_MS = 10_000;
 
 export interface MachineState {
   readonly entries: readonly MachineEntry[];
+  /** The terminals with those on a machine that is not connected marked unreachable (`withReach`). */
+  readonly terminals: readonly Terminal[];
   /** Reads machine.list again now, e.g. after a call on a machine failed. */
   readonly refresh: () => void;
   readonly listError: string | undefined;
@@ -72,6 +75,7 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
     };
   }, [refresh]);
   const localName = connection.hello.core.name;
-  const entries = useMemo(() => machineEntries(localName, views, terminals), [localName, views, terminals]);
-  return { entries, refresh, listError };
+  const reached = useMemo(() => withReach(terminals, views), [terminals, views]);
+  const entries = useMemo(() => machineEntries(localName, views, reached), [localName, views, reached]);
+  return { entries, terminals: reached, refresh, listError };
 }
