@@ -19,8 +19,12 @@ interface Shot {
   readonly run: (page: Page, width: Width) => Promise<void>;
 }
 
-const terminalReady = (page: Page) =>
-  expect(page.locator("[data-terminal]").first()).toContainText("$", { timeout: 15_000 });
+const focusedTerminal = (page: Page) => page.locator('[data-focused="true"] [data-terminal]');
+/** Opens the seeded terminal whose sidebar row matches, so the shot never depends on which tab opened first. */
+const openTerminal = async (page: Page, name: RegExp, text: string | RegExp) => {
+  await page.getByRole("button", { name }).first().click();
+  await expect(focusedTerminal(page)).toContainText(text, { timeout: 15_000 });
+};
 
 const SHOTS: readonly Shot[] = [
   {
@@ -29,11 +33,8 @@ const SHOTS: readonly Shot[] = [
     run: async (page, width) => {
       await page.goto("/");
       if (width === "390") return void (await expect(page.getByText("Needs you")).toBeVisible());
-      await terminalReady(page);
-      await page
-        .getByRole("button", { name: /deploy/ })
-        .first()
-        .click();
+      await openTerminal(page, /shell/, "$");
+      await openTerminal(page, /deploy/, "Waiting for approval");
       await page.getByRole("button", { name: "Split" }).click();
     },
   },
@@ -42,7 +43,7 @@ const SHOTS: readonly Shot[] = [
     connected: true,
     run: async (page, width) => {
       await page.goto("/");
-      if (width === "1440") return terminalReady(page);
+      if (width === "1440") return openTerminal(page, /shell/, "$");
       await page
         .getByRole("button", { name: /deploy/ })
         .first()
