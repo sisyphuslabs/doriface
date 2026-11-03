@@ -78,6 +78,16 @@ describe("pairing slots", () => {
     expect(await lookup(typed(slot))).toBeUndefined();
   });
 
+  test("registering a new slot releases the host's previous one", async () => {
+    const host = await startTestHost(relay.url, testIp());
+    const [first, second] = [randomSlot(), randomSlot()];
+    await host.uplink.registerPairSlot(first, crypto.getRandomValues(new Uint8Array(32)));
+    await host.uplink.registerPairSlot(second, crypto.getRandomValues(new Uint8Array(32)));
+    expect(await lookup(typed(first))).toBeUndefined();
+    expect((await lookup(typed(second)))?.hostId).toBe(host.uplink.hostId);
+    host.uplink.stop();
+  });
+
   test("a cleared slot is not found any more", async () => {
     const host = await startTestHost(relay.url, testIp());
     const slot = randomSlot();
