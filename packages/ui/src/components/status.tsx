@@ -55,11 +55,13 @@ export function StatusIndicator({ status, className, decorative = false }: Statu
 
 export interface StatusChipProps {
   readonly status: AgentStatus;
+  /** Off where the row already leads with the same glyph. */
+  readonly glyph?: boolean;
   readonly className?: string;
 }
 
 /** The labelled form: the shape plus its word, used where there is room. */
-export function StatusChip({ status, className }: StatusChipProps) {
+export function StatusChip({ status, glyph = true, className }: StatusChipProps) {
   const tint = {
     working: "bg-status-working/15 text-status-working-text",
     blocked: "bg-status-blocked/15 text-status-blocked-text",
@@ -75,7 +77,7 @@ export function StatusChip({ status, className }: StatusChipProps) {
         className,
       )}
     >
-      <StatusIndicator status={status} decorative className="size-3" />
+      {glyph ? <StatusIndicator status={status} decorative className="size-3" /> : null}
       {STATUS_LABEL[status]}
     </span>
   );
