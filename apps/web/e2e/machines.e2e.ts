@@ -36,6 +36,8 @@ test.describe("machines added with hc machine add", () => {
     await expect(focused).toContainText("on-build-box-42", { timeout: 15_000 });
     await page.keyboard.type("exit\r");
     await expect(machineRow(page)).toContainText(/connected\s*0/, { timeout: 15_000 });
+    await expect(machineRow(page)).toBeDisabled();
+    await expect(machineRow(page)).toHaveCSS("opacity", "0.45");
   });
 
   test("a machine that goes offline with the page open reads unreachable and offers no new terminal", async ({
