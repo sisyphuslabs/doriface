@@ -13,7 +13,7 @@ export interface StaticKey {
 /** A static key held as raw bytes (the host), using @noble's X25519; low-order peer keys are rejected. */
 export const rawStaticKey = (pair: KeyPair): StaticKey => ({
   publicKey: pair.publicKey,
-  dh: (remotePublic) => Promise.resolve(x25519.getSharedSecret(pair.secretKey, remotePublic)),
+  dh: async (remotePublic) => x25519.getSharedSecret(pair.secretKey, remotePublic),
 });
 
 const X25519 = { name: "X25519" } as const;
