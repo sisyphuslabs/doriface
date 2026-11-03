@@ -74,8 +74,21 @@ function measure(row: HTMLElement): Fit {
       return floorWidth(part, isPart(role) ? plan[role] : 3);
     }),
   );
-  const widths = sized.find((plan) => plan.reduce((sum, width) => sum + width, 0) <= available) ?? sized.at(-1) ?? [];
-  return { row, content, parts, widths };
+  return { row, content, parts, widths: choose(sized, available) };
+}
+
+const total = (widths: readonly number[]): number => widths.reduce((sum, width) => sum + width, 0);
+
+/**
+ * The richest plan the room holds. When even the narrowest does not fit, its widths shrink in proportion to the room:
+ * the parts keep fewer characters, but the row never runs past its edge, so every row's age still ends at one edge.
+ */
+function choose(sized: readonly (readonly number[])[], available: number): readonly number[] {
+  const fits = sized.find((widths) => total(widths) <= available);
+  if (fits !== undefined) return fits;
+  const narrowest = sized.at(-1) ?? [];
+  const scale = Math.max(0, available) / Math.max(1, total(narrowest));
+  return narrowest.map((width) => Math.floor(width * scale));
 }
 
 /** Every row on the page that keeps floors, and the content width it was last fitted at. */
