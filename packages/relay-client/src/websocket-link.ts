@@ -9,7 +9,7 @@ import {
   type Unsubscribe,
 } from "./link.ts";
 import { RELAY_MESSAGE_CAP } from "./limits.ts";
-import { isOpen } from "./socket.ts";
+import { closeSocket, isOpen } from "./socket.ts";
 import { CloseCode, PING_INTERVAL_MS, PONG } from "./wire/index.ts";
 
 /**
@@ -27,7 +27,7 @@ export class WebSocketLink implements ByteLink {
   constructor(ws: WebSocket, pingIntervalMs = PING_INTERVAL_MS) {
     this.#ws = ws;
     ws.binaryType = "arraybuffer";
-    this.#inbox = new Inbox(() => this.#shut(CloseCode.InternalError, "data listener failed"));
+    this.#inbox = new Inbox((error) => this.#shut(CloseCode.InternalError, "data listener failed", error));
     this.#stopPings = keepAlive(ws, pingIntervalMs);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
@@ -64,16 +64,16 @@ export class WebSocketLink implements ByteLink {
     this.#shut(CloseCode.Normal, "");
   }
 
-  #shut(code: number, reason: string): void {
-    if (isOpen(this.#ws)) this.#ws.close(code, reason);
-    this.#finish(code, reason);
+  #shut(code: number, reason: string, cause?: unknown): void {
+    if (isOpen(this.#ws)) closeSocket(this.#ws, code, reason);
+    this.#finish(code, reason, cause);
   }
 
-  #finish(code: number, reason: string): void {
+  #finish(code: number, reason: string, cause?: unknown): void {
     if (this.#closed.fired) return;
     this.#stopPings();
     this.#closeCode = code;
     this.#inbox.clear();
-    this.#closed.fire(code === CloseCode.Normal ? undefined : new RelayCloseError(code, reason));
+    this.#closed.fire(code === CloseCode.Normal ? undefined : new RelayCloseError(code, reason, { cause }));
   }
 }

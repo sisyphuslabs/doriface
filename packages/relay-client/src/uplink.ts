@@ -5,7 +5,7 @@ import { LinkClosedError } from "./link.ts";
 import { type PairSlotResult, PairSlotRequests } from "./pair-requests.ts";
 import { SessionLink } from "./session-link.ts";
 import type { HostSigner } from "./signer.ts";
-import { type CreateSocket, defaultCreateSocket, isOpen, relaySocketUrl } from "./socket.ts";
+import { closeSocket, type CreateSocket, defaultCreateSocket, isOpen, relaySocketUrl } from "./socket.ts";
 import {
   authMessage,
   CHALLENGE_BYTES,
@@ -130,19 +130,20 @@ export class Uplink {
     this.#stopPings = keepAlive(ws, this.#options.pingIntervalMs ?? PING_INTERVAL_MS);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
-      if (!(event.data instanceof ArrayBuffer)) return ws.close(CloseCode.UnsupportedData, "binary messages only");
+      if (!(event.data instanceof ArrayBuffer))
+        return closeSocket(ws, CloseCode.UnsupportedData, "binary messages only");
       const ack = acks.ackFor(event.data.byteLength);
       if (ack !== undefined && isOpen(ws)) ws.send(ack);
       const bytes = new Uint8Array(event.data);
       if (challenged) return this.#frame(ws, bytes);
       challenged = true;
-      this.#answer(ws, bytes).catch(() => ws.close(CloseCode.InternalError, "signing failed"));
+      this.#answer(ws, bytes).catch(() => closeSocket(ws, CloseCode.InternalError, "signing failed"));
     });
     ws.addEventListener("close", (event: CloseEvent) => this.#lost(ws, event.code));
   }
 
   async #answer(ws: WebSocket, challenge: Uint8Array): Promise<void> {
-    if (challenge.byteLength !== CHALLENGE_BYTES) return ws.close(CloseCode.ProtocolError, "bad challenge");
+    if (challenge.byteLength !== CHALLENGE_BYTES) return closeSocket(ws, CloseCode.ProtocolError, "bad challenge");
     const { signer } = this.#options;
     const signature = await signer.sign(authMessage(this.#relayOrigin, this.hostId, challenge));
     if (!isOpen(ws)) return;
@@ -156,17 +157,18 @@ export class Uplink {
     try {
       frame = decodeMux(bytes);
     } catch (error) {
-      if (error instanceof MuxError) return ws.close(CloseCode.ProtocolError, error.message);
+      if (error instanceof MuxError) return closeSocket(ws, CloseCode.ProtocolError, error.message);
       throw error;
     }
     if (frame.type === MuxType.PairSlot) {
-      if (!this.#pairSlots.settle(frame.payload)) ws.close(CloseCode.ProtocolError, "bad PAIR_SLOT reply");
+      if (!this.#pairSlots.settle(frame.payload)) closeSocket(ws, CloseCode.ProtocolError, "bad PAIR_SLOT reply");
       return;
     }
     const session = this.#sessions.get(frame.sessionId);
     if (frame.type === MuxType.Data) return session?.deliver(frame.payload);
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
-    if (session !== undefined) return ws.close(CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
+    if (session !== undefined)
+      return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
     const link = new SessionLink(frame.sessionId, {
       sendFrame: (out) => {
         if (isOpen(ws)) ws.send(out);
