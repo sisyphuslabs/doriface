@@ -41,6 +41,7 @@
   --sidebar-ring: #2f5fc4;
   --term-fg: #2a2723;
   --term-bg: #fbfaf7;
+  --term-faint: #76736f;
   --term-cursor: #2a2723;
   --term-selection: #d6e0f5;
   --status-working: #8a5a00;
@@ -113,6 +114,7 @@
     --sidebar-ring: #9fb4e6;
     --term-fg: #d8d4cb;
     --term-bg: #161513;
+    --term-faint: #817f78;
     --term-cursor: #d8d4cb;
     --term-selection: #3a3e4c;
     --status-working: #e2b86b;
@@ -185,6 +187,7 @@
   --sidebar-ring: #9fb4e6;
   --term-fg: #d8d4cb;
   --term-bg: #161513;
+  --term-faint: #817f78;
   --term-cursor: #d8d4cb;
   --term-selection: #3a3e4c;
   --status-working: #e2b86b;
@@ -256,6 +259,7 @@
   --sidebar-ring: #2f5fc4;
   --term-fg: #2a2723;
   --term-bg: #fbfaf7;
+  --term-faint: #76736f;
   --term-cursor: #2a2723;
   --term-selection: #d6e0f5;
   --status-working: #8a5a00;
@@ -327,6 +331,7 @@
   --sidebar-ring: #96b2d7;
   --term-fg: #d2d4d9;
   --term-bg: #17191d;
+  --term-faint: #7f8185;
   --term-cursor: #d2d4d9;
   --term-selection: #394454;
   --status-working: #e5c07b;
@@ -398,6 +403,7 @@
   --sidebar-ring: #1f62d0;
   --term-fg: #25272c;
   --term-bg: #ffffff;
+  --term-faint: #757679;
   --term-cursor: #25272c;
   --term-selection: #cfdcf5;
   --status-working: #9a6700;

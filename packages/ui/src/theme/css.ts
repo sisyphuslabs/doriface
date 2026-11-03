@@ -31,6 +31,10 @@ export function themeVariables(theme: ResolvedTheme): CssVariables {
   const surfaces = [base, canvas, chrome, popover, flatten(r.raised, base), ...selected];
   const text = (value: string): string => ensureContrast(value, surfaces, AA_TEXT, ink);
   const graphic = (value: string): string => ensureContrast(value, surfaces, AA_GRAPHIC, ink);
+  const termBg = rgb(r.background);
+  const termFg = rgb(r.terminal_foreground);
+  /** Ghostty draws faint text at faint-opacity 0.5; the guard lifts it to AA on the terminal background. */
+  const faint = ensureContrast(hex(mix(termBg, termFg, 0.5)), [termBg], AA_TEXT, termFg);
   const edge = ensureContrast(hex(mix(base, ink, 0.3)), surfaces, AA_GRAPHIC, ink);
   const vars: Record<string, string> = {
     background: r.canvas,
@@ -72,6 +76,7 @@ export function themeVariables(theme: ResolvedTheme): CssVariables {
     "sidebar-ring": graphic(r.accent),
     "term-fg": r.terminal_foreground,
     "term-bg": r.background,
+    "term-faint": faint,
     "term-cursor": r.cursor,
     "term-selection": r.selection,
   };
