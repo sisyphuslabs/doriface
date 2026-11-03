@@ -96,4 +96,23 @@ describe("WsLink over a real socket", () => {
       await server.stop();
     }
   });
+
+  test("a write the socket drops closes the link without an unhandled rejection", async () => {
+    const server = serveWsLinks({ backpressureLimit: 64 * 1024 });
+    try {
+      const linked = server.nextLink();
+      const client = await rawWsClient(server.port);
+      const link = await linked;
+      const wire = new WsByteLink(link);
+      const closed = Promise.withResolvers<void>();
+      link.onClose(() => closed.resolve());
+      client.socket.pause();
+      for (let write = 0; write < 8; write++) wire.send(new Uint8Array(256 * 1024));
+      await closed.promise;
+      await new Promise((resolve) => setImmediate(resolve));
+      client.socket.destroy();
+    } finally {
+      await server.stop();
+    }
+  });
 });
