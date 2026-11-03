@@ -83,6 +83,16 @@ function lanUrl(value: unknown): string {
   return value;
 }
 
+/** The longest leading run of `lanUrls` whose reply still fits one 256-byte line (and at most 8 entries). */
+export function fitLanUrls(lanUrls: readonly string[]): readonly string[] {
+  const fitted: string[] = [];
+  for (const url of lanUrls.slice(0, MAX_LAN_URLS)) {
+    if (line({ lan: [...fitted, lanUrl(url)] }).byteLength > MAX_LINE) break;
+    fitted.push(url);
+  }
+  return fitted;
+}
+
 /** Message 2: `{"v":1,"lan":[…]}\n` with at most 8 IP-literal LAN URLs, and nothing after it. */
 export function encodeReply(lanUrls: readonly string[]): Uint8Array {
   if (lanUrls.length > MAX_LAN_URLS) throw new PayloadError(`at most ${MAX_LAN_URLS} LAN URLs`);
