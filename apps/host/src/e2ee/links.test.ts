@@ -1,4 +1,4 @@
-import type { SecureLink } from "@doriface/crypto";
+import { type SecureLink, SessionKind } from "@doriface/crypto";
 import { describe, expect, test } from "bun:test";
 import { ByteQueue } from "../link.ts";
 import { plaintextLink, type Wire } from "./links.ts";
@@ -7,7 +7,7 @@ import { plaintextLink, type Wire } from "./links.ts";
 function fakeSecure(): SecureLink & { readonly emit: (bytes: Uint8Array) => void } {
   let data: ((bytes: Uint8Array) => void) | undefined;
   return {
-    pattern: "IK",
+    kind: SessionKind.Session,
     remoteStatic: new Uint8Array(32),
     handshakeHash: new Uint8Array(32),
     peerName: undefined,

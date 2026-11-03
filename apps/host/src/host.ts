@@ -144,7 +144,7 @@ function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
 
 function e2eeDeps(stateDir: string, options: HostOptions) {
   const devices = new DeviceStore(stateDir);
-  const pairing = new PairingStore(stateDir);
+  const pairing = new PairingStore(stateDir, options.log);
   const identity = loadHostIdentity(stateDir);
   /** Filled in once the LAN listener has its port. */
   const lanUrls: string[] = [];
