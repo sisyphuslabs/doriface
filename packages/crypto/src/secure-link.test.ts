@@ -3,21 +3,33 @@ import { concatBytes } from "./encoding.ts";
 import { CloseCode } from "./link.ts";
 import { generateWebCryptoStaticKey } from "./static-key.ts";
 import { nextClose } from "./testing/memory-link.ts";
-import { collect, device, established, flush, hellos, psk } from "./testing/secure-link-fixture.ts";
+import { SessionKind } from "./kinds.ts";
+import {
+  codePairing,
+  collect,
+  device,
+  established,
+  flush,
+  hellos,
+  linkPairing,
+} from "./testing/secure-link-fixture.ts";
 import { MAX_PLAINTEXT } from "./transport.ts";
 
 describe("secureLink", () => {
-  test("pairs over IKpsk2, then reconnects over IK, carrying bytes both ways", async () => {
-    const paired = await established({ clientPsk: psk, name: "laptop" });
-    expect([paired.client.pattern, paired.server.pattern]).toEqual(["IKpsk2", "IKpsk2"]);
+  test.each([
+    ["the typed code", codePairing("laptop"), SessionKind.PairCode],
+    ["the link secret", linkPairing("laptop"), SessionKind.PairLink],
+  ] as const)("pairs with %s, then reconnects as a session, carrying bytes both ways", async (_, pairing, kind) => {
+    const paired = await established({ pairing });
+    expect([paired.client.kind, paired.server.kind]).toEqual([kind, kind]);
     expect(paired.server.peerName).toBe("laptop");
-    expect(hellos.at(-1)).toMatchObject({ pattern: "IKpsk2", name: "laptop" });
+    expect(hellos.at(-1)).toMatchObject({ kind, name: "laptop" });
     expect(paired.server.remoteStatic).toEqual(device.publicKey);
     expect(paired.client.handshakeHash).toEqual(paired.server.handshakeHash);
 
     const again = await established();
-    expect([again.client.pattern, again.server.pattern]).toEqual(["IK", "IK"]);
-    expect(hellos.at(-1)?.pattern).toBe("IK");
+    expect([again.client.kind, again.server.kind]).toEqual([SessionKind.Session, SessionKind.Session]);
+    expect(hellos.at(-1)?.kind).toBe(SessionKind.Session);
     const atServer = collect(again.server);
     const atClient = collect(again.client);
     again.client.send(new TextEncoder().encode("ping"));
@@ -30,7 +42,7 @@ describe("secureLink", () => {
   test("a device key held in non-extractable WebCrypto pairs and reconnects (the DH is injected)", async () => {
     const { privateKey, staticKey } = await generateWebCryptoStaticKey();
     expect(privateKey.extractable).toBe(false);
-    const paired = await established({ clientKey: staticKey, clientPsk: psk, name: "browser" });
+    const paired = await established({ clientKey: staticKey, pairing: codePairing("browser") });
     expect(paired.server.remoteStatic).toEqual(staticKey.publicKey);
     const again = await established({ clientKey: staticKey });
     const atServer = collect(again.server);

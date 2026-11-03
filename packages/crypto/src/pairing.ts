@@ -1,5 +1,3 @@
-import { hkdf } from "@noble/hashes/hkdf.js";
-import { sha256 } from "@noble/hashes/sha2.js";
 import { base64urlDecode, base64urlEncode, concatBytes, utf8 } from "./encoding.ts";
 import { hostIdOf } from "./identity.ts";
 
@@ -10,6 +8,12 @@ export const PAIRING_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const PAIRING_CODE_LENGTH = 8;
 /** The leading characters that name the relay pairing slot; the rest is the secret. */
 export const PAIRING_SLOT_LENGTH = 3;
+/** Typed-code attempts the host answers per offer before it retires the code (contract v1.3 "Pairing"). */
+export const PAIRING_CODE_ATTEMPTS = 10;
+export const LINK_SECRET_LENGTH = 32;
+
+/** 32 random bytes per pairing offer, carried only in the pairing URL fragment. */
+export const generateLinkSecret = (): Uint8Array => crypto.getRandomValues(new Uint8Array(LINK_SECRET_LENGTH));
 
 /** 8 Crockford base32 characters; each byte's low 5 bits pick one, so every character is uniform. */
 export function generatePairingCode(): string {
@@ -40,18 +44,16 @@ export const formatPairingCode = (code: string): string => {
 /** The relay pairing slot: the code's first 3 characters. */
 export const pairingSlotOf = (code: string): string => normalizePairingCode(code).slice(0, PAIRING_SLOT_LENGTH);
 
-/** psk = HKDF-SHA256(ikm = UTF-8 of all 8 code characters, salt = empty, info = "doriface pair v1", 32 bytes). */
-export const pairingPsk = (code: string): Uint8Array =>
-  hkdf(sha256, utf8(normalizePairingCode(code)), new Uint8Array(0), utf8("doriface pair v1"), 32);
-
 export interface PairingOffer {
   readonly code: string;
+  readonly linkSecret: Uint8Array;
   /** Milliseconds since the epoch. */
   readonly expiresAt: number;
 }
 
 export const createPairingOffer = (now = Date.now()): PairingOffer => ({
   code: generatePairingCode(),
+  linkSecret: generateLinkSecret(),
   expiresAt: now + PAIRING_TTL_MS,
 });
 
@@ -59,8 +61,8 @@ export type PairingGuardState = "open" | "used" | "expired";
 
 /**
  * One offer's single-use lifecycle on the host: it ends only on the first confirmed handshake or at expiry, never on
- * failures (the relay bounds guesses per slot), so nobody can burn a code they do not know. Claiming only reads the
- * psk, so an attempt in flight never locks another out; expiry is latched against a clock that later goes back.
+ * failures, so nobody can burn an offer they cannot pair with. Claiming only reads the offer's secrets, so an attempt in
+ * flight never locks another out; expiry is latched against a clock that later goes back.
  */
 export class PairingGuard {
   readonly offer: PairingOffer;
@@ -74,9 +76,9 @@ export class PairingGuard {
     return this.#state;
   }
 
-  claim(now = Date.now()): Uint8Array | undefined {
+  claim(now = Date.now()): PairingOffer | undefined {
     this.#expireAt(now);
-    return this.#state === "open" ? pairingPsk(this.offer.code) : undefined;
+    return this.#state === "open" ? this.offer : undefined;
   }
 
   /**
@@ -111,11 +113,10 @@ export interface PairingLink {
   readonly hostId: string;
   readonly noiseStaticPub: Uint8Array;
   readonly signPub: Uint8Array;
-  readonly code: string;
+  readonly linkSecret: Uint8Array;
   readonly relayUrl: string;
 }
 
-/** `<web origin>/pair#h=…&k=…&s=…&c=…&r=…`; everything sits in the fragment, which never reaches a server. */
 const WEBSOCKET_SCHEME: Readonly<Record<string, string>> = {
   "https:": "wss:",
   "wss:": "wss:",
@@ -139,18 +140,19 @@ export function pairingWebOrigin(webOrigin: string): string {
   return url.origin;
 }
 
+/** `<web origin>/pair#h=…&k=…&s=…&p=…&r=…`; everything sits in the fragment, which never reaches a server. */
 export function buildPairingUrl(link: PairingLink): string {
   const fragment = new URLSearchParams({
     h: link.hostId,
     k: base64urlEncode(link.noiseStaticPub),
     s: base64urlEncode(link.signPub),
-    c: link.code,
+    p: base64urlEncode(link.linkSecret),
     r: relayWebSocketUrl(link.relayUrl),
   });
   return `${pairingWebOrigin(link.webOrigin)}/pair#${fragment.toString()}`;
 }
 
-/** Parses and checks a pairing URL: key lengths, the code's shape, and that `h` is the hostId of `s`. */
+/** Parses and checks a pairing URL: key and secret lengths, and that `h` is the hostId of `s`. */
 export function parsePairingUrl(url: string): PairingLink {
   const parsed = new URL(url);
   pairingWebOrigin(url);
@@ -165,11 +167,14 @@ export function parsePairingUrl(url: string): PairingLink {
     if (encoded.length !== 43) throw new Error("the pairing URL has a bad key");
     return base64urlDecode(encoded);
   };
+  if (!fragment.has("p") && fragment.has("c")) {
+    throw new Error("this pairing link comes from an older doriface-host; run doriface-host pair again");
+  }
   const noiseStaticPub = key("k");
   const signPub = key("s");
   const hostId = get("h");
   if (hostIdOf(signPub) !== hostId) throw new Error("the pairing URL's hostId does not match its signing key");
-  const code = normalizePairingCode(get("c"));
+  const linkSecret = key("p");
   const relayUrl = relayWebSocketUrl(get("r"));
-  return { webOrigin: parsed.origin, hostId, noiseStaticPub, signPub, code, relayUrl };
+  return { webOrigin: parsed.origin, hostId, noiseStaticPub, signPub, linkSecret, relayUrl };
 }

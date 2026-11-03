@@ -1,6 +1,8 @@
 import { generateHostIdentity, generateX25519, type KeyPair } from "../identity.ts";
 import { SecureLinkError } from "../link.ts";
-import { createPairingOffer, pairingPsk } from "../pairing.ts";
+import type { PairingSecret } from "../client-flight.ts";
+import { SessionKind } from "../kinds.ts";
+import { createPairingOffer } from "../pairing.ts";
 import { type Authorization, type ClientHello, secureLink } from "../secure-link.ts";
 import type { SecureLink } from "../secured-link.ts";
 import { rawStaticKey, type StaticKey } from "../static-key.ts";
@@ -8,17 +10,31 @@ import { memoryLinkPair, type MemoryEnd } from "./memory-link.ts";
 
 export const host = generateHostIdentity();
 export const device = generateX25519();
-export const psk = pairingPsk(createPairingOffer().code);
+export const offer = createPairingOffer();
+export const codePairing = (name: string, code = offer.code): PairingSecret => ({ mode: "code", code, name });
+export const linkPairing = (name: string, linkSecret = offer.linkSecret): PairingSecret => ({
+  mode: "link",
+  linkSecret,
+  name,
+});
 export const hellos: ClientHello[] = [];
 
+/** The host's default decision: every session key is accepted, and a pairing finishes with the offer's secret. */
+export function acceptAll(hello: ClientHello): Authorization {
+  hellos.push(hello);
+  if (hello.kind === SessionKind.PairCode) return { accept: true, secret: { mode: "code", code: offer.code } };
+  if (hello.kind === SessionKind.PairLink)
+    return { accept: true, secret: { mode: "link", linkSecret: offer.linkSecret } };
+  return { accept: true };
+}
+
 export interface Setup {
-  readonly clientPsk?: Uint8Array;
+  readonly pairing?: PairingSecret;
   readonly authorize?: (hello: ClientHello) => Authorization;
   readonly clientKey?: KeyPair | StaticKey;
   readonly early?: Uint8Array;
   readonly lanUrls?: readonly string[];
   readonly rekey?: readonly [number, number];
-  readonly name?: string;
   /** Rewrites the client's first message (message 1) in flight. */
   readonly tamperHello?: (bytes: Uint8Array) => Uint8Array;
   readonly synchronous?: boolean;
@@ -44,19 +60,14 @@ export function connect(setup: Setup = {}) {
     staticKey: rawStaticKey(host.noise),
     rekeyInterval: setup.rekey?.[1],
     lanUrls: setup.lanUrls,
-    authorize:
-      setup.authorize ??
-      ((hello) => {
-        hellos.push(hello);
-        return { accept: true, psk };
-      }),
+    authorize: setup.authorize ?? acceptAll,
   });
   const initiator = secureLink(clientEnd, {
     role: "initiator",
     hostId: host.hostId,
     staticKey: toStatic(setup.clientKey ?? device),
     remoteStatic: host.noise.publicKey,
-    pairing: setup.clientPsk === undefined ? undefined : { psk: setup.clientPsk, name: setup.name ?? "device" },
+    pairing: setup.pairing,
     early: setup.early,
     rekeyInterval: setup.rekey?.[0],
   });

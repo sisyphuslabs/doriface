@@ -1,14 +1,14 @@
-import { prologueFor } from "./identity.ts";
-import { type ByteLink, CloseCode, closeCodeOf, SecureLinkError } from "./link.ts";
-import { Handshake, type Pattern } from "./noise/handshake.ts";
+import { type ClientFlightTestOptions, clientFlight, type PairingSecret } from "./client-flight.ts";
 import {
-  decodeHello,
-  decodeReply,
-  encodePairingHello,
-  encodeReply,
-  encodeSessionHello,
-  PayloadError,
-} from "./payloads.ts";
+  answerClientFlight,
+  type HostFlightTestOptions,
+  type HostPairingSecret,
+  readClientFlight,
+} from "./host-flight.ts";
+import { SessionKind } from "./kinds.ts";
+import { type ByteLink, CloseCode, closeCodeOf, SecureLinkError } from "./link.ts";
+import type { Handshake } from "./noise/handshake.ts";
+import { PayloadError } from "./payloads.ts";
 import { MAX_HELD_BYTES, type SecureLink, SecuredLink, type SessionInfo } from "./secured-link.ts";
 import type { StaticKey } from "./static-key.ts";
 import { REKEY_INTERVAL, Transport } from "./transport.ts";
@@ -30,23 +30,28 @@ export interface InitiatorOptions extends CommonOptions {
   readonly role: "initiator";
   /** The host's Noise static public key. */
   readonly remoteStatic: Uint8Array;
-  /** Present for the pairing session (IKpsk2, message 1 carries only the name); absent for every later IK session. */
-  readonly pairing?: { readonly psk: Uint8Array; readonly name: string } | undefined;
-  /** IK only: the first stream bytes (at most 4096), sent inside message 1. */
+  /** Present to pair (by typed code or by link secret); absent for every session after pairing. */
+  readonly pairing?: PairingSecret | undefined;
+  /** Session only: the first stream bytes (at most 4096), sent inside message 1. */
   readonly early?: Uint8Array | undefined;
+  /** For tests only: fixed randomness. */
+  readonly testRandomness?: ClientFlightTestOptions | undefined;
 }
 
 export interface ClientHello {
-  readonly pattern: Pattern;
+  readonly kind: SessionKind;
   readonly remoteStatic: Uint8Array;
   /** The device name of a pairing hello. */
   readonly name: string | undefined;
 }
 
-/** IK sessions accept or refuse the client key; IKpsk2 sessions accept by naming the psk to finish with. */
+/**
+ * The host's decision after message 1, made before anything is answered. A session accepts or refuses the device
+ * key; a pairing accepts by naming the offer's secret for its kind. A refusal closes with `closeCode` (default 4401).
+ */
 export type Authorization =
-  | { readonly accept: true; readonly psk?: Uint8Array | undefined }
-  | { readonly accept: false; readonly reason?: string | undefined };
+  | { readonly accept: true; readonly secret?: HostPairingSecret | undefined }
+  | { readonly accept: false; readonly closeCode?: number | undefined; readonly reason?: string | undefined };
 
 export interface ResponderOptions extends CommonOptions {
   readonly role: "responder";
@@ -54,6 +59,8 @@ export interface ResponderOptions extends CommonOptions {
   readonly authorize: (hello: ClientHello) => Authorization;
   /** IP-literal `ws://…/v1/e2ee` URLs for message 2 (at most 8). */
   readonly lanUrls?: readonly string[] | undefined;
+  /** For tests only: fixed randomness. */
+  readonly testRandomness?: HostFlightTestOptions | undefined;
 }
 
 export type SecureLinkOptions = InitiatorOptions | ResponderOptions;
@@ -70,7 +77,6 @@ const failure = (code: number, message: string, cause?: unknown): SecureLinkErro
  */
 export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<SecureLink> {
   const settled = Promise.withResolvers<SecureLink>();
-  const prologue = prologueFor(options.hostId);
   const rekeyInterval = options.rekeyInterval ?? REKEY_INTERVAL;
   const inbox: Uint8Array[] = [];
   let inboxBytes = 0;
@@ -96,10 +102,14 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
       else fail(failure(CloseCode.CryptoFailure, "handshake failed", error));
     }
   };
-  const establish = (handshake: Handshake, info: Pick<SessionInfo, "peerName" | "lanUrls">): SecuredLink => {
+  const establish = (
+    kind: SessionKind,
+    handshake: Handshake,
+    info: Pick<SessionInfo, "peerName" | "lanUrls">,
+  ): SecuredLink => {
     const { send, receive, handshakeHash, remoteStatic } = handshake.finish(rekeyInterval);
     return new SecuredLink(link, new Transport(send, receive), {
-      pattern: handshake.pattern,
+      kind,
       remoteStatic,
       handshakeHash,
       ...info,
@@ -147,25 +157,17 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
   else runResponder(options);
   return settled.promise;
 
-  /** Setup runs inside the failure path too, so a bad psk, name or early payload rejects instead of throwing. */
+  /** Setup runs inside the failure path too, so a bad code, secret, name or early payload rejects instead of throwing. */
   function runInitiator(opts: InitiatorOptions): void {
     const start = guarded(async () => {
-      const handshake = new Handshake({
-        pattern: opts.pairing === undefined ? "IK" : "IKpsk2",
-        role: "initiator",
-        prologue,
-        staticKey: opts.staticKey,
-        remoteStatic: opts.remoteStatic,
-        psk: opts.pairing?.psk,
-      });
-      const hello = opts.pairing === undefined ? encodeSessionHello(opts.early) : encodePairingHello(opts.pairing.name);
+      const flight = await clientFlight(opts, opts.testRandomness);
       step = guarded(async (bytes) => {
-        const lanUrls = decodeReply(await handshake.readMessage(bytes));
-        const secured = establish(handshake, { peerName: undefined, lanUrls });
+        const { handshake, lanUrls } = await flight.reply(bytes);
+        const secured = establish(flight.kind, handshake, { peerName: undefined, lanUrls });
         resolve(secured);
         secured.send(EMPTY);
       });
-      link.send(await handshake.writeMessage(hello));
+      link.send(flight.first);
     });
     void start(EMPTY);
   }
@@ -180,43 +182,27 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
       resolve(secured);
     });
     step = guarded(async (bytes) => {
-      const { handshake, payload } = await readHello(opts, prologue, bytes);
-      const hello = decodeHello(handshake.pattern, payload);
-      const remoteStatic = handshake.remoteStatic;
-      if (remoteStatic === undefined) throw failure(CloseCode.CryptoFailure, "message 1 carried no static key");
+      const flight = await readClientFlight(bytes, opts.hostId, opts.staticKey, opts.testRandomness);
+      const { message, handshake, hello, remoteStatic } = flight;
       const name = hello.kind === "pairing" ? hello.name : undefined;
-      const verdict = opts.authorize({ pattern: handshake.pattern, remoteStatic, name });
-      if (!verdict.accept) throw failure(CloseCode.UnknownDevice, verdict.reason ?? "unknown device");
-      if (handshake.pattern === "IKpsk2") {
-        if (verdict.psk === undefined) throw failure(CloseCode.UnknownDevice, "no pairing is pending");
-        handshake.setPsk(verdict.psk);
+      const verdict = opts.authorize({ kind: message.kind, remoteStatic, name });
+      if (!verdict.accept) throw failure(verdict.closeCode ?? CloseCode.UnknownDevice, verdict.reason ?? "refused");
+      if (message.kind !== SessionKind.Session && verdict.secret === undefined) {
+        throw failure(CloseCode.UnknownDevice, "no pairing is pending");
       }
-      const reply = await handshake.writeMessage(encodeReply(opts.lanUrls ?? []));
-      pending = establish(handshake, { peerName: name, lanUrls: [] });
+      const lanUrls = opts.lanUrls ?? [];
+      const reply = await answerClientFlight(
+        flight,
+        opts.hostId,
+        opts.staticKey,
+        verdict.secret,
+        lanUrls,
+        opts.testRandomness,
+      );
+      pending = establish(message.kind, handshake, { peerName: name, lanUrls: [] });
       if (hello.kind === "session") pending.hold(hello.early);
       step = confirm;
       link.send(reply);
     });
-  }
-}
-
-/** Message 1 tells IK from IKpsk2 only by which protocol name decrypts it, so try IK first, then IKpsk2. */
-async function readHello(
-  options: ResponderOptions,
-  prologue: Uint8Array,
-  message: Uint8Array,
-): Promise<{ readonly handshake: Handshake; readonly payload: Uint8Array }> {
-  const attempt = async (pattern: Pattern) => {
-    const handshake = new Handshake({ pattern, role: "responder", prologue, staticKey: options.staticKey });
-    return { handshake, payload: await handshake.readMessage(message) };
-  };
-  try {
-    return await attempt("IK");
-  } catch {
-    try {
-      return await attempt("IKpsk2");
-    } catch (error) {
-      throw failure(CloseCode.CryptoFailure, "message 1 failed authentication", error);
-    }
   }
 }
