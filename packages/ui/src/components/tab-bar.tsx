@@ -19,12 +19,24 @@ export interface TabBarProps {
   readonly onNew?: () => void;
   /** The New tab shortcut as key chips, from the app's live binding; none when it is unbound. */
   readonly newTabKeys?: readonly string[];
+  /** Before the tabs, e.g. the button that brings a hidden sidebar back where the sidebar was. */
+  readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
   readonly className?: string;
 }
 
 /** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars. */
-export function TabBar({ tabs, activeId, onSelect, onClose, onNew, newTabKeys, trailing, className }: TabBarProps) {
+export function TabBar({
+  tabs,
+  activeId,
+  onSelect,
+  onClose,
+  onNew,
+  newTabKeys,
+  leading,
+  trailing,
+  className,
+}: TabBarProps) {
   return (
     <div
       data-titlebar
@@ -33,6 +45,7 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNew, newTabKeys, t
         className,
       )}
     >
+      {leading}
       <div role="tablist" aria-label="Tabs" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {tabs.map((tab) => {
           const active = tab.id === activeId;
