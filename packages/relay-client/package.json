@@ -10,5 +10,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./wire": "./src/wire/index.ts"
+  },
+  "dependencies": {
+    "@doriface/client": "workspace:*",
+    "@noble/curves": "2.4.0"
   }
 }
