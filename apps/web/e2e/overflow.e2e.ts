@@ -89,6 +89,22 @@ const PAGES: readonly { readonly name: string; readonly html: string; readonly f
     html: `<div style="font-size:24px;line-height:1.25;overflow:hidden">ÅÉÎÕÛ gjpqy</div>`,
     found: [],
   },
+  {
+    // A skip link before it is focused: visually hidden on purpose, so a screen reader still reads it.
+    name: "visually hidden text (sr-only, clip-path)",
+    html: `<a href="#x" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border-width:0">Skip to terminal</a>`,
+    found: [],
+  },
+  {
+    name: "visually hidden text (the older clip form)",
+    html: `<a href="#x" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap">Skip to sidebar</a>`,
+    found: [],
+  },
+  {
+    name: "a 1 px wide box that clips text without hiding it",
+    html: `<div style="width:1px;overflow:hidden;white-space:nowrap">${LONG}</div>`,
+    found: ["clipped"],
+  },
 ];
 
 for (const { name, html, found } of PAGES) {
