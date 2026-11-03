@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { relayDir } from "../private-relay.ts";
-import { stopProcessGroup } from "./process-group.ts";
+import { adoptProcessGroup, stopProcessGroup } from "./process-group.ts";
 
 const READY = /Ready on (http:\/\/\S+)/;
 const START_TIMEOUT_MS = 90_000;
@@ -146,6 +146,7 @@ async function startOnce(
       },
     ),
   );
+  adoptProcessGroup(proc);
   let output = earlier;
   const ready = Promise.withResolvers<string>();
   const bindRace = `Address already in use (127.0.0.1:${port})`;
