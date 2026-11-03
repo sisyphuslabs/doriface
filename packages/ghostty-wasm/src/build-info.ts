@@ -34,16 +34,19 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function text(source: Readonly<Record<string, unknown>>, field: string, pattern?: RegExp): string {
+function text(source: Readonly<Record<string, unknown>>, field: string, pattern?: RegExp, at = field): string {
   const value = source[field];
-  if (typeof value !== "string" || value.length === 0) throw new BuildInfoError(field, "must be a non-empty string");
-  if (pattern !== undefined && !pattern.test(value)) throw new BuildInfoError(field, `must match ${pattern.source}`);
+  if (typeof value !== "string" || value.length === 0) throw new BuildInfoError(at, "must be a non-empty string");
+  if (pattern !== undefined && !pattern.test(value)) throw new BuildInfoError(at, `must match ${pattern.source}`);
   return value;
 }
 
 function patchRecord(value: unknown, index: number): PatchRecord {
   if (!isRecord(value)) throw new BuildInfoError(`patches[${index}]`, "must be an object");
-  return { path: text(value, "path"), sha256: text(value, "sha256", SHA256) };
+  return {
+    path: text(value, "path", undefined, `patches[${index}].path`),
+    sha256: text(value, "sha256", SHA256, `patches[${index}].sha256`),
+  };
 }
 
 export function parseBuildInfo(value: unknown): BuildInfo {
