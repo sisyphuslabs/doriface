@@ -57,17 +57,22 @@ describe("triggers", () => {
     ["Ctrl+Shift+PageDown", "ctrl+shift+page_down"],
     ["super", null],
     ["ctrl+nope", null],
+    ["ctrl+++", null],
+    ["++", "shift+="],
   ])("%p -> %p", (text, expected) => expect(normalizeTrigger(text)).toBe(expected));
 
   test("herdr-app's dash syntax", () => {
     expect(normalizeTrigger("cmd-alt-shift-left", true)).toBe("alt+shift+super+left");
     expect(normalizeTrigger("ctrl--", true)).toBe("ctrl+-");
+    expect(normalizeTrigger("ctrl---", true)).toBeNull();
   });
 
   test("key events use layout-independent codes", () => {
     const event = { code: "KeyT", ctrlKey: false, altKey: false, shiftKey: true, metaKey: true };
     expect(triggerFromEvent(event)).toBe("shift+super+t");
     expect(triggerFromEvent({ ...event, code: "ShiftLeft" })).toBeNull();
+    expect(triggerFromEvent({ ...event, code: "F12" })).toBe("shift+super+f12");
+    expect(triggerFromEvent({ ...event, code: "F13" })).toBeNull();
   });
 });
 
