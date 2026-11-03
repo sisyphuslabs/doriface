@@ -11,7 +11,7 @@ export const buttonVariants = cva(
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
     "active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-45",
     "[&_svg]:size-4 [&_svg]:shrink-0",
-    "after:absolute after:-inset-1 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11",
+    "after:absolute after:-inset-1 coarse:after:min-h-11 coarse:after:min-w-11",
   ],
   {
     variants: {
