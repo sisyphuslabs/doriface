@@ -11,6 +11,7 @@ export function generateSigningKey(): Uint8Array {
 }
 
 export function ed25519Signer(secretKey: Uint8Array): HostSigner {
-  const publicKey = new Uint8Array(ed25519.getPublicKey(secretKey));
-  return { publicKey, sign: (message) => ed25519.sign(message, secretKey) };
+  const key = secretKey.slice();
+  const publicKey = new Uint8Array(ed25519.getPublicKey(key));
+  return { publicKey, sign: (message) => ed25519.sign(message, key) };
 }
