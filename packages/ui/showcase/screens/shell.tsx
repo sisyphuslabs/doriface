@@ -165,7 +165,7 @@ export function CompactHome({ className }: { readonly className?: string }) {
       </ScrollArea>
       <StatusBar
         start={<StatusBarItem icon={<Monitor aria-hidden />}>studio · relay</StatusBarItem>}
-        className="box-content pb-(--safe-bottom)"
+        className="h-[calc(var(--statusbar-height)+var(--safe-bottom))] pb-(--safe-bottom)"
       />
     </div>
   );
