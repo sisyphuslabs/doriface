@@ -31,6 +31,7 @@ export class PairingSlots {
   #opening: Promise<void> = Promise.resolve();
   #stopWatch: (() => void) | undefined;
   #stopped = false;
+  #relayGone = false;
   #retry: ReturnType<typeof setTimeout> | undefined;
   readonly #retryMs: number;
 
@@ -91,6 +92,13 @@ export class PairingSlots {
     this.#enqueue(() => this.#sync());
   }
 
+  /** The uplink stopped for good (relay auth failed or replaced): register nothing more and stop retrying. */
+  relayGone(): void {
+    this.#relayGone = true;
+    clearTimeout(this.#retry);
+    this.sync();
+  }
+
   /** A fresh uplink holds no slot, so the pending offer registers again. */
   relayConnected(): void {
     this.#enqueue(() => {
@@ -118,7 +126,7 @@ export class PairingSlots {
     this.#arm(pending);
     if (codeRetired(pending)) return this.#release();
     if (pending.slot === "unavailable" || (pending.slot === "registered" && pending.code === this.#registered)) return;
-    if (this.#registrar === undefined) return this.#store.setSlot(pending.code, "unavailable");
+    if (this.#registrar === undefined || this.#relayGone) return this.#store.setSlot(pending.code, "unavailable");
     return this.#register(this.#registrar, pending, 0);
   }
 
@@ -141,7 +149,7 @@ export class PairingSlots {
 
   /** A failed registration is tried again while the offer lives; `#sync` drops an expired one. */
   #scheduleRetry(): void {
-    if (this.#stopped) return;
+    if (this.#stopped || this.#relayGone) return;
     clearTimeout(this.#retry);
     this.#retry = setTimeout(() => this.sync(), this.#retryMs);
   }
