@@ -6,6 +6,9 @@ export type ControlRequest =
   | { readonly op: "devices-changed" }
   | { readonly op: "mesh-changed" }
   | { readonly op: "mesh-status" }
+  | { readonly op: "mesh-revoke"; readonly member: string; readonly compromised: boolean; readonly yes: boolean }
+  | { readonly op: "mesh-rename"; readonly member: string; readonly name: string }
+  | { readonly op: "mesh-leave" }
   | { readonly op: "mesh-pair"; readonly auto: boolean }
   | { readonly op: "mesh-pending" }
   | { readonly op: "mesh-approve"; readonly nonce: string; readonly approve: boolean }
@@ -42,7 +45,17 @@ export function parseRequest(line: string): ControlRequest {
     case "mesh-changed":
     case "mesh-pending":
     case "mesh-status":
+    case "mesh-leave":
       return { op };
+    case "mesh-revoke":
+      return {
+        op: "mesh-revoke",
+        member: field(get("member"), isString),
+        compromised: get("compromised") === true,
+        yes: get("yes") === true,
+      };
+    case "mesh-rename":
+      return { op: "mesh-rename", member: field(get("member"), isString), name: field(get("name"), isString) };
     case "mesh-pair":
       return { op: "mesh-pair", auto: get("auto") === true };
     case "mesh-approve":
