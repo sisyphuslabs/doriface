@@ -17,3 +17,11 @@ body {
 #root {
   text-align: center;
 }
+
+/* The macOS hidden-inset titlebar leaves no native frame, so the top strip moves the window. */
+.titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 40px;
+  -webkit-app-region: drag;
+}
