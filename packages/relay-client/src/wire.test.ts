@@ -11,6 +11,7 @@ import {
   encodePairSlotReply,
   encodePairSlotRequest,
   fromBase64Url,
+  HOST_ID_PATTERN,
   hostIdOf,
   MuxError,
   MuxType,
@@ -45,6 +46,16 @@ describe("mux frames", () => {
     }
     expect(() => encodeOpen(-1)).toThrow(MuxError);
   });
+
+  test("PAIR_SLOT is a control frame on sessionId 0 only", () => {
+    const onSession = new Uint8Array([4, 7, 0, 0, 0]);
+    expect(() => decodeMux(onSession)).toThrow(MuxError);
+    expect(decodeMux(new Uint8Array([4, 0, 0, 0, 0]))).toEqual({
+      type: MuxType.PairSlot,
+      sessionId: 0,
+      payload: new Uint8Array(0),
+    });
+  });
 });
 
 describe("host identity", () => {
@@ -64,7 +75,17 @@ describe("host identity", () => {
     const signPub = crypto.getRandomValues(new Uint8Array(32));
     const digest = new Bun.CryptoHasher("sha256").update(signPub).digest();
     expect(await hostIdOf(signPub)).toBe(base32(digest.subarray(0, 16)));
-    expect(await hostIdOf(signPub)).toMatch(/^[a-z2-7]{26}$/);
+    expect(await hostIdOf(signPub)).toMatch(HOST_ID_PATTERN);
+  });
+
+  test("a hostId's last character carries two zero padding bits, so only one spelling per host is valid", async () => {
+    const ids = await Promise.all(
+      Array.from({ length: 64 }, () => hostIdOf(crypto.getRandomValues(new Uint8Array(32)))),
+    );
+    expect(ids.every((id) => HOST_ID_PATTERN.test(id))).toBe(true);
+    expect(HOST_ID_PATTERN.test(`${"a".repeat(25)}a`)).toBe(true);
+    for (const alias of ["b", "c", "d", "z", "7"])
+      expect(HOST_ID_PATTERN.test(`${"a".repeat(25)}${alias}`)).toBe(false);
   });
 
   test("the signed message is context, relay origin, hostId and challenge concatenated", () => {

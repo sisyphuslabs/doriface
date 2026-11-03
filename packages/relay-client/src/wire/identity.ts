@@ -8,8 +8,11 @@ export const SIGNATURE_BYTES = 64;
 export const CHALLENGE_BYTES = 32;
 export const AUTH_ANSWER_BYTES = SIGN_PUB_BYTES + SIGNATURE_BYTES;
 export const AUTH_CONTEXT = "doriface-relay-v1";
-/** 16 bytes of SHA-256 as unpadded lowercase base32. */
-export const HOST_ID_PATTERN = /^[a-z2-7]{26}$/;
+/**
+ * 16 bytes of SHA-256 as unpadded lowercase base32. 128 bits fill 25 characters and 3 bits of the 26th; the 2 padding
+ * bits are zero, so the last character is one of the 8 whose low bits are 00 and every host has exactly one hostId.
+ */
+export const HOST_ID_PATTERN = /^[a-z2-7]{25}[aeimquy4]$/;
 
 /** RFC 4648 base32, lowercase, no padding. */
 export function base32(bytes: Uint8Array): string {
