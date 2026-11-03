@@ -11,7 +11,7 @@ import {
 } from "@doriface/crypto";
 import { join } from "node:path";
 import { ensureStateDir, isRecord, readJson, removeFile, stringField, writePrivateJson } from "./files.ts";
-import { withStateLock } from "./lock.ts";
+import { DEFAULT_LOCK_TIMEOUT_MS, withStateLock } from "./lock.ts";
 
 const FILE = "pairing.json";
 const VERSION = 3;
@@ -86,24 +86,30 @@ export class PairingStore {
   readonly #dir: string;
   readonly #path: string;
   readonly #log: (line: string) => void;
+  readonly #lockTimeoutMs: number;
   #guard: PairingGuard | undefined;
   readonly #listeners = new Set<() => void>();
 
-  constructor(stateDir: string, log: (line: string) => void = () => {}) {
+  constructor(
+    stateDir: string,
+    log: (line: string) => void = () => {},
+    options: { readonly lockTimeoutMs?: number } = {},
+  ) {
     this.#dir = ensureStateDir(stateDir);
     this.#path = join(this.#dir, FILE);
     this.#log = log;
+    this.#lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   }
 
   offer(now = Date.now(), mesh = false): PendingPairing {
     const pending = { ...createPairingOffer(now), slot: "pending" as const, codeAttempts: 0, mesh };
-    withStateLock(this.#dir, () => this.#write(pending));
+    this.#locked(() => this.#write(pending));
     return pending;
   }
 
   /** Replaces the code of the pending offer after a relay slot collision; keeps its expiry, link secret and count. */
   redraw(code: string): PendingPairing | undefined {
-    return withStateLock(this.#dir, () => {
+    return this.#locked(() => {
       const current = this.read();
       if (current === undefined || current.code !== code) return current;
       const next = { ...current, code: createPairingOffer().code, slot: "pending" as const };
@@ -113,7 +119,7 @@ export class PairingStore {
   }
 
   setSlot(code: string, slot: SlotStatus): void {
-    withStateLock(this.#dir, () => {
+    this.#locked(() => {
       const current = this.read();
       if (current?.code === code && current.slot !== slot) this.#write({ ...current, slot });
     });
@@ -125,7 +131,7 @@ export class PairingStore {
    * failed write throws, so the caller answers nothing.
    */
   claimCode(openSlot: string, now = Date.now(), mesh = false): PairingClaim | ClaimRefusal {
-    return withStateLock(this.#dir, () => {
+    return this.#locked(() => {
       const pending = this.#live(now, (expired) => this.#removeIfHeld(expired));
       if ("refused" in pending) return pending;
       if (pending.mesh !== mesh) return kindRefusal(mesh);
@@ -199,7 +205,7 @@ export class PairingStore {
       secret,
       retiredCode,
       complete: (at = Date.now()) =>
-        withStateLock(this.#dir, () => {
+        this.#locked(() => {
           const first = guard.use(at);
           if (first || guard.state === "expired") this.#removeIfHeld(pending);
           return first;
@@ -221,7 +227,7 @@ export class PairingStore {
   }
 
   #removeIf(offer: PendingPairing): void {
-    withStateLock(this.#dir, () => this.#removeIfHeld(offer));
+    this.#locked(() => this.#removeIfHeld(offer));
   }
 
   /** Removes the offer if the file still holds it (a newer `pair` may have replaced it); the caller holds the lock. */
@@ -229,6 +235,10 @@ export class PairingStore {
     if (this.read()?.linkSecret.toHex() !== offer.linkSecret.toHex()) return;
     removeFile(this.#path);
     this.#changed();
+  }
+
+  #locked<T>(fn: () => T): T {
+    return withStateLock(this.#dir, fn, this.#lockTimeoutMs);
   }
 
   #changed(): void {
