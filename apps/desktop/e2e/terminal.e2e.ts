@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { appArgs, packagedExecutable as executablePath } from "./launch.ts";
+import { launchOptions } from "./launch.ts";
 
 /** A scratch hc session and a scratch profile, made only when the tests run (not on --list). */
 interface Scratch {
@@ -41,8 +41,7 @@ test.beforeAll(async () => {
   );
   const args = [`--user-data-dir=${profile}`];
   launched = await electron.launch({
-    ...(executablePath === undefined ? {} : { executablePath }),
-    args: appArgs(args),
+    ...launchOptions(args),
     env,
   });
 });

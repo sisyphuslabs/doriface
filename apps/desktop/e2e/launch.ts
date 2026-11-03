@@ -24,3 +24,16 @@ export function appArgs(extra: readonly string[] = []): string[] {
   const args = [...platformArgs, ...extra];
   return packagedExecutable === undefined ? ["-r", hideWindows, appDir, ...args] : args;
 }
+
+const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
+
+/**
+ * What every electron.launch() takes besides `env`. The packaged app always starts through attach-after-first-load:
+ * attached directly, Playwright can land while the first navigation is in flight and then waits forever (#13).
+ */
+export function launchOptions(
+  extra: readonly string[] = [],
+): { readonly args: string[] } | { readonly executablePath: string; readonly args: string[] } {
+  const args = appArgs(extra);
+  return packagedExecutable === undefined ? { args } : { executablePath: attachAfterFirstLoad, args };
+}

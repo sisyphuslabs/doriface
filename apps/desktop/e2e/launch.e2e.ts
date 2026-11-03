@@ -1,8 +1,7 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
-import { join } from "node:path";
 import type { DorifaceBridge } from "../src/shared/bridge.ts";
 import { scratchHcSession } from "./hc-session.ts";
-import { appArgs, appDir, packagedExecutable as executablePath } from "./launch.ts";
+import { launchOptions } from "./launch.ts";
 
 declare global {
   interface Window {
@@ -10,7 +9,6 @@ declare global {
   }
 }
 
-const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
 /** Playwright wants a string-only environment. */
 const launchEnv = (session: ReturnType<typeof scratchHcSession>): Record<string, string> =>
   Object.fromEntries(
@@ -26,7 +24,7 @@ test.beforeAll(async () => {
   const session = scratchHcSession();
   hc = session;
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: appArgs() } : { executablePath: attachAfterFirstLoad, args: appArgs() }),
+    ...launchOptions(),
     env: launchEnv(session),
   });
 });

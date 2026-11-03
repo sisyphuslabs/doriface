@@ -5,9 +5,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { appArgs, appDir, packagedExecutable } from "./launch.ts";
+import { appArgs, launchOptions, packagedExecutable } from "./launch.ts";
 
-const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
 const CLOSE_TAB = process.platform === "darwin" ? "Meta+KeyW" : "Control+Shift+KeyW";
 
 /** The clicks that ask a browser for a new window or tab on this platform; Control-click is a right-click on macOS. */
@@ -36,9 +35,7 @@ test.beforeAll(async () => {
   );
   scratch = { hc, profile, env };
   launched = await electron.launch({
-    ...(packagedExecutable === undefined
-      ? { args: appArgs([profileArg(profile)]) }
-      : { executablePath: attachAfterFirstLoad, args: appArgs([profileArg(profile)]) }),
+    ...launchOptions([profileArg(profile)]),
     env,
   });
 });
