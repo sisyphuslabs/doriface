@@ -43,4 +43,20 @@ test.describe("renaming a machine with its terminals open", () => {
     await page.keyboard.type("echo renamed-$((40 + 2))\r");
     await expect(moved).toContainText("renamed-42", { timeout: 15_000 });
   });
+
+  test("on a phone, stays in the open terminal, now at the new address, and it still answers", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await agentRow(page, "e2e", true).click();
+    await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`)).toContainText("$", { timeout: 15_000 });
+
+    hcOn("host", ["machine", "rename", MACHINE_NAME, RENAMED]);
+    renamed = true;
+    const moved = page.locator(`[data-terminal="${RENAMED}/${remote}"]`);
+    await expect(moved).toBeVisible({ timeout: STATE_BOUND_MS });
+    await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible();
+    await moved.click();
+    await page.keyboard.type("echo renamed-$((40 + 2))\r");
+    await expect(moved).toContainText("renamed-42", { timeout: 15_000 });
+  });
 });
