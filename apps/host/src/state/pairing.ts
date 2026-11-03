@@ -27,6 +27,31 @@ export interface PendingPairing extends PairingOffer {
 
 export const codeRetired = (pending: PendingPairing): boolean => pending.codeAttempts >= PAIRING_CODE_ATTEMPTS;
 
+/** The offer as the control socket carries it: JSON, with the link secret in base64url. */
+export const pendingToWire = (pending: PendingPairing) => ({
+  code: pending.code,
+  linkSecret: base64urlEncode(pending.linkSecret),
+  expiresAt: pending.expiresAt,
+  slot: pending.slot,
+  codeAttempts: pending.codeAttempts,
+});
+
+export function pendingFromWire(value: unknown): PendingPairing {
+  if (!isRecord(value)) throw new Error("the running host sent a malformed pairing");
+  const { code, linkSecret, expiresAt, slot, codeAttempts } = value;
+  const knownSlot = slot === "pending" || slot === "registered" || slot === "unavailable";
+  if (
+    typeof code !== "string" ||
+    typeof linkSecret !== "string" ||
+    typeof expiresAt !== "number" ||
+    typeof codeAttempts !== "number" ||
+    !knownSlot
+  ) {
+    throw new Error("the running host sent a malformed pairing");
+  }
+  return { code, linkSecret: base64urlDecode(linkSecret), expiresAt, slot, codeAttempts };
+}
+
 /** A claim on the live offer: the secret the handshake finishes with, and the step that burns the offer on success. */
 export interface PairingClaim {
   readonly secret: HostPairingSecret;

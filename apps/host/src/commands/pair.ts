@@ -12,7 +12,7 @@ import { renderUnicodeCompact } from "uqr";
 import { requestControl } from "../control.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
-import { type PendingPairing, PairingStore } from "../state/pairing.ts";
+import { type PendingPairing, PairingStore, pendingFromWire } from "../state/pairing.ts";
 
 export const DEFAULT_WEB_ORIGIN = "https://doriface.omo.dev";
 
@@ -23,22 +23,10 @@ export const PAIR_USAGE = `usage: doriface-host pair [options]
   --state-dir <dir>   the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --no-qr             print no QR code`;
 
-function asPending(value: unknown): PendingPairing {
-  if (typeof value === "object" && value !== null && "code" in value && "expiresAt" in value) {
-    const { code, expiresAt } = value;
-    const slot = "slot" in value ? value.slot : undefined;
-    const knownSlot = slot === "pending" || slot === "registered" || slot === "unavailable";
-    if (typeof code === "string" && typeof expiresAt === "number" && knownSlot) {
-      return { code, expiresAt, slot };
-    }
-  }
-  throw new Error("the running host sent a malformed pairing");
-}
-
 /** Asks the running host to open the pairing (it registers the relay slot first); without one, writes it directly. */
 async function openOffer(stateDir: string): Promise<PendingPairing> {
   const answer = await requestControl(stateDir, { op: "pair" });
-  return answer === undefined ? new PairingStore(stateDir).offer() : asPending(answer);
+  return answer === undefined ? new PairingStore(stateDir).offer() : pendingFromWire(answer);
 }
 
 const SLOT_NOTES = {
@@ -72,7 +60,7 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
     hostId: identity.hostId,
     noiseStaticPub: identity.noise.publicKey,
     signPub: identity.sign.publicKey,
-    code: offer.code,
+    linkSecret: offer.linkSecret,
     relayUrl: values.relay,
   });
   const ways = values["no-qr"] ? "or type the code" : "scan the QR code, or type the code";
