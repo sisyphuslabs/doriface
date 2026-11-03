@@ -31,14 +31,13 @@ describe("resolveKeymap", () => {
   });
 
   test("a changed default never overwrites an override", () => {
-    const overrides = withBinding("mac", new Map(), "super+shift+n", "tab.new");
+    const overrides = withBinding("mac", new Map(), "super+t", "tab.close");
     const shipped = resolveKeymap("mac", new Map());
-    const changed = new Map(shipped);
-    changed.set("super+shift+n", "pane.split");
-    const resolved = new Map(changed);
-    for (const [trigger, action] of overrides) if (action !== null) resolved.set(trigger, action);
-    expect(resolved.get("super+shift+n")).toBe("tab.new");
-    expect(resolveKeymap("mac", overrides).get("super+shift+n")).toBe("tab.new");
+    const changedDefaults = new Map([...shipped, ["super+t", "pane.split"], ["super+shift+y", "agent.next"]]);
+    const resolved = resolveKeymap("mac", overrides, changedDefaults);
+    expect(resolved.get("super+t")).toBe("tab.close");
+    expect(resolved.get("shift+super+y")).toBeUndefined();
+    expect(resolved.get("super+shift+y")).toBe("agent.next");
   });
 
   test("removals are stored explicitly and reset forgets them", () => {
