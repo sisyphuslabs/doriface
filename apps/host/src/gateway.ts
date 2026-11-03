@@ -90,7 +90,7 @@ export function createGateway(options: GatewayOptions): Gateway {
 
   const openE2ee = async (link: WsLink<BunWebSocketData>, deps: NonNullable<GatewayOptions["e2ee"]>): Promise<void> => {
     const wire = new WsByteLink(link);
-    const secure = await acceptE2ee(wire, deps);
+    const secure = await acceptE2ee(wire, deps, { kind: "lan" });
     if (secure === undefined) return;
     deps.sessions.add(secure);
     pipeTo(plaintextLink(secure, wire), (code, reason) => secure.close(code, reason));

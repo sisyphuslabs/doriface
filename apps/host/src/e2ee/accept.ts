@@ -1,15 +1,22 @@
 import {
   type Authorization,
+  type ByteLink,
   type ClientHello,
   CloseCode,
   type HostIdentity,
+  PAIRING_CODE_ATTEMPTS,
   rawStaticKey,
   type SecureLink,
   secureLink,
+  SessionKind,
 } from "@doriface/crypto";
 import type { DeviceStore } from "../state/devices.ts";
-import type { PairingClaim, PairingStore } from "../state/pairing.ts";
-import type { WsByteLink } from "./links.ts";
+import type { ClaimRefusal, PairingClaim, PairingStore } from "../state/pairing.ts";
+
+/** Where a session arrived: the direct listener, or a relay session (`openSlot` is the slot a `?pair` session named). */
+export type E2eeTransport =
+  | { readonly kind: "lan" }
+  | { readonly kind: "relay"; readonly openSlot?: string | undefined };
 
 export interface E2eeDeps {
   readonly identity: HostIdentity;
@@ -22,21 +29,49 @@ export interface E2eeDeps {
   readonly rekeyInterval?: number | undefined;
 }
 
+const refuse = (closeCode: number, reason: string): Authorization => ({ accept: false, closeCode, reason });
+
 /**
- * Runs the responder handshake on a fresh `/v1/e2ee` socket. IK admits only stored devices (4401 otherwise); IKpsk2
- * claims the pending pairing code and, once the client confirmed the keys, burns the code and stores the device. A
- * failed attempt leaves the code open: codes end only on success or expiry, and the relay bounds guesses per slot.
+ * Runs the responder handshake on a fresh session (contract v1.3 "Session kinds"). A session (0x01) admits only a
+ * stored device, and never on a `?pair` relay session. A typed-code pairing (0x02) runs only on a relay session
+ * opened with `?pair`, and reserves one of the offer's 10 attempts before anything is answered; a link pairing (0x03)
+ * runs anywhere. Once the client confirmed the keys, a pairing burns the offer and stores the device. Every refusal
+ * closes before the host has answered anything.
  */
-export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promise<SecureLink | undefined> {
+export async function acceptE2ee(
+  link: ByteLink,
+  deps: E2eeDeps,
+  transport: E2eeTransport,
+): Promise<SecureLink | undefined> {
   let claim: PairingClaim | undefined;
   let deviceName = "";
-  const authorize = (hello: ClientHello): Authorization => {
-    if (hello.pattern === "IK") {
-      return deps.devices.has(hello.remoteStatic) ? { accept: true } : { accept: false, reason: "unknown device" };
+  const pairSession = transport.kind === "relay" && transport.openSlot !== undefined;
+  const claimWith = (claimed: () => PairingClaim | ClaimRefusal): Authorization => {
+    let result: PairingClaim | ClaimRefusal;
+    try {
+      result = claimed();
+    } catch (error) {
+      return refuse(1011, `cannot record the pairing attempt: ${String(error)}`);
     }
+    if ("refused" in result) return refuse(result.refused, result.reason);
+    claim = result;
+    if (result.retiredCode) logRetired(deps);
+    return { accept: true, secret: result.secret };
+  };
+  const authorize = (hello: ClientHello): Authorization => {
     deviceName = hello.name ?? "";
-    claim = deps.pairing.claim();
-    return claim === undefined ? { accept: false, reason: "no pairing is pending" } : { accept: true, psk: claim.psk };
+    if (hello.kind === SessionKind.Session) {
+      if (pairSession) return refuse(CloseCode.UnknownDevice, "a ?pair session carries only pairing");
+      return deps.devices.has(hello.remoteStatic)
+        ? { accept: true }
+        : refuse(CloseCode.UnknownDevice, "unknown device");
+    }
+    if (hello.kind === SessionKind.PairLink) return claimWith(() => deps.pairing.claimLink());
+    if (transport.kind !== "relay" || transport.openSlot === undefined) {
+      return refuse(CloseCode.UnknownDevice, "typed-code pairing runs over the relay with ?pair");
+    }
+    const openSlot = transport.openSlot;
+    return claimWith(() => deps.pairing.claimCode(openSlot));
   };
   let secure: SecureLink;
   try {
@@ -52,7 +87,7 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
     deps.log(`e2ee handshake refused: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
-  if (secure.pattern === "IKpsk2") {
+  if (secure.kind !== SessionKind.Session) {
     const admitted =
       claim === undefined ? REFUSED_CLAIM : admitPairing(claim, deps.devices, secure.remoteStatic, deviceName);
     if (!admitted.ok) {
@@ -65,13 +100,21 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
   return secure;
 }
 
+function logRetired(deps: E2eeDeps): void {
+  const expiresAt = deps.pairing.read()?.expiresAt;
+  const until = expiresAt === undefined ? "it expires" : new Date(expiresAt).toISOString();
+  deps.log(
+    `pairing code retired after ${PAIRING_CODE_ATTEMPTS} failed attempts; the link still works until ${until}; run doriface-host pair for a new code`,
+  );
+}
+
 export type Admission = { readonly ok: true } | { readonly ok: false; readonly code: number; readonly reason: string };
 
 const REFUSED_CLAIM: Admission = { ok: false, code: CloseCode.UnknownDevice, reason: "no pairing claim" };
 
 /**
- * Finishes a confirmed IKpsk2 pairing: burns the code first, then stores the device. A second handshake that confirmed
- * with an already used code is refused, and a store failure leaves the code burned rather than reusable.
+ * Finishes a confirmed pairing: burns the offer first, then stores the device. A second handshake that confirmed with
+ * an already used offer is refused, and a store failure leaves the offer burned rather than reusable.
  */
 export function admitPairing(
   claim: PairingClaim,
@@ -80,7 +123,7 @@ export function admitPairing(
   name: string,
 ): Admission {
   if (!claim.complete())
-    return { ok: false, code: CloseCode.UnknownDevice, reason: "the pairing code was already used" };
+    return { ok: false, code: CloseCode.UnknownDevice, reason: "the pairing offer was already used" };
   try {
     devices.add(clientStatic, name);
   } catch (error) {
