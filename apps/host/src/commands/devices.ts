@@ -16,7 +16,7 @@ const printable = (name: string): string =>
   );
 
 const line = (device: PairedDevice, ...fields: readonly string[]): string =>
-  `${[deviceIdOf(device), ...fields, printable(device.name)].join("  ")}\n`;
+  `${[deviceIdOf(device), ...fields, device.name].map(printable).join("  ")}\n`;
 
 /** `devices list` prints one device per line; `devices revoke <id>` removes one. Returns the exit code. */
 export async function devicesCommand(args: readonly string[], out: (text: string) => void): Promise<number> {

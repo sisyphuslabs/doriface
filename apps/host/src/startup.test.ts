@@ -47,7 +47,7 @@ describe("cli", () => {
     const device = {
       clientStaticPub: "A".repeat(43),
       name: "ok\u001b[2J\nfake line",
-      pairedAt: "2026-01-01T00:00:00.000Z",
+      pairedAt: "2026-01-01\u001b[2J\nT00:00",
     };
     writeFileSync(join(stateDir, "devices.json"), JSON.stringify({ version: 1, devices: [device] }));
     const proc = Bun.spawn([process.execPath, CLI, "devices", "list", "--state-dir", stateDir], { stdout: "pipe" });
@@ -55,6 +55,7 @@ describe("cli", () => {
     rmSync(stateDir, { recursive: true, force: true });
     expect(stdout.split("\n")).toHaveLength(2);
     expect(stdout).toContain("ok\\u001b[2J\\u000afake line");
+    expect(stdout).toContain("2026-01-01\\u001b[2J\\u000aT00:00");
   });
 
   test("a bad --lan-listen is reported as --lan-listen", async () => {
