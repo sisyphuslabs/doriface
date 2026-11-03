@@ -40,7 +40,7 @@ export function TerminalPreview({ lines, cursor = false, label, className }: Ter
             <span
               key={`${row}-${index}`}
               style={span.color === undefined ? undefined : { color: `var(--term-color-${span.color})` }}
-              className={cn(span.bold === true && "font-bold", span.dim === true && "opacity-60")}
+              className={cn(span.bold === true && "font-bold", span.dim === true && "text-(--term-faint)")}
             >
               {span.text}
             </span>
