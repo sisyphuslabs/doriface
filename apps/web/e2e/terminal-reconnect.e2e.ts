@@ -92,3 +92,15 @@ test("a terminal whose program ends while the connection is down closes its tab 
   await expect(tabs).toHaveCount(tabsBefore - 1, { timeout: 15_000 });
   await expect(page.getByText(/has finished/)).toHaveCount(0);
 });
+
+test("New tab while reconnecting says it could not open one instead of doing nothing", async ({ page }) => {
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  await socket.drop(true);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
+  await page.getByRole("button", { name: "New tab" }).click();
+  await expect(page.getByText("Could not open a new tab")).toBeVisible();
+  await expect(page.getByText(/try again once it is back/)).toBeVisible();
+  socket.restore();
+});
