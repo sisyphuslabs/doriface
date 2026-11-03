@@ -33,7 +33,11 @@ export function hostCommand(context: HostContext): HostCommand {
   if (context.packaged) {
     return { file: join(context.resourcesPath, "bin", executable("doriface-host", context.platform)), args: [] };
   }
-  return { file: context.env["BUN_BIN"] ?? "bun", args: [join(context.appPath, "..", "host", "src", "cli.ts")] };
+  const bun = context.env["BUN_BIN"];
+  return {
+    file: bun === undefined || bun === "" ? "bun" : bun,
+    args: [join(context.appPath, "..", "host", "src", "cli.ts")],
+  };
 }
 
 /** Where herdr-core usually lands when PATH does not say. */

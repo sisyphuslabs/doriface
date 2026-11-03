@@ -19,6 +19,11 @@ describe("doriface-host command", () => {
     expect(hostCommand(context({}))).toEqual({ file: "bun", args: [join("/repo/apps", "host", "src", "cli.ts")] });
   });
 
+  test("an empty BUN_BIN counts as unset", () => {
+    expect(hostCommand(context({ env: { BUN_BIN: "" } })).file).toBe("bun");
+    expect(hostCommand(context({ env: { BUN_BIN: "/opt/bun" } })).file).toBe("/opt/bun");
+  });
+
   test("a packaged app runs the bundled binary", () => {
     expect(hostCommand(context({ packaged: true }))).toEqual({ file: join("/res", "bin", "doriface-host"), args: [] });
     expect(hostCommand(context({ packaged: true, platform: "win32" })).file).toBe(
