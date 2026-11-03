@@ -88,6 +88,15 @@ describe("WebSocketLink", () => {
     link.close();
   });
 
+  test("with credit, a text that is not c:<n> still closes with 1003, not as bad credit", async () => {
+    const relay = fakeRelay();
+    const link = await openLink(relay, true);
+    const closed = closeError(link);
+    (await relay.peer).send("hello");
+    const error = await closed;
+    expect(error instanceof RelayCloseError ? error.code : error).toBe(CloseCode.UnsupportedData);
+  });
+
   test("a c:<n> crediting more than is in flight closes the link with 4402", async () => {
     const relay = fakeRelay();
     const link = await openLink(relay, true);
