@@ -3,6 +3,7 @@ import {
   CHALLENGE_BYTES,
   ed25519Signer,
   generateSigningKey,
+  LinkClosedError,
   Uplink,
   CloseCode,
   connectRelayClient,
@@ -78,9 +79,9 @@ describe("pending admission (C1)", () => {
 });
 
 describe("backpressure (C3)", () => {
-  test("a client that never acks is closed with 4408 once more than 4 MiB is unacked", async () => {
+  test("a client that never acks is closed with 4408 once a legacy uplink sends more than 4 MiB", async () => {
     const ip = testIp();
-    const host = await startTestHost(relay.url, ip);
+    const host = await startTestHost(relay.url, ip, { credit: false });
     const probe = new Probe(clientUrl(host.uplink.hostId), ip);
     await probe.opened();
     const session = await host.sessions.take();
@@ -92,6 +93,29 @@ describe("backpressure (C3)", () => {
     expect((await probe.closed).code).toBe(CloseCode.IdleTimeout);
     expect(await sessionClosed).toBe(CloseCode.IdleTimeout);
     host.uplink.stop();
+  });
+
+  test("a credit uplink holds its sends to a client that never acks instead of overrunning it", async () => {
+    const ip = testIp();
+    const host = await startTestHost(relay.url, ip);
+    const probe = new Probe(`${clientUrl(host.uplink.hostId)}?credit=1`, ip);
+    await probe.opened();
+    const session = await host.sessions.take();
+    const first = received(session);
+    probe.socket.send(new Uint8Array([1]));
+    await first.take();
+    const sends = times(5).map((index) => session.send(new Uint8Array(MAX_SESSION_SEND_BYTES).fill(index)));
+    expect((await probe.next()).byteLength).toBe(MAX_SESSION_SEND_BYTES);
+    expect(probe.socket.readyState).toBe(WebSocket.OPEN);
+    host.uplink.stop();
+    const outcomes = await Promise.allSettled(sends);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual([
+      "fulfilled",
+      ...times(4).map(() => "rejected" as const),
+    ]);
+    expect(
+      outcomes.slice(1).every((outcome) => outcome.status === "rejected" && outcome.reason instanceof LinkClosedError),
+    ).toBe(true);
   });
 
   test("a client that acks keeps receiving far past 4 MiB", async () => {

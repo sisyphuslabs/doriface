@@ -21,6 +21,7 @@ export interface TestHost {
 export interface TestHostOptions {
   readonly secretKey?: Uint8Array;
   readonly pingIntervalMs?: number;
+  readonly credit?: boolean;
 }
 
 /** Starts an uplink and resolves once it has answered the relay's challenge. */
@@ -35,6 +36,7 @@ export async function startTestHost(relayUrl: string, ip: string, options: TestH
     signer,
     createSocket: socketFrom(ip),
     ...(options.pingIntervalMs === undefined ? {} : { pingIntervalMs: options.pingIntervalMs }),
+    ...(options.credit === undefined ? {} : { credit: options.credit }),
     onSession: (session) => sessions.push(session),
     onState: (state) => {
       states.push(state);
