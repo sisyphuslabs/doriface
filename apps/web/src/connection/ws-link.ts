@@ -20,8 +20,6 @@ function listen<T>(set: Set<T>, listener: T): Unsubscribe {
 
 export interface LinkOptions {
   readonly timeoutMs?: number;
-  /** Relay and direct sockets send the TEXT message `ping` at this interval (contract v1.2 C6); 0 sends none. */
-  readonly pingEveryMs?: number;
 }
 
 /** Opens a binary WebSocket and resolves once it is open; one message carries one chunk of bytes. */
@@ -30,7 +28,7 @@ export function openWebSocketLink(
   protocols: readonly string[],
   options: LinkOptions = {},
 ): Promise<ByteLink> {
-  const { timeoutMs = 10_000, pingEveryMs = 0 } = options;
+  const { timeoutMs = 10_000 } = options;
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url, [...protocols]);
     socket.binaryType = "arraybuffer";
@@ -56,10 +54,8 @@ export function openWebSocketLink(
       close: () => socket.close(1000),
     };
 
-    let ping: ReturnType<typeof setInterval> | undefined;
     socket.addEventListener("open", () => {
       clearTimeout(timer);
-      if (pingEveryMs > 0) ping = setInterval(() => socket.send("ping"), pingEveryMs);
       resolve(link);
     });
     socket.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -70,7 +66,6 @@ export function openWebSocketLink(
     });
     socket.addEventListener("close", (event) => {
       clearTimeout(timer);
-      clearInterval(ping);
       if (ended) return;
       ended = true;
       const error = event.code === 1000 ? undefined : new LinkCloseError(event.code, event.reason);
