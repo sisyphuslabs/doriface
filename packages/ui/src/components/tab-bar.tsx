@@ -27,6 +27,7 @@ export interface TabBarProps {
 export function TabBar({ tabs, activeId, onSelect, onClose, onNew, newTabKeys, trailing, className }: TabBarProps) {
   return (
     <div
+      data-titlebar
       className={cn(
         "flex h-(--tabbar-height) shrink-0 items-center gap-1 border-b border-border bg-chrome px-2.5",
         className,

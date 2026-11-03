@@ -21,7 +21,10 @@ export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: Sideba
       aria-label="Workspace"
       className="flex w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar"
     >
-      <div className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-3.5">
+      <div
+        data-titlebar
+        className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-[var(--titlebar-inset-start,0.875rem)]"
+      >
         <span className="flex-1 text-sm font-semibold text-sidebar-foreground">doriface</span>
         <IconButton
           label="Command palette"
