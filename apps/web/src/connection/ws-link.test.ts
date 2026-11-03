@@ -1,42 +1,60 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
 import { openWebSocketLink } from "./ws-link.ts";
 
-const servers: ReturnType<typeof Bun.serve>[] = [];
+/** A socket the test opens and closes by hand, recording what the link sends. */
+class FakeSocket extends EventTarget {
+  static last: FakeSocket | null = null;
+  readonly sent: unknown[] = [];
+  readyState = 0;
+  binaryType = "blob";
+  constructor() {
+    super();
+    FakeSocket.last = this;
+  }
+  send(data: unknown): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.readyState = 3;
+    this.dispatchEvent(Object.assign(new Event("close"), { code: 1000, reason: "" }));
+  }
+  open(): void {
+    this.readyState = 1;
+    this.dispatchEvent(new Event("open"));
+  }
+}
+
+const RealWebSocket = globalThis.WebSocket;
+beforeEach(() => {
+  jest.useFakeTimers();
+  Reflect.set(globalThis, "WebSocket", Object.assign(FakeSocket, { OPEN: 1 }));
+});
 afterEach(() => {
-  for (const server of servers.splice(0)) server.stop(true);
+  jest.useRealTimers();
+  Reflect.set(globalThis, "WebSocket", RealWebSocket);
 });
 
-function serve(onText: (text: string) => void): string {
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    fetch: (request, srv) => (srv.upgrade(request) ? undefined : new Response("ws only", { status: 426 })),
-    websocket: {
-      message: (_socket, message) => {
-        if (typeof message === "string") onText(message);
-      },
-    },
-  });
-  servers.push(server);
-  return `ws://127.0.0.1:${server.port}/`;
+async function opened(pingEveryMs?: number) {
+  const linking = openWebSocketLink("ws://relay.test/", [], pingEveryMs === undefined ? {} : { pingEveryMs });
+  const socket = FakeSocket.last;
+  if (socket === null) throw new Error("no socket");
+  socket.open();
+  return { link: await linking, socket };
 }
 
 describe("openWebSocketLink keepalive", () => {
-  test("sends the text message ping at the interval and stops on close", async () => {
-    const firstPing = Promise.withResolvers<string>();
-    const url = serve((text) => firstPing.resolve(text));
-    const link = await openWebSocketLink(url, [], { pingEveryMs: 10 });
-    expect(await firstPing.promise).toBe("ping");
+  test("sends the text message ping at every interval and stops on close", async () => {
+    const { link, socket } = await opened(30_000);
+    jest.advanceTimersByTime(90_000);
+    expect(socket.sent).toEqual(["ping", "ping", "ping"]);
     link.close();
+    jest.advanceTimersByTime(90_000);
+    expect(socket.sent).toHaveLength(3);
   });
 
   test("sends no ping by default", async () => {
-    let pings = 0;
-    const url = serve(() => pings++);
-    const link = await openWebSocketLink(url, []);
-    const closed = new Promise<void>((resolve) => link.onClose(() => resolve()));
-    link.close();
-    await closed;
-    expect(pings).toBe(0);
+    const { socket } = await opened();
+    jest.advanceTimersByTime(120_000);
+    expect(socket.sent).toEqual([]);
   });
 });
