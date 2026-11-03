@@ -29,7 +29,7 @@ export function VerifyStep({ offer }: { readonly offer: PairingOffer }) {
           <code className="text-foreground">doriface-host fingerprint</code>.
         </p>
       </div>
-      <div className="rounded-lg border border-border bg-raised p-4">
+      <div className="rounded-lg bg-raised p-4">
         <Fingerprint label="Host key (SHA-256)" value={offer.fingerprint.replaceAll(" ", "")} />
       </div>
       {outcome === "saved" ? (

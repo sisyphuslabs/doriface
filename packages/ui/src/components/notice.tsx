@@ -12,7 +12,7 @@ export interface NoticeProps {
 
 const TINT = {
   info: "bg-selected",
-  warning: "bg-raised ring-1 ring-border ring-inset",
+  warning: "bg-raised",
   error: "bg-status-blocked/12",
 } as const;
 
