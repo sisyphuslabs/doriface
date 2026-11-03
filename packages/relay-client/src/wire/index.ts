@@ -23,6 +23,7 @@ export {
   SIGN_PUB_BYTES,
   SIGNATURE_BYTES,
 } from "./identity.ts";
+export { MAX_SESSION_SEND_BYTES, RELAY_MESSAGE_CAP } from "./limits.ts";
 export {
   decodeMux,
   encodeClose,
