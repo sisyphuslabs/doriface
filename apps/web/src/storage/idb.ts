@@ -1,7 +1,7 @@
 /**
  * A tiny promise wrapper over one IndexedDB object store. Where IndexedDB is unavailable or denied its
- * calls reject; the settings stores fall back to defaults, and the device key fails, because a key that
- * is not stored would give the device a new identity on every load.
+ * calls reject; the settings stores then show the error and refuse writes, and the device key fails,
+ * because a key that is not stored would give the device a new identity on every load.
  */
 export interface KeyValueStore {
   get(key: string): Promise<unknown>;
@@ -26,6 +26,10 @@ function open(): Promise<IDBDatabase> {
     req.addEventListener("upgradeneeded", () => req.result.createObjectStore(STORE));
     req.addEventListener("success", () => resolve(req.result));
     req.addEventListener("error", () => reject(req.error ?? new Error("cannot open IndexedDB")));
+  });
+  // A failed open is not remembered: the next call opens again.
+  opened.catch(() => {
+    opened = null;
   });
   return opened;
 }
