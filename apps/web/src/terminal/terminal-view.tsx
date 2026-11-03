@@ -98,7 +98,7 @@ export function TerminalView(props: TerminalViewProps) {
           attached.onData((bytes) => {
             handle.current?.write(bytes);
             attached.consumed(bytes.byteLength);
-            // DECSCUSR 0 means the default shape, and the default is the configured cursor-style.
+            // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
             if (resetsCursor(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
           attached.onClose(() => onClosed?.(address));
