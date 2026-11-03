@@ -146,7 +146,7 @@ export class Uplink {
     this.#socket = ws;
     let challenged = false;
     const acks = new AckCounter();
-    const consumed = (bytes: number): void => {
+    const arrived = (bytes: number): void => {
       const ack = acks.ackFor(bytes);
       if (ack !== undefined && isOpen(ws)) ws.send(ack);
     };
@@ -156,8 +156,8 @@ export class Uplink {
       if (!(event.data instanceof ArrayBuffer))
         return closeSocket(ws, CloseCode.UnsupportedData, "binary messages only");
       const bytes = new Uint8Array(event.data);
-      if (challenged) return this.#frame(ws, bytes, consumed);
-      consumed(bytes.byteLength);
+      if (challenged) return this.#frame(ws, bytes, arrived);
+      arrived(bytes.byteLength);
       challenged = true;
       this.#answer(ws, bytes).catch(() => closeSocket(ws, CloseCode.InternalError, "signing failed"));
     });
@@ -175,7 +175,7 @@ export class Uplink {
   }
 
   /** Handles one relay frame; every frame is acked on arrival, and each session bounds its own backlog. */
-  #frame(ws: WebSocket, bytes: Uint8Array, consumed: (bytes: number) => void): void {
+  #frame(ws: WebSocket, bytes: Uint8Array, arrived: (bytes: number) => void): void {
     let frame;
     try {
       frame = decodeMux(bytes);
@@ -183,7 +183,7 @@ export class Uplink {
       if (error instanceof MuxError) return closeSocket(ws, CloseCode.ProtocolError, error.message);
       throw error;
     }
-    consumed(bytes.byteLength);
+    arrived(bytes.byteLength);
     const session = this.#sessions.get(frame.sessionId);
     if (frame.type === MuxType.Data && session !== undefined) return session.deliver(frame.payload);
     if (frame.type === MuxType.PairSlotAck) {

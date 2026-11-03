@@ -3,7 +3,8 @@ import type { CloseListener, DataListener, Unsubscribe } from "./link.ts";
 /**
  * Delivers chunks to every data listener strictly in order. Chunks that arrive before the first listener are held,
  * and a chunk is handed on only after every listener's promise for the previous one settled. `onConsumed` sees each
- * chunk once its listeners are done with it or once it is dropped, which is when its bytes may be acked.
+ * chunk once its listeners are done with it or once it is dropped: a client link acks its bytes then, and a relay
+ * session (whose uplink acks on arrival) takes them off its backlog.
  */
 export class Inbox {
   readonly #chunks: Uint8Array[] = [];
