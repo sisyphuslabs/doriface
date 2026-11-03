@@ -1,4 +1,4 @@
-# doriface transport contract v1.3
+# doriface transport contract v1.3.1
 
 This is the binding wire contract for every doriface package. Each rule below is the current one; the change log at the end records what each revision changed.
 
@@ -110,9 +110,10 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 | -------------------------- | --------------------------------------------------------------------- | ---------------------------- |
 | `ping`                     | client or host, every 30 s                                            | keepalive                    |
 | `pong`                     | the relay, via `setWebSocketAutoResponse` (no Durable Object wake-up) | keepalive reply              |
-| `a:<total bytes received>` | the receiver of relay traffic (client or host uplink), every 64 KiB   | backpressure acknowledgement |
+| `a:<total bytes received>` | the receiver of relay traffic (client or host uplink), every 64 KiB   | flow-control acknowledgement |
 
 - Backpressure: the Durable Object keeps `sent - acked` per socket in its attachment and closes the sending side with 4408 when it exceeds 4 MiB. Acknowledgements are cumulative and must be monotonic: an `a:<n>` that is not a decimal integer, is smaller than the last acknowledgement, or is larger than the bytes actually sent to that socket is a protocol error and closes the socket with 4402, so a peer cannot ack bytes it never received to make the relay buffer without bound.
+- Host uplink flow control: the uplink carries every session of the host, so the host acks each frame when it arrives, whether or not that session's reader has taken it. Withholding acks for one slow session would stall the whole uplink and make the relay close it, and with it every other client's session, with 4408. Each session instead bounds its own undelivered bytes: once more than 4 MiB of one session's DATA payload is waiting for its reader (exactly 4 MiB is allowed), the host closes only that session with CLOSE 4408 and drops its later DATA, still acking it. The host therefore buffers at most 4 MiB per session, so at most (32 active + 8 pending) x 4 MiB = 160 MiB per uplink.
 - Keepalive: an alarm reaps sockets whose auto-response timestamp is more than 90 s old, with 4408.
 - Direct path: there is no relay, so the host itself answers each text `ping` with a text `pong`, and closes a `/v1/e2ee` socket with 4408 when it has received nothing (no record and no `ping`) for 90 s. Clients send `ping` every 30 s on the direct path too.
 
@@ -129,13 +130,14 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 - 4402: relay protocol error (for example an invalid `a:<n>` acknowledgement)
 - 4403: relay auth failed
 - 4404: host offline
-- 4408: idle or backpressure timeout, or a handshake that did not finish within 10 s
+- 4408: idle or backpressure timeout, a handshake that did not finish within 10 s, or a relay session whose undelivered bytes on the host exceeded 4 MiB
 - 4409: uplink replaced by a newer authenticated uplink for this hostId; the replaced host must not reconnect
 - 4410: pairing slot not registered to this host (expired, retired or never opened)
 - 4429: rate limited, including a typed code whose 10 answered attempts are spent
 
 ## Change log
 
+- v1.3.1: the host uplink acks each relay frame on arrival and bounds each session's undelivered bytes at 4 MiB, closing only that session with 4408 (at most 160 MiB per uplink); acks no longer wait for a session's reader, so one slow session cannot stall the uplink.
 - v1.3: typed-code pairing uses CPace (CPACE-RISTR255-SHA512, draft-irtf-cfrg-cpace-21) bound to hostId, the host Noise static key, the slot and a per-attempt session id; its key is the IKpsk2 psk, so every code guess costs one answer from the real host and no relay or observer can test a guess offline (v1.2 let one message 2 test every code). The pairing URL carries a 32-byte link secret (`p=`) instead of the code. Every session's first message starts with a kind byte (`0x01` session, `0x02` pair-code, `0x03` pair-link), bound into the prologue. The host retires a typed code after 10 answered attempts per offer and refuses typed-code pairing on the direct path. The handshake payload rules (`"v":1`, the message 2 `lan` reply, the 256-byte line, the 64-unit name and the 4096-byte early data) and the empty key-confirmation record are now written down. v1.2 pairing and session messages are refused.
 - v1.2.1: close code 4409 (uplink replaced), which the relay already sends when a newer uplink authenticates for the same hostId.
 - v1.2: pending-session admission; the `a:<n>` backpressure acknowledgement; the relay origin in the uplink signature; non-extractable device keys with a raw fallback; `ping`/`pong` keepalive; the pairing budget moved to the relay, with codes burned only on success or expiry (replacing "burn after 3 failed handshakes"); PAIR_SLOT carrying the Noise static key, acknowledged by PAIR_SLOT_ACK; pairing sessions marked with `?pair=<slot>`; monotonic acknowledgements, rejected with 4402 when out of range; per-source quotas on pairing lookups and sessions, with the slot's session budget charged only after the host answers; close codes 4402 and 4410; direct-path keepalive; pinned prologue, payload and nonce rules. Resume without a repaint is deferred.
