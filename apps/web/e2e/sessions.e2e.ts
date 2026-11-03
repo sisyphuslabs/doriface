@@ -56,3 +56,23 @@ test("closing a tab asks whether to keep the session running or end it", async (
   await ask.getByRole("button", { name: "End session" }).click();
   await expect(page.getByRole("contentinfo")).toContainText(`${before - 1} terminal`, { timeout: 15_000 });
 });
+
+test("End session in the close prompt is styled destructive and Enter does not end the session", async ({ page }) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await sessionMenu(page, "End session…");
+  const confirm = page.getByRole("dialog", { name: /^End / });
+  const destructive = await confirm
+    .getByRole("button", { name: "End session" })
+    .evaluate((button) => getComputedStyle(button).backgroundColor);
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  const before = await liveCount(page);
+  await closeSelected(page).click();
+  const ask = page.getByRole("dialog", { name: /^Close .+\?$/ });
+  const end = ask.getByRole("button", { name: "End session" });
+  expect(await end.evaluate((button) => getComputedStyle(button).backgroundColor)).toBe(destructive);
+  await page.keyboard.press("Enter");
+  await expect(ask).toBeHidden();
+  await expect(page.getByRole("contentinfo")).toContainText(`${before} terminal`);
+  await expect(page.getByRole("tab", { selected: true })).toBeVisible();
+});
