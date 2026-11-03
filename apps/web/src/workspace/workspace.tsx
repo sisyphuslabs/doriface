@@ -67,6 +67,7 @@ export function Workspace({ connection }: WorkspaceProps) {
         <DesktopShell
           connection={connection}
           terminals={terminals}
+          loaded={loaded}
           tabs={tabs}
           onNew={() => newTerminal()}
           onPalette={onPalette}

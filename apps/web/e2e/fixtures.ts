@@ -23,7 +23,7 @@ export { expect } from "@playwright/test";
 /** "4 terminals", optionally followed by " · 1 needs you". */
 const TERMINAL_COUNT = /^\d+ terminals?\b/;
 
-/** The status bar's terminal count, once the workspace has loaded. */
+/** The status bar's terminal count. It shows only once the core has listed its terminals, so `before` is never a placeholder 0. */
 export async function terminalCount(
   page: Page,
 ): Promise<{ readonly before: number; readonly grown: () => Promise<void> }> {
