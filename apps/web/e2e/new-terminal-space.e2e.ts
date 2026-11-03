@@ -36,8 +36,7 @@ test("New tab starts in the directory the active shell has moved to", async ({ p
   await page.goto("/");
   const first = await openNewTerminal(page);
   await first.click();
-  // hc re-reads a shell's directory when its foreground process changes, so a program runs after the cd (a builtin).
-  await page.keyboard.type('mkdir -p "${TMPDIR:-/tmp}/f13-moved" && cd "${TMPDIR:-/tmp}/f13-moved" && ls >/dev/null\r');
+  await page.keyboard.type('mkdir -p "${TMPDIR:-/tmp}/f13-moved" && cd "${TMPDIR:-/tmp}/f13-moved"\r');
   await expect(page.locator('[data-focused="true"] header')).toContainText("f13-moved", { timeout: 15_000 });
   const moved = await workingDirectory(page, first);
   expect(moved).toMatch(/f13-moved$/);
