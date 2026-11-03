@@ -1,7 +1,7 @@
 import type { TerminalThemeColors } from "@wterm/react";
 
 const toNumber = (value: string): number | null => {
-  const hex = /^#([0-9a-f]{6})/i.exec(value.trim());
+  const hex = /^#([0-9a-f]{6})$/i.exec(value.trim());
   return hex === null ? null : Number.parseInt(hex[1] ?? "0", 16);
 };
 
@@ -11,7 +11,8 @@ export function readThemeColors(element: HTMLElement): TerminalThemeColors | nul
   const read = (name: string) => toNumber(style.getPropertyValue(name));
   const foreground = read("--term-fg");
   const background = read("--term-bg");
-  const cursor = read("--doriface-theme-cursor") ?? foreground;
+  // --term-cursor holds cursor-color when it is a plain color; with cursor-opacity it is a color-mix.
+  const cursor = read("--term-cursor") ?? read("--doriface-theme-cursor") ?? foreground;
   const palette = Array.from({ length: 16 }, (_, index) => read(`--term-color-${index}`));
   if (foreground === null || background === null || cursor === null || palette.some((entry) => entry === null))
     return null;
