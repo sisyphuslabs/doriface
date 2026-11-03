@@ -1,10 +1,11 @@
 import { shell, type Session, type WebContents, type WebPreferences } from "electron";
-import { isAllowedExternal } from "../config/external.ts";
+import { allowedExternal } from "../config/external.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import { isGrantable } from "../config/permissions.ts";
 
-const openAllowed = (url: string): void => {
-  if (!isAllowedExternal(url)) return;
+const openAllowed = (candidate: string): void => {
+  const url = allowedExternal(candidate);
+  if (url === undefined) return;
   shell.openExternal(url).catch((error: unknown) => console.error(`openExternal failed: ${String(error)}`));
 };
 

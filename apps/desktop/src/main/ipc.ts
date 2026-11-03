@@ -1,5 +1,5 @@
 import { ipcMain, shell, type IpcMainInvokeEvent } from "electron";
-import { isAllowedExternal } from "../config/external.ts";
+import { allowedExternal } from "../config/external.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import { Channel, type LocalHostEndpoint } from "../shared/bridge.ts";
 
@@ -14,9 +14,10 @@ function assertAppFrame(event: IpcMainInvokeEvent, origin: string): void {
 }
 
 export function registerIpc(deps: IpcDeps): void {
-  ipcMain.handle(Channel.openExternal, async (event, url: unknown) => {
+  ipcMain.handle(Channel.openExternal, async (event, candidate: unknown) => {
     assertAppFrame(event, deps.origin);
-    if (typeof url !== "string" || !isAllowedExternal(url)) return false;
+    const url = typeof candidate === "string" ? allowedExternal(candidate) : undefined;
+    if (url === undefined) return false;
     await shell.openExternal(url);
     return true;
   });

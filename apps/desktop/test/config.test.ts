@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { contentSecurityPolicy } from "../src/config/csp.ts";
-import { isAllowedExternal } from "../src/config/external.ts";
+import { allowedExternal, isAllowedExternal } from "../src/config/external.ts";
 import { APP_ORIGIN, isSameOrigin, loopbackDevUrl } from "../src/config/origin.ts";
 import { isGrantable } from "../src/config/permissions.ts";
 import { secureWebPreferences, TRAFFIC_LIGHT_POSITION, windowOptions } from "../src/config/window.ts";
@@ -103,6 +103,8 @@ describe("origin, external links and permissions", () => {
     expect(isAllowedExternal("https://user:pw@github.com/")).toBe(false);
     expect(isAllowedExternal("file:///etc/passwd")).toBe(false);
     expect(isAllowedExternal("javascript:alert(1)")).toBe(false);
+    expect(allowedExternal("https://GitHub.com/a/../sisyphuslabs")).toBe("https://github.com/sisyphuslabs");
+    expect(allowedExternal("https://example.com/")).toBeUndefined();
   });
 
   test("permissions are denied unless the app origin asks for a clipboard write", () => {
