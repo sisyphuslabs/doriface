@@ -10,6 +10,17 @@ async function isPending(promise: Promise<unknown>): Promise<boolean> {
   return (await Promise.race([promise.then(() => "settled"), turn])) === "pending";
 }
 
+/**
+ * Writes 256 KiB at a time, one event-loop turn apart, until `stop` holds or `writes` are used up (64 MiB), so the
+ * socket buffers fill and Bun drops a write however large the platform's buffers are.
+ */
+async function writeUntil(wire: WsByteLink<undefined>, stop: () => boolean, writes: number): Promise<void> {
+  if (stop() || writes === 0) return;
+  wire.send(new Uint8Array(256 * 1024));
+  await new Promise((resolve) => setImmediate(resolve));
+  return writeUntil(wire, stop, writes - 1);
+}
+
 /** The server's frames (unmasked) in `bytes`: opcode and payload of each complete frame. */
 function serverFrames(bytes: Uint8Array): { readonly opcode: number; readonly payload: Uint8Array }[] {
   const frames: { readonly opcode: number; readonly payload: Uint8Array }[] = [];
@@ -104,11 +115,13 @@ describe("WsLink over a real socket", () => {
       const client = await rawWsClient(server.port);
       const link = await linked;
       const wire = new WsByteLink(link);
-      const closed = Promise.withResolvers<void>();
-      link.onClose(() => closed.resolve());
+      let closed = false;
+      link.onClose(() => {
+        closed = true;
+      });
       client.socket.pause();
-      for (let write = 0; write < 8; write++) wire.send(new Uint8Array(256 * 1024));
-      await closed.promise;
+      await writeUntil(wire, () => closed, 256);
+      expect(closed).toBe(true);
       await new Promise((resolve) => setImmediate(resolve));
       client.socket.destroy();
     } finally {
