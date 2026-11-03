@@ -39,6 +39,7 @@ export async function hostIdOf(signPub: Uint8Array<ArrayBuffer>): Promise<string
  * default port omitted. `http(s)` URLs map to `ws(s)`, so a host and a relay on plain HTTP agree too.
  */
 export function relayOriginOf(url: string): string {
+  if (!URL.canParse(url)) throw new Error(`relay URL must be http(s) or ws(s): ${url}`);
   const parsed = new URL(url);
   const secure = parsed.protocol === "https:" || parsed.protocol === "wss:";
   if (!secure && parsed.protocol !== "http:" && parsed.protocol !== "ws:") {
