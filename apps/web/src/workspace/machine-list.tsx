@@ -1,6 +1,6 @@
 import { Button, IconButton, Notice, SidebarSection, cn } from "@doriface/ui";
 import { Monitor, Plus, Server } from "lucide-react";
-import { type MachineEntry, stateLabel } from "./machines.ts";
+import { type MachineEntry, onlyThisMachine, stateLabel } from "./machines.ts";
 import type { RunFailure } from "./start-on.ts";
 
 export interface MachineListProps {
@@ -12,6 +12,7 @@ export interface MachineListProps {
   readonly failure?: RunFailure | undefined;
   readonly listError?: string | undefined;
   readonly onDismiss?: () => void;
+  readonly onAdd: () => void;
   readonly className?: string;
 }
 
@@ -29,10 +30,20 @@ export function MachineList({
   failure,
   listError,
   onDismiss,
+  onAdd,
   className,
 }: MachineListProps) {
+  const alone = onlyThisMachine(entries);
+  const add = alone ? undefined : (
+    <IconButton label="Add a machine" icon={<Plus />} onClick={onAdd} className="-mr-1" />
+  );
   return (
-    <SidebarSection title="Machines" count={entries.length} {...(className === undefined ? {} : { className })}>
+    <SidebarSection
+      title="Machines"
+      count={entries.length}
+      {...(add === undefined ? {} : { action: add })}
+      {...(className === undefined ? {} : { className })}
+    >
       {entries.map((machine) => {
         const Icon = machine.local ? Monitor : Server;
         const selected = machine.id === activeMachine;
@@ -80,6 +91,12 @@ export function MachineList({
           </div>
         );
       })}
+      {alone ? (
+        <Button variant="ghost" onClick={onAdd} className="h-(--row) justify-start gap-2.5 px-2 text-sm">
+          <Plus aria-hidden className="size-4 text-muted-foreground" />
+          Add a machine
+        </Button>
+      ) : null}
       {listError === undefined ? null : (
         <Notice tone="error" className="mx-1 mt-1" title="Could not list the machines">
           {listError}
