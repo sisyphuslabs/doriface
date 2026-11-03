@@ -1,14 +1,19 @@
 import type { EventFeed, HcConnection } from "@doriface/client";
+import { encodeFrame, FrameKind, RPC_CHANNEL } from "@doriface/protocol";
 import { generateX25519 } from "@doriface/crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ByteReader } from "../../host/src/testing/byte-reader.ts";
+import { HELLO } from "../../host/src/testing/hc-session.ts";
+import { firstDifference, type RecordingLink, tapFor } from "./support/byte-tap.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { type EventWatch, watchEvents, watchScreen, within } from "./support/watch.ts";
 
 const phone = generateX25519();
 let relayed: RelayedHost | undefined;
 let connection: HcConnection | undefined;
+let recorded: RecordingLink | undefined;
 let feed: EventFeed | undefined;
 let watched: EventWatch | undefined;
 
@@ -23,7 +28,7 @@ beforeAll(async () => {
   relayed = await startRelayedHost("doriface-relay-methods");
   mkdirSync(join(relayed.scratch, "work"));
   await relayed.pair(phone, "methods");
-  connection = await relayed.connect(phone);
+  ({ connection, link: recorded } = await relayed.connectRecorded(phone));
   feed = await connection.subscribe();
   watched = watchEvents(feed);
 }, 120_000);
@@ -33,6 +38,30 @@ afterAll(async () => {
   connection?.close();
   await relayed?.stop();
 });
+
+const encoder = new TextEncoder();
+const request = (id: number, method: string, params: object): Uint8Array =>
+  encodeFrame(RPC_CHANNEL, FrameKind.Data, encoder.encode(JSON.stringify({ jsonrpc: "2.0", id, method, params })));
+/** Replies whose bytes do not depend on time or on what other tests did. */
+const STABLE: readonly [string, object][] = [
+  ["templates.list", {}],
+  ["rpc.discover", {}],
+  ["machine.list", {}],
+  ["doc.get", { name: "never-written" }],
+  ["terminal.get", { terminal: "t999" }],
+];
+
+async function replies(write: (bytes: Uint8Array) => void | Promise<void>, reader: ByteReader): Promise<Uint8Array[]> {
+  await write(HELLO);
+  const hello = await reader.line();
+  const next = async (index: number, out: Uint8Array[]): Promise<Uint8Array[]> => {
+    const call = STABLE[index];
+    if (call === undefined) return out;
+    await write(request(index + 1, call[0], call[1]));
+    return next(index + 1, [...out, await reader.frame()]);
+  };
+  return next(0, [hello]);
+}
 
 describe("every hc method family, client SDK -> Noise IK -> relay -> doriface-host -> hc", () => {
   test("terminal.run, list, get, attach (typing), send, keys, read, label, kill and rm, with their events", async () => {
@@ -123,5 +152,43 @@ describe("every hc method family, client SDK -> Noise IK -> relay -> doriface-ho
         )
       : [];
     expect(names).toEqual(expect.arrayContaining([...hc.hello.methods]));
+  }, 30_000);
+
+  test("hello and replies that do not change are byte-identical through the relay and from a direct hc connect", async () => {
+    if (relayed === undefined) throw new Error("setup failed");
+    const link = await relayed.dial(phone);
+    const viaRelay = new ByteReader();
+    link.onData((bytes) => viaRelay.push(bytes));
+    const relayedReplies = await within(
+      replies((bytes) => link.send(bytes), viaRelay),
+      "the relayed replies",
+    );
+    link.close();
+    const direct = relayed.session.connect();
+    const directReplies = await within(
+      replies((bytes) => direct.write(bytes), direct.reader),
+      "the direct replies",
+    );
+    direct.end();
+    await direct.exited;
+    expect(relayedReplies.map((bytes) => new TextDecoder().decode(bytes))).toEqual(
+      directReplies.map((bytes) => new TextDecoder().decode(bytes)),
+    );
+  }, 30_000);
+
+  test("every byte of this suite's session reached hc unchanged, and every byte hc wrote reached the client unchanged", async () => {
+    const { hc } = started();
+    if (relayed === undefined || recorded === undefined || feed === undefined) throw new Error("setup failed");
+    feed.close();
+    // hc reads its input in order, so once it answered this call it has read every byte sent before it.
+    await hc.call("terminal.list");
+    const { sent, received } = recorded;
+    const tap = tapFor(relayed.taps(), sent);
+    expect(tap).toBeDefined();
+    expect(firstDifference(sent, tap?.read ?? new Uint8Array(0))).toBeUndefined();
+    expect(
+      firstDifference(received, (tap?.wrote ?? new Uint8Array(0)).subarray(0, received.byteLength)),
+    ).toBeUndefined();
+    expect(received.byteLength).toBeGreaterThan(10_000);
   }, 30_000);
 });
