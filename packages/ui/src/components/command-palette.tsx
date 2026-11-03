@@ -82,9 +82,11 @@ export function CommandPalette({
           className="h-12 min-w-0 flex-1 bg-transparent text-lg text-foreground outline-none placeholder:text-muted-foreground"
         />
         <Kbd keys={["esc"]} />
-        <Button variant="ghost" size="sm" onClick={onCancel} className="-mr-2 hidden coarse:inline-flex">
-          Cancel
-        </Button>
+        {onCancel === undefined ? null : (
+          <Button variant="ghost" size="sm" onClick={onCancel} className="-mr-2 hidden coarse:inline-flex">
+            Cancel
+          </Button>
+        )}
       </div>
       <div
         id={listId}
