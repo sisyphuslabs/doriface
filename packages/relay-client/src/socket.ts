@@ -21,6 +21,7 @@ export function closeSocket(ws: WebSocket, code: number, reason: string): void {
 
 /** `https://relay.example` + `/v1/host/<id>` -> `wss://relay.example/v1/host/<id>`. */
 export function relaySocketUrl(relayUrl: string, path: string): string {
+  if (!URL.canParse(relayUrl)) throw new Error(`relay URL must be http(s) or ws(s): ${relayUrl}`);
   const url = new URL(path, relayUrl);
   if (url.protocol === "https:") url.protocol = "wss:";
   else if (url.protocol === "http:") url.protocol = "ws:";
