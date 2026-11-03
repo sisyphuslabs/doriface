@@ -36,9 +36,13 @@ export function parseGhosttyConfig(text: string): ParsedConfig {
     const trimmed = raw.trim();
     if (trimmed === "" || trimmed.startsWith("#")) return;
     const eq = trimmed.indexOf("=");
-    const key = (eq === -1 ? trimmed : trimmed.slice(0, eq)).trim();
-    const value = eq === -1 ? "" : unquote(trimmed.slice(eq + 1).trim());
     const line = index + 1;
+    if (eq === -1) {
+      lines.push({ line, key: trimmed, value: "", status: "invalid", reason: "expects key = value" });
+      return;
+    }
+    const key = trimmed.slice(0, eq).trim();
+    const value = unquote(trimmed.slice(eq + 1).trim());
     const def = KEY_BY_NAME.get(key);
     if (def === undefined) {
       lines.push({ line, key, value, status: "unknown", reason: "not a terminal setting doriface knows" });
@@ -47,7 +51,17 @@ export function parseGhosttyConfig(text: string): ParsedConfig {
     if (value === "") {
       config.set(key, []);
       touched.add(key);
-      lines.push({ line, key, value, status: "applies", reason: "resets to the default" });
+      lines.push(
+        def.support.level === "unsupported"
+          ? { line, key, value, status: "unsupported", reason: def.support.reason }
+          : {
+              line,
+              key,
+              value,
+              status: def.support.level === "live" ? "applies" : "new-terminals",
+              reason: "resets to the default",
+            },
+      );
       return;
     }
     const checked = checkValue(def.kind, value);

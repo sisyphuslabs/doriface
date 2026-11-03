@@ -44,12 +44,13 @@ export function parsePaletteEntry(value: string): { readonly index: number; read
 /** `light:X,dark:Y` in any order, or one name for both. */
 export function parseTheme(value: string): { readonly light: string; readonly dark: string } | null {
   if (!value.includes(":")) return value === "" ? null : { light: value, dark: value };
-  const parts = new Map(
-    value.split(",").map((part) => {
-      const colon = part.indexOf(":");
-      return [part.slice(0, colon).trim(), part.slice(colon + 1).trim()] as const;
-    }),
-  );
+  const parts = new Map<string, string>();
+  for (const part of value.split(",")) {
+    const colon = part.indexOf(":");
+    const side = part.slice(0, colon).trim();
+    if (colon === -1 || parts.has(side)) return null;
+    parts.set(side, part.slice(colon + 1).trim());
+  }
   const light = parts.get("light");
   const dark = parts.get("dark");
   return light === undefined || dark === undefined || light === "" || dark === "" || parts.size !== 2
@@ -64,7 +65,7 @@ export function featureToCss(feature: string): string | null {
   if (match === null) return null;
   const [, sign = "", tag = "", setting] = match;
   const value = sign === "-" || setting === "off" ? 0 : setting === undefined || setting === "on" ? 1 : Number(setting);
-  return `"${tag}" ${value}`;
+  return Number.isFinite(value) ? `"${tag}" ${value}` : null;
 }
 
 /** `wght=600` as a CSS `font-variation-settings` entry. */
@@ -76,14 +77,16 @@ export function variationToCss(variation: string): string | null {
 /** An adjustment: `1`, `-2`, or `20%`. */
 export function parseMetric(value: string): { readonly amount: number; readonly percent: boolean } | null {
   const match = /^(-?\d+(?:\.\d+)?)(%?)$/.exec(value.trim());
-  return match === null ? null : { amount: Number(match[1]), percent: match[2] === "%" };
+  const amount = Number(match?.[1]);
+  return match === null || !Number.isFinite(amount) ? null : { amount, percent: match[2] === "%" };
 }
 
 export function parsePadding(value: string): readonly [number, number] | null {
   const parts = value.split(",").map((part) => part.trim());
   if (parts.length > 2 || parts.some((part) => !/^\d+$/.test(part))) return null;
   const [first = "0", second = first] = parts;
-  return [Number(first), Number(second)];
+  const sides = [Number(first), Number(second)] as const;
+  return sides.every(Number.isFinite) ? sides : null;
 }
 
 /** Checks one value against its key's kind. */
