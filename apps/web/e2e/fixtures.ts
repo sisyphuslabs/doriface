@@ -33,16 +33,32 @@ export async function terminalCount(
   return { before, grown: () => expect(count).toHaveText(next, { timeout: 15_000 }) };
 }
 
-/** Opens one more terminal and returns the focused pane once its prompt is up. */
+/** Opens one more terminal and returns it, pinned by address, once it is the focused pane and its prompt is up. */
 export async function openNewTerminal(page: Page): Promise<Locator> {
   const count = await terminalCount(page);
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  if (count.before > 0) await expect(focused).toBeVisible({ timeout: 15_000 });
+  const known = new Set(
+    await page.locator("[data-terminal]").evaluateAll((els) => els.map((el) => el.getAttribute("data-terminal"))),
+  );
   await page
     .getByRole("button", { name: "New tab" })
     .or(page.getByRole("button", { name: "New terminal" }))
     .first()
     .click();
   await count.grown();
-  const terminal = page.locator('[data-focused="true"] [data-terminal]');
+  // The focus moves to the new terminal a moment after it registers; until then the old pane is focused.
+  await expect
+    .poll(
+      async () => {
+        const address = await focused.getAttribute("data-terminal").catch(() => null);
+        return address !== null && !known.has(address);
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  const address = await focused.getAttribute("data-terminal");
+  const terminal = page.locator(`[data-terminal="${address}"]`);
   await expect(terminal).toContainText("$", { timeout: 15_000 });
   return terminal;
 }
