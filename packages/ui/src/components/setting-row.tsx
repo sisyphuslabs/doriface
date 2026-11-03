@@ -4,38 +4,39 @@ import { cn } from "../lib/cn.ts";
 
 /** Spread onto a disabled row's control so assistive tech reads the reason with it. */
 export interface SettingReason {
-  readonly "aria-describedby"?: string;
+  readonly "aria-describedby": string;
 }
 
-export interface SettingRowProps {
+interface SettingRowBase {
   readonly title: ReactNode;
   readonly description?: ReactNode;
-  /** The control, or a function that receives the reason's `aria-describedby` to spread onto it. */
-  readonly control: ReactNode | ((reason: SettingReason) => ReactNode);
   /** The config file key this row writes, e.g. a Ghostty key; shown as a monospace label. */
   readonly configKey?: string;
-  /** Why this setting cannot apply here, in words. The row stays visible; pass `disabled` to the control as well. */
-  readonly disabledReason?: string | undefined;
   /** Keep the control trailing on narrow screens instead of stacking it full width. */
   readonly inline?: boolean;
   readonly id?: string;
   readonly className?: string;
 }
 
+interface EnabledSettingRow extends SettingRowBase {
+  readonly control: ReactNode;
+  readonly disabledReason?: undefined;
+}
+
+interface DisabledSettingRow extends SettingRowBase {
+  /** Builds the disabled control; spread the reason onto it so the reason is read with it. */
+  readonly control: (reason: SettingReason) => ReactNode;
+  /** Why this setting cannot apply here, in words. The row stays visible; pass `disabled` to the control as well. */
+  readonly disabledReason: string;
+}
+
+export type SettingRowProps = EnabledSettingRow | DisabledSettingRow;
+
 /** A settings line: what it is on the left, the control on the right; stacks under 480 px unless inline. */
-export function SettingRow({
-  title,
-  description,
-  control,
-  configKey,
-  disabledReason,
-  inline = false,
-  id,
-  className,
-}: SettingRowProps) {
+export function SettingRow(props: SettingRowProps) {
+  const { title, description, configKey, disabledReason, inline = false, id, className } = props;
   const disabled = disabledReason !== undefined;
   const reasonId = useId();
-  const reason: SettingReason = disabled ? { "aria-describedby": reasonId } : {};
   return (
     <div
       className={cn(
@@ -65,7 +66,7 @@ export function SettingRow({
           !inline && "max-sm:w-full max-sm:[&>*]:flex-1 sm:[&>*]:flex-none",
         )}
       >
-        {typeof control === "function" ? control(reason) : control}
+        {props.disabledReason === undefined ? props.control : props.control({ "aria-describedby": reasonId })}
       </div>
     </div>
   );
