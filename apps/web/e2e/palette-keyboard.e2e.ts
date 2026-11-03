@@ -27,6 +27,28 @@ test("focus stays inside the open palette and returns to the terminal that opene
   await expect(opener).toBeFocused();
 });
 
+test("the palette offers Split as the toolbar does, and runs the same action", async ({ page }) => {
+  await page.goto("/");
+  await terminalCount(page);
+  const split = page.getByRole("button", { name: "Split", exact: true });
+  const row = page.getByRole("option", { name: /^Split or unsplit/ });
+  if ((await page.locator("[data-terminal]").count()) > 1) throw new Error("the e2e host starts with one tab at most");
+
+  await page.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("aria-disabled", "true");
+  await expect(split).toBeDisabled();
+  await page.keyboard.press("Escape");
+
+  await openNewTerminal(page);
+  await openNewTerminal(page);
+  await page.keyboard.press("ControlOrMeta+Shift+KeyP");
+  await expect(row).not.toHaveAttribute("aria-disabled", "true");
+  await row.click();
+  await expect(dialog(page)).toBeHidden();
+  await expect(split).toHaveAttribute("aria-pressed", "true");
+});
+
 for (const [width, height] of [
   [1470, 956],
   [390, 844],

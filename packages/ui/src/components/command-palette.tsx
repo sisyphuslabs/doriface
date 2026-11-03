@@ -16,6 +16,8 @@ export interface Command {
   readonly hint?: ReactNode;
   /** An agent's state, shown as its glyph and word after the hint. */
   readonly status?: AgentStatus;
+  /** Listed but not runnable right now, as its disabled toolbar button; the hint says why. */
+  readonly disabled?: boolean;
 }
 
 export interface CommandPaletteProps {
@@ -61,7 +63,7 @@ export function CommandPalette({
       // The palette consumes its Enter: running a row can close it and move focus to a button,
       // which would otherwise take the same key press and act on it (reopening the palette).
       event.preventDefault();
-      onRun?.(current.id);
+      if (current.disabled !== true) onRun?.(current.id);
     }
   };
 
@@ -114,11 +116,15 @@ export function CommandPalette({
                       id={`${listId}-${command.id}`}
                       role="option"
                       aria-selected={selected}
+                      aria-disabled={command.disabled}
                       onPointerMove={() => setActive(visible.indexOf(command))}
-                      onClick={() => onRun?.(command.id)}
+                      onClick={() => {
+                        if (command.disabled !== true) onRun?.(command.id);
+                      }}
                       className={cn(
                         "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-base text-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground",
                         selected && "bg-selected",
+                        command.disabled === true && "text-muted-foreground",
                       )}
                     >
                       {command.icon}

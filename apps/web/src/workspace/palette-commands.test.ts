@@ -26,6 +26,11 @@ const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
   keymap: resolveKeymap("mac", new Map()),
 });
 
+const split = (open: readonly string[]) =>
+  paletteCommands({ ...source([]), actions: availableActions("desktop", { open }) }).find(
+    (command) => command.id === "pane.split",
+  );
+
 describe("paletteCommands", () => {
   test("lists live agents with their state, then actions, the host and settings", () => {
     const commands = paletteCommands(
@@ -60,9 +65,9 @@ describe("paletteCommands", () => {
     expect(labels).toEqual(["New tab", "Larger terminal text", "Smaller terminal text", "studio", "Open settings"]);
   });
 
-  test("split is listed only once there are two tabs to split", () => {
-    expect(availableActions("desktop", { open: ["t1"] })).not.toContain("pane.split");
-    expect(availableActions("desktop", { open: ["t1", "t2"] })).toContain("pane.split");
+  test("split is listed as unavailable, with the reason, until there are two tabs to split", () => {
+    expect(split(["t1"])?.disabled).toBe(true);
+    expect(split(["t1", "t2"])?.disabled).toBeUndefined();
   });
 
   test("each row kind parses to its choice", () => {
