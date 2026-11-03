@@ -1,5 +1,5 @@
 import packageJson from "../package.json" with { type: "json" };
-import { fingerprintOf, type HostIdentity } from "@doriface/crypto";
+import { fingerprintOf, type HostIdentity, type SecureLink } from "@doriface/crypto";
 import type { CreateSocket } from "@doriface/relay-client";
 import { controlIsLive, listenControl } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
@@ -13,6 +13,7 @@ import { RelaySessionWire } from "./relay/session-wire.ts";
 import { DeviceStore } from "./state/devices.ts";
 import { loadHostIdentity } from "./state/host-keys.ts";
 import { MeshStore } from "./state/mesh.ts";
+import { HostMesh } from "./mesh/host-mesh.ts";
 import { PairingStore, pendingToWire } from "./state/pairing.ts";
 
 export const HOST_VERSION = packageJson.version;
@@ -180,8 +181,21 @@ export async function startHost(options: HostOptions): Promise<Host> {
 /** The control socket is how `devices revoke` closes live sessions, so a host that cannot open it does not start. */
 function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
   return listenControl(stateDir, async (request) => {
-    if (request.op === "devices-changed" || request.op === "mesh-changed") return e2ee.sessions.closeRevoked();
-    return pendingToWire(await e2ee.slots.open());
+    switch (request.op) {
+      case "devices-changed":
+      case "mesh-changed":
+        return e2ee.sessions.closeRevoked();
+      case "pair":
+        return pendingToWire(await e2ee.slots.open());
+      case "mesh-pair":
+        return pendingToWire(await e2ee.hostMesh.pair(request.auto));
+      case "mesh-pending":
+        return e2ee.hostMesh.pending.next();
+      case "mesh-approve":
+        return { decided: e2ee.hostMesh.pending.decide(request.nonce, request.approve) };
+      case "mesh-join":
+        return e2ee.hostMesh.join(request);
+    }
   });
 }
 
@@ -197,14 +211,21 @@ function e2eeDeps(
   mesh.ensureIndex();
   /** Filled in once the LAN listener has its port. */
   const lanUrls: string[] = [];
+  const slots = new PairingSlots(pairing, identity.noise.publicKey, registrar, options.log);
+  const sessions = new LiveSessions(devices, options.log, mesh);
+  const hc = { hc: options.hc, session: options.session, env: options.env };
+  const relay = { url: options.relay?.url, createSocket: options.relay?.createSocket };
+  const hostMesh = new HostMesh({ stateDir, identity, mesh, slots, sessions, hc, relay, log: options.log });
   return {
     identity,
     lanUrls,
     devices,
     pairing,
     mesh,
-    slots: new PairingSlots(pairing, identity.noise.publicKey, registrar, options.log),
-    sessions: new LiveSessions(devices, options.log, mesh),
+    slots,
+    sessions,
+    hostMesh,
+    meshStream: (secure: SecureLink) => hostMesh.serve(secure),
     rekeyInterval: options.rekeyInterval,
     log: options.log,
   };
