@@ -49,3 +49,41 @@ export async function handlePairSlot(
   }
   sendControl(host, encodePairSlotAck(request.slot, claimed ? PairSlotAckStatus.Registered : PairSlotAckStatus.Taken));
 }
+
+/** Why a `?pair=<slot>` session to `hostId` is refused, as a close code, or undefined when it is admitted. */
+export async function pairingRefusal(
+  env: PairSlotsEnv,
+  hostId: string,
+  slot: string,
+  source: string,
+): Promise<{ readonly code: number; readonly reason: string } | undefined> {
+  const verdict = await env.PAIR_SLOTS.get(env.PAIR_SLOTS.idFromName(slot)).admitOpen(hostId, source);
+  if (verdict === "not-held") return { code: CloseCode.PairSlotUnknown, reason: "no host is pairing on this slot" };
+  if (verdict === "limited") return { code: CloseCode.RateLimited, reason: "pairing budget spent for this slot" };
+  return undefined;
+}
+
+/**
+ * Charges answered pairing sessions to their slot's budget. The charge happens on the host's first DATA; later DATA
+ * on the same session waits for it, so frames stay in order and nothing passes a refused charge.
+ */
+export class PairingCharges {
+  readonly #env: PairSlotsEnv;
+  readonly #pending = new Map<number, Promise<boolean>>();
+
+  constructor(env: PairSlotsEnv) {
+    this.#env = env;
+  }
+
+  charge(sessionId: number, slot: string): Promise<boolean> {
+    const charged = this.#env.PAIR_SLOTS.get(this.#env.PAIR_SLOTS.idFromName(slot)).chargeSession();
+    this.#pending.set(sessionId, charged);
+    void charged.finally(() => this.#pending.delete(sessionId));
+    return charged;
+  }
+
+  /** The session's charge while it is still running; later DATA awaits it. */
+  inFlight(sessionId: number): Promise<boolean> | undefined {
+    return this.#pending.get(sessionId);
+  }
+}

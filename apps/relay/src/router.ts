@@ -2,7 +2,7 @@ import { CloseCode, HOST_ID_PATTERN, PAIR_SLOT_PATTERN } from "@doriface/relay-c
 import { Hono } from "hono";
 import packageJson from "../package.json" with { type: "json" };
 import type { Env } from "./env.ts";
-import { allowFromIp } from "./limits.ts";
+import { allowFromIp, sourceOf } from "./limits.ts";
 import { closedSocket } from "./reject.ts";
 
 export const RELAY_VERSION = packageJson.version;
@@ -27,7 +27,7 @@ app.get("/v1/pair/:slot", async (c) => {
   const slot = c.req.param("slot");
   if (!PAIR_SLOT_PATTERN.test(slot)) return c.json({ error: "slot must be 3 Crockford base32 characters" }, 400);
   if (!(await allowFromIp(c.env.PAIR_LIMIT, c.req.raw))) return c.json({ error: "rate limited" }, 429);
-  const answer = await c.env.PAIR_SLOTS.get(c.env.PAIR_SLOTS.idFromName(slot)).lookup();
+  const answer = await c.env.PAIR_SLOTS.get(c.env.PAIR_SLOTS.idFromName(slot)).lookup(sourceOf(c.req.raw));
   if (answer.status === "limited") return c.json({ error: "pairing budget spent for this slot" }, 429);
   if (answer.status === "none") return c.json({ error: "no host is pairing on this slot" }, 404);
   return c.json(answer.record);
