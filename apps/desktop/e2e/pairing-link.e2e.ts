@@ -1,13 +1,13 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import { base64urlEncode, buildPairingUrl, hostIdOf } from "@doriface/crypto";
+import electronBinary from "electron";
+import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
+import { appArgs, appDir, packagedExecutable } from "./launch.ts";
 
-const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
 const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
 
 const signPub = new Uint8Array(32).map((_, index) => (index * 37 + 11) % 256);
@@ -26,6 +26,7 @@ const FRAGMENT = PAIR_URL.slice(PAIR_URL.indexOf("#"));
 interface Scratch {
   readonly hc: ReturnType<typeof scratchHcSession>;
   readonly profile: string;
+  readonly env: Record<string, string>;
 }
 let scratch: Scratch | undefined;
 let launched: ElectronApplication | undefined;
@@ -33,13 +34,13 @@ let launched: ElectronApplication | undefined;
 test.beforeAll(async () => {
   const hc = scratchHcSession();
   const profile = mkdtempSync(join(tmpdir(), "dd-pairing-"));
-  scratch = { hc, profile };
   const env = Object.fromEntries(
     Object.entries({ ...process.env, ...hc.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
-  const args = [...(executablePath === undefined ? [appDir] : []), `--user-data-dir=${profile}`];
+  scratch = { hc, profile, env };
+  const args = instanceArgs(profile);
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args } : { executablePath: attachAfterFirstLoad, args }),
+    ...(packagedExecutable === undefined ? { args } : { executablePath: attachAfterFirstLoad, args }),
     env,
   });
 });
@@ -54,6 +55,11 @@ test.afterAll(async () => {
     }
   }
 });
+
+/** A checkout launch loads the hide hook, so neither instance ever puts a window on screen. */
+function instanceArgs(profile: string): string[] {
+  return appArgs([`--user-data-dir=${profile}`]);
+}
 
 const running = (): ElectronApplication => {
   if (launched === undefined) throw new Error("the app did not launch");
@@ -84,4 +90,70 @@ test("a pairing link's secret leaves the location and the history of the desktop
   await expect(page.getByRole("button", { name: "They match" })).toBeVisible();
   expect(page.url()).not.toContain(SECRET);
   expect(await historyWithSecret()).toEqual([]);
+});
+
+const windowCount = (): Promise<number> =>
+  running().evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length);
+
+/** Back on the workspace, then `send` hands the app a link; it must land on the pairing step in the one window. */
+async function expectPairedInApp(page: Page, send: () => Promise<void>): Promise<void> {
+  await page.goto(`${originOf(page)}/`);
+  await page.waitForSelector("#root > *");
+  await send();
+  await expect(page).toHaveURL(`${originOf(page)}/pair`);
+  await expect(page.getByRole("button", { name: "They match" })).toBeVisible();
+  expect(page.url()).not.toContain(SECRET);
+  expect(await historyWithSecret()).toEqual([]);
+  expect(await windowCount()).toBe(1);
+}
+
+test("a doriface://pair link from a second launch pairs in the one window", async () => {
+  const page = await appPage();
+  await expectPairedInApp(page, async () => {
+    if (scratch === undefined) throw new Error("no scratch profile");
+    const second = spawn(
+      packagedExecutable ?? String(electronBinary),
+      [...instanceArgs(scratch.profile), `doriface://pair${FRAGMENT}`],
+      { env: scratch.env, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let output = "";
+    second.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    second.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    const code = await new Promise<number | null>((resolve) => second.once("exit", resolve));
+    expect(code, output).toBe(0);
+  });
+});
+
+test("a doriface://pair link from open-url (macOS) pairs in the one window", async () => {
+  const page = await appPage();
+  await expectPairedInApp(page, async () => {
+    await running().evaluate(({ app }, url) => {
+      app.emit("open-url", { preventDefault: () => undefined }, url);
+    }, `doriface://pair${FRAGMENT}`);
+  });
+});
+
+test("a pairing link clicked in the app pairs in the app; other links still go to the browser", async () => {
+  const page = await appPage();
+  await running().evaluate(({ shell }) => {
+    const opened: string[] = [];
+    Reflect.set(globalThis, "openedExternally", opened);
+    shell.openExternal = async (url: string) => {
+      opened.push(url);
+    };
+  });
+  const click = async (href: string): Promise<void> => {
+    await page.evaluate((target) => {
+      const anchor = document.createElement("a");
+      anchor.href = target;
+      anchor.textContent = "link";
+      document.body.append(anchor);
+      anchor.click();
+    }, href);
+  };
+  await expectPairedInApp(page, () => click(PAIR_URL));
+  await click("https://github.com/sisyphuslabs/doriface");
+  await expect
+    .poll(() => running().evaluate(() => Reflect.get(globalThis, "openedExternally")))
+    .toEqual(["https://github.com/sisyphuslabs/doriface"]);
 });

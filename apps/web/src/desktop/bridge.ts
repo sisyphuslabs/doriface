@@ -57,6 +57,16 @@ export function setDesktopBackground(color: string, scope: object = globalThis):
     painted.catch((error: unknown) => console.error(`window background: ${String(error)}`));
 }
 
+/** Runs `open` with each pairing link fragment the desktop app hands over; does nothing outside the desktop app. */
+export function onDesktopPairingLink(open: (fragment: string) => void, scope: object = globalThis): void {
+  bridgeMethod(
+    "onPairingLink",
+    scope,
+  )?.((fragment: unknown) => {
+    if (typeof fragment === "string") open(fragment);
+  });
+}
+
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
   if (typeof bridge !== "object" || bridge === null) return null;

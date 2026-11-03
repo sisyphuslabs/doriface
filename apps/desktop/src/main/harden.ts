@@ -3,13 +3,16 @@ import { allowedExternal } from "../config/external.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import { isGrantable } from "../config/permissions.ts";
 import { routeWindowOpen } from "../config/window-open.ts";
+import { openInAppLink } from "./deep-link.ts";
 
 /** Opens a URL that already passed the allowlist in the system browser. */
 const openExternal = (url: string): void => {
   shell.openExternal(url).catch((error: unknown) => console.error(`openExternal failed: ${String(error)}`));
 };
 
+/** A pairing link stays in the app; anything else opens in the system browser when it is allowlisted. */
 const openAllowed = (candidate: string): void => {
+  if (openInAppLink(candidate)) return;
   const url = allowedExternal(candidate);
   if (url !== undefined) openExternal(url);
 };

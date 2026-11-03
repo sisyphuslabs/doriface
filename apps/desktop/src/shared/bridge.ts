@@ -6,6 +6,10 @@ export const Channel = {
   closeWindow: "doriface:close-window",
   /** Main to renderer: show an app path in the one window (the app menu, a new-window click). */
   navigate: "doriface:navigate",
+  /** Main to renderer: a pairing link is waiting; it carries no data. */
+  pairingLinkWaiting: "doriface:pairing-link-waiting",
+  /** Renderer to main: hands over the waiting pairing link's fragment once, or null. */
+  takePairingLink: "doriface:take-pairing-link",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -34,6 +38,8 @@ export interface DorifaceBridge {
   setWindowBackground(color: string): Promise<boolean>;
   /** Closes the window as File > Close Window does; the page's own window.close() would skip the close events. */
   closeWindow(): Promise<void>;
+  /** Calls `listener` with each pairing link fragment the app is opened with (a doriface: link or an in-app click). */
+  onPairingLink(listener: (fragment: string) => void): void;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {

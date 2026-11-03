@@ -10,4 +10,5 @@ export function registerIpc(deps: IpcDeps): void {
     handlers.setWindowBackground(event, candidate),
   );
   ipcMain.handle(Channel.closeWindow, (event) => handlers.closeWindow(event));
+  ipcMain.handle(Channel.takePairingLink, (event) => handlers.takePairingLink(event));
 }
