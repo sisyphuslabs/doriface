@@ -79,7 +79,7 @@ function isKey(key: string): boolean {
 export function normalizeTrigger(text: string, herdrStyle = false): string | null {
   const raw = text.trim().toLowerCase();
   if (raw === "") return null;
-  const parts = herdrStyle ? splitHerdr(raw) : splitGhostty(raw);
+  const parts = splitTrigger(raw, herdrStyle ? "-" : "+");
   const keyPart = parts.at(-1) ?? "";
   const mods = new Set<Mod>();
   for (const part of parts.slice(0, -1)) {
@@ -97,30 +97,15 @@ export function normalizeTrigger(text: string, herdrStyle = false): string | nul
   return [...MOD_ORDER.filter((mod) => mods.has(mod)), key].join("+");
 }
 
-/** "ctrl++" ends with a literal plus; every other "+" separates. */
-function splitGhostty(raw: string): string[] {
-  if (raw.endsWith("++"))
-    return [
-      ...raw
-        .slice(0, -2)
-        .split("+")
-        .filter((part) => part !== ""),
-      "+",
-    ];
-  return raw === "+" ? ["+"] : raw.split("+");
-}
-
-/** "ctrl--" ends with a literal minus. */
-function splitHerdr(raw: string): string[] {
-  if (raw.endsWith("--"))
-    return [
-      ...raw
-        .slice(0, -2)
-        .split("-")
-        .filter((part) => part !== ""),
-      "-",
-    ];
-  return raw === "-" ? ["-"] : raw.split("-");
+/**
+ * Splits on the separator, where a doubled separator at the end is the literal key ("ctrl++",
+ * "ctrl--"). Empty fields are kept so a stray separator ("ctrl+++") fails the modifier check.
+ */
+function splitTrigger(raw: string, separator: string): string[] {
+  if (raw === separator) return [separator];
+  if (!raw.endsWith(separator + separator)) return raw.split(separator);
+  const prefix = raw.slice(0, -2);
+  return [...(prefix === "" ? [] : prefix.split(separator)), separator];
 }
 
 const CODE_KEYS: Readonly<Record<string, string>> = {
@@ -162,7 +147,7 @@ export function triggerFromEvent(
     ? code.slice(3).toLowerCase()
     : /^Digit\d$/.test(code)
       ? code.slice(5)
-      : /^F\d{1,2}$/.test(code)
+      : /^F([1-9]|1[0-2])$/.test(code)
         ? code.toLowerCase()
         : CODE_KEYS[code];
   if (key === undefined) return null;
