@@ -114,6 +114,7 @@ export class AuthorizeIndex {
   readonly #superseded: ReadonlySet<string>;
   readonly #hcIds = new Set<string>();
   readonly #hostIds = new Set<string>();
+  readonly #signPubs = new Set<string>();
 
   constructor(data: IndexData) {
     this.generation = data.generation;
@@ -127,6 +128,7 @@ export class AuthorizeIndex {
       if (member.devicePub !== undefined) this.#overCap.add(member.devicePub);
     }
     for (const member of [...data.members, ...data.overCap]) {
+      this.#signPubs.add(member.signPub);
       this.#hcIds.add(member.hcId);
       this.#hostIds.add(member.hostId);
     }
@@ -153,6 +155,15 @@ export class AuthorizeIndex {
   /** Whether the key is any member's or revoked member's Noise or device key (no device may hold it). */
   claimsKey(key: string): boolean {
     return this.#byNoise.has(key) || this.deviceRefusal(key) !== undefined;
+  }
+
+  /** Members in the view, over-cap ones included: what the 12-member cap counts. */
+  get memberCount(): number {
+    return this.#signPubs.size;
+  }
+
+  isMember(signPub: string): boolean {
+    return this.#signPubs.has(signPub);
   }
 
   isMemberHcId(hcId: string): boolean {
