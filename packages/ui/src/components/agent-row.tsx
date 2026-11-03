@@ -1,6 +1,7 @@
 import { Pin } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import { useRef, type ComponentProps, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
+import { useRowFloors } from "./row-floors.ts";
 import { StatusChip, StatusIndicator, type AgentStatus } from "./status.tsx";
 
 export interface Agent {
@@ -26,19 +27,33 @@ export interface AgentRowProps extends Omit<ComponentProps<"button">, "onSelect"
   readonly className?: string;
 }
 
-/** One agent in the sidebar or the phone list: status glyph, name, detail, machine, age. */
+/**
+ * One agent in the sidebar or the phone list: status glyph, name, detail, machine, age. When the row is short, the
+ * detail gives way first, then the machine, then the name, each down to five characters and an ellipsis (three for
+ * the machine, then the detail, when the row cannot hold every five; see useRowFloors), with its full text as its
+ * title. The age keeps a fixed column so ages line up.
+ */
 export function AgentRow({
   agent,
   selected = false,
   compactBlocked = false,
   onSelect,
   className,
+  ref,
   ...props
 }: AgentRowProps) {
   const quiet = agent.status === "idle" && !selected;
+  const row = useRef<HTMLButtonElement | null>(null);
+  useRowFloors(row, [agent.name, agent.detail, agent.machine].join("\u0000"));
   return (
     <button
       {...props}
+      ref={(node) => {
+        row.current = node;
+        if (typeof ref === "function") return ref(node);
+        if (ref !== null && ref !== undefined) ref.current = node;
+        return undefined;
+      }}
       type="button"
       aria-current={selected ? "true" : undefined}
       onClick={() => onSelect?.(agent.id)}
@@ -57,20 +72,41 @@ export function AgentRow({
         )}
       </span>
       {agent.icon}
-      <span className={cn("max-w-[50%] shrink-0 truncate", quiet ? "text-muted-foreground" : "text-foreground")}>
+      <span
+        title={agent.name}
+        data-floor="name"
+        className={cn("min-w-0 max-w-[50%] truncate", quiet ? "text-muted-foreground" : "text-foreground")}
+      >
         {agent.name}
       </span>
       {agent.detail === undefined ? null : (
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">· {agent.detail}</span>
+        <>
+          <span aria-hidden className="-mx-1.5 shrink-0 text-muted-foreground">
+            ·
+          </span>
+          <span
+            title={agent.detail}
+            data-floor="detail"
+            className="min-w-0 flex-auto shrink-3 truncate text-muted-foreground"
+          >
+            {agent.detail}
+          </span>
+        </>
       )}
       {agent.detail === undefined ? <span className="flex-1" /> : null}
       {agent.machine === undefined ? null : (
-        <span className="shrink-0 text-2xs text-muted-foreground">{agent.machine}</span>
+        <span
+          title={agent.machine}
+          data-floor="machine"
+          className="min-w-0 max-w-[35%] shrink-2 truncate text-2xs text-muted-foreground"
+        >
+          {agent.machine}
+        </span>
       )}
       {agent.status === "blocked" && !compactBlocked ? <StatusChip status="blocked" glyph={false} /> : null}
       {agent.pinned === true ? <Pin aria-label="Pinned" className="size-3 shrink-0 text-muted-foreground" /> : null}
       {agent.age === undefined ? null : (
-        <time data-numeric className="shrink-0 text-xs text-muted-foreground">
+        <time data-numeric className="w-7 shrink-0 text-right text-xs text-muted-foreground">
           {agent.age}
         </time>
       )}

@@ -55,7 +55,9 @@ export function MachineList({
               className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 text-left text-sm text-foreground outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:cursor-default"
             >
               <Icon aria-hidden className={cn("size-4 shrink-0 text-muted-foreground", dim)} />
-              <span className={cn("min-w-0 flex-1 truncate", dim)}>{machine.name}</span>
+              <span title={machine.name} className={cn("min-w-0 flex-1 truncate", dim)}>
+                {machine.name}
+              </span>
               <span className={cn("shrink-0 text-2xs text-muted-foreground", STATE_TONE[machine.state])}>{state}</span>
               <span
                 data-numeric
