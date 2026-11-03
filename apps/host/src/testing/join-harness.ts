@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type InviteDeps, serveJoin } from "../mesh/invite.ts";
 import { type JoinerContext, runJoiner } from "../mesh/join.ts";
-import { MeshLines } from "../mesh/lines.ts";
+import { INVITER_EXPECTS, JOINER_EXPECTS, MeshLines } from "../mesh/lines.ts";
 import { PendingJoins } from "../mesh/pending-joins.ts";
 import { MeshStore } from "../state/mesh.ts";
 import { type Machine, machine } from "./mesh-history.ts";
@@ -44,7 +44,8 @@ export function joinerContext(
 ): JoinerContext {
   const log = (line: string): void => void joiner.logs.push(line);
   const dialed = { hostId: inviter.m.identity.hostId, noisePub: dialedNoise };
-  return { identity: joiner.m.identity, mesh: joiner.mesh, own: ownOf(joiner), dialed, log };
+  const deadline = Date.now() + 60_000;
+  return { identity: joiner.m.identity, mesh: joiner.mesh, own: ownOf(joiner), dialed, deadline, log };
 }
 
 export interface JoinRun {
@@ -57,8 +58,8 @@ export interface JoinRun {
 /** Runs both sides of a join over an in-memory link (no Noise: the protocol is what is under test). */
 export function runJoin(deps: InviteDeps, ctx: JoinerContext, joinerNoise: Uint8Array): JoinRun {
   const [inviterEnd, joinerEnd] = memoryLinkPair();
-  const invited = serveJoin(new MeshLines(inviterEnd), joinerNoise, deps);
-  const joined = runJoiner(new MeshLines(joinerEnd), ctx);
+  const invited = serveJoin(new MeshLines(inviterEnd, INVITER_EXPECTS), joinerNoise, deps);
+  const joined = runJoiner(new MeshLines(joinerEnd, JOINER_EXPECTS), ctx);
   invited.catch(() => undefined);
   joined.catch(() => undefined);
   return { inviterEnd, joinerEnd, invited, joined };

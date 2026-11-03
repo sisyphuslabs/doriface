@@ -53,4 +53,20 @@ describe("control socket", () => {
     }
     expect(await controlIsLive(dir)).toBe(false);
   });
+
+  test("a request's signal aborts once the connection that sent it closes", async () => {
+    const asked = Promise.withResolvers<AbortSignal>();
+    listeners.push(
+      listenControl(dir, (_, closed) => {
+        asked.resolve(closed);
+        return new Promise(() => {});
+      }),
+    );
+    const socket = await Bun.connect({ unix: controlSocketPath(dir), socket: { data() {} } });
+    socket.write('{"op":"mesh-pending"}\n');
+    const closed = await asked.promise;
+    const aborted = new Promise<unknown>((resolve) => closed.addEventListener("abort", () => resolve(closed.reason)));
+    socket.end();
+    expect(String(await aborted)).toContain("the control connection closed");
+  });
 });

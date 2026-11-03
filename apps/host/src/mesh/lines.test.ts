@@ -7,7 +7,7 @@ const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 function pair() {
   const [sender, receiver] = memoryLinkPair();
-  return { sender, receiver, lines: new MeshLines(receiver) };
+  return { sender, receiver, lines: new MeshLines(receiver, ["done", "refused"]) };
 }
 
 describe("mesh stream lines (section 10.2)", () => {

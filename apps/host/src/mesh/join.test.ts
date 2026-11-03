@@ -15,7 +15,7 @@ import {
 } from "../testing/join-harness.ts";
 import { signPubOf } from "../testing/mesh-history.ts";
 import { runJoiner } from "./join.ts";
-import { MeshLines } from "./lines.ts";
+import { INVITER_EXPECTS, JOINER_EXPECTS, MeshLines } from "./lines.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 afterEach(removeSides);
@@ -148,7 +148,11 @@ describe("J-5: the joiner trusts nothing in the welcome it did not check", () =>
   test.each([
     ["for another mesh", "other-mesh", "the welcome is for another mesh"],
     ["without this host's admit", "no-admit", "the welcome does not admit this host with its own card"],
-    ["admitting this host with another Noise key", "stale-noise", "the welcome admits this host with another Noise key"],
+    [
+      "admitting this host with another Noise key",
+      "stale-noise",
+      "the welcome admits this host with another Noise key",
+    ],
   ] as const)("a welcome %s is refused", async (_, kind, reason) => {
     expect(await fakeWelcome(kind)).toBe(reason);
   });
@@ -180,8 +184,8 @@ async function fakeWelcome(kind: "other-mesh" | "no-admit" | "stale-noise"): Pro
   }
   const welcome = kind === "other-mesh" ? (elsewhere.mesh.read()?.records ?? []) : records(a);
   const [inviterEnd, joinerEnd] = memoryLinkPair();
-  const inviter = new MeshLines(inviterEnd);
-  const joined = failure(runJoiner(new MeshLines(joinerEnd), joinerContext(b, a)));
+  const inviter = new MeshLines(inviterEnd, INVITER_EXPECTS);
+  const joined = failure(runJoiner(new MeshLines(joinerEnd, JOINER_EXPECTS), joinerContext(b, a)));
   inviter.send({
     t: "offer",
     mesh: meshId,

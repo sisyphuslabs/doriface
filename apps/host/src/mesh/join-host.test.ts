@@ -90,7 +90,6 @@ describe("J-1: a link join run by the joiner's running host", () => {
     expect(records(a.dir)).toHaveLength(2);
     expect(b.logs).toContain(`mesh: joined mesh ${meshId ?? ""} via ${identity.hostId}`);
     expect(a.logs.some((line) => line.startsWith("mesh: admitted "))).toBe(true);
-    for (const side of [a, b]) expect(side.logs).toContain("mesh: keeping the join's session for sync");
     expect(
       new MeshStore(b.dir, { log: () => {} })
         .authorizeIndex()

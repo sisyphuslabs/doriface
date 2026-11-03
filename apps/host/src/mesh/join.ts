@@ -1,7 +1,14 @@
-import { base64urlEncode, CloseCode, hostIdOf, base64urlDecode, type HostIdentity } from "@doriface/crypto";
-import { door, hashOf, meshIdOf, parseRecord, type Signed, signCard, viewOf } from "@doriface/mesh";
+import {
+  base64urlDecode,
+  base64urlEncode,
+  CloseCode,
+  type HostIdentity,
+  hostIdOf,
+  PAIRING_TTL_MS,
+} from "@doriface/crypto";
+import { door, hashOf, MAX_RECORDS, meshIdOf, parseRecord, type Signed, signCard, viewOf } from "@doriface/mesh";
 import { cardBody, type MeshStore, type OwnCard } from "../state/mesh.ts";
-import { JoinRefused } from "./invite.ts";
+import { byDeadline, JoinRefused } from "./invite.ts";
 import type { MeshLine, MeshLines } from "./lines.ts";
 
 export interface JoinerContext {
@@ -10,21 +17,37 @@ export interface JoinerContext {
   readonly own: OwnCard;
   /** The member this host dialed: the hostId and Noise key it authenticated in the handshake. */
   readonly dialed: { readonly hostId: string; readonly noisePub: Uint8Array };
+  /** Milliseconds since the epoch by which the offer and the whole welcome must have arrived. */
+  readonly deadline: number;
   readonly log: (line: string) => void;
 }
 
+/** An offer lives at most {@link PAIRING_TTL_MS}, and its pending join expires with it; a minute more is for the welcome. */
+export const JOIN_DEADLINE_MS = PAIRING_TTL_MS + 60_000;
+
 type Offer = Extract<MeshLine, { t: "offer" }>;
 
-/** Reads `records` lines until `done`; a `refused` line ends the join with the inviter's reason. */
+/**
+ * Reads `records` lines until `done`, then expects nothing more; a `refused` line ends the join with the inviter's
+ * reason, and more records than a mesh may hold close the session with 4400.
+ */
 async function welcome(
   lines: MeshLines,
-  records: readonly Signed[] = [],
+  records: Signed[] = [],
 ): Promise<{ readonly records: readonly Signed[]; readonly mesh: string }> {
   const line = await lines.next();
-  if (line.t === "records") return welcome(lines, [...records, ...line.records]);
-  if (line.t === "done") return { records, mesh: line.mesh };
+  if (line.t === "done") {
+    lines.expect();
+    return { records, mesh: line.mesh };
+  }
   if (line.t === "refused") throw new JoinRefused(`the inviting member refused: ${line.reason}`);
-  throw new JoinRefused(`unexpected ${line.t} line in the welcome`);
+  if (line.t !== "records") throw new JoinRefused(`unexpected ${line.t} line in the welcome`);
+  records.push(...line.records);
+  if (records.length > MAX_RECORDS) {
+    lines.close(CloseCode.CryptoFailure, "the welcome holds more records than a mesh may");
+    throw new JoinRefused("the welcome holds more records than a mesh may");
+  }
+  return welcome(lines, records);
 }
 
 /**
@@ -67,25 +90,32 @@ export function checkWelcome(records: readonly Signed[], doneMesh: string, offer
 /**
  * The joiner's side of section 4.4 on an open mesh session: answers the offer with this host's card for exactly that
  * mesh, inviter and nonce, checks the welcome, and stores it with `createPrivateJson` (a mesh.json that appeared
- * meanwhile wins and the join fails). A failure closes 4401 (4400 when the inviter sent a malformed line) and stores
- * nothing. Resolves with the mesh id.
+ * meanwhile wins and the join fails). A failure closes 4401 (4400 when the inviter sent a malformed or unexpected line)
+ * and stores nothing; otherwise the join's parser lets go of the session, which stays open for sync. Resolves with the
+ * mesh id.
  */
 export async function runJoiner(lines: MeshLines, ctx: JoinerContext): Promise<string> {
   try {
-    const offer = await lines.next();
-    if (offer.t !== "offer") throw new JoinRefused(`expected an offer, got ${offer.t}`);
-    const body = cardBody(ctx.identity, ctx.own, offer.mesh, offer.inviter, offer.nonce);
-    const sent = signCard(body, ctx.identity.sign.secretKey);
-    lines.send({ t: "card", ...sent });
-    const { records, mesh } = await welcome(lines);
-    checkWelcome(records, mesh, offer, ctx);
-    if (!ctx.mesh.adopt(records, ctx.identity)) throw new JoinRefused("a mesh.json appeared on this host meanwhile");
-    ctx.log(`mesh: joined mesh ${offer.mesh} via ${ctx.dialed.hostId}`);
-    return offer.mesh;
+    return await byDeadline(join(lines, ctx), ctx.deadline, "the inviting member did not welcome this host in time");
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     ctx.log(`mesh: join failed: ${reason}`);
     lines.refuse(CloseCode.UnknownDevice, reason);
     throw error instanceof JoinRefused ? error : new JoinRefused(reason, { cause: error });
   }
+}
+
+async function join(lines: MeshLines, ctx: JoinerContext): Promise<string> {
+  const offer = await lines.next();
+  if (offer.t === "refused") throw new JoinRefused(`the inviting member refused: ${offer.reason}`);
+  if (offer.t !== "offer") throw new JoinRefused(`expected an offer, got ${offer.t}`);
+  const body = cardBody(ctx.identity, ctx.own, offer.mesh, offer.inviter, offer.nonce);
+  lines.send({ t: "card", ...signCard(body, ctx.identity.sign.secretKey) });
+  lines.expect("records", "done", "refused");
+  const { records, mesh } = await welcome(lines);
+  checkWelcome(records, mesh, offer, ctx);
+  if (!ctx.mesh.adopt(records, ctx.identity)) throw new JoinRefused("a mesh.json appeared on this host meanwhile");
+  lines.detach();
+  ctx.log(`mesh: joined mesh ${offer.mesh} via ${ctx.dialed.hostId}`);
+  return offer.mesh;
 }
