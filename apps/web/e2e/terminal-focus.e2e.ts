@@ -45,6 +45,14 @@ test("dismissing the palette gives keyboard focus back to the terminal", async (
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeHidden();
   await expect.poll(() => focusedAddress(page)).toBe(await opened.getAttribute("data-terminal"));
+
+  // The backdrop is the other way to dismiss it with a pointer.
+  await page.getByRole("button", { name: "Command palette" }).first().click();
+  await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
+  // The top-left corner is backdrop: the palette sits centred near the top.
+  await page.mouse.click(5, 5);
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeHidden();
+  await expect.poll(() => focusedAddress(page)).toBe(await opened.getAttribute("data-terminal"));
 });
 
 test("dismissing the palette over the paste dialog leaves focus in that dialog, not the shell behind it", async ({
@@ -71,4 +79,25 @@ test("dismissing the palette over the paste dialog leaves focus in that dialog, 
   await expect.poll(() => paste.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
   await page.keyboard.type("qqleak");
   await expect(terminal).not.toContainText("qqleak");
+});
+
+test("closing the palette with its shortcut or by running an action gives focus back to the terminal", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const opened = await openNewTerminal(page);
+  const address = await opened.getAttribute("data-terminal");
+  const palette = page.getByRole("combobox", { name: "Command" });
+
+  await opened.getByRole("textbox").focus();
+  await page.keyboard.press("ControlOrMeta+Shift+P");
+  await expect(palette).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+Shift+P");
+  await expect(palette).toBeHidden();
+  await expect.poll(() => focusedAddress(page)).toBe(address);
+
+  await page.keyboard.press("ControlOrMeta+Shift+P");
+  await page.getByRole("option", { name: /^Larger terminal text/ }).click();
+  await expect(palette).toBeHidden();
+  await expect.poll(() => focusedAddress(page)).toBe(address);
 });

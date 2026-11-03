@@ -27,11 +27,7 @@ export function Palette({ terminals, host, route, actions, onOpenTerminal, onClo
     return paletteCommands({ terminals, host, route, actions, platform, keymap: resolveKeymap(platform, overrides) });
   }, [terminals, host, route, actions, overrides]);
   const frame = useRef<HTMLDivElement>(null);
-  const markDismissed = useOverlayFocus(frame, '[role="combobox"]');
-  const dismiss = (): void => {
-    markDismissed();
-    onClose();
-  };
+  useOverlayFocus(frame, '[role="combobox"]');
   const run = (id: string): void => {
     const choice = choiceOf(id);
     // An action nobody took leaves the palette open on its row instead of closing on nothing.
@@ -42,7 +38,7 @@ export function Palette({ terminals, host, route, actions, onOpenTerminal, onClo
   };
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40" aria-hidden onClick={dismiss} />
+      <div className="fixed inset-0 z-40 bg-black/40" aria-hidden onClick={onClose} />
       <div
         role="dialog"
         aria-modal
@@ -51,11 +47,11 @@ export function Palette({ terminals, host, route, actions, onOpenTerminal, onClo
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.stopPropagation();
-          dismiss();
+          onClose();
         }}
         className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-3 pt-3 md:pt-[12vh] [&>*]:pointer-events-auto"
       >
-        <CommandPalette commands={commands} onRun={run} onCancel={dismiss} />
+        <CommandPalette commands={commands} onRun={run} onCancel={onClose} />
       </div>
     </>
   );

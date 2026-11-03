@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useEffect, type RefObject } from "react";
 
 /** Another modal still open once this overlay is gone, such as the terminal's paste dialog. */
 const OPEN_MODAL = '[role="dialog"][aria-modal="true"], [role="alertdialog"]';
@@ -29,11 +29,10 @@ function restoreTargets(opener: Element | null): (Element | null)[] {
 /**
  * While the overlay is mounted it owns the keyboard: focus starts on its `selector` element, and
  * anything that takes focus outside it (a terminal whose renderer focuses itself as it starts)
- * hands it straight back. Returns `dismiss`: call it when the overlay is cancelled, and focus goes
- * to the active terminal once it unmounts, or else back to what opened it.
+ * hands it straight back. Once it unmounts, focus left on the page body (it closed under its own
+ * input) goes back: see restoreTargets. A row that opened a terminal has already moved focus there.
  */
-export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: string): () => void {
-  const dismissed = useRef(false);
+export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: string): void {
   useEffect(() => {
     const opener = document.activeElement;
     const target = (): HTMLElement | null => root.current?.querySelector<HTMLElement>(selector) ?? null;
@@ -45,11 +44,9 @@ export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: s
     document.addEventListener("focusin", keep);
     return () => {
       document.removeEventListener("focusin", keep);
-      if (!dismissed.current) return;
+      const active = document.activeElement;
+      if (active !== null && active !== document.body) return;
       restoreTargets(opener).find(isUsable)?.focus();
     };
   }, [root, selector]);
-  return useCallback(() => {
-    dismissed.current = true;
-  }, []);
 }
