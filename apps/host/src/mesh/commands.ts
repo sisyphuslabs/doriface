@@ -118,10 +118,17 @@ export class MeshCommands {
     });
     const others = [...view.members].filter((key) => key !== this.#self);
     const confirmed =
-      record === undefined || others.length === 0 ? [] : await this.deps.hooks.push([record], PUSH_WITHIN_MS);
+      record === undefined || others.length === 0
+        ? []
+        : await this.deps.hooks.push([record], PUSH_WITHIN_MS).catch((error: unknown) => {
+            this.deps.log(`mesh: pushing this host's leave failed, so no member confirmed it: ${String(error)}`);
+            return [];
+          });
     withStateLock(this.deps.stateDir, () => rmSync(join(this.deps.stateDir, MESH_FILE), { force: true }));
     this.deps.closeRevoked();
-    await this.deps.hooks.left();
+    await this.deps.hooks.left().catch((error: unknown) => {
+      this.deps.log(`mesh: removing this host's mesh machines after leaving failed: ${String(error)}`);
+    });
     const name = view.name.get(this.#self) ?? this.deps.identity.hostId;
     return {
       signed: record !== undefined,

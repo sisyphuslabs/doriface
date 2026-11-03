@@ -1,4 +1,5 @@
 import { requestControl } from "../control.ts";
+import { PUSH_WITHIN_MS } from "../mesh/commands.ts";
 import { type MemberRef, parseLeaveReply, parseRenameReply, parseRevokeReply } from "../mesh/command-replies.ts";
 import { printable } from "./devices.ts";
 
@@ -65,7 +66,7 @@ export async function renameMember(context: ChangeContext, member: string, name:
   return 0;
 }
 
-export async function leaveMesh(context: ChangeContext) {
+export async function leaveMesh(context: ChangeContext): Promise<number> {
   const answer = await ask(context, { op: "mesh-leave" });
   if (answer === null) return 1;
   const reply = parseLeaveReply(answer);
@@ -78,7 +79,7 @@ export async function leaveMesh(context: ChangeContext) {
       `left the mesh: ${reply.confirmed.length} of ${reply.members.length} members confirmed (${names(reply.confirmed)})`,
     );
   } else {
-    line(context, `left the mesh, but reached no member within 30 s (${names(reply.members)})`);
+    line(context, `left the mesh, but reached no member within ${PUSH_WITHIN_MS / 1000} s (${names(reply.members)})`);
     if (reply.revokeCommand !== null) line(context, `run this on one of them: ${reply.revokeCommand}`);
   }
   return 0;
