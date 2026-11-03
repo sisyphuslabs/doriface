@@ -141,6 +141,11 @@ export class MeshLines {
     ];
   }
 
+  /** Why the lines ended (the session closed, or they were detached); undefined while they are open. */
+  get closed(): Error | undefined {
+    return this.#closed;
+  }
+
   /** The line types the protocol state consumes from now on; any other known line closes the session with 4400. */
   expect(...types: LineType[]): void {
     this.#expected = new Set(types);

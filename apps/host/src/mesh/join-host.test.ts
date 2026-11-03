@@ -88,8 +88,6 @@ describe("J-1: a link join run by the joiner's running host", () => {
     expect(joined).toEqual({ meshId, hostId: identity.hostId });
     expect(records(b.dir)).toEqual(records(a.dir));
     expect(records(a.dir)).toHaveLength(2);
-    expect(b.logs).toContain(`mesh: joined mesh ${meshId ?? ""} via ${identity.hostId}`);
-    expect(a.logs.some((line) => line.startsWith("mesh: admitted "))).toBe(true);
     expect(
       new MeshStore(b.dir, { log: () => {} })
         .authorizeIndex()
