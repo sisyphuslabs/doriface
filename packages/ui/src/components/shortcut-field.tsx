@@ -44,27 +44,24 @@ export function ShortcutField({
   return (
     <div className={cn("flex flex-col items-end gap-2", className)}>
       <div className="flex items-center gap-1">
-        {state === "idle" ? (
-          <button
-            type="button"
-            aria-label={`${action}: ${keys.join(" ")}. Record a new shortcut`}
-            onClick={onRecord}
-            className="flex h-(--control-sm) items-center rounded-md border border-input px-1.5 outline-none hover:bg-hover focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <Kbd keys={keys} persistent />
-          </button>
-        ) : (
-          <span
-            role="status"
-            className="flex h-(--control-sm) min-w-32 items-center gap-1.5 rounded-md border border-ring bg-surface px-2 text-sm text-foreground"
-          >
-            {pending.length === 0 ? (
-              <span className="text-muted-foreground">Press keys…</span>
-            ) : (
-              <Kbd keys={pending} persistent />
-            )}
-          </span>
-        )}
+        <button
+          type="button"
+          aria-label={state === "idle" ? `${action}: ${keys.join(" ")}. Record a new shortcut` : `${action}: recording`}
+          onClick={state === "idle" ? onRecord : undefined}
+          className={cn(
+            "flex h-(--control-sm) items-center rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-ring",
+            state === "idle"
+              ? "border-input px-1.5 hover:bg-hover"
+              : "min-w-32 gap-1.5 border-ring bg-surface px-2 text-sm text-foreground",
+          )}
+        >
+          {state === "idle" ? <Kbd keys={keys} persistent /> : null}
+          {state !== "idle" && pending.length === 0 ? <span className="text-muted-foreground">Press keys…</span> : null}
+          {state !== "idle" && pending.length > 0 ? <Kbd keys={pending} persistent /> : null}
+        </button>
+        <span role="status" className="sr-only">
+          {state === "recording" ? "Press keys…" : ""}
+        </span>
         {state === "idle" && modified ? (
           <Button
             variant="ghost"
