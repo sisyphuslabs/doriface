@@ -46,3 +46,29 @@ test("dismissing the palette gives keyboard focus back to the terminal", async (
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeHidden();
   await expect.poll(() => focusedAddress(page)).toBe(await opened.getAttribute("data-terminal"));
 });
+
+test("dismissing the palette over the paste dialog leaves focus in that dialog, not the shell behind it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  const input = terminal.getByRole("textbox");
+  await input.focus();
+  await input.evaluate((el) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "echo one\necho two\n");
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  const paste = page.getByRole("dialog", { name: /Paste 3 lines/ });
+  await expect(paste).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Shift+P");
+  // The paste dialog marks everything outside it aria-hidden, the palette included.
+  const palette = page.getByRole("combobox", { name: "Command", includeHidden: true });
+  await expect(palette).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(paste).toBeVisible();
+  await expect.poll(() => paste.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+  await page.keyboard.type("qqleak");
+  await expect(terminal).not.toContainText("qqleak");
+});
