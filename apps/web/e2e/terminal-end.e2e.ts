@@ -82,3 +82,41 @@ test("keys typed offline for a kept program that is lost and restarted meanwhile
   await expect(page.getByText("Typed input was not sent because the program restarted")).toBeVisible();
 });
 
+test("a reconnect inside a kept program's restart shows it restarting, not an error, then attaches", async ({
+  page,
+}) => {
+  // Every attach error the page ever renders, however briefly.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    Object.assign(window, { attachErrors: seen });
+    new MutationObserver(() => {
+      for (const node of document.querySelectorAll("p")) {
+        const text = node.textContent ?? "";
+        if (text.startsWith("Could not open") && !seen.includes(text)) seen.push(text);
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  hc(["keep", address]);
+  const shellPid = pidOf(address);
+  if (shellPid === null) throw new Error(`${address} has no program`);
+  await terminal.evaluate((element) => element.setAttribute("data-before-restart", ""));
+
+  await socket.drop(true);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
+  process.kill(shellPid, "SIGKILL");
+  // Lost, waiting for its new shell: the reconnect lands in this window.
+  await expect.poll(() => pidOf(address), { timeout: 15_000 }).toBeNull();
+  socket.restore();
+
+  const restarted = page.locator(`[data-terminal="${address}"]:not([data-before-restart])`);
+  await expect(restarted).toContainText("$", { timeout: 30_000 });
+  await restarted.getByRole("textbox").focus();
+  await page.keyboard.type("echo back-$((6*7))");
+  await page.keyboard.press("Enter");
+  await expect(restarted).toContainText("back-42", { timeout: 15_000 });
+  expect(await page.evaluate(() => Reflect.get(window, "attachErrors"))).toEqual([]);
+});
