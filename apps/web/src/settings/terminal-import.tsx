@@ -40,7 +40,9 @@ export function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedConf
             variant="primary"
             disabled={parsed.config.size === 0}
             onClick={() => {
-              void terminalConfigStore.update(mergeConfig(terminalConfigStore.config, parsed.config));
+              void terminalConfigStore.loaded.then(() =>
+                terminalConfigStore.update(mergeConfig(terminalConfigStore.config, parsed.config)),
+              );
               onClose();
             }}
           >
@@ -87,7 +89,14 @@ export function ImportExport() {
       <Button size="sm" onClick={pick}>
         Import Ghostty config…
       </Button>
-      <Button size="sm" onClick={() => download("ghostty-config", serializeGhosttyConfig(terminalConfigStore.config))}>
+      <Button
+        size="sm"
+        onClick={() =>
+          void terminalConfigStore.loaded.then(() =>
+            download("ghostty-config", serializeGhosttyConfig(terminalConfigStore.config)),
+          )
+        }
+      >
         Export
       </Button>
       {parsed === null ? null : <ImportPreview parsed={parsed} onClose={() => setParsed(null)} />}

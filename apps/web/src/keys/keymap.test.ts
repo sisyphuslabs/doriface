@@ -107,6 +107,16 @@ describe("KeymapStore", () => {
     expect(checkBinding("super+t", null).ok).toBe(true);
   });
 
+  test("a keymap from a newer build is left untouched", async () => {
+    const storage = memoryStore();
+    const newer = { version: KEYMAP_VERSION + 1, bindings: [["super+shift+n", "tab.new"]] };
+    await storage.put("keymap", newer);
+    const store = new KeymapStore(storage);
+    await store.loaded;
+    expect(store.overrides.size).toBe(0);
+    expect(await storage.get("keymap")).toEqual(newer);
+  });
+
   test("backs up an older version before migrating it", async () => {
     const storage = memoryStore();
     await storage.put("keymap", {

@@ -32,6 +32,7 @@ function migrate(stored: Stored): Overrides {
 
 export class KeymapStore {
   #overrides: Overrides = NO_OVERRIDES;
+  #dirty = false;
   #listeners = new Set<() => void>();
   readonly #storage: KeyValueStore;
   readonly loaded: Promise<void>;
@@ -56,6 +57,7 @@ export class KeymapStore {
       const checked = checkBinding(trigger, action);
       if (!checked.ok) return Promise.reject(new Error(checked.reason));
     }
+    this.#dirty = true;
     this.#set(overrides);
     const stored: Stored = { version: KEYMAP_VERSION, bindings: [...overrides] };
     return this.#storage.put(KEY, stored);
@@ -63,10 +65,13 @@ export class KeymapStore {
 
   async #load(): Promise<void> {
     const raw = await this.#storage.get(KEY).catch(() => undefined);
-    if (!isStored(raw)) return;
-    if (raw.version !== KEYMAP_VERSION) {
+    if (this.#dirty || !isStored(raw)) return;
+    // A newer build's keymap is left as it is, so going back a version never rewrites it.
+    if (raw.version > KEYMAP_VERSION) return;
+    if (raw.version < KEYMAP_VERSION) {
       await this.#storage.put(`${KEY}.backup.v${raw.version}`, raw);
       const migrated = migrate(raw);
+      if (this.#dirty) return;
       await this.#storage.put(KEY, { version: KEYMAP_VERSION, bindings: [...migrated] });
       this.#set(migrated);
       return;
