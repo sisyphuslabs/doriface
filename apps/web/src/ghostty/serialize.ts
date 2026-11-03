@@ -1,7 +1,8 @@
 import { KEYS } from "./keys.ts";
 import type { TerminalConfig } from "./config.ts";
 
-const quote = (value: string): string => (/^\s|\s$|^"/.test(value) ? `"${value}"` : value);
+const quote = (value: string): string =>
+  /^\s|\s$|["\\]/.test(value) ? `"${value.replace(/[\\"]/g, (char) => `\\${char}`)}"` : value;
 
 /** Writes the non-default keys as a Ghostty config file, in schema order, one line per value. */
 export function serializeGhosttyConfig(config: TerminalConfig): string {
