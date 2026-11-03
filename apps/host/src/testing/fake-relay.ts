@@ -63,7 +63,6 @@ export class FakeRelay {
   readonly answers = new Inbox<{ readonly hostId: string; readonly verified: boolean }>();
   readonly pairSlots = new Inbox<PairSlotSeen>();
   readonly acks = new Inbox<number>();
-  readonly pings = new Inbox<string>();
   /** Binary bytes sent to the current uplink, challenge included: what its `a:<n>` acks count. */
   sentToHost = 0;
   readonly #server: Server<Uplink>;
@@ -146,7 +145,7 @@ export class FakeRelay {
 
   #receive(ws: ServerWebSocket<Uplink>, message: string | Uint8Array): void {
     if (typeof message === "string") {
-      if (message === PING) return this.pings.push(message);
+      if (message === PING) return;
       const total = parseAck(message);
       if (total === undefined) throw new Error(`unexpected text ${message}`);
       return this.acks.push(total);
