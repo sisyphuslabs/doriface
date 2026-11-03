@@ -72,7 +72,7 @@ export function StatusSpecimens() {
               ))}
             </div>
             <div className="overflow-hidden rounded-lg border border-border">
-              <TabBar tabs={TABS} activeId="t1" />
+              <TabBar tabs={TABS} activeId="t1" newTabKeys={["⌘", "T"]} />
             </div>
           </div>
         </div>
