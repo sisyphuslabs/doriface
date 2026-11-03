@@ -1,4 +1,5 @@
 import { CloseCode, generateX25519 } from "@doriface/crypto";
+import { memoryLinkPair } from "@doriface/crypto/testing";
 import { parseRecord, type Signed, signCard, signRecord } from "@doriface/mesh";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cardBody } from "../state/mesh.ts";
@@ -13,6 +14,8 @@ import {
   type Side,
 } from "../testing/join-harness.ts";
 import { signPubOf } from "../testing/mesh-history.ts";
+import { runJoiner } from "./join.ts";
+import { MeshLines } from "./lines.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 afterEach(removeSides);
@@ -142,28 +145,29 @@ describe("J-5: the joiner trusts nothing in the welcome it did not check", () =>
     expect(run.joinerEnd.closeCode).toBe(CloseCode.UnknownDevice);
   });
 
-  test("a welcome for another mesh, one without this host's admit, and one admitting another card of it are refused", async () => {
-    const outcomes = await Promise.all([fakeWelcome("other-mesh"), fakeWelcome("no-admit"), fakeWelcome("old-card")]);
-    expect(outcomes).toEqual([
-      "the welcome is for another mesh",
-      "the welcome does not admit this host with its own card",
-      "the welcome does not admit this host with its own card",
-    ]);
+  test.each([
+    ["for another mesh", "other-mesh", "the welcome is for another mesh"],
+    ["without this host's admit", "no-admit", "the welcome does not admit this host with its own card"],
+    ["admitting this host with another Noise key", "stale-noise", "the welcome admits this host with another Noise key"],
+  ] as const)("a welcome %s is refused", async (_, kind, reason) => {
+    expect(await fakeWelcome(kind)).toBe(reason);
   });
 });
 
-const noise = (s: Side): string => Buffer.from(s.m.identity.noise.publicKey).toString("base64url");
+const noiseOf = (keys: { readonly publicKey: Uint8Array }): string => Buffer.from(keys.publicKey).toString("base64url");
+const noise = (s: Side): string => noiseOf(s.m.identity.noise);
 const hashOfSigned = (record: Signed | undefined): string =>
   record === undefined ? "" : new Bun.CryptoHasher("sha256").update(record.body).digest("base64url");
 
 /** A dishonest inviter: answers the card with a welcome built from `a`'s real mesh but bent one way. */
-async function fakeWelcome(kind: "other-mesh" | "no-admit" | "old-card"): Promise<string> {
+async function fakeWelcome(kind: "other-mesh" | "no-admit" | "stale-noise"): Promise<string> {
   const [a, b, elsewhere] = [side("alpha"), side("beta"), side("other")];
   a.mesh.found(a.m.identity, ownOf(a));
   elsewhere.mesh.found(elsewhere.m.identity, ownOf(elsewhere));
   const meshId = a.mesh.read()?.meshId ?? "";
-  if (kind === "old-card") {
-    const stale = signCard(cardBody(b.m.identity, ownOf(b), meshId, signPubOf(a.m)), b.m.identity.sign.secretKey);
+  if (kind === "stale-noise") {
+    const body = { ...cardBody(b.m.identity, ownOf(b), meshId, signPubOf(a.m)), noisePub: noiseOf(generateX25519()) };
+    const stale = signCard(body, b.m.identity.sign.secretKey);
     a.mesh.sign(a.m.identity, (n, prev) => ({
       v: 2,
       mesh: meshId,
@@ -175,9 +179,6 @@ async function fakeWelcome(kind: "other-mesh" | "no-admit" | "old-card"): Promis
     }));
   }
   const welcome = kind === "other-mesh" ? (elsewhere.mesh.read()?.records ?? []) : records(a);
-  const { memoryLinkPair } = await import("@doriface/crypto/testing");
-  const { MeshLines } = await import("./lines.ts");
-  const { runJoiner } = await import("./join.ts");
   const [inviterEnd, joinerEnd] = memoryLinkPair();
   const inviter = new MeshLines(inviterEnd);
   const joined = failure(runJoiner(new MeshLines(joinerEnd), joinerContext(b, a)));
