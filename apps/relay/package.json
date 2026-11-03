@@ -14,6 +14,8 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261102.1",
+    "@doriface/client": "workspace:*",
+    "@doriface/crypto": "workspace:*",
     "@doriface/host": "workspace:*",
     "@doriface/protocol": "workspace:*",
     "wrangler": "4.156.2"
