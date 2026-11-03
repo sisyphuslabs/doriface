@@ -27,18 +27,19 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
     found.push({ rule, at: parts.join(" > "), text, px: Math.round(px) });
   };
   const scrolling = new Set(["auto", "scroll"]);
-  // Ink past the em box, per side: the ring on Å reaches 0.134 em in JetBrains Mono, 0.105 em in Helvetica and
-  // 0.04-0.10 em in the system UI fonts (Chromium TextMetrics, centred em box). 0.14 em covers them all, and the
-  // 1.28 em glyph box it gives still fits a `leading-tight` (1.25) line within the slack. Only words that carry a mark
-  // get it: unmarked glyphs sit in the em box, which a status badge's "!" fills exactly.
-  const accent = 0.14;
+  // Marks reach past the em box by how much depends on the mark and the font: 0.07-0.13 em for the ring on Å, 0.16-0.28
+  // em for stacked Vietnamese marks (Ẫ, Ǻ) and Thai tone marks (Chromium TextMetrics, centred em box). So a word that
+  // carries a mark is measured by its own ink as well. Unmarked glyphs sit in the em box, which a status badge's "!"
+  // fills exactly, so they keep it.
   const marked = /\p{M}/u;
+  const pen = document.createElement("canvas").getContext("2d");
+  if (pen === null) throw new Error("the overflow check needs a 2D canvas to measure ink");
   // A title helps only the text it carries: the truncating element's own, or its control's when that names the text.
   const control = 'button, a[href], label, summary, [role="button"], [role="link"], [role="tab"], [role="option"]';
   const titled = (el: Element): boolean => {
     const title = el.parentElement?.closest(control)?.getAttribute("title");
     const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
-    return el.hasAttribute("title") || (title != null && text !== "" && title.includes(text));
+    return (el.getAttribute("title") ?? "") !== "" || (title != null && text !== "" && title.includes(text));
   };
   // Replaced elements are atoms even when inline: they are measured by their box, never through their children.
   const replaced = /^(IMG|VIDEO|CANVAS|IFRAME|EMBED|OBJECT)$/;
@@ -68,11 +69,20 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
       x = Math.max(x, inner.left - rect.left, rect.right - inner.right);
       y = Math.max(y, inner.top - rect.top, rect.bottom - inner.bottom);
     };
-    // A text or inline box is the font's whole ascent and descent; glyphs sit in its em box plus the accent allowance.
+    // A text or inline box is the font's whole ascent and descent; glyphs sit in its em box, and marks in their ink.
     const glyphs = (rect: DOMRect, of: Element, text: string): DOMRect => {
-      const widen = marked.test(text.normalize("NFD")) ? accent : 0;
-      const inset = Math.max(0, (rect.height - Number.parseFloat(getComputedStyle(of).fontSize) * (1 + 2 * widen)) / 2);
-      return new DOMRect(rect.x, rect.y + inset, rect.width, rect.height - 2 * inset);
+      const font = getComputedStyle(of);
+      const inset = Math.max(0, (rect.height - Number.parseFloat(font.fontSize)) / 2);
+      let top = rect.top + inset;
+      let bottom = rect.bottom - inset;
+      if (marked.test(text.normalize("NFD"))) {
+        pen.font = `${font.fontStyle} ${font.fontWeight} ${font.fontSize} ${font.fontFamily}`;
+        const metrics = pen.measureText(text);
+        const baseline = rect.top + metrics.fontBoundingBoxAscent;
+        top = Math.min(top, baseline - metrics.actualBoundingBoxAscent);
+        bottom = Math.max(bottom, baseline + metrics.actualBoundingBoxDescent);
+      }
+      return new DOMRect(rect.x, top, rect.width, bottom - top);
     };
     // Each word's line fragments: the spaces a line wraps at hang past the box without being drawn.
     const inked = (text: Text): DOMRect[] =>
