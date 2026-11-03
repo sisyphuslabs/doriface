@@ -47,6 +47,6 @@ The per-IP limit (60 WebSocket upgrades per minute) is the `ratelimits` entry in
 bun test apps/relay packages/relay-client
 ```
 
-Locally, workerd delays the TCP close of a
+The end-to-end test also needs herdr-core (`HC_BIN` or `hc` on PATH). Locally, workerd delays the TCP close of a
 hibernatable socket that never sent a data frame by about 10 seconds (cloudflare/workerd#7566), so tests that close
 sessions from the relay side send one frame first, as every real client does.
