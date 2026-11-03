@@ -53,10 +53,15 @@ describe("machineEntries", () => {
     ]);
   });
 
-  test("the refresh key changes only when the set of machines with terminals changes", () => {
-    expect(machineKey([terminal("t1"), terminal("boxb/t1"), terminal("boxb/t2")])).toBe("boxb");
-    expect(machineKey([terminal("lab/t1"), terminal("boxb/t9")])).toBe("boxb lab");
-    expect(machineKey([terminal("t1")])).toBe("");
+  test("the refresh key changes when an added machine's terminals stop being live, as they do when its line drops", () => {
+    const live = [terminal("t1"), terminal("boxb/t1"), terminal("boxb/t2")];
+    const dropped = [
+      terminal("t1"),
+      terminal("boxb/t1", { state: "finished" }),
+      terminal("boxb/t2", { state: "finished" }),
+    ];
+    expect(machineKey(dropped)).not.toBe(machineKey(live));
+    expect(machineKey([...live, terminal("t9", { state: "finished" })])).toBe(machineKey(live));
   });
 });
 
