@@ -15,8 +15,10 @@ import {
   MuxError,
   MuxType,
   normalizePairCode,
+  parseAck,
   pairSlotOf,
   PairSlotStatus,
+  relayOriginOf,
   toBase64Url,
 } from "./wire/index.ts";
 
@@ -65,11 +67,18 @@ describe("host identity", () => {
     expect(await hostIdOf(signPub)).toMatch(/^[a-z2-7]{26}$/);
   });
 
-  test("the signed message is context, hostId and challenge concatenated", () => {
+  test("the signed message is context, relay origin, hostId and challenge concatenated", () => {
     const challenge = new Uint8Array(32).fill(7);
-    expect(authMessage("abc", challenge)).toEqual(
-      new Uint8Array([...encoder.encode("doriface-relay-v1abc"), ...challenge]),
+    expect(authMessage("wss://r.example", "abc", challenge)).toEqual(
+      new Uint8Array([...encoder.encode("doriface-relay-v1wss://r.exampleabc"), ...challenge]),
     );
+  });
+
+  test("the relay origin is the dialed scheme and host with the default port dropped", () => {
+    expect(relayOriginOf("https://relay-doriface.omo.dev")).toBe("wss://relay-doriface.omo.dev");
+    expect(relayOriginOf("wss://relay-doriface.omo.dev:443/v1/host/x")).toBe("wss://relay-doriface.omo.dev");
+    expect(relayOriginOf("http://127.0.0.1:8787/v1/host/x")).toBe("ws://127.0.0.1:8787");
+    expect(() => relayOriginOf("ftp://relay.example")).toThrow();
   });
 
   test("base64url round-trips and rejects other alphabets", () => {
@@ -77,6 +86,16 @@ describe("host identity", () => {
     expect(fromBase64Url(toBase64Url(bytes))).toEqual(bytes);
     expect(toBase64Url(new Uint8Array([0xfb, 0xff]))).toBe("-_8");
     expect(fromBase64Url("a+b/")).toBeUndefined();
+  });
+});
+
+describe("flow-control acks", () => {
+  test("parse the a:<total> text and nothing else", () => {
+    expect(parseAck("a:0")).toBe(0);
+    expect(parseAck("a:65536")).toBe(65_536);
+    for (const bad of ["a:", "a:01", "a:-1", "a:1.5", "b:1", "ping", "a:99999999999999999"]) {
+      expect(parseAck(bad)).toBeUndefined();
+    }
   });
 });
 

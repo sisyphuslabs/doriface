@@ -1,6 +1,16 @@
 export { fromBase64Url, toBase64Url } from "./base64url.ts";
 export { CloseCode, sendableCloseCode } from "./close-codes.ts";
 export {
+  ACK_INTERVAL_BYTES,
+  encodeAck,
+  IDLE_TIMEOUT_MS,
+  MAX_UNACKED_BYTES,
+  parseAck,
+  PING,
+  PING_INTERVAL_MS,
+  PONG,
+} from "./flow.ts";
+export {
   AUTH_ANSWER_BYTES,
   AUTH_CONTEXT,
   authMessage,
@@ -9,6 +19,7 @@ export {
   encodeAuthAnswer,
   HOST_ID_PATTERN,
   hostIdOf,
+  relayOriginOf,
   SIGN_PUB_BYTES,
   SIGNATURE_BYTES,
 } from "./identity.ts";
@@ -34,6 +45,7 @@ export {
 export {
   decodePairSlotReply,
   decodePairSlotRequest,
+  encodePairSlotClear,
   encodePairSlotReply,
   encodePairSlotRequest,
   NOISE_STATIC_PUB_BYTES,
