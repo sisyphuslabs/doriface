@@ -9,7 +9,7 @@ describe("startRelayedHost", () => {
   test("an uplink that never connects rejects within its bound and tears everything down", async () => {
     const before = new Set(scratchDirs());
     const startedAt = performance.now();
-    const failure = await startRelayedHost("doriface-relay-unreachable", {
+    const failure = await startRelayedHost("relay-unreachable", {
       hostRelayUrl: "http://127.0.0.1:9",
       uplinkTimeoutMs: 2_000,
     }).then(

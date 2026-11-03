@@ -36,7 +36,7 @@ function readerOf(link: SecureLink): ByteReader {
 }
 
 beforeAll(async () => {
-  relayed = await startRelayedHost("doriface-relay-e2e", {
+  relayed = await startRelayedHost("relay-e2e", {
     wrapSockets: (base) => capturingSockets(captureFile, base),
   });
   const { url, code } = await relayed.pairingOffer();

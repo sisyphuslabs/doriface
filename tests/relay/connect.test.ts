@@ -23,7 +23,7 @@ function host(): RelayedHost {
 }
 
 beforeAll(async () => {
-  relayed = await startRelayedHost("doriface-relay-connect");
+  relayed = await startRelayedHost("relay-connect");
   await relayed.pair(phone, "phone");
 }, 120_000);
 
