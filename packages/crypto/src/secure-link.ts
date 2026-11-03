@@ -1,7 +1,8 @@
-import { prologueFor, type KeyPair } from "./identity.ts";
+import { prologueFor } from "./identity.ts";
 import { type ByteLink, CloseCode, closeCodeOf, SecureLinkError } from "./link.ts";
 import { Handshake, type Pattern } from "./noise/handshake.ts";
 import { type SecureLink, SecuredLink } from "./secured-link.ts";
+import type { StaticKey } from "./static-key.ts";
 import { REKEY_INTERVAL, Transport } from "./transport.ts";
 
 export const HANDSHAKE_TIMEOUT_MS = 10_000;
@@ -9,7 +10,8 @@ const EMPTY = new Uint8Array(0);
 
 interface CommonOptions {
   readonly hostId: string;
-  readonly staticKey: KeyPair;
+  /** The local static key (raw bytes for the host, possibly a non-extractable WebCrypto key on the web). */
+  readonly staticKey: StaticKey;
   /** Closes with 4408 when the handshake has not finished in time; default {@link HANDSHAKE_TIMEOUT_MS}. */
   readonly timeoutMs?: number | undefined;
   /** Messages per direction between rekeys; the contract's 2^20 unless a test needs a short cycle. */
@@ -45,9 +47,13 @@ export interface ResponderOptions extends CommonOptions {
 
 export type SecureLinkOptions = InitiatorOptions | ResponderOptions;
 
+const failure = (code: number, message: string, cause?: unknown): SecureLinkError =>
+  new SecureLinkError(code, message, cause === undefined ? undefined : { cause });
+
 /**
- * Runs the Noise handshake over `link` and resolves with the encrypted link. The initiator's first transport record
- * (empty) confirms the keys, so the responder resolves only once the peer provably holds them: a replayed message 1
+ * Runs the Noise handshake over `link` and resolves with the encrypted link. Messages are processed strictly in order
+ * even though the static DH is async. The initiator's first transport record (empty) confirms the keys, so the
+ * responder resolves only once the peer provably holds them: a replayed message 1
  * never gets that far. Any failure closes `link` with its code (4400 crypto, 4401 refused, 4408 timeout) and rejects
  * with a {@link SecureLinkError}.
  */
@@ -55,23 +61,26 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
   const settled = Promise.withResolvers<SecureLink>();
   const prologue = prologueFor(options.hostId);
   const rekeyInterval = options.rekeyInterval ?? REKEY_INTERVAL;
+  const inbox: Uint8Array[] = [];
   let session: SecuredLink | undefined;
-  let pending: SecuredLink | undefined;
   let done = false;
-  let onMessage: ((bytes: Uint8Array) => void) | undefined;
+  let draining = false;
+  let step: ((bytes: Uint8Array) => Promise<void>) | undefined;
 
   const fail = (error: SecureLinkError): void => {
     if (done) return;
     done = true;
     clearTimeout(timer);
+    inbox.length = 0;
     if (error.code !== undefined) link.close(error.code, error.message);
     settled.reject(error);
   };
-  const guard = (code: number, step: () => void): void => {
+  const guarded = (fn: (bytes: Uint8Array) => Promise<void>) => async (bytes: Uint8Array) => {
     try {
-      step();
+      await fn(bytes);
     } catch (error) {
-      fail(error instanceof SecureLinkError ? error : new SecureLinkError(code, "handshake failed", { cause: error }));
+      if (error instanceof SecureLinkError) fail(error);
+      else fail(failure(CloseCode.CryptoFailure, "handshake failed", error));
     }
   };
   const establish = (handshake: Handshake, helloPayload: Uint8Array): SecuredLink => {
@@ -84,90 +93,102 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
     done = true;
     clearTimeout(timer);
     session = secured;
+    for (const bytes of inbox.splice(0)) secured.receive(bytes);
     settled.resolve(secured);
+  };
+  const drain = async (): Promise<void> => {
+    const bytes = inbox.shift();
+    if (bytes === undefined || done || step === undefined) {
+      draining = false;
+      return;
+    }
+    await step(bytes);
+    return drain();
   };
 
   const timer = setTimeout(
-    () => fail(new SecureLinkError(CloseCode.IdleTimeout, "handshake timed out")),
+    () => fail(failure(CloseCode.IdleTimeout, "handshake timed out")),
     options.timeoutMs ?? HANDSHAKE_TIMEOUT_MS,
   );
   link.onData((bytes) => {
-    if (session !== undefined) session.receive(bytes);
-    else if (!done) onMessage?.(bytes);
+    if (session !== undefined) return session.receive(bytes);
+    if (done) return;
+    inbox.push(bytes);
+    if (draining) return;
+    draining = true;
+    void drain();
   });
   link.onClose((error) => {
     if (session !== undefined) session.linkClosed(error);
-    else fail(new SecureLinkError(closeCodeOf(error), "link closed during the handshake", { cause: error }));
+    else fail(failure(closeCodeOf(error) ?? CloseCode.CryptoFailure, "link closed during the handshake", error));
   });
 
-  if (options.role === "initiator") {
+  if (options.role === "initiator") runInitiator(options);
+  else runResponder(options);
+  return settled.promise;
+
+  function runInitiator(opts: InitiatorOptions): void {
     const handshake = new Handshake({
-      pattern: options.psk === undefined ? "IK" : "IKpsk2",
+      pattern: opts.psk === undefined ? "IK" : "IKpsk2",
       role: "initiator",
       prologue,
-      staticKey: options.staticKey,
-      remoteStatic: options.remoteStatic,
-      psk: options.psk,
+      staticKey: opts.staticKey,
+      remoteStatic: opts.remoteStatic,
+      psk: opts.psk,
     });
-    onMessage = (bytes) =>
-      guard(CloseCode.CryptoFailure, () => {
-        handshake.readMessage(bytes);
-        const secured = establish(handshake, options.payload ?? EMPTY);
-        resolve(secured);
-        secured.send(EMPTY);
-      });
-    guard(CloseCode.CryptoFailure, () => link.send(handshake.writeMessage(options.payload ?? EMPTY)));
-  } else {
-    onMessage = (bytes) =>
-      guard(CloseCode.CryptoFailure, () => {
-        const { handshake, payload } = readHello(options, prologue, bytes);
-        const verdict = options.authorize({
-          pattern: handshake.pattern,
-          remoteStatic: requireStatic(handshake),
-          payload,
-        });
-        if (!verdict.accept) throw new SecureLinkError(CloseCode.UnknownDevice, verdict.reason ?? "unknown device");
-        if (handshake.pattern === "IKpsk2") {
-          if (verdict.psk === undefined) throw new SecureLinkError(CloseCode.UnknownDevice, "no pairing is pending");
-          handshake.setPsk(verdict.psk);
-        }
-        const reply = handshake.writeMessage(EMPTY);
-        pending = establish(handshake, payload);
-        onMessage = (record) => confirm(record);
-        link.send(reply);
-      });
-    const confirm = (record: Uint8Array): void =>
-      guard(CloseCode.CryptoFailure, () => {
-        const secured = pending;
-        if (secured === undefined) return;
-        secured.receive(record);
-        if (secured.closed) throw new SecureLinkError(CloseCode.CryptoFailure, "key confirmation failed");
-        resolve(secured);
-      });
+    step = guarded(async (bytes) => {
+      await handshake.readMessage(bytes);
+      const secured = establish(handshake, opts.payload ?? EMPTY);
+      resolve(secured);
+      secured.send(EMPTY);
+    });
+    void guarded(async () => link.send(await handshake.writeMessage(opts.payload ?? EMPTY)))(EMPTY);
   }
-  return settled.promise;
+
+  function runResponder(opts: ResponderOptions): void {
+    let pending: SecuredLink | undefined;
+    const confirm = guarded(async (record) => {
+      const secured = pending;
+      if (secured === undefined) return;
+      secured.receive(record);
+      if (secured.closed) throw failure(CloseCode.CryptoFailure, "key confirmation failed");
+      resolve(secured);
+    });
+    step = guarded(async (bytes) => {
+      const { handshake, payload } = await readHello(opts, prologue, bytes);
+      const remoteStatic = handshake.remoteStatic;
+      if (remoteStatic === undefined) throw failure(CloseCode.CryptoFailure, "message 1 carried no static key");
+      const verdict = opts.authorize({ pattern: handshake.pattern, remoteStatic, payload });
+      if (!verdict.accept) throw failure(CloseCode.UnknownDevice, verdict.reason ?? "unknown device");
+      if (handshake.pattern === "IKpsk2") {
+        if (verdict.psk === undefined) throw failure(CloseCode.UnknownDevice, "no pairing is pending");
+        handshake.setPsk(verdict.psk);
+      }
+      const reply = await handshake.writeMessage(EMPTY);
+      pending = establish(handshake, payload);
+      step = confirm;
+      link.send(reply);
+    });
+  }
 }
 
 /** Message 1 tells IK from IKpsk2 only by which protocol name decrypts it, so try IK first, then IKpsk2. */
-function readHello(
+async function readHello(
   options: ResponderOptions,
   prologue: Uint8Array,
   message: Uint8Array,
-): { readonly handshake: Handshake; readonly payload: Uint8Array } {
-  let lastError: unknown;
-  for (const pattern of ["IK", "IKpsk2"] as const) {
+): Promise<{ readonly handshake: Handshake; readonly payload: Uint8Array }> {
+  const attempt = async (pattern: Pattern) => {
     const handshake = new Handshake({ pattern, role: "responder", prologue, staticKey: options.staticKey });
+    return { handshake, payload: await handshake.readMessage(message) };
+  };
+  try {
+    return await attempt("IK");
+  } catch {
     try {
-      return { handshake, payload: handshake.readMessage(message) };
+      return await attempt("IKpsk2");
     } catch (error) {
-      lastError = error;
+      throw failure(CloseCode.CryptoFailure, "message 1 failed authentication", error);
     }
   }
-  throw new SecureLinkError(CloseCode.CryptoFailure, "message 1 failed authentication", { cause: lastError });
-}
-
-function requireStatic(handshake: Handshake): Uint8Array {
-  const remoteStatic = handshake.remoteStatic;
-  if (remoteStatic === undefined) throw new SecureLinkError(CloseCode.CryptoFailure, "message 1 carried no static key");
-  return remoteStatic;
 }

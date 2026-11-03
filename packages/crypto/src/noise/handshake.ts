@@ -1,6 +1,7 @@
 import { x25519 } from "@noble/curves/ed25519.js";
 import { concatBytes } from "../encoding.ts";
 import { generateX25519, type KeyPair, x25519FromSecret } from "../identity.ts";
+import type { StaticKey } from "../static-key.ts";
 import { type CipherState, MAX_MESSAGE, TAG_LENGTH } from "./cipher-state.ts";
 import { SymmetricState } from "./symmetric-state.ts";
 
@@ -18,7 +19,8 @@ export interface HandshakeOptions {
   readonly pattern: Pattern;
   readonly role: Role;
   readonly prologue: Uint8Array;
-  readonly staticKey: KeyPair;
+  /** The local static key; its DH may be async (a WebCrypto key). */
+  readonly staticKey: StaticKey;
   /** The responder's static public key; required for the initiator, learned from message 1 by the responder. */
   readonly remoteStatic?: Uint8Array | undefined;
   /** Required for IKpsk2 before message 2 is written or read; the responder may set it after reading message 1. */
@@ -72,7 +74,7 @@ export class Handshake {
     this.#psk = psk;
   }
 
-  writeMessage(payload: Uint8Array): Uint8Array {
+  async writeMessage(payload: Uint8Array): Promise<Uint8Array> {
     const expected = this.#options.role === "initiator" ? 0 : 1;
     if (this.#step !== expected) throw new Error("handshake message out of turn");
     this.#step++;
@@ -83,7 +85,7 @@ export class Handshake {
     if (this.#step === 1) {
       this.#symmetric.mixKey(dh(e, remoteStatic));
       parts.push(this.#symmetric.encryptAndHash(this.#options.staticKey.publicKey));
-      this.#symmetric.mixKey(dh(this.#options.staticKey, remoteStatic));
+      this.#symmetric.mixKey(await this.#options.staticKey.dh(remoteStatic));
     } else {
       this.#symmetric.mixKey(dh(e, this.#required(this.#remoteEphemeral, "remote ephemeral")));
       this.#symmetric.mixKey(dh(e, remoteStatic));
@@ -95,7 +97,7 @@ export class Handshake {
     return message;
   }
 
-  readMessage(message: Uint8Array): Uint8Array {
+  async readMessage(message: Uint8Array): Promise<Uint8Array> {
     const expected = this.#options.role === "responder" ? 0 : 1;
     if (this.#step !== expected) throw new Error("handshake message out of turn");
     if (message.byteLength > MAX_MESSAGE) throw new Error("handshake message exceeds 65535 bytes");
@@ -106,14 +108,14 @@ export class Handshake {
     const s = this.#options.staticKey;
     let offset = KEY_LENGTH;
     if (this.#step === 1) {
-      this.#symmetric.mixKey(dh(s, re));
+      this.#symmetric.mixKey(await s.dh(re));
       const rs = this.#symmetric.decryptAndHash(this.#slice(message, offset, offset + KEY_LENGTH + TAG_LENGTH));
       offset += KEY_LENGTH + TAG_LENGTH;
       this.#remoteStatic = rs;
-      this.#symmetric.mixKey(dh(s, rs));
+      this.#symmetric.mixKey(await s.dh(rs));
     } else {
       this.#symmetric.mixKey(dh(this.#ephemeralKey(), re));
-      this.#symmetric.mixKey(dh(s, re));
+      this.#symmetric.mixKey(await s.dh(re));
       this.#mixPsk();
     }
     return this.#symmetric.decryptAndHash(message.subarray(offset));

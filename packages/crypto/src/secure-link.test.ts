@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { concatBytes } from "./encoding.ts";
 import { generateHostIdentity, generateX25519, type KeyPair } from "./identity.ts";
 import { CloseCode, SecureLinkError } from "./link.ts";
+import { generateWebCryptoStaticKey, rawStaticKey, type StaticKey } from "./static-key.ts";
 import { createPairingOffer, decodePairingHello, encodePairingHello, pairingPsk } from "./pairing.ts";
 import { type Authorization, type ClientHello, secureLink } from "./secure-link.ts";
 import type { SecureLink } from "./secured-link.ts";
@@ -16,13 +17,15 @@ const hellos: ClientHello[] = [];
 interface Setup {
   readonly clientPsk?: Uint8Array;
   readonly authorize?: (hello: ClientHello) => Authorization;
-  readonly clientKey?: KeyPair;
+  readonly clientKey?: KeyPair | StaticKey;
   readonly rekey?: readonly [number, number];
   readonly name?: string;
   /** Rewrites the client's first message (message 1) in flight. */
   readonly tamperHello?: (bytes: Uint8Array) => Uint8Array;
   readonly synchronous?: boolean;
 }
+
+const toStatic = (key: KeyPair | StaticKey): StaticKey => ("dh" in key ? key : rawStaticKey(key));
 
 function connect(setup: Setup = {}) {
   const [clientEnd, hostEnd] = memoryLinkPair(setup.synchronous);
@@ -31,7 +34,7 @@ function connect(setup: Setup = {}) {
   const responder = secureLink(hostEnd, {
     role: "responder",
     hostId: host.hostId,
-    staticKey: host.noise,
+    staticKey: rawStaticKey(host.noise),
     rekeyInterval: setup.rekey?.[1],
     authorize:
       setup.authorize ??
@@ -43,7 +46,7 @@ function connect(setup: Setup = {}) {
   const initiator = secureLink(clientEnd, {
     role: "initiator",
     hostId: host.hostId,
-    staticKey: setup.clientKey ?? device,
+    staticKey: toStatic(setup.clientKey ?? device),
     remoteStatic: host.noise.publicKey,
     psk: setup.clientPsk,
     payload: setup.name === undefined ? undefined : encodePairingHello(setup.name),
@@ -93,6 +96,18 @@ describe("secureLink", () => {
     await flush();
     expect(atServer.map((c) => new TextDecoder().decode(c))).toEqual(["ping"]);
     expect(atClient.map((c) => new TextDecoder().decode(c))).toEqual(["pong"]);
+  });
+
+  test("a device key held in non-extractable WebCrypto pairs and reconnects (the DH is injected)", async () => {
+    const { privateKey, staticKey } = await generateWebCryptoStaticKey();
+    expect(privateKey.extractable).toBe(false);
+    const paired = await established({ clientKey: staticKey, clientPsk: psk, name: "browser" });
+    expect(paired.server.remoteStatic).toEqual(staticKey.publicKey);
+    const again = await established({ clientKey: staticKey });
+    const atServer = collect(again.server);
+    again.client.send(Uint8Array.of(42));
+    await flush();
+    expect(atServer).toEqual([Uint8Array.of(42)]);
   });
 
   test("chunks a 1 MiB write into records of at most 65535 bytes, reassembled in order", async () => {
@@ -234,7 +249,7 @@ describe("secureLink failures", () => {
     const responder = secureLink(hostEnd, {
       role: "responder",
       hostId: host.hostId,
-      staticKey: host.noise,
+      staticKey: rawStaticKey(host.noise),
       timeoutMs: 20,
       authorize: () => ({ accept: true }),
     });

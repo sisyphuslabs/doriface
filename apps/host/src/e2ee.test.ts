@@ -5,6 +5,7 @@ import {
   type KeyPair,
   formatPairingCode,
   pairingPsk,
+  rawStaticKey,
   pairingSlotOf,
   parsePairingUrl,
   SecureLinkError,
@@ -88,7 +89,7 @@ async function pair(): Promise<ReturnType<typeof parsePairingUrl>> {
 const dial = (staticKey: KeyPair, extra: { readonly psk?: Uint8Array; readonly payload?: Uint8Array } = {}) =>
   openE2eeClient(endpoint().url, {
     hostId: pairing.hostId,
-    staticKey,
+    staticKey: rawStaticKey(staticKey),
     remoteStatic: pairing.noiseStaticPub,
     ...extra,
   });
@@ -218,7 +219,7 @@ describe("/v1/e2ee against a real hc", () => {
     expect(plaintext.status).toBe(404);
     const client = await openE2eeClient(lanUrl, {
       hostId: pairing.hostId,
-      staticKey: device,
+      staticKey: rawStaticKey(device),
       remoteStatic: pairing.noiseStaticPub,
     });
     client.link.send(HELLO);
