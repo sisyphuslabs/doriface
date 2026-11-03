@@ -111,6 +111,17 @@ describe("HcConnection frames and lifetime", () => {
     expect([sent.kind, [...sent.payload]]).toEqual([4, [1]]);
   });
 
+  test("delivers no frame after a bad frame closed the connection", async () => {
+    const core = new FakeCore();
+    const connection = await opened(core);
+    const seen: Frame[] = [];
+    connection.raw.onFrame((f) => seen.push(f));
+    const closed = next<Error | undefined>((resolve) => connection.onClose(resolve));
+    core.push(concatBytes(frame(0, 0, "not json"), frame(9, 250, "after")));
+    expect(await closed).toBeInstanceOf(Error);
+    expect(seen.map((f) => f.channel)).toEqual([0]);
+  });
+
   test("answers a request from the core with unknown_method", async () => {
     const core = new FakeCore();
     await opened(core);

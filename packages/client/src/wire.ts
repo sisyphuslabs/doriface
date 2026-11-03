@@ -24,6 +24,11 @@ export interface ChannelHandler {
 }
 
 const utf8 = new TextEncoder();
+const MAX_CHANNEL = 0xffffffff;
+
+export function isStreamChannel(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > RPC_CHANNEL && value <= MAX_CHANNEL;
+}
 
 /** Owns one link: the plain-mode hello, then frame decoding and routing by channel. */
 export class Wire {
@@ -89,6 +94,7 @@ export class Wire {
   }
 
   register(channel: number, handler: ChannelHandler): void {
+    if (!isStreamChannel(channel)) throw new RangeError(`stream channel ${channel} is not a uint32 above 0`);
     this.#channels.set(channel, handler);
   }
 
@@ -113,7 +119,10 @@ export class Wire {
         this.#helloSettle.resolve(step.hello);
         framed = step.framedBytes;
       }
-      for (const frame of this.#frames.push(framed)) this.#dispatch(frame);
+      for (const frame of this.#frames.push(framed)) {
+        if (this.#closeState !== undefined) return;
+        this.#dispatch(frame);
+      }
     } catch (error) {
       this.close(error instanceof Error ? error : new HcConnectionClosedError(String(error)));
     }
@@ -153,7 +162,7 @@ export class Wire {
   #orphanReply(response: JsonRpcResponse): void {
     if (response.kind !== "success" || !isJsonObject(response.result)) return;
     const channel = response.result["channel"];
-    if (typeof channel === "number" && channel !== RPC_CHANNEL) this.send(channel, FrameKind.Close);
+    if (isStreamChannel(channel) && !this.isClosed) this.send(channel, FrameKind.Close);
   }
 
   #shutdown(error: Error | undefined): void {

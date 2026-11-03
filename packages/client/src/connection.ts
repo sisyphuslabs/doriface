@@ -2,6 +2,7 @@ import {
   encodeNotification,
   encodeRequest,
   isJsonObject,
+  isTerminal,
   type EmptyParams,
   type Frame,
   type HcMethod,
@@ -18,7 +19,7 @@ import type { ByteLink } from "./link.ts";
 import type { Unsubscribe } from "./listeners.ts";
 import { EventFeed } from "./event-feed.ts";
 import { TerminalStream } from "./terminal-stream.ts";
-import { Wire } from "./wire.ts";
+import { isStreamChannel, Wire } from "./wire.ts";
 
 export interface HcConnectionOptions {
   /** Default 10 000 ms. */
@@ -105,6 +106,9 @@ export class HcConnection {
   /** Attaches as a viewer. Kind 6 is used only when both the core and this attach path offer it. */
   attach(params: TerminalAttachParams, options: AttachOptions = {}): Promise<TerminalStream> {
     return this.#request("terminal.attach", params, options, (result) => {
+      if (!isStreamChannel(result.channel) || !isTerminal(result.terminal)) {
+        throw new HcProtocolError("terminal.attach replied without a stream channel and terminal");
+      }
       const automaticInput = this.features.has("automatic_input") && result.automatic_input === true;
       const stream = new TerminalStream(this.#wire, result, automaticInput, options.autoCredit ?? true);
       this.#wire.register(result.channel, stream);
@@ -116,7 +120,7 @@ export class HcConnection {
   subscribe(filter: EventsSubscribeParams = {}, options: SubscribeOptions = {}): Promise<EventFeed> {
     return this.#request("events.subscribe", filter, options, (result) => {
       const channel = result.channel;
-      if (typeof channel !== "number") throw new HcProtocolError("events.subscribe gave no channel on a framed line");
+      if (!isStreamChannel(channel)) throw new HcProtocolError("events.subscribe gave no stream channel");
       const snapshot = { seq: result.seq, terminals: result.terminals };
       const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS;
       const feed = new EventFeed(this.#wire, channel, snapshot, heartbeatTimeoutMs);

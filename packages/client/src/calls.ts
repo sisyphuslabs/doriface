@@ -1,7 +1,7 @@
 import { HcRpcError, type JsonRpcResponse, type JsonValue } from "@doriface/protocol";
 
 interface Pending {
-  readonly settle: (response: JsonRpcResponse) => void;
+  readonly settle: (response: JsonRpcResponse) => boolean;
   readonly fail: (error: Error) => void;
 }
 
@@ -21,12 +21,14 @@ export class PendingCalls {
       settle: (response) => {
         if (response.kind === "failure") {
           reject(new HcRpcError(response.error));
-          return;
+          return true;
         }
         try {
           resolve(adopt(response.result));
+          return true;
         } catch (error) {
           reject(error);
+          return false;
         }
       },
       fail: reject,
@@ -34,14 +36,16 @@ export class PendingCalls {
     return { id, promise };
   }
 
-  /** False when no call waits for this id (it timed out, was aborted, or never existed). */
+  /**
+   * False when no call took the reply: none waits for this id (it timed out, was aborted, or never
+   * existed), or its `adopt` refused the result. Either way, anything the reply opened is unowned.
+   */
   settle(response: JsonRpcResponse): boolean {
     if (typeof response.id !== "number") return false;
     const pending = this.#pending.get(response.id);
     if (pending === undefined) return false;
     this.#pending.delete(response.id);
-    pending.settle(response);
-    return true;
+    return pending.settle(response);
   }
 
   forget(id: number): void {

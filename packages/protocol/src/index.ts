@@ -4,3 +4,4 @@ export * from "./json.ts";
 export * from "./jsonrpc.ts";
 export * from "./lines.ts";
 export * from "./events.ts";
+export { isTerminal } from "./event-guards.ts";

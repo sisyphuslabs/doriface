@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { HcRpcError } from "@doriface/protocol";
 import { HcConnection } from "./connection.ts";
 import type { ByteLink } from "./link.ts";
-import { HcConnectionClosedError, HcTimeoutError } from "./errors.ts";
+import { HcConnectionClosedError, HcProtocolError, HcTimeoutError } from "./errors.ts";
 import { FakeCore } from "./testing/fake-core.ts";
 import {
   bytes,
@@ -178,6 +178,16 @@ describe("HcConnection.call", () => {
     link.refuseAfter = 1;
     await expect(connection.call("server.status")).rejects.toThrow(HcTimeoutError);
     expect(connection.closed).toBe(true);
+  });
+
+  test("rejects a malformed attach reply and closes the channel it named", async () => {
+    const core = new FakeCore();
+    const connection = await opened(core);
+    const attach = connection.attach({ terminal: "t1", cols: 80, rows: 24 });
+    const request = await core.waitRequest("terminal.attach");
+    core.pushFrame(0, 0, `{"id":${request.id},"jsonrpc":"2.0","result":{"channel":3}}`);
+    await expect(attach).rejects.toThrow(HcProtocolError);
+    expect((await core.waitFrame((f) => f.channel === 3)).kind).toBe(2);
   });
 
   test("closes a stream whose attach reply came after the call gave up", async () => {
