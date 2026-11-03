@@ -37,7 +37,7 @@ test.beforeAll(async () => {
   );
   scratch = { hc, profile, env };
   launched = await electron.launch({
-    ...launchOptions([`--user-data-dir=${profile}`]),
+    ...launchOptions([profileArg(profile)]),
     env,
   });
 });
@@ -53,9 +53,11 @@ test.afterAll(async () => {
   }
 });
 
+const profileArg = (profile: string): string => `--user-data-dir=${profile}`;
+
 /** A checkout launch loads the hide hook, so neither instance ever puts a window on screen. */
 function instanceArgs(profile: string): string[] {
-  return appArgs([`--user-data-dir=${profile}`]);
+  return appArgs([profileArg(profile)]);
 }
 
 const running = (): ElectronApplication => {
