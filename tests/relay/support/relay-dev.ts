@@ -3,14 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { relayDir } from "../private-relay.ts";
+import { stopProcessGroup } from "./process-group.ts";
 
 const READY = /Ready on (http:\/\/\S+)/;
 const START_TIMEOUT_MS = 90_000;
-/**
- * How long an exited wrangler's last output may take to arrive. A child that inherited its stderr (esbuild's service)
- * can outlive it and hold the pipe open, so the failure is not held until the pipes close.
- */
-const EXIT_OUTPUT_MS = 2_000;
 /** Each attempt binds a freshly picked HTTP port; the next attempt runs only after a proven bind race on it. */
 const START_ATTEMPTS = 3;
 
@@ -136,6 +132,8 @@ async function startOnce(
       ],
       {
         cwd: dir,
+        // wrangler leads a process group of its own, so stopping it reaches the esbuild and workerd it starts.
+        detached: true,
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
@@ -167,19 +165,23 @@ async function startOnce(
     }
   };
   const drained = Promise.all([drain(proc.stdout), drain(proc.stderr)]);
+  let stopping: Promise<void> | undefined;
+  const stopGroup = (): Promise<void> => (stopping ??= stopProcessGroup(proc));
+  // When wrangler exits, what it started may still hold its stderr; once the group is gone, the pipes are complete.
   const exited = async (): Promise<void> => {
     const code = await proc.exited;
-    await Promise.race([drained, Bun.sleep(EXIT_OUTPUT_MS)]);
+    await stopGroup();
+    await drained;
     ready.reject(failure(code));
   };
-  void exited();
+  void exited().catch((error: unknown) => ready.reject(error));
   const timer = setTimeout(
     () => ready.reject(new Error(`wrangler dev not ready in ${START_TIMEOUT_MS} ms:\n${output}`)),
     START_TIMEOUT_MS,
   );
   const stop = async (): Promise<void> => {
-    proc.kill("SIGTERM");
-    await proc.exited;
+    await stopGroup();
+    await drained;
     await rm(scratch, { recursive: true, force: true });
   };
   try {
