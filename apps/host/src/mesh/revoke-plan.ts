@@ -1,8 +1,8 @@
-import { MAX_REVOKE_SUBJECTS, type Signed, type View } from "@doriface/mesh";
+import { MAX_REVOKE_SUBJECTS, presentAt, type Signed, type View, ViewCache } from "@doriface/mesh";
 import type { MemberRef } from "./command-replies.ts";
 import { admittedKeys, overCapNames, subtreeOf } from "./lineage.ts";
 import { hostIdOfKey } from "./status.ts";
-import { presentAt, undecidableFrom } from "./witness.ts";
+import { undecidableFrom } from "./witness.ts";
 
 export interface Undecidable {
   readonly subject: MemberRef;
@@ -69,6 +69,7 @@ export function planRevoke(
   self: string,
   ref: string,
   compromised: boolean,
+  cache: ViewCache = new ViewCache(),
 ): RevokePlan {
   const key = findMember(view, ref);
   if (key === undefined) throw new Error(`no member "${ref}" in this host's view of the mesh`);
@@ -80,9 +81,9 @@ export function planRevoke(
   }
   const cardNames = overCapNames(records, view);
   const toRef = (k: string): MemberRef => memberRef(view, k, cardNames);
-  const undecidable = [...undecidableFrom(records, view, self, keys)].map(([subject, askFrom]) => ({
+  const undecidable = [...undecidableFrom(records, view, self, keys, cache)].map(([subject, askFrom]) => ({
     subject: toRef(subject),
-    present: presentAt(records, subject).map(toRef),
+    present: presentAt(records, subject, cache).map(toRef),
     askFrom: askFrom.map(toRef),
   }));
   const target = toRef(key);

@@ -7,6 +7,7 @@ import {
   type Signed,
   verifyCard,
   type View,
+  ViewCache,
   viewOf,
 } from "@doriface/mesh";
 import type { MeshStatus } from "@doriface/protocol";
@@ -105,7 +106,13 @@ function localOf(file: MeshFile, view: View, self: string, live: MeshLiveFacts):
   };
 }
 
-export function meshSourcesOf(file: MeshFile, view: View, self: string, live: MeshLiveFacts): MeshSources {
+export function meshSourcesOf(
+  file: MeshFile,
+  view: View,
+  self: string,
+  live: MeshLiveFacts,
+  cache: ViewCache = new ViewCache(),
+): MeshSources {
   const parsed = parsedOf(file.records);
   /** The founder is admitted by its own found record; PR 7's ViewFacts gives it no admitter. */
   const foundHash = parsed.find(({ body }) => body.type === "found")?.hash;
@@ -125,18 +132,15 @@ export function meshSourcesOf(file: MeshFile, view: View, self: string, live: Me
     peers: live.peers,
     lines: live.lines,
     budget: live.budget,
-    witnessPool: (subject) => witnessFacts(file.records, view, self, subject),
+    witnessPool: (subject) => witnessFacts(file.records, view, self, subject, cache),
   };
 }
 
 /** This host's mesh status now, or undefined while it is in no mesh: the host's `meshStatus`. */
-export function storedMeshStatus(
-  store: MeshStore,
-  identity: HostIdentity,
-  hooks: MeshHooks,
-): MeshStatus | undefined {
+export function storedMeshStatus(store: MeshStore, identity: HostIdentity, hooks: MeshHooks): MeshStatus | undefined {
   const file = store.read();
   if (file === undefined) return undefined;
   const self = base64urlEncode(identity.sign.publicKey);
-  return meshStatus(meshSourcesOf(file, viewOf(file.records), self, hooks.live()), new Date());
+  const cache = new ViewCache();
+  return meshStatus(meshSourcesOf(file, viewOf(file.records, cache), self, hooks.live(), cache), new Date());
 }
