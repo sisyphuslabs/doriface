@@ -1,6 +1,7 @@
 import { base64urlDecode, base64urlEncode, CloseCode, fingerprintOf, type HostIdentity } from "@doriface/crypto";
 import { type CardBody, checkName, MAX_MESH_MEMBERS, type Signed, verifyCard } from "@doriface/mesh";
 import type { MeshStore, OwnCard } from "../state/mesh.ts";
+import type { AuthorizeIndex } from "./authorize-index.ts";
 import { type MeshLines, recordLines } from "./lines.ts";
 import type { PendingJoin, PendingJoins } from "./pending-joins.ts";
 
@@ -68,16 +69,14 @@ function sendWelcome(lines: MeshLines, records: readonly Signed[], meshId: strin
 
 /**
  * Section 4.4 step 4, in one mesh.json transaction: admits the card unless its key became a member while the join
- * waited (then the welcome only, step 3), refuses a mesh that filled up meanwhile, and returns the records to welcome.
+ * waited (then the welcome only, step 3), refuses what step 3 refuses as it stands now (a twin, a member with another
+ * key) and a mesh that filled up meanwhile, and returns the records to welcome.
  */
 function admit(deps: InviteDeps, meshId: string, inviter: string, card: CardBody, signed: Signed): readonly Signed[] {
   return deps.mesh.transact((tx) => {
-    const view = tx.view();
-    if (view.members.has(card.signPub)) {
-      if (view.noise.get(card.signPub) !== card.noisePub) throw new JoinRefused(ANOTHER_KEY);
-      return tx.records;
-    }
-    if (view.members.size >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
+    const index = deps.mesh.authorizeIndex();
+    if (isRejoin(index, card)) return tx.records;
+    if ((index?.memberCount ?? 0) >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
     tx.sign(deps.identity, (n, prev) => ({
       v: 2,
       mesh: meshId,
@@ -95,28 +94,43 @@ function admit(deps: InviteDeps, meshId: string, inviter: string, card: CardBody
 }
 
 /**
- * Section 4.3: the inviting member's decision. A `refused` line from the joiner, or the session's end, drops the
- * pending join instead, and so does a session that ended before an automatic approval.
+ * Section 4.3: the inviting member's decision. A `refused` line from the joiner (the only line the parser hands on
+ * now: any other closes the session), or the session's end, drops the pending join instead, and so does a session
+ * that ended before an automatic approval.
  */
 async function decision(lines: MeshLines, deps: InviteDeps, join: PendingJoin): Promise<void> {
   const left = lines.next().then(
-    (line) => ({ left: line.t === "refused" ? `the joiner gave up: ${line.reason}` : `unexpected ${line.t} line` }),
+    (line) => ({ left: `the joiner gave up: ${line.t === "refused" ? line.reason : line.t}` }),
     (error: unknown) => ({ left: `the session closed before the join was decided: ${messageOf(error)}` }),
   );
   const decided = await Promise.race([deps.pending.ask(join), left]);
-  const closed = lines.closed;
-  if (typeof decided === "object" || closed !== undefined) {
+  if (typeof decided === "object") {
     deps.pending.expire(join.nonce);
-    const reason = typeof decided === "object" ? decided.left : messageOf(closed);
-    throw new JoinRefused(closed === undefined ? reason : `the session closed before the join was decided: ${reason}`);
+    throw new JoinRefused(decided.left);
   }
+  const closed = lines.closed;
+  if (closed !== undefined) throw new JoinRefused(`the session closed before the join was decided: ${closed.message}`);
   if (decided !== "approved") throw new JoinRefused(`the join was ${decided} on the inviting member`);
 }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-const ANOTHER_KEY =
-  "this host is a member with another Noise key, or over the member cap: rekey it, or revoke and re-admit it";
+const ANOTHER_KEY = "this host is a member with another Noise key: rekey it, or revoke and re-admit it";
+const OVER_CAP = "this host is a member past the 12-member cap: it is not dialed and cannot sign";
+const KEY_HELD = "this Noise key is another mesh member's";
+
+/**
+ * Section 4.4 step 3 against the stored set: true for a member presenting the Noise key the mesh holds for it (the
+ * welcome only). Refuses a member with another Noise key or past the cap, and a new signing key presenting a member's
+ * Noise key: that twin would keep the key authorized, and the member's sessions open, after the member is revoked.
+ */
+function isRejoin(index: AuthorizeIndex | undefined, card: CardBody): boolean {
+  const holder = index?.member(card.noisePub);
+  if (holder?.signPub === card.signPub) return true;
+  if (holder !== undefined) throw new JoinRefused(KEY_HELD);
+  if (index?.isMember(card.signPub) !== true) return false;
+  throw new JoinRefused(index.deviceRefusal(card.noisePub) === "over-cap mesh member" ? OVER_CAP : ANOTHER_KEY);
+}
 
 /**
  * The inviting member's side of a join (sections 4.3 and 4.4), on a session the mesh offer admitted: offer, card
@@ -133,12 +147,11 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
     if (reply.t !== "card") throw new JoinRefused(`expected a card, got ${reply.t}`);
     const card = checkCard(reply, offer, peerStatic);
     const index = deps.mesh.authorizeIndex();
-    if (index?.member(card.noisePub)?.signPub === card.signPub) {
+    if (isRejoin(index, card)) {
       sendWelcome(lines, deps.mesh.read()?.records ?? [], meshId);
       lines.detach();
       return card;
     }
-    if (index?.isMember(card.signPub) === true) throw new JoinRefused(ANOTHER_KEY);
     if ((index?.memberCount ?? 0) >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
     const fingerprint = fingerprintOf(base64urlDecode(card.noisePub));
     const join = { nonce: offer.nonce, name: card.name, hostId: card.hostId, fingerprint, expiresAt: deps.expiresAt };

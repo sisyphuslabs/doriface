@@ -37,8 +37,10 @@ export const JOIN_DEADLINE_MS = PAIRING_TTL_MS + 60_000;
 
 type Offer = Extract<MeshLine, { t: "offer" }>;
 
-/** The most a welcome can carry: every record of a full set at the door's body cap (about 8 MiB). */
-const MAX_WELCOME_BYTES = MAX_RECORDS * MAX_BODY_BYTES;
+/** An Ed25519 signature in base64url without padding: 64 bytes are 86 characters. */
+const SIGNATURE_CHARS = 86;
+/** The most a welcome can carry: every record of a full set at the door's body cap, with its signature (8.3 MiB). */
+const MAX_WELCOME_BYTES = MAX_RECORDS * (MAX_BODY_BYTES + SIGNATURE_CHARS);
 const encoder = new TextEncoder();
 const bytesOf = (records: readonly Signed[]): number =>
   records.reduce(
@@ -50,15 +52,11 @@ const bytesOf = (records: readonly Signed[]): number =>
  * Reads `records` lines until `done`, then expects nothing more; a `refused` line ends the join with the inviter's
  * reason, and more records, or more bytes, than a mesh may hold close the session with 4400.
  */
-async function welcome(
-  lines: MeshLines,
-  records: Signed[] = [],
-  bytes = 0,
-): Promise<{ readonly records: readonly Signed[]; readonly mesh: string }> {
+async function welcome(lines: MeshLines, records: Signed[] = [], bytes = 0): Promise<readonly Signed[]> {
   const line = await lines.next();
   if (line.t === "done") {
     lines.expect();
-    return { records, mesh: line.mesh };
+    return records;
   }
   if (line.t === "refused") throw new JoinRefused(`the inviting member refused: ${line.reason}`);
   if (line.t !== "records") throw new JoinRefused(`unexpected ${line.t} line in the welcome`);
@@ -82,7 +80,7 @@ function tooLarge(lines: MeshLines, reason: string): never {
  * when that attempt's welcome was lost: step 3's idempotent re-join, through any member, even after the admitter left).
  * Trusts nothing else in the welcome.
  */
-export function checkWelcome(records: readonly Signed[], doneMesh: string, offer: Offer, ctx: JoinerContext): void {
+export function checkWelcome(records: readonly Signed[], offer: Offer, ctx: JoinerContext): void {
   const stored: Signed[] = [];
   for (const record of records) {
     const verdict = door(record, stored);
@@ -92,8 +90,7 @@ export function checkWelcome(records: readonly Signed[], doneMesh: string, offer
   const founds = stored.filter((record) => parseRecord(record)?.type === "found");
   const [found] = founds;
   if (founds.length !== 1 || found === undefined) throw new JoinRefused("the welcome does not hold exactly one found");
-  if (meshIdOf(found) !== offer.mesh || doneMesh !== offer.mesh)
-    throw new JoinRefused("the welcome is for another mesh");
+  if (meshIdOf(found) !== offer.mesh) throw new JoinRefused("the welcome is for another mesh");
   const view = viewOf(stored);
   const inviter = offer.inviter;
   const inviterHost = hostIdOf(base64urlDecode(inviter));
@@ -137,8 +134,8 @@ async function join(lines: MeshLines, ctx: JoinerContext): Promise<string> {
   const body = cardBody(ctx.identity, ctx.own, offer.mesh, offer.inviter, offer.nonce);
   lines.send({ t: "card", ...signCard(body, ctx.identity.sign.secretKey) });
   lines.expect("records", "done", "refused");
-  const { records, mesh } = await welcome(lines);
-  checkWelcome(records, mesh, offer, ctx);
+  const records = await welcome(lines);
+  checkWelcome(records, offer, ctx);
   if (!ctx.mesh.adopt(records, ctx.identity)) throw new JoinRefused("a mesh.json appeared on this host meanwhile");
   lines.detach();
   ctx.log(`mesh: joined mesh ${offer.mesh} via ${ctx.dialed.hostId}`);
