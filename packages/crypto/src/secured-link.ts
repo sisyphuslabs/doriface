@@ -6,8 +6,10 @@ export interface SessionInfo {
   readonly pattern: Pattern;
   readonly remoteStatic: Uint8Array;
   readonly handshakeHash: Uint8Array;
-  /** The decrypted message-1 payload (the responder sees the pairing `{"name"}` here). */
-  readonly helloPayload: Uint8Array;
+  /** Responder, pairing sessions: the device name from message 1. */
+  readonly peerName: string | undefined;
+  /** Initiator: the host's LAN URLs from message 2 (IP literals). */
+  readonly lanUrls: readonly string[];
 }
 
 /** A ByteLink whose bytes travel as Noise transport records over another ByteLink. */
@@ -21,7 +23,8 @@ export class SecuredLink implements SecureLink {
   readonly pattern: Pattern;
   readonly remoteStatic: Uint8Array;
   readonly handshakeHash: Uint8Array;
-  readonly helloPayload: Uint8Array;
+  readonly peerName: string | undefined;
+  readonly lanUrls: readonly string[];
   readonly #link: ByteLink;
   readonly #transport: Transport;
   readonly #data = new Listeners<Uint8Array>();
@@ -36,7 +39,8 @@ export class SecuredLink implements SecureLink {
     this.pattern = info.pattern;
     this.remoteStatic = info.remoteStatic;
     this.handshakeHash = info.handshakeHash;
-    this.helloPayload = info.helloPayload;
+    this.peerName = info.peerName;
+    this.lanUrls = info.lanUrls;
   }
 
   get closed(): boolean {
@@ -70,6 +74,11 @@ export class SecuredLink implements SecureLink {
     if (this.#closed) return;
     this.linkClosed(undefined);
     this.#link.close(code, reason);
+  }
+
+  /** Hands bytes that arrived inside the handshake (IK early data) to the first data listener. */
+  hold(bytes: Uint8Array): void {
+    if (bytes.byteLength > 0) this.#held.push(bytes);
   }
 
   /** Feeds one record from the underlying link; any failure closes the link with 4400. */

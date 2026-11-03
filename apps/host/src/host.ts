@@ -1,6 +1,7 @@
 import packageJson from "../package.json" with { type: "json" };
 import { fingerprintOf } from "@doriface/crypto";
 import { listenControl } from "./control.ts";
+import { lanUrlsFor } from "./lan-urls.ts";
 import { LiveSessions } from "./e2ee/sessions.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
@@ -85,6 +86,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
     await server.stop(true);
     throw error;
   }
+  if (lan !== undefined && lanServer !== undefined) {
+    e2ee?.lanUrls.push(...lanUrlsFor(lan.hostname, lanServer.port ?? lan.port));
+  }
   e2ee?.slots.start();
   const control =
     options.stateDir === undefined || e2ee === undefined ? undefined : openControl(options.stateDir, e2ee, options.log);
@@ -133,8 +137,11 @@ function e2eeDeps(stateDir: string, options: HostOptions) {
   const devices = new DeviceStore(stateDir);
   const pairing = new PairingStore(stateDir);
   const identity = loadHostIdentity(stateDir);
+  /** Filled in once the LAN listener has its port. */
+  const lanUrls: string[] = [];
   return {
     identity,
+    lanUrls,
     devices,
     pairing,
     slots: new PairingSlots(pairing, identity.noise.publicKey, options.pairingSlots, options.log),
