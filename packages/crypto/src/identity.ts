@@ -44,5 +44,9 @@ export function generateHostIdentity(): HostIdentity {
   return hostIdentityFromSecrets(generateEd25519().secretKey, generateX25519().secretKey);
 }
 
-/** The Noise prologue for both patterns: UTF-8 `doriface/1` followed by the 26 ASCII characters of the hostId (36 B). */
-export const prologueFor = (hostId: string): Uint8Array => concatBytes(utf8("doriface/1"), utf8(hostId));
+/**
+ * The Noise prologue: UTF-8 `doriface/1`, the 26 ASCII characters of the hostId, the session kind byte, and for a
+ * typed-code pairing the CPace sid and share (contract v1.3 "Session kinds").
+ */
+export const prologueFor = (hostId: string, kind: number, extra: Uint8Array = new Uint8Array(0)): Uint8Array =>
+  concatBytes(utf8("doriface/1"), utf8(hostId), Uint8Array.of(kind), extra);

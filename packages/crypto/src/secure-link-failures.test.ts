@@ -1,19 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { generateX25519 } from "./identity.ts";
+import { concatBytes } from "./encoding.ts";
+import { generateX25519, prologueFor } from "./identity.ts";
+import { SessionKind } from "./kinds.ts";
 import { CloseCode, SecureLinkError } from "./link.ts";
 import { Handshake } from "./noise/handshake.ts";
-import { createPairingOffer, pairingPsk } from "./pairing.ts";
+import { createPairingOffer } from "./pairing.ts";
 import { secureLink } from "./secure-link.ts";
 import { rawStaticKey } from "./static-key.ts";
 import { memoryLinkPair, nextClose } from "./testing/memory-link.ts";
 import {
+  codePairing,
   collect,
   connect,
   device,
   established,
   flush,
   host,
-  psk,
+  linkPairing,
   settledError,
   tamperNext,
 } from "./testing/secure-link-fixture.ts";
@@ -67,8 +70,11 @@ describe("secureLink failures", () => {
     expect(asked).toBe(false);
   });
 
-  test("a wrong psk fails the pairing with 4400 on both sides", async () => {
-    const pair = connect({ clientPsk: pairingPsk(createPairingOffer().code), name: "phone" });
+  test.each([
+    ["typed code", codePairing("phone", createPairingOffer().code)],
+    ["link secret", linkPairing("phone", createPairingOffer().linkSecret)],
+  ])("a wrong %s fails the pairing with 4400 on both sides", async (_, pairing) => {
+    const pair = connect({ pairing });
     expect((await settledError(pair.initiator)).code).toBe(CloseCode.CryptoFailure);
     expect(pair.clientEnd.closeCode).toBe(CloseCode.CryptoFailure);
     expect((await settledError(pair.responder)).code).toBe(CloseCode.CryptoFailure);
@@ -85,8 +91,8 @@ describe("secureLink failures", () => {
     expect((await settledError(pair.initiator)).code).toBe(CloseCode.UnknownDevice);
   });
 
-  test("an IKpsk2 attempt with no pending pairing is refused with 4401", async () => {
-    const pair = connect({ clientPsk: psk, name: "phone", authorize: () => ({ accept: true }) });
+  test("a pairing the host accepts without naming its secret is refused with 4401", async () => {
+    const pair = connect({ pairing: codePairing("phone"), authorize: () => ({ accept: true }) });
     expect((await settledError(pair.responder)).code).toBe(CloseCode.UnknownDevice);
     expect((await settledError(pair.initiator)).code).toBe(CloseCode.UnknownDevice);
   });
@@ -102,17 +108,19 @@ describe("secureLink failures", () => {
     const handshake = new Handshake({
       pattern: "IK",
       role: "initiator",
-      prologue: new TextEncoder().encode(`doriface/1${host.hostId}`),
+      prologue: prologueFor(host.hostId, SessionKind.Session),
       staticKey: rawStaticKey(device),
       remoteStatic: host.noise.publicKey,
     });
-    clientEnd.send(await handshake.writeMessage(new TextEncoder().encode('{"v":2}\n')));
+    const message1 = await handshake.writeMessage(new TextEncoder().encode('{"v":2}\n'));
+    clientEnd.send(concatBytes(Uint8Array.of(SessionKind.Session), message1));
     expect((await settledError(responder)).code).toBe(CloseCode.CryptoFailure);
   });
 
   test.each([
-    ["a short psk", { clientPsk: new Uint8Array(5), name: "phone" }],
-    ["an empty device name", { clientPsk: psk, name: " " }],
+    ["a short link secret", { pairing: linkPairing("phone", new Uint8Array(5)) }],
+    ["a malformed code", { pairing: codePairing("phone", "SHORT") }],
+    ["an empty device name", { pairing: codePairing(" ") }],
     ["too many early bytes", { early: new Uint8Array(8192) }],
   ])("bad initiator options (%s) reject and close the link instead of throwing", async (_, setup) => {
     const pair = connect(setup);

@@ -1,4 +1,4 @@
-import type { Pattern } from "./noise/handshake.ts";
+import type { SessionKind } from "./kinds.ts";
 import { type ByteLink, CloseCode, closeCodeOf, Listeners, SecureLinkError, type Unsubscribe } from "./link.ts";
 import type { Transport } from "./transport.ts";
 
@@ -6,7 +6,7 @@ import type { Transport } from "./transport.ts";
 export const MAX_HELD_BYTES = 4 * 1024 * 1024;
 
 export interface SessionInfo {
-  readonly pattern: Pattern;
+  readonly kind: SessionKind;
   readonly remoteStatic: Uint8Array;
   readonly handshakeHash: Uint8Array;
   /** Responder, pairing sessions: the device name from message 1. */
@@ -24,7 +24,7 @@ export interface SecureLink extends ByteLink, SessionInfo {}
  * a record that arrives while a listener runs is delivered after the chunks already waiting.
  */
 export class SecuredLink implements SecureLink {
-  readonly pattern: Pattern;
+  readonly kind: SessionKind;
   readonly remoteStatic: Uint8Array;
   readonly handshakeHash: Uint8Array;
   readonly peerName: string | undefined;
@@ -42,7 +42,7 @@ export class SecuredLink implements SecureLink {
   constructor(link: ByteLink, transport: Transport, info: SessionInfo) {
     this.#link = link;
     this.#transport = transport;
-    this.pattern = info.pattern;
+    this.kind = info.kind;
     this.remoteStatic = info.remoteStatic;
     this.handshakeHash = info.handshakeHash;
     this.peerName = info.peerName;
