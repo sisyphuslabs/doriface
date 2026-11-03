@@ -28,7 +28,12 @@ const machine = (name: string, state: string): MachineView => ({
 test("only the live terminals of a machine that is not connected leave Working for Offline", () => {
   const terminals = [terminal("t1"), terminal("build/t1"), terminal("build/t2", "finished"), terminal("rack/t1")];
   const reached = withReach(terminals, [machine("build", "unreachable"), machine("rack", "connected")]);
-  expect(reached.map((entry) => entry.state)).toEqual(["live", "unreachable", "finished", "live"]);
+  expect(reached.map((entry) => [entry.state, entry.offline ?? false])).toEqual([
+    ["live", false],
+    ["live", true],
+    ["finished", false],
+    ["live", false],
+  ]);
   const groups = groupAgents(reached, 0);
   expect(groups.working.map((agent) => agent.id)).toEqual(["t1", "rack/t1"]);
   expect(groups.offline.map((agent) => [agent.id, agent.status])).toEqual([["build/t1", "unknown"]]);

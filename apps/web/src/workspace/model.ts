@@ -11,19 +11,19 @@ const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
 };
 
 /**
- * A terminal on an added machine that is not connected: hc keeps the last picture it had of it, so the app marks it
- * with this state (beside hc's "live" and "finished") instead of showing it as live. See `withReach`.
+ * A terminal as the workspace shows it: hc's terminal, plus `offline` when its machine cannot be reached now. hc keeps
+ * the last picture it had of such a terminal as live, so the client marks it (`withReach`); hc's own state is untouched.
  */
-export const UNREACHABLE = "unreachable";
+export type Session = Terminal & { readonly offline?: true };
 
 /**
  * The one status selector every surface uses (sidebar section, pane chip, tab glyph, space attention).
  * A program that never reported OSC 7501, or reported a word outside the protocol's, reads as idle; one on a machine
  * that cannot be reached reads as unknown.
  */
-export function agentStatus(terminal: Terminal): AgentStatus {
+export function agentStatus(terminal: Session): AgentStatus {
   if (terminal.state === "finished") return "done";
-  if (terminal.state === UNREACHABLE) return "unknown";
+  if (terminal.offline === true) return "unknown";
   const word = terminal.status?.state;
   return word !== undefined && Object.hasOwn(OSC_STATES, word) ? (OSC_STATES[word] ?? "idle") : "idle";
 }
@@ -98,12 +98,15 @@ export interface AgentGroups {
 }
 
 /** Needs you, Done, Working, Idle, then Offline; programs that never reported sit with Idle. */
-export function groupAgents(terminals: readonly Terminal[], nowMs: number): AgentGroups {
+export function groupAgents(terminals: readonly Session[], nowMs: number): AgentGroups {
   const groups = { blocked: [] as Agent[], done: [] as Agent[], working: [] as Agent[], idle: [] as Agent[] };
   const offline: Agent[] = [];
   for (const terminal of terminals) {
-    if (terminal.state === UNREACHABLE) offline.push(toAgent(terminal, nowMs));
     if (terminal.state !== "live") continue;
+    if (terminal.offline === true) {
+      offline.push(toAgent(terminal, nowMs));
+      continue;
+    }
     const agent = toAgent(terminal, nowMs);
     if (agent.status !== "unknown") groups[agent.status].push(agent);
   }

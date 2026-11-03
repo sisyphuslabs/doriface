@@ -1,5 +1,4 @@
 import type { HcConnection } from "@doriface/client";
-import type { Terminal } from "@doriface/protocol";
 import { StatusChip, cn } from "@doriface/ui";
 import { SquareTerminal } from "lucide-react";
 import { currentPlatform } from "../keys/trigger.ts";
@@ -7,12 +6,12 @@ import { useActionKeys } from "../keys/use-action-keys.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
-import { agentStatus, machineOf, spaceName, terminalTitle, UNREACHABLE } from "./model.ts";
+import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { SessionMenu } from "./session-menu.tsx";
 
 export interface PaneProps {
   readonly connection: HcConnection;
-  readonly terminal: Terminal;
+  readonly terminal: Session;
   readonly focused: boolean;
   /** 1-based position among the shown panes, for the shortcut hint. */
   readonly index: number;
@@ -58,7 +57,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
         </span>
         <SessionMenu address={terminal.address} />
       </header>
-      {terminal.state === UNREACHABLE && machine !== undefined ? (
+      {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />
       ) : (
         // A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh.

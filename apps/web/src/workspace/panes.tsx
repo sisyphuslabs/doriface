@@ -1,11 +1,11 @@
 import type { HcConnection } from "@doriface/client";
-import type { Terminal } from "@doriface/protocol";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
+import type { Session } from "./model.ts";
 import { Pane } from "./pane.tsx";
 
 export interface PanesProps {
   readonly connection: HcConnection;
-  readonly terminals: readonly Terminal[];
+  readonly terminals: readonly Session[];
   readonly open: readonly string[];
   readonly active: string | null;
   readonly split: string | null;

@@ -1,10 +1,9 @@
 import type { HcConnection } from "@doriface/client";
-import type { Terminal } from "@doriface/protocol";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Monitor, PanelLeft } from "lucide-react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
-import { agentStatus, machineOf, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, type Session, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
@@ -19,7 +18,7 @@ const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
 
 export interface DesktopShellProps {
   readonly connection: HcConnection;
-  readonly terminals: readonly Terminal[];
+  readonly terminals: readonly Session[];
   /** False until the core has listed its terminals; the count would read 0 until then. */
   readonly loaded: boolean;
   readonly tabs: Tabs;
@@ -51,7 +50,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     return [machine === undefined ? tab : { ...tab, machine }];
   });
   const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
-  const live = terminals.filter((terminal) => terminal.state === "live");
+  const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   const toggle = (
     <IconButton
