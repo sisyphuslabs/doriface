@@ -31,6 +31,7 @@ const FINAL_REASONS: Readonly<Record<number, string>> = {
 export class HostUplink implements PairingSlotRegistrar {
   readonly #options: HostUplinkOptions;
   #uplink: Uplink | undefined;
+  #releasing: Promise<void> = Promise.resolve();
 
   constructor(options: HostUplinkOptions) {
     this.#options = options;
@@ -57,13 +58,17 @@ export class HostUplink implements PairingSlotRegistrar {
   }
 
   release(): void {
-    this.#uplink?.clearPairSlot().catch((error: unknown) => {
+    const uplink = this.#uplink;
+    if (uplink === undefined) return;
+    this.#releasing = uplink.clearPairSlot().catch((error: unknown) => {
       const why = error instanceof Error ? error.message : String(error);
-      this.#options.log(`relay: the pairing slot was not released (${why}); it ends with the uplink`);
+      this.#options.log(`relay: could not release the pairing slot: ${why}`);
     });
   }
 
-  stop(): void {
+  /** Waits for a slot release in flight, so the relay frees the slot before the uplink closes. */
+  async stop(): Promise<void> {
+    await this.#releasing;
     this.#uplink?.stop();
   }
 

@@ -115,7 +115,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
   try {
     server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });
   } catch (error) {
-    uplink?.stop();
+    await uplink?.stop();
     throw error;
   }
   const lan = options.lanListen;
@@ -131,7 +131,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
             websocket: gateway.websocket,
           });
   } catch (error) {
-    uplink?.stop();
+    await uplink?.stop();
     await server.stop(true);
     throw error;
   }
@@ -164,11 +164,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
           },
     relayUrl: uplink === undefined ? undefined : options.relay?.url,
     stop() {
-      uplink?.stop();
       e2ee?.slots.stop();
       control?.stop();
-      stopping ??= gateway
-        .closeAll()
+      stopping ??= Promise.resolve(uplink?.stop())
+        .then(() => gateway.closeAll())
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => undefined);
       return stopping;

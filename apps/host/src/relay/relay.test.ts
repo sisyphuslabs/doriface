@@ -65,6 +65,11 @@ async function ackReaching(total: number): Promise<number> {
   return ack >= total ? ack : ackReaching(total);
 }
 
+async function slotRegistered(slot: string): Promise<void> {
+  const seen = await relay.pairSlots.next();
+  if (seen === "clear" || seen.slot !== slot) return slotRegistered(slot);
+}
+
 async function pairOffer(): Promise<{ readonly code: string; readonly linkSecret: Uint8Array }> {
   const args = ["pair", "--no-qr", "--web-origin", "https://web.example", "--state-dir", stateDir];
   const proc = Bun.spawn([process.execPath, CLI, ...args], { stdout: "pipe", stderr: "pipe" });
@@ -184,5 +189,15 @@ describe("pairing through the relay", () => {
       slot: pairingSlotOf(next),
       noiseStaticPub: identity.noise.publicKey,
     });
+  });
+});
+
+describe("shutdown", () => {
+  test("stop releases the pending pairing slot over the uplink before closing it", async () => {
+    const { code } = await pairOffer();
+    const slot = pairingSlotOf(code);
+    await slotRegistered(slot);
+    await host.stop();
+    expect(await relay.pairSlots.next()).toBe("clear");
   });
 });
