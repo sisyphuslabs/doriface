@@ -79,41 +79,57 @@ function escapeGhostty(text: string): string {
     .map((c) => {
       if (c === "\\") return "\\\\";
       const code = c.charCodeAt(0);
-      return code < 0x20 ? `\\x${code.toString(16).padStart(2, "0")}` : c;
+      return code < 0x20 || code >= 0x7f ? `\\x${code.toString(16).padStart(2, "0")}` : c;
     })
     .join("");
 }
 
 const SIMPLE_ESCAPES: Readonly<Record<string, string>> = { n: "\n", r: "\r", t: "\t", "\\": "\\", "'": "'", '"': '"' };
 
-/** Decodes Ghostty's text: payload, which uses Zig string escapes; null when an escape is not one of them. */
+const latin1 = (bytes: Uint8Array): string => String.fromCharCode(...bytes);
+const utf8 = (text: string): string => latin1(new TextEncoder().encode(text));
+
+/**
+ * Decodes Ghostty's text: payload, which uses Zig string escapes, into a byte string (one char per
+ * byte): \xNN is one raw byte, literal text and \u{N...} are UTF-8. Null when an escape is not Zig's,
+ * including a surrogate or a code point past U+10FFFF.
+ */
 export function decodeZigString(text: string): string | null {
   let out = "";
-  for (let index = 0; index < text.length; index++) {
+  let index = 0;
+  while (index < text.length) {
     const char = text[index] ?? "";
     if (char !== "\\") {
-      out += char;
+      const point = text.codePointAt(index) ?? 0;
+      const literal = String.fromCodePoint(point);
+      out += utf8(literal);
+      index += literal.length;
       continue;
     }
     const next = text[index + 1] ?? "";
     const simple = SIMPLE_ESCAPES[next];
     if (simple !== undefined) {
       out += simple;
-      index += 1;
+      index += 2;
     } else if (next === "x" && /^[0-9a-f]{2}$/i.test(text.slice(index + 2, index + 4))) {
       out += String.fromCharCode(Number.parseInt(text.slice(index + 2, index + 4), 16));
-      index += 3;
+      index += 4;
     } else if (next === "u") {
-      const match = /^\{([0-9a-f]{1,6})\}/i.exec(text.slice(index + 2));
+      const match = /^\{([0-9a-f]+)\}/i.exec(text.slice(index + 2));
       const code = match === null ? Number.NaN : Number.parseInt(match[1] ?? "", 16);
-      if (match === null || code > 0x10ffff) return null;
-      out += String.fromCodePoint(code);
-      index += 1 + match[0].length;
+      if (match === null || !(code <= 0x10ffff) || (code >= 0xd800 && code <= 0xdfff)) return null;
+      out += utf8(String.fromCodePoint(code));
+      index += 2 + match[0].length;
     } else {
       return null;
     }
   }
   return out;
+}
+
+/** The bytes a send:<payload> action writes: the payload is a byte string, one char per byte. */
+export function sendBytes(id: string): Uint8Array {
+  return Uint8Array.from(id.slice("send:".length), (char) => char.charCodeAt(0) & 0xff);
 }
 
 /** Our id for a Ghostty action name; `text:` becomes `send:`, `unbind` is null, unknown is undefined. */
