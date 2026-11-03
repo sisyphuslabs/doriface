@@ -46,7 +46,7 @@ export function FirstRun() {
           </>
         }
       >
-        <code className="rounded-md bg-raised px-3 py-2 text-sm text-foreground">doriface host --pair</code>
+        <code className="rounded-md bg-raised px-3 py-2 text-sm text-foreground">doriface-host pair</code>
       </EmptyState>
     </div>
   );
@@ -105,7 +105,7 @@ export function VerifyStep() {
         <h1 className="text-2xl font-semibold text-balance text-foreground">Check the host's key</h1>
         <p className="mt-1.5 text-base text-muted-foreground">
           The host prints the same groups when you run{" "}
-          <code className="text-foreground">doriface host --fingerprint</code>.
+          <code className="text-foreground">doriface-host fingerprint</code>.
         </p>
       </div>
       <div className="rounded-lg border border-border bg-raised p-4">
