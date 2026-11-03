@@ -9,7 +9,7 @@ import { formatHost, isLoopbackHost, type ListenAddress } from "./listen.ts";
 import { type PairingSlotRegistrar, PairingSlots } from "./pairing-slots.ts";
 import { DeviceStore } from "./state/devices.ts";
 import { loadHostIdentity } from "./state/host-keys.ts";
-import { PairingStore } from "./state/pairing.ts";
+import { PairingStore, pendingToWire } from "./state/pairing.ts";
 
 export const HOST_VERSION = packageJson.version;
 
@@ -138,7 +138,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
 function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
   return listenControl(stateDir, async (request) => {
     if (request.op === "devices-changed") return e2ee.sessions.closeRevoked();
-    return e2ee.slots.open();
+    return pendingToWire(await e2ee.slots.open());
   });
 }
 

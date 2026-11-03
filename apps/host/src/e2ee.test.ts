@@ -3,14 +3,16 @@ import {
   generateX25519,
   type KeyPair,
   formatPairingCode,
-  pairingPsk,
+  normalizePairingCode,
+  type PairingSecret,
   rawStaticKey,
   pairingSlotOf,
   parsePairingUrl,
   SecureLinkError,
+  SessionKind,
 } from "@doriface/crypto";
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -86,18 +88,28 @@ function lanEndpoint(): string {
   return lanUrl;
 }
 
-let pairing: ReturnType<typeof parsePairingUrl>;
+type Offer = ReturnType<typeof parsePairingUrl> & { readonly code: string };
+let pairing: Offer;
 let pairOutput = "";
 
-async function pair(): Promise<ReturnType<typeof parsePairingUrl>> {
+/** Runs `doriface-host pair` and reads back the link and the typed code it printed. */
+async function pair(): Promise<Offer> {
   const paired = await cli("pair", "--no-qr", "--web-origin", "https://web.example");
-  const url = paired.stdout.split("\n").find((line) => line.startsWith("https://web.example/pair#"));
-  if (paired.code !== 0 || url === undefined) throw new Error(`pair failed: ${paired.stdout}`);
+  const lines = paired.stdout.split("\n");
+  const url = lines.find((line) => line.startsWith("https://web.example/pair#"));
+  const typed = paired.stdout.match(/^code +(\S{4} \S{4})/m)?.[1];
+  if (paired.code !== 0 || url === undefined || typed === undefined) throw new Error(`pair failed: ${paired.stdout}`);
   pairOutput = paired.stdout;
-  return parsePairingUrl(url);
+  return { ...parsePairingUrl(url), code: normalizePairingCode(typed) };
 }
 
-const dial = (staticKey: KeyPair, pairingWith?: { readonly psk: Uint8Array; readonly name: string }) =>
+const viaLink = (name: string, offer: Offer = pairing): PairingSecret => ({
+  mode: "link",
+  linkSecret: offer.linkSecret,
+  name,
+});
+
+const dial = (staticKey: KeyPair, pairingWith?: PairingSecret) =>
   openE2eeClient(endpoint().url, {
     hostId: pairing.hostId,
     staticKey: rawStaticKey(staticKey),
@@ -161,12 +173,17 @@ describe("/v1/e2ee against a real hc", () => {
     expect(printed.stdout).toMatch(/^([0-9A-F]{4} ){9}[0-9A-F]{4}\n$/);
   });
 
-  test("a device pairs once over IKpsk2; the code then refuses anyone else with 4401", async () => {
-    const psk = pairingPsk(pairing.code);
+  test("a typed code on the direct path is refused 4401 before the host answers, and counts no attempt", async () => {
+    const typed = dial(generateX25519(), { mode: "code", code: pairing.code, name: "typed" });
+    expect(await refusal(typed)).toBe(CloseCode.UnknownDevice);
+    expect(JSON.parse(readFileSync(join(stateDir, "pairing.json"), "utf8"))).toMatchObject({ codeAttempts: 0 });
+  });
+
+  test("a device pairs once with the link secret; the offer then refuses anyone else with 4401", async () => {
     const used = released(pairingSlotOf(pairing.code));
     const stored = nextLog(/^paired device "test phone"$/);
-    const first = await dial(device, { psk, name: "test phone" });
-    expect(first.link.pattern).toBe("IKpsk2");
+    const first = await dial(device, viaLink("test phone"));
+    expect(first.link.kind).toBe(SessionKind.PairLink);
     expect(first.link.lanUrls).toEqual([lanEndpoint()]);
     first.link.close();
     await stored;
@@ -174,14 +191,14 @@ describe("/v1/e2ee against a real hc", () => {
     expect(listed.stdout).toMatch(/^[0-9A-F]{8} {2}\S+ {2}test phone\n$/);
     await used;
     expect(slots.released).toEqual([pairingSlotOf(pairing.code)]);
-    const second = dial(generateX25519(), { psk, name: "intruder" });
+    const second = dial(generateX25519(), viaLink("intruder"));
     expect(await refusal(second)).toBe(CloseCode.UnknownDevice);
     expect(statSync(join(stateDir, "devices.json")).mode & 0o777).toBe(0o600);
   });
 
   test("an IK reconnect carries hello and terminal.list byte-identical to a direct hc connect", async () => {
     const client = await dial(device);
-    expect(client.link.pattern).toBe("IK");
+    expect(client.link.kind).toBe(SessionKind.Session);
     client.link.send(HELLO);
     const helloViaE2ee = await client.reader.line();
     client.link.send(rpcFrame(1, "terminal.list"));
@@ -204,17 +221,22 @@ describe("/v1/e2ee against a real hc", () => {
     client.link.close();
   });
 
-  test("wrong guesses leave the code usable; the right one pairs and releases the relay slot", async () => {
+  test("wrong link secrets leave the offer usable; the right one pairs and releases the relay slot", async () => {
     const offer = await pair();
     const used = released(pairingSlotOf(offer.code));
     const stored = nextLog(/^paired device "second phone"$/);
-    const wrong = pairingPsk(`${offer.code.slice(0, 7)}${offer.code.endsWith("0") ? "1" : "0"}`);
     const guesses = [1, 2, 3, 4].map((attempt) =>
-      refusal(dial(generateX25519(), { psk: wrong, name: `guesser ${attempt}` })),
+      refusal(
+        dial(generateX25519(), {
+          mode: "link",
+          linkSecret: crypto.getRandomValues(new Uint8Array(32)),
+          name: `guesser ${attempt}`,
+        }),
+      ),
     );
     expect(await Promise.all(guesses)).toEqual([4, 4, 4, 4].map(() => CloseCode.CryptoFailure));
-    const right = await dial(generateX25519(), { psk: pairingPsk(offer.code), name: "second phone" });
-    expect(right.link.pattern).toBe("IKpsk2");
+    const right = await dial(generateX25519(), viaLink("second phone", offer));
+    expect(right.link.kind).toBe(SessionKind.PairLink);
     right.link.close();
     await Promise.all([used, stored]);
     expect(existsSync(join(stateDir, "pairing.json"))).toBe(false);
