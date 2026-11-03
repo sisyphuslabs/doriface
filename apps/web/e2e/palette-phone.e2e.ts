@@ -59,7 +59,7 @@ test("on a phone every palette row does what it says", async ({ page }) => {
   await openPalette(page);
   await page.getByRole("group", { name: "Hosts" }).getByRole("option").click();
   await expect(page).toHaveURL(/\/settings$/);
-  await page.getByRole("link", { name: "Back to workspace" }).first().click();
+  await page.getByRole("button", { name: "Close settings" }).first().click();
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
 
   await run(page, "Open settings");

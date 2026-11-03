@@ -15,7 +15,7 @@ test("rebinding New tab makes the new shortcut open a tab", async ({ page }) => 
   await page.keyboard.press("Control+Alt+N");
   await expect(page.getByText("Changed")).toBeVisible();
 
-  await page.getByRole("link", { name: "Back to workspace" }).first().click();
+  await page.getByRole("button", { name: "Close settings" }).first().click();
   const count = await terminalCount(page);
   await page.keyboard.press("Control+Alt+N");
   await count.grown();
