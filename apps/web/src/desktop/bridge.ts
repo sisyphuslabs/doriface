@@ -20,6 +20,14 @@ function isEndpoint(value: unknown): value is LocalHostEndpoint {
   );
 }
 
+/** Runs `open` whenever the desktop app menu's Settings… item is chosen; does nothing outside the desktop app. */
+export function onDesktopOpenSettings(open: () => void, scope: object = globalThis): void {
+  const bridge: unknown = Reflect.get(scope, "doriface");
+  if (typeof bridge !== "object" || bridge === null) return;
+  const subscribe: unknown = Reflect.get(bridge, "onOpenSettings");
+  if (typeof subscribe === "function") Reflect.apply(subscribe, bridge, [() => open()]);
+}
+
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
   if (typeof bridge !== "object" || bridge === null) return null;

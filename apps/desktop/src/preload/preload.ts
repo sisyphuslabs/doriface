@@ -15,6 +15,9 @@ const bridge: DorifaceBridge = {
     if (!isLocalHostEndpoint(endpoint)) throw new Error("the main process returned no local host endpoint");
     return { url: endpoint.url, token: endpoint.token };
   },
+  onOpenSettings(listener) {
+    ipcRenderer.on(Channel.openSettings, () => listener());
+  },
 };
 
 contextBridge.exposeInMainWorld("doriface", bridge);
