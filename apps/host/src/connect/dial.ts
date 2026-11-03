@@ -30,6 +30,8 @@ export interface DialOptions {
   readonly log: (line: string) => void;
   /** For a typed code: the fingerprint (at least its first 4 groups) the person read off the host. */
   readonly fingerprint?: string | undefined;
+  /** Lets a pairing replace a saved host whose key or relay differs; without it that pairing is refused. */
+  readonly replace?: boolean | undefined;
   /** For tests: the sockets the relay links open. */
   readonly createSocket?: CreateSocket | undefined;
 }
@@ -135,6 +137,34 @@ function confirmFingerprint(given: string | undefined, hostKey: Uint8Array): voi
  * Runs the pairing session and saves the host only after it answered `hello`, which it does once it stored this
  * device, so the IK session that follows is admitted.
  */
+/**
+ * A pairing link or code for a host this machine already saved must not silently change what it trusts: a different
+ * key or relay is named on stderr, and only --replace lets the pairing go on. Checked before dialing, so a refusal
+ * spends no single-use link and writes nothing here or on the host.
+ */
+function confirmReplacement(saved: KnownHost | undefined, offered: KnownHost, options: DialOptions): void {
+  if (saved === undefined) return;
+  const changes = [
+    ...(bytesEqual(saved.hostKey, offered.hostKey)
+      ? []
+      : [
+          `host key changed for ${offered.hostId}: old fingerprint ${fingerprintOf(saved.hostKey)} -> new ${fingerprintOf(offered.hostKey)}`,
+        ]),
+    ...(saved.relayUrl === offered.relayUrl
+      ? []
+      : [`relay changed for ${offered.hostId}: ${saved.relayUrl} -> ${offered.relayUrl}`]),
+  ];
+  for (const change of changes) options.log(change);
+  if (changes.length > 0 && options.replace !== true) {
+    throw new Error(
+      `refusing to replace the saved host ${offered.hostId}: check the change above, then run again with --replace`,
+    );
+  }
+}
+
+const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.byteLength === b.byteLength && a.every((byte, index) => byte === b[index]);
+
 async function pair(
   known: KnownHosts,
   host: KnownHost,
@@ -142,6 +172,7 @@ async function pair(
   options: DialOptions,
   pairSlot?: string,
 ): Promise<KnownHost> {
+  confirmReplacement(known.get(host.hostId), host, options);
   const link = await connectRelayClient({
     relayUrl: host.relayUrl,
     hostId: host.hostId,
