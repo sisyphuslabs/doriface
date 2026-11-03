@@ -29,6 +29,7 @@
         "doriface-host": "./src/cli.ts",
       },
       "dependencies": {
+        "@doriface/crypto": "workspace:*",
         "hono": "4.13.16",
       },
       "devDependencies": {
