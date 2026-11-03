@@ -1,5 +1,6 @@
 import packageJson from "../package.json" with { type: "json" };
-import { fingerprintOf } from "@doriface/crypto";
+import { fingerprintOf, type HostIdentity } from "@doriface/crypto";
+import type { CreateSocket } from "@doriface/relay-client";
 import { controlIsLive, listenControl } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
 import { LiveSessions } from "./e2ee/sessions.ts";
@@ -7,6 +8,8 @@ import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { formatHost, isLoopbackHost, type ListenAddress } from "./listen.ts";
 import { type PairingSlotRegistrar, PairingSlots } from "./pairing-slots.ts";
+import { HostUplink } from "./relay/host-uplink.ts";
+import { RelaySessionWire } from "./relay/session-wire.ts";
 import { DeviceStore } from "./state/devices.ts";
 import { loadHostIdentity } from "./state/host-keys.ts";
 import { PairingStore, pendingToWire } from "./state/pairing.ts";
@@ -30,8 +33,10 @@ export interface HostOptions {
   readonly rekeyInterval?: number | undefined;
   /** For tests: the direct-path idle close (default 90 s). */
   readonly directIdleMs?: number | undefined;
-  /** Registers typed-code pairing slots with the relay (PAIR_SLOT over the host uplink). */
+  /** Registers typed-code pairing slots; defaults to the relay uplink when there is one. */
   readonly pairingSlots?: PairingSlotRegistrar | undefined;
+  /** Keeps an authenticated uplink to this relay and answers E2EE sessions through it; needs `stateDir`. */
+  readonly relay?: { readonly url: string; readonly createSocket?: CreateSocket | undefined } | undefined;
   readonly log: (line: string) => void;
 }
 
@@ -50,6 +55,8 @@ export interface Host {
   readonly port: number;
   readonly hcVersion: string;
   readonly e2ee: E2eeEndpoint | undefined;
+  /** The relay this host keeps its uplink to, when it does. */
+  readonly relayUrl: string | undefined;
   /** Closes every client and `hc connect` child, then the listener. */
   stop(): Promise<void>;
 }
@@ -68,7 +75,22 @@ export async function startHost(options: HostOptions): Promise<Host> {
     throw new Error(`another doriface-host is already running on ${options.stateDir}`);
   }
   const hcVersion = await readHcVersion(options.hc);
-  const e2ee = options.stateDir === undefined ? undefined : e2eeDeps(options.stateDir, options);
+  const stateDir = options.stateDir;
+  if (options.relay !== undefined && stateDir === undefined) throw new Error("the relay uplink needs a state dir");
+  const identity = stateDir === undefined ? undefined : loadHostIdentity(stateDir);
+  const uplink =
+    options.relay === undefined || identity === undefined
+      ? undefined
+      : new HostUplink({
+          relayUrl: options.relay.url,
+          createSocket: options.relay.createSocket,
+          identity,
+          log: options.log,
+        });
+  const e2ee =
+    stateDir === undefined || identity === undefined
+      ? undefined
+      : e2eeDeps(stateDir, identity, options.pairingSlots ?? uplink, options);
   const gateway = createGateway({
     e2ee,
     token: options.token,
@@ -78,7 +100,24 @@ export async function startHost(options: HostOptions): Promise<Host> {
     directIdleMs: options.directIdleMs,
     openPipe: () => new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log }),
   });
-  const server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });
+  await uplink?.start({
+    onSession: (session) => {
+      gateway
+        .serveE2ee(new RelaySessionWire(session), { kind: "relay", openSlot: session.pairSlot })
+        .catch((error: unknown) => {
+          options.log(`relay session ${session.sessionId} failed: ${String(error)}`);
+          session.close(1011, "internal error");
+        });
+    },
+    onConnected: () => e2ee?.slots.relayConnected(),
+  });
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });
+  } catch (error) {
+    uplink?.stop();
+    throw error;
+  }
   const lan = options.lanListen;
   let lanServer: ReturnType<typeof Bun.serve> | undefined;
   try {
@@ -92,6 +131,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
             websocket: gateway.websocket,
           });
   } catch (error) {
+    uplink?.stop();
     await server.stop(true);
     throw error;
   }
@@ -122,7 +162,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
             url: `${base}/v1/e2ee`,
             lanUrls: e2ee.lanUrls,
           },
+    relayUrl: uplink === undefined ? undefined : options.relay?.url,
     stop() {
+      uplink?.stop();
       e2ee?.slots.stop();
       control?.stop();
       stopping ??= gateway
@@ -142,10 +184,14 @@ function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
   });
 }
 
-function e2eeDeps(stateDir: string, options: HostOptions) {
+function e2eeDeps(
+  stateDir: string,
+  identity: HostIdentity,
+  registrar: PairingSlotRegistrar | undefined,
+  options: HostOptions,
+) {
   const devices = new DeviceStore(stateDir);
   const pairing = new PairingStore(stateDir, options.log);
-  const identity = loadHostIdentity(stateDir);
   /** Filled in once the LAN listener has its port. */
   const lanUrls: string[] = [];
   return {
@@ -153,7 +199,7 @@ function e2eeDeps(stateDir: string, options: HostOptions) {
     lanUrls,
     devices,
     pairing,
-    slots: new PairingSlots(pairing, identity.noise.publicKey, options.pairingSlots, options.log),
+    slots: new PairingSlots(pairing, identity.noise.publicKey, registrar, options.log),
     sessions: new LiveSessions(devices, options.log),
     rekeyInterval: options.rekeyInterval,
     log: options.log,

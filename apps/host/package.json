@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@doriface/crypto": "workspace:*",
+    "@doriface/relay-client": "workspace:*",
     "hono": "4.13.16",
     "uqr": "0.1.3"
   },
