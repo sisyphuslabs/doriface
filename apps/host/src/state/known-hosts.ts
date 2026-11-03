@@ -2,6 +2,7 @@ import { base64urlDecode, base64urlEncode, generateX25519, type KeyPair, x25519F
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import { createPrivateJson, ensureStateDir, isRecord, readJson, stringField, writePrivateJson } from "./files.ts";
+import { DEFAULT_LOCK_TIMEOUT_MS, withStateLock } from "./lock.ts";
 
 const DEVICE_FILE = "device-key.json";
 const HOSTS_FILE = "known-hosts.json";
@@ -40,24 +41,35 @@ function parseDevice(value: unknown): KeyPair {
 }
 
 export class KnownHosts {
+  readonly #dir: string;
   readonly #path: string;
+  readonly #lockTimeoutMs: number;
 
-  constructor(stateDir: string) {
-    this.#path = join(ensureStateDir(stateDir), HOSTS_FILE);
+  constructor(stateDir: string, options: { readonly lockTimeoutMs?: number } = {}) {
+    this.#dir = ensureStateDir(stateDir);
+    this.#path = join(this.#dir, HOSTS_FILE);
+    this.#lockTimeoutMs = options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   }
 
   get(hostId: string): KnownHost | undefined {
     return this.#read().find((host) => host.hostId === hostId);
   }
 
+  /** Saves `host`, replacing an earlier record for the same hostId, under the state lock other writers take. */
   add(host: KnownHost): void {
-    const others = this.#read().filter((known) => known.hostId !== host.hostId);
-    const hosts = [...others, host].map(({ hostId, hostKey, relayUrl }) => ({
-      hostId,
-      hostKey: base64urlEncode(hostKey),
-      relayUrl,
-    }));
-    writePrivateJson(this.#path, { version: 1, hosts });
+    withStateLock(
+      this.#dir,
+      () => {
+        const others = this.#read().filter((known) => known.hostId !== host.hostId);
+        const hosts = [...others, host].map(({ hostId, hostKey, relayUrl }) => ({
+          hostId,
+          hostKey: base64urlEncode(hostKey),
+          relayUrl,
+        }));
+        writePrivateJson(this.#path, { version: 1, hosts });
+      },
+      this.#lockTimeoutMs,
+    );
   }
 
   #read(): KnownHost[] {
