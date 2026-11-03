@@ -3,6 +3,8 @@
   "name": "doriface-relay",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-03",
+  // The transport contract forbids permessage-deflate; compression is on by default since 2023-08-15.
+  "compatibility_flags": ["no_web_socket_compression"],
   // Production route of the public relay. Self-hosters: put your own hostname here, or delete "routes" to serve
   // from workers.dev.
   "routes": [{ "pattern": "relay-doriface.omo.dev", "custom_domain": true }],
