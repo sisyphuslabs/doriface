@@ -44,5 +44,5 @@ export function generateHostIdentity(): HostIdentity {
   return hostIdentityFromSecrets(generateEd25519().secretKey, generateX25519().secretKey);
 }
 
-/** The Noise prologue for both patterns: UTF-8 `doriface/1` followed by the UTF-8 hostId. */
+/** The Noise prologue for both patterns: UTF-8 `doriface/1` followed by the 26 ASCII characters of the hostId (36 B). */
 export const prologueFor = (hostId: string): Uint8Array => concatBytes(utf8("doriface/1"), utf8(hostId));

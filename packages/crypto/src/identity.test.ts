@@ -23,7 +23,10 @@ describe("host identity", () => {
     expect(hostIdentityFromSecrets(identity.sign.secretKey, identity.noise.secretKey)).toEqual(identity);
   });
 
-  test("the prologue is doriface/1 followed by the hostId", () => {
-    expect(new TextDecoder().decode(prologueFor(identity.hostId))).toBe(`doriface/1${identity.hostId}`);
+  test("the prologue is 64 6f 72 69 66 61 63 65 2f 31 followed by the 26 ASCII bytes of the hostId", () => {
+    const prologue = prologueFor(identity.hostId);
+    expect(prologue.byteLength).toBe(36);
+    expect(prologue.subarray(0, 10).toHex()).toBe("646f7269666163652f31");
+    expect(prologue.subarray(10)).toEqual(new Uint8Array(Buffer.from(identity.hostId, "ascii")));
   });
 });
