@@ -22,15 +22,24 @@ const decoder = new TextDecoder();
 const scratch = mkdtempSync(join(tmpdir(), "relay-e2e-"));
 const captureFile = join(scratch, "relay-observed.bin");
 const logs: string[] = [];
-let relay: LocalRelay;
-let session: HcSession;
-let uplink: Uplink;
-let client: WebSocketLink;
-let reader: ByteReader;
+let relay: LocalRelay | undefined;
+let hcSession: HcSession | undefined;
+let uplink: Uplink | undefined;
+let relayClient: WebSocketLink | undefined;
+const reader = new ByteReader();
+
+/** What beforeAll set up; the tests only run once all of it exists. */
+function started(): { readonly client: WebSocketLink; readonly session: HcSession } {
+  if (relayClient === undefined || hcSession === undefined) {
+    throw new Error("the relay end-to-end setup did not finish");
+  }
+  return { client: relayClient, session: hcSession };
+}
 
 beforeAll(async () => {
   relay = await startLocalRelay();
-  session = createHcSession("doriface-relay-e2e");
+  const hc = createHcSession("doriface-relay-e2e");
+  hcSession = hc;
   const ip = testIp();
   const sockets = capturingSockets(captureFile, socketFrom(ip));
   const answered = Promise.withResolvers<void>();
@@ -43,31 +52,34 @@ beforeAll(async () => {
     },
     onSession: (link) => {
       const pipe = new HcPipe({
-        hc: session.hc,
-        session: session.name,
-        env: session.env,
+        hc: hc.hc,
+        session: hc.name,
+        env: hc.env,
         log: (line) => logs.push(line),
       });
       void bridge(link, pipe, (error) => logs.push(`bridge: ${String(error)}`));
     },
   });
   await answered.promise;
-  client = await connectRelayClient({ relayUrl: relay.url, hostId: uplink.hostId, createSocket: sockets.client });
-  reader = new ByteReader();
-  client.onData((bytes) => reader.push(bytes));
-  client.onClose(() => reader.end());
+  const link = await connectRelayClient({ relayUrl: relay.url, hostId: uplink.hostId, createSocket: sockets.client });
+  relayClient = link;
+  link.onData((bytes) => reader.push(bytes));
+  link.onClose(() => reader.end());
 }, 120_000);
 
 afterAll(async () => {
-  client.close();
-  uplink.stop();
-  await session.dispose();
-  await relay.stop();
+  // Bridge and hc pipe diagnostics, so a failure above comes with the host side's own account.
+  if (logs.length > 0) console.log(`host-side log:\n${logs.join("\n")}`);
+  relayClient?.close();
+  uplink?.stop();
+  await hcSession?.dispose();
+  await relay?.stop();
   rmSync(scratch, { recursive: true, force: true });
 });
 
 describe("client -> relay -> host uplink -> hc", () => {
   test("hello and terminal.list replies are byte-identical to a direct hc connect", async () => {
+    const { client, session } = started();
     client.send(HELLO);
     const helloViaRelay = await reader.line();
     client.send(rpcFrame(1, "terminal.list"));
@@ -90,6 +102,7 @@ describe("client -> relay -> host uplink -> hc", () => {
   }, 30_000);
 
   test("typing 'echo doriface-ok' into an attached shell round-trips; the relay sees ciphertext only with crypto", async () => {
+    const { client } = started();
     let channel = -1;
     let screen = "";
     const onTerminal = (frame: ParsedFrame): void => {

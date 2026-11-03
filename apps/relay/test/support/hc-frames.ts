@@ -55,9 +55,10 @@ export async function drainUntil(
   done: () => boolean,
   onTerminal: (frame: ParsedFrame) => void,
 ): Promise<void> {
+  if (done()) return;
   const frame = parseFrame(await reader.frame());
   if (frame.channel !== RPC_CHANNEL) onTerminal(frame);
-  if (!done()) return drainUntil(reader, done, onTerminal);
+  return drainUntil(reader, done, onTerminal);
 }
 
 export { field };

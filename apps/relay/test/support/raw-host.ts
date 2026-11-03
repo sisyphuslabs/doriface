@@ -8,6 +8,7 @@ import {
   type MuxFrame,
   relayOriginOf,
 } from "@doriface/relay-client";
+import { defer } from "./cleanup.ts";
 import { Probe } from "./probe.ts";
 
 export interface RawHost {
@@ -25,6 +26,7 @@ export async function startRawHost(relayUrl: string, ip: string): Promise<RawHos
   const hostId = await hostIdOf(signer.publicKey);
   const url = `${relayUrl.replace("http", "ws")}/v1/host/${hostId}`;
   const probe = new Probe(url, ip);
+  defer(() => probe.socket.close());
   const challenge = await probe.next();
   const signature = await signer.sign(authMessage(relayOriginOf(url), hostId, challenge));
   probe.socket.send(encodeAuthAnswer(signer.publicKey, signature));

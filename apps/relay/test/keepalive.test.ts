@@ -1,5 +1,6 @@
 import { CloseCode, connectRelayClient, type SessionLink, type WebSocketLink } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { defer, runDeferred } from "./support/cleanup.ts";
 import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { startRawHost } from "./support/raw-host.ts";
@@ -23,6 +24,8 @@ beforeAll(async () => {
 
 afterAll(() => relay.stop());
 
+afterEach(runDeferred);
+
 interface Session {
   readonly client: WebSocketLink;
   readonly session: SessionLink;
@@ -35,6 +38,7 @@ async function connect(host: TestHost, ip: string, pingIntervalMs: number): Prom
     createSocket: socketFrom(ip),
     pingIntervalMs,
   });
+  defer(() => client.close());
   const session = await host.sessions.take();
   const first = received(session);
   client.send(new Uint8Array([1]));
