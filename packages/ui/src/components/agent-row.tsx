@@ -67,7 +67,7 @@ export function AgentRow({
       {agent.machine === undefined ? null : (
         <span className="shrink-0 text-2xs text-muted-foreground">{agent.machine}</span>
       )}
-      {agent.status === "blocked" && !compactBlocked ? <StatusChip status="blocked" /> : null}
+      {agent.status === "blocked" && !compactBlocked ? <StatusChip status="blocked" glyph={false} /> : null}
       {agent.pinned === true ? <Pin aria-label="Pinned" className="size-3 shrink-0 text-muted-foreground" /> : null}
       {agent.age === undefined ? null : (
         <time data-numeric className="shrink-0 text-xs text-muted-foreground">
