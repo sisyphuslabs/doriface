@@ -6,6 +6,8 @@ export interface HcSocket {
   readonly opened: () => number;
   /** Reconnects refused while down: one or more means the page has noticed the drop. */
   readonly refused: () => number;
+  /** Every frame the page has sent, in order, as text (the RPC JSON inside a frame reads as latin1). */
+  readonly sent: () => readonly string[];
   /** Holds every later frame from the host `ms`, in order, as a relay round trip does. */
   readonly delay: (ms: number) => void;
   /** Closes every open connection; while `down` is true the page's reconnects are refused. */
@@ -16,6 +18,7 @@ export interface HcSocket {
 /** Call before page.goto: every connection to the e2e host passes through the returned handle. */
 export async function routeHcSocket(page: Page): Promise<HcSocket> {
   const live = new Set<WebSocketRoute>();
+  const sent: string[] = [];
   let down = false;
   let opened = 0;
   let refused = 0;
@@ -28,7 +31,10 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       return;
     }
     const host = socket.connectToServer();
-    socket.onMessage((frame) => host.send(frame));
+    socket.onMessage((frame) => {
+      sent.push(typeof frame === "string" ? frame : frame.toString("latin1"));
+      host.send(frame);
+    });
     host.onMessage((frame) => {
       lastDue = Math.max(Date.now() + delay, lastDue);
       setTimeout(() => socket.send(frame), Math.max(0, lastDue - Date.now()));
@@ -39,6 +45,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   return {
     opened: () => opened,
     refused: () => refused,
+    sent: () => sent,
     delay: (ms) => void (delay = ms),
     drop: async (stayDown) => {
       down = stayDown;
