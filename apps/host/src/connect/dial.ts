@@ -1,6 +1,6 @@
 import { HcConnection } from "@doriface/client";
 import {
-  CloseCode,
+  closeCodeOf,
   fingerprintOf,
   type KeyPair,
   type PairingSecret,
@@ -36,11 +36,26 @@ export async function dial(target: ConnectTarget, options: DialOptions): Promise
     const secure = await secureLink(link, initiator(host, options.device));
     return { secure, link };
   } catch (error) {
-    if (error instanceof SecureLinkError && error.code === CloseCode.UnknownDevice) {
-      throw new Error(`host ${host.hostId} does not know this machine anymore: pair it again`, { cause: error });
-    }
-    throw error;
+    throw refusal(host.hostId, error);
   }
+}
+
+const REFUSALS: Readonly<Record<number, (hostId: string) => string>> = {
+  4400: (hostId) => `the handshake with host ${hostId} failed: its key does not match the one this machine paired with`,
+  4401: (hostId) => `host ${hostId} does not know this machine anymore: pair it again`,
+  4403: (hostId) => `the relay refused host ${hostId}'s key`,
+  4404: (hostId) => `host ${hostId} is not connected to the relay: start doriface-host there`,
+  4408: (hostId) => `host ${hostId} did not answer in time`,
+  4410: () => "no host is pairing with this code on the relay: it may have expired",
+  4429: () => "the relay is rate limiting this machine or that host: try again in a minute",
+};
+
+/** One clear line for hc to show as the reason, with the close code when there is one. */
+function refusal(hostId: string, error: unknown): Error {
+  const code = error instanceof Error ? closeCodeOf(error) : undefined;
+  const message = code === undefined ? undefined : REFUSALS[code]?.(hostId);
+  if (message === undefined) return error instanceof Error ? error : new Error(String(error));
+  return new SecureLinkError(code, `${message} (${code})`, { cause: error });
 }
 
 const initiator = (host: KnownHost, device: KeyPair, pairing?: PairingSecret) =>
@@ -90,7 +105,9 @@ async function pair(
     hostId: host.hostId,
     ...(pairSlot === undefined ? {} : { pairSlot }),
   });
-  const secure = await secureLink(link, initiator(host, options.device, pairing));
+  const secure = await secureLink(link, initiator(host, options.device, pairing)).catch((error: unknown) => {
+    throw refusal(host.hostId, error);
+  });
   (await HcConnection.open(secure)).close();
   known.add(host);
   options.log(`paired with host ${host.hostId}, fingerprint ${fingerprintOf(host.hostKey)}`);
