@@ -9,10 +9,10 @@ import { agentStatus, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
-import { sidebarStop } from "./focus-targets.ts";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions } from "./use-app-actions.ts";
+import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import type { Tabs } from "./use-tabs.ts";
 
 const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
@@ -32,7 +32,14 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
-  useAppActions({ terminals, tabs, onNew, onToggleSidebar: () => setSidebar((shown) => !shown) });
+  const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
+  useAppActions({
+    terminals,
+    tabs,
+    onNew,
+    onToggleSidebar: () => setSidebar((shown) => !shown),
+    onFocusSidebar: focusSidebar,
+  });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
     const terminal = byAddress.get(address);
@@ -59,7 +66,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
 
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background">
-      <SkipLinks onSidebar={() => sidebarStop()?.focus()} />
+      <SkipLinks onSidebar={focusSidebar} />
       {sidebar ? (
         <Sidebar
           terminals={terminals}
