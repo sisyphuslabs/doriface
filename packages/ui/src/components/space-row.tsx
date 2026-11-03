@@ -34,9 +34,13 @@ export function SpaceRow({ space, selected = false, onSelect, className }: Space
       )}
     >
       <Folder aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate">{space.name}</span>
+      <span title={space.name} className="min-w-0 flex-1 truncate">
+        {space.name}
+      </span>
       {space.machine === undefined ? null : (
-        <span className="shrink-0 text-2xs text-muted-foreground">{space.machine}</span>
+        <span title={space.machine} className="min-w-0 max-w-[50%] truncate text-2xs text-muted-foreground">
+          {space.machine}
+        </span>
       )}
       {space.attention === undefined ? null : <StatusIndicator status={space.attention} className="size-3" />}
       <span
