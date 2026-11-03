@@ -27,6 +27,23 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
     found.push({ rule, at: parts.join(" > "), text, px: Math.round(px) });
   };
   const scrolling = new Set(["auto", "scroll"]);
+  // Ink past the em box, per side: the ring on Å reaches 0.134 em in JetBrains Mono, 0.105 em in Helvetica and
+  // 0.04-0.10 em in the system UI fonts (Chromium TextMetrics, centred em box). 0.14 em covers them all, and the
+  // 1.28 em glyph box it gives still fits a `leading-tight` (1.25) line within the slack. Only words that carry a mark
+  // get it: unmarked glyphs sit in the em box, which a status badge's "!" fills exactly.
+  const accent = 0.14;
+  const marked = /\p{M}/u;
+  // A title helps only the text it carries: the truncating element's own, or its control's when that names the text.
+  const control = 'button, a[href], label, summary, [role="button"], [role="link"], [role="tab"], [role="option"]';
+  const titled = (el: Element): boolean => {
+    const title = el.parentElement?.closest(control)?.getAttribute("title");
+    const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+    return el.hasAttribute("title") || (title != null && text !== "" && title.includes(text));
+  };
+  // Replaced elements are atoms even when inline: they are measured by their box, never through their children.
+  const replaced = /^(IMG|VIDEO|CANVAS|IFRAME|EMBED|OBJECT)$/;
+  const flows = (el: Element): boolean =>
+    el instanceof HTMLElement && getComputedStyle(el).display === "inline" && !replaced.test(el.tagName);
 
   const elements = [...document.body.querySelectorAll("*")].filter(
     (el) => !skip.some((selector) => el.closest(selector) !== null) && el.checkVisibility({ visibilityProperty: true }),
@@ -37,8 +54,7 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
     if (style.position === "fixed" && (box.left < -slack || box.right > width + slack)) {
       report("viewport", el, Math.max(-box.left, box.right - width));
     }
-    const inline = style.display.startsWith("inline") && style.display !== "inline-block";
-    if (inline || el.tagName === "svg" || el.closest("svg") !== null) continue;
+    if (flows(el) || el.tagName === "svg" || el.closest("svg") !== null) continue;
     const inner = {
       left: box.left + el.clientLeft,
       right: box.left + el.clientLeft + el.clientWidth,
@@ -52,27 +68,55 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
       x = Math.max(x, inner.left - rect.left, rect.right - inner.right);
       y = Math.max(y, inner.top - rect.top, rect.bottom - inner.bottom);
     };
-    for (const child of el.childNodes) {
-      if (child instanceof Element) {
-        if (!child.checkVisibility({ visibilityProperty: true })) continue;
-        const position = getComputedStyle(child).position;
-        if (position === "fixed" || (child.clientWidth <= 1 && child.clientHeight <= 1)) continue;
-        measure(child.getBoundingClientRect());
-      } else if (child.nodeType === Node.TEXT_NODE && (child.textContent ?? "").trim() !== "") {
+    // A text or inline box is the font's whole ascent and descent; glyphs sit in its em box plus the accent allowance.
+    const glyphs = (rect: DOMRect, of: Element, text: string): DOMRect => {
+      const widen = marked.test(text.normalize("NFD")) ? accent : 0;
+      const inset = Math.max(0, (rect.height - Number.parseFloat(getComputedStyle(of).fontSize) * (1 + 2 * widen)) / 2);
+      return new DOMRect(rect.x, rect.y + inset, rect.width, rect.height - 2 * inset);
+    };
+    // Each word's line fragments: the spaces a line wraps at hang past the box without being drawn.
+    const inked = (text: Text): DOMRect[] =>
+      [...text.data.matchAll(/\S+/g)].flatMap((word) => {
         const range = document.createRange();
-        range.selectNodeContents(child);
-        // A text box is the font's whole ascent and descent; glyphs sit in its em box, which `leading-none` fits.
-        const em = Number.parseFloat(style.fontSize);
-        for (const rect of range.getClientRects()) {
-          const inset = Math.max(0, (rect.height - em) / 2);
-          measure(new DOMRect(rect.x, rect.y + inset, rect.width, rect.height - 2 * inset));
-        }
+        range.setStart(text, word.index);
+        range.setEnd(text, word.index + word[0].length);
+        return [...range.getClientRects()].map((rect) => glyphs(rect, text.parentElement ?? el, word[0]));
+      });
+    // Content in the box's own lines: text by its words, an inline element by each line fragment that holds a word
+    // (a fragment of nothing but spaces draws nothing), and every other box whole.
+    const flow = (node: ChildNode): void => {
+      if (node instanceof Text) {
+        for (const rect of inked(node)) measure(rect);
+        return;
       }
-    }
+      if (!(node instanceof Element) || !node.checkVisibility({ visibilityProperty: true })) return;
+      if (getComputedStyle(node).position === "fixed") return;
+      if (!flows(node)) {
+        if (node.clientWidth > 1 || node.clientHeight > 1) measure(node.getBoundingClientRect());
+        return;
+      }
+      const wordRects: DOMRect[] = [];
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+        if (text instanceof Text) wordRects.push(...inked(text));
+      }
+      for (const fragment of node.getClientRects()) {
+        const holds = wordRects.some(
+          (word) =>
+            word.right > fragment.left &&
+            word.left < fragment.right &&
+            word.bottom > fragment.top &&
+            word.top < fragment.bottom,
+        );
+        if (holds) measure(glyphs(fragment, node, node.textContent ?? ""));
+      }
+      for (const child of node.childNodes) flow(child);
+    };
+    for (const child of el.childNodes) flow(child);
     // An ellipsis draws only in a block container; a flex or grid box with text-overflow just cuts the text.
     const ellipsis = style.textOverflow === "ellipsis" && !/flex|grid/.test(style.display);
     const truncated = ellipsis && el.scrollWidth > el.clientWidth + slack;
-    if (truncated && el.closest("[title]") === null) report("untitled", el, el.scrollWidth - el.clientWidth);
+    if (truncated && !titled(el)) report("untitled", el, el.scrollWidth - el.clientWidth);
     const overX = x > slack && !scrolling.has(style.overflowX);
     const overY = y > slack && !scrolling.has(style.overflowY);
     if (overX && style.overflowX === "visible") report("spill", el, x);

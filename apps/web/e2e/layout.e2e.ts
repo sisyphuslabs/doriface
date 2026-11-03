@@ -7,21 +7,29 @@ import { findOverflows } from "./overflow.ts";
 import { expect, test } from "./fixtures.ts";
 
 const VIEWPORTS = [
-  { name: "1470x956@2", viewport: { width: 1470, height: 956 }, deviceScaleFactor: 2, narrow: false },
-  { name: "1280x800@2", viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2, narrow: false },
-  { name: "1280x800@1", viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, narrow: false },
-  { name: "390x844@3", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, narrow: true },
+  { name: "1470x956@2", viewport: { width: 1470, height: 956 }, deviceScaleFactor: 2, narrow: false, inset: false },
+  { name: "1280x800@2", viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2, narrow: false, inset: false },
+  // The desktop shell's top-left inset for its window buttons; the other 1280 viewport covers the browser.
+  {
+    name: "1280x800@1+inset",
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+    narrow: false,
+    inset: true,
+  },
+  { name: "390x844@3", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, narrow: true, inset: false },
 ] as const;
 /** The live terminal draws its own grid; the sidebar and the phone's list of the same rows have their own fix. */
 const SKIP = ["[data-terminal]", 'aside[aria-label="Workspace"]', '[data-slot="agents-list"]'];
 /** A spinning glyph's box grows as it turns; measure every box at rest. */
 const AT_REST = "*, ::before, ::after { animation: none !important; transition: none !important; }";
+const DESKTOP_INSET = ":root { --titlebar-inset-start: 78px; }";
 const BROKEN_STORAGE = `IDBFactory.prototype.open = () => { throw new DOMException("IndexedDB is not available here", "InvalidStateError"); };`;
 const OUT = process.env["LAYOUT_OUT"];
 
-test.use({ page: async ({ page }, use) => use(page), serviceWorkers: "block" });
+test.use({ serviceWorkers: "block" });
 
-for (const { name: size, narrow, ...use } of VIEWPORTS) {
+for (const { name: size, narrow, inset, ...use } of VIEWPORTS) {
   for (const theme of ["day", "night"] as const) {
     const screens = SCREENS.filter((screen) => screen.only === undefined || (screen.only === "narrow") === narrow);
     for (const screen of screens) {
@@ -47,6 +55,7 @@ for (const { name: size, narrow, ...use } of VIEWPORTS) {
         await page.mouse.move(0, 0);
         await page.evaluate(() => document.fonts.ready);
         await page.addStyleTag({ content: AT_REST });
+        if (inset) await page.addStyleTag({ content: DESKTOP_INSET });
         const found = await page.evaluate(findOverflows, SKIP);
         if (OUT !== undefined) {
           const file = join(OUT, `${screen.name}-${size}-${theme}`);
