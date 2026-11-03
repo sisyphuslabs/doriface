@@ -28,6 +28,11 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+      - name: Install herdr-core
+        run: |
+          curl -fsSL https://releases.herdr.dev/core/install.sh | HC_VERSION=0.1.17 sh
+          echo "HC_BIN=$(command -v hc || echo "$HOME/.local/bin/hc")" >> "$GITHUB_ENV"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
