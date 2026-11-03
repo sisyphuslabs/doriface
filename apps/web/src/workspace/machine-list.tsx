@@ -1,7 +1,6 @@
 import { Button, IconButton, Notice, SidebarSection, cn } from "@doriface/ui";
 import { Monitor, Plus, Server } from "lucide-react";
 import { type MachineEntry, onlyThisMachine, stateLabel } from "./machines.ts";
-import type { RunFailure } from "./start-on.ts";
 
 export interface MachineListProps {
   readonly entries: readonly MachineEntry[];
@@ -9,9 +8,7 @@ export interface MachineListProps {
   readonly activeMachine: string | undefined;
   readonly onOpen: (address: string) => void;
   readonly onNewOn: (machine: string) => void;
-  readonly failure?: RunFailure | undefined;
   readonly listError?: string | undefined;
-  readonly onDismiss?: () => void;
   readonly onAdd: () => void;
   readonly className?: string;
 }
@@ -27,9 +24,7 @@ export function MachineList({
   activeMachine,
   onOpen,
   onNewOn,
-  failure,
   listError,
-  onDismiss,
   onAdd,
   className,
 }: MachineListProps) {
@@ -100,20 +95,6 @@ export function MachineList({
       {listError === undefined ? null : (
         <Notice tone="error" className="mx-1 mt-1" title="Could not list the machines">
           {listError}
-        </Notice>
-      )}
-      {failure === undefined ? null : (
-        <Notice
-          tone="error"
-          className="mx-1 mt-1"
-          title={`No new terminal on ${failure.machine}`}
-          actions={
-            <Button variant="ghost" size="sm" onClick={onDismiss}>
-              Dismiss
-            </Button>
-          }
-        >
-          {failure.message}
         </Notice>
       )}
     </SidebarSection>

@@ -1,5 +1,4 @@
 import type { HcConnection } from "@doriface/client";
-import { useToastManager } from "@doriface/ui";
 import { useCallback, useMemo, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
@@ -46,25 +45,10 @@ export function Workspace({ connection }: WorkspaceProps) {
     [select],
   );
   const runs = useMachineRuns(connection, opened, refresh);
-  const toasts = useToastManager();
   const inView = narrow ? phoneOpen : tabs.active;
   const newTerminal = (): void => {
     const active = terminals.find((terminal) => terminal.address === inView);
-    void connection.call("terminal.run", runParamsFor(active)).then(
-      (started) => {
-        opened(started.address);
-        return started;
-      },
-      (cause: unknown) => {
-        toasts.add({
-          type: "error",
-          title: "Could not open a new tab",
-          description: connection.closed
-            ? `Reconnecting to ${connection.hello.core.name}; try again once it is back.`
-            : String(cause),
-        });
-      },
-    );
+    runs.start(runParamsFor(active));
   };
   const openTerminal = (address: string): void => {
     tabs.select(address);
