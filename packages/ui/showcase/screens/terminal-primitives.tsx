@@ -64,7 +64,7 @@ export function TerminalSettingsParts() {
             title="Thicken glyphs"
             configKey="font-thicken"
             disabledReason="Only Ghostty's macOS renderer can thicken strokes."
-            control={<Switch aria-label="Thicken glyphs" disabled />}
+            control={(reason) => <Switch aria-label="Thicken glyphs" disabled {...reason} />}
           />
         </div>
       </div>

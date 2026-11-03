@@ -26,7 +26,7 @@ export { QrCode, type QrCodeProps } from "./components/qr-code.tsx";
 export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area.tsx";
 export { SegmentedControl, type SegmentOption, type SegmentedControlProps } from "./components/segmented-control.tsx";
 export { ShortcutField, type ShortcutFieldProps, type ShortcutState } from "./components/shortcut-field.tsx";
-export { SettingRow, type SettingRowProps } from "./components/setting-row.tsx";
+export { SettingRow, type SettingReason, type SettingRowProps } from "./components/setting-row.tsx";
 export { Sheet, SheetPanel, type SheetProps } from "./components/sheet.tsx";
 export { SidebarSection, type SidebarSectionProps } from "./components/sidebar-section.tsx";
 export { Skeleton, type SkeletonProps } from "./components/skeleton.tsx";

@@ -8,6 +8,7 @@ import {
   Switch,
   TerminalPreview,
   resolveTheme,
+  type SettingReason,
 } from "../../src/index.ts";
 import { CLAUDE_LINES } from "../data.ts";
 
@@ -39,12 +40,14 @@ export function Toggle({
   label,
   on,
   disabled = false,
+  reason = {},
 }: {
   readonly label: string;
   readonly on: boolean;
   readonly disabled?: boolean;
+  readonly reason?: SettingReason;
 }) {
-  return <Switch aria-label={label} defaultChecked={on} disabled={disabled} />;
+  return <Switch aria-label={label} defaultChecked={on} disabled={disabled} {...reason} />;
 }
 
 export function Mono({
