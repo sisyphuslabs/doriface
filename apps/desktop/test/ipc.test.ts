@@ -15,7 +15,13 @@ const setup = () => {
   const painted: string[] = [];
   let starts = 0;
   let closes = 0;
+  let waiting: string | undefined = "#p=waiting";
   const handlers = ipcHandlers({
+    takePairingLink: () => {
+      const link = waiting;
+      waiting = undefined;
+      return link;
+    },
     origin: APP_ORIGIN,
     startLocalHost: async () => {
       starts += 1;
@@ -45,8 +51,16 @@ describe("IPC sender gate", () => {
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
       ]),
     );
+    for (const event of foreign) expect(() => handlers.takePairingLink(event)).toThrow("refused IPC");
     expect(opened).toEqual([]);
     expect(starts()).toBe(0);
+    expect(handlers.takePairingLink(app)).toBe("#p=waiting");
+  });
+
+  test("the app origin takes a waiting pairing link once", () => {
+    const { handlers } = setup();
+    expect(handlers.takePairingLink(app)).toBe("#p=waiting");
+    expect(handlers.takePairingLink(app)).toBeNull();
   });
 
   test("the app origin opens only normalized allowlisted links", async () => {

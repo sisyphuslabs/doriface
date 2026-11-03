@@ -27,6 +27,14 @@ const bridge: DorifaceBridge = {
   async closeWindow() {
     await ipcRenderer.invoke(Channel.closeWindow);
   },
+  onPairingLink(listener) {
+    const take = async (): Promise<void> => {
+      const fragment: unknown = await ipcRenderer.invoke(Channel.takePairingLink);
+      if (typeof fragment === "string") listener(fragment);
+    };
+    ipcRenderer.on(Channel.pairingLinkWaiting, () => void take());
+    void take();
+  },
 };
 
 contextBridge.exposeInMainWorld("doriface", bridge);

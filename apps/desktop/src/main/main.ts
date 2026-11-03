@@ -3,10 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { contextMenuTemplate } from "../config/context-menu.ts";
 import { contentSecurityPolicy } from "../config/csp.ts";
+import { DEEP_LINK_SCHEME, deepLinkArg } from "../config/deep-link.ts";
 import { APP_ORIGIN, loopbackDevUrl } from "../config/origin.ts";
 import { restorePlacement } from "../config/window-state.ts";
 import { launchBackground, secureWebPreferences, windowOptions } from "../config/window.ts";
 import { Channel, parsePlatform } from "../shared/bridge.ts";
+import { openDeepLink, routeDeepLinksTo, takePairingLink } from "./deep-link.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
 import { findHc, hostCommand, type HostContext } from "./host-command.ts";
 import { registerIpc } from "./ipc.ts";
@@ -98,6 +100,12 @@ function setWindowBackground(color: string): void {
   writeSaved(savedFile("window-background.json"), { background: color });
 }
 
+/**
+ * Deep links land in the one window: brought forward, or made when the app has none (macOS keeps running). Before the
+ * app is ready there is no window yet; the one made at startup takes the waiting link when it loads.
+ */
+const revealWindow = () => (app.isReady() ? showWindow().webContents : undefined);
+
 function ready(): void {
   const context = hostContext();
   const localHost = new LocalHost({
@@ -117,8 +125,14 @@ function ready(): void {
     openExternal: (url) => shell.openExternal(url),
     setWindowBackground,
     closeWindow: () => liveWindow()?.close(),
+    takePairingLink,
   });
+  // In a checkout the executable is Electron itself, which must not become the OS handler for doriface: links.
+  if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+  routeDeepLinksTo(revealWindow);
   showWindow();
+  const launchLink = deepLinkArg(process.argv);
+  if (launchLink !== undefined) openDeepLink(launchLink);
   app.on("activate", () => void showWindow());
 }
 
@@ -128,7 +142,13 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("web-contents-created", (_event, contents) => hardenContents(contents, origin, navigate));
-  app.on("second-instance", () => {
+  app.on("open-url", (event, url) => {
+    event.preventDefault();
+    openDeepLink(url);
+  });
+  app.on("second-instance", (_event, argv) => {
+    const link = deepLinkArg(argv);
+    if (link !== undefined) openDeepLink(link);
     if (app.isReady()) showWindow();
   });
   app.on("window-all-closed", () => {

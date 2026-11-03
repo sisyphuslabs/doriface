@@ -5,7 +5,13 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { appearanceStore, applyAppearance } from "./appearance/appearance.ts";
 import { connectionStore } from "./connection/store.ts";
-import { closeDesktopWindow, desktopBridge, onDesktopNavigate, setDesktopBackground } from "./desktop/bridge.ts";
+import {
+  closeDesktopWindow,
+  desktopBridge,
+  onDesktopNavigate,
+  onDesktopPairingLink,
+  setDesktopBackground,
+} from "./desktop/bridge.ts";
 import { bootConnection } from "./desktop/local-host.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
@@ -35,6 +41,11 @@ if (desktopBridge() !== null) {
 // Leaving the pair route forgets the link; coming back without one asks for a link or code again.
 router.subscribe("onResolved", ({ toLocation }) => {
   if (toLocation.pathname !== PAIR_PATH) pairingLink.set(null);
+});
+// A doriface:// link or an in-app pairing link: the desktop shell hands over the fragment, never a URL to load.
+onDesktopPairingLink((fragment) => {
+  pairingLink.set(fragment);
+  void router.navigate({ to: PAIR_PATH });
 });
 if (import.meta.env.DEV) void import("./dev-tools.ts");
 

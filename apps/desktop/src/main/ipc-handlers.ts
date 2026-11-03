@@ -14,6 +14,7 @@ export interface IpcDeps {
   readonly openExternal: (url: string) => Promise<void>;
   readonly setWindowBackground: (color: string) => void;
   readonly closeWindow: () => void;
+  readonly takePairingLink: () => string | undefined;
 }
 
 export interface IpcHandlers {
@@ -23,6 +24,7 @@ export interface IpcHandlers {
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
   closeWindow(event: IpcSender): Promise<void>;
+  takePairingLink(event: IpcSender): string | null;
 }
 
 function assertAppFrame(event: IpcSender, origin: string): void {
@@ -53,6 +55,10 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async closeWindow(event) {
       assertAppFrame(event, deps.origin);
       deps.closeWindow();
+    },
+    takePairingLink(event) {
+      assertAppFrame(event, deps.origin);
+      return deps.takePairingLink() ?? null;
     },
   };
 }
