@@ -1,5 +1,6 @@
 import { backoffDelay } from "./backoff.ts";
 import { AckCounter, keepAlive } from "./flow-control.ts";
+import { rethrowAfter } from "./inbox.ts";
 import { LinkClosedError } from "./link.ts";
 import { type PairSlotResult, PairSlotRequests } from "./pair-requests.ts";
 import { SessionLink } from "./session-link.ts";
@@ -178,9 +179,7 @@ export class Uplink {
     if (ws !== this.#socket) return;
     this.#socket = undefined;
     this.#pairSlot = undefined;
-    this.#endSessions(code);
     this.#pairSlots.failAll(`the uplink closed with ${code} before the relay answered`);
-    if (this.#done) return;
     if (FINAL_CODES.has(code)) return this.#finish(code);
     const stable = this.#answeredAt !== undefined && Date.now() - this.#answeredAt >= STABLE_MS;
     if (stable) this.#attempt = 0;
@@ -188,12 +187,15 @@ export class Uplink {
     this.#attempt += 1;
     this.#options.onState?.({ state: "waiting", code, retryInMs });
     this.#timer = setTimeout(() => this.#connect(), retryInMs);
+    // Last, so a session's throwing close listener cannot cancel the reconnect.
+    this.#endSessions(code);
   }
 
   #endSessions(code: number): void {
-    for (const session of this.#sessions.values())
-      session.ended(code === CloseCode.Normal ? CloseCode.GoingAway : code);
+    const sessions = [...this.#sessions.values()];
     this.#sessions.clear();
+    const sessionCode = code === CloseCode.Normal ? CloseCode.GoingAway : code;
+    rethrowAfter(sessions.map((session) => () => session.ended(sessionCode)));
   }
 
   #finish(code: number): void {
@@ -202,10 +204,10 @@ export class Uplink {
     clearTimeout(this.#timer);
     const ws = this.#socket;
     this.#socket = undefined;
-    this.#endSessions(code);
     this.#pairSlots.failAll("the uplink stopped");
     if (ws !== undefined && isOpen(ws)) ws.close(CloseCode.Normal, "host stopping");
     this.#options.onState?.({ state: "stopped", code });
     this.#stop.resolve(code);
+    this.#endSessions(code);
   }
 }

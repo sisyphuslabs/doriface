@@ -56,7 +56,10 @@ export class Inbox {
   }
 }
 
-/** Close listeners that run once; a listener added after the close runs on the next microtask. */
+/**
+ * Close listeners that run once; a listener added after the close runs on the next microtask unless it is removed
+ * first. Every listener runs even if one throws; the failure is rethrown once all have run.
+ */
 export class CloseSignal {
   readonly #listeners = new Set<CloseListener>();
   #fired: { readonly error: Error | undefined } | undefined;
@@ -68,8 +71,13 @@ export class CloseSignal {
   add(listener: CloseListener): Unsubscribe {
     const fired = this.#fired;
     if (fired !== undefined) {
-      queueMicrotask(() => listener(fired.error));
-      return () => {};
+      let active = true;
+      queueMicrotask(() => {
+        if (active) listener(fired.error);
+      });
+      return () => {
+        active = false;
+      };
     }
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -78,7 +86,22 @@ export class CloseSignal {
   fire(error: Error | undefined): void {
     if (this.#fired !== undefined) return;
     this.#fired = { error };
-    for (const listener of this.#listeners) listener(error);
+    const listeners = [...this.#listeners];
     this.#listeners.clear();
+    rethrowAfter(listeners.map((listener) => () => listener(error)));
   }
+}
+
+/** Runs every step even if some throw, then rethrows the failure (an AggregateError when several failed). */
+export function rethrowAfter(steps: readonly (() => void)[]): void {
+  const failures: unknown[] = [];
+  for (const step of steps) {
+    try {
+      step();
+    } catch (failure) {
+      failures.push(failure);
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, "close listeners failed");
 }
