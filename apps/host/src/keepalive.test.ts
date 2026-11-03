@@ -43,6 +43,7 @@ async function open() {
   socket.addEventListener("close", (event) => closed.resolve(event.code));
   const opened = Promise.withResolvers<void>();
   socket.addEventListener("open", () => opened.resolve());
+  socket.addEventListener("error", () => opened.reject(new Error("the /v1/e2ee socket failed to open")));
   await opened.promise;
   return { socket, texts, closed: closed.promise };
 }
