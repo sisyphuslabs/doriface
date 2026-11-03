@@ -1,4 +1,4 @@
-import { GripVertical, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { cn } from "../lib/cn.ts";
 import { Button } from "./button.tsx";
 import { IconButton } from "./icon-button.tsx";
@@ -28,7 +28,6 @@ export function FontFamilyList({ families, missing = [], onRemove, onAdd, classN
               key={`${family}#${repeat}`}
               className="flex h-(--row) items-center gap-2 border-b border-border pr-1 pl-2 last:border-b-0"
             >
-              <GripVertical aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
               <span data-numeric className="w-4 shrink-0 text-xs text-muted-foreground">
                 {index + 1}
               </span>
