@@ -76,10 +76,10 @@ function tooLarge(lines: MeshLines, reason: string): never {
 
 /**
  * Section 4.4 step 5: every record passes the door in order; exactly one found, whose id is the offered mesh; the
- * dialed member is in the view with the hostId and Noise key this host authenticated; and this host is a member,
- * governed by an admit of a member of the view, with this host's current Noise key. The door already proved that the
- * admit's card is signed by this host's own key, so it is this host's own card: the one just sent, or the one an
- * earlier attempt sent when that attempt's welcome was lost (step 3's idempotent re-join, through any member).
+ * dialed member is in the view with the hostId and Noise key this host authenticated; and this host is a member of the
+ * view with its current Noise key. Whoever admitted it: the door already proved that the card its membership rests on
+ * is signed by this host's own key, so it is this host's own card (the one just sent, or one an earlier attempt sent
+ * when that attempt's welcome was lost: step 3's idempotent re-join, through any member, even after the admitter left).
  * Trusts nothing else in the welcome.
  */
 export function checkWelcome(records: readonly Signed[], doneMesh: string, offer: Offer, ctx: JoinerContext): void {
@@ -104,8 +104,7 @@ export function checkWelcome(records: readonly Signed[], doneMesh: string, offer
     throw new JoinRefused("the inviting member's key in the mesh is not the key this host dialed");
   }
   const self = base64urlEncode(ctx.identity.sign.publicKey);
-  const admitter = view.admitter.get(self);
-  if (!view.members.has(self) || admitter === undefined || !view.members.has(admitter)) {
+  if (!view.members.has(self)) {
     throw new JoinRefused("the welcome does not admit this host with its own card");
   }
   if (view.noise.get(self) !== base64urlEncode(ctx.identity.noise.publicKey)) {

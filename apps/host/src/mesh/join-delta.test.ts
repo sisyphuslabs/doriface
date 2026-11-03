@@ -60,6 +60,28 @@ describe("section 4.4 step 3: a member re-joins through any member", () => {
     expect(b.mesh.read()?.records).toEqual(c.mesh.read()?.records);
   });
 
+  test("a member whose admitter left the mesh re-joins through another member", async () => {
+    const [a, b, c] = [side("alpha"), side("beta"), side("gamma")];
+    await joined(a, b);
+    await joined(a, c);
+    const meshId = a.mesh.read()?.meshId ?? "";
+    const leave = { signPubs: [signPubOf(a.m)], reason: "leave" } as const;
+    a.mesh.sign(a.m.identity, (n, prev) => ({
+      v: 2,
+      mesh: meshId,
+      type: "revoke",
+      by: signPubOf(a.m),
+      n,
+      prev,
+      subject: leave,
+    }));
+    c.mesh.merge(a.mesh.read()?.records ?? []);
+    rmSync(join(b.dir, "mesh.json"));
+    const run = runJoin(inviteDeps(c, new PendingJoins()), joinerContext(b, c), b.m.identity.noise.publicKey);
+    expect(await run.joined).toBe(meshId);
+    expect(b.mesh.authorizeIndex()?.isMember(signPubOf(a.m))).toBe(false);
+  });
+
   test("a member whose Noise key is not its key in the mesh gets no welcome and is not asked about", async () => {
     const [a, b] = [side("alpha"), side("beta")];
     await joined(a, b);
