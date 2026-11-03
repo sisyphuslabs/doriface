@@ -22,7 +22,7 @@ Layering, outermost first:
 - `doriface-host pair` prints a QR code and URL `<web origin>/pair#h=<hostId>&k=<noiseStaticPub b64url>&s=<signPub b64url>&c=<code>&r=<relay url>`. The fragment never reaches a server.
 - Typed code: 8 characters from the Crockford base32 alphabet `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, displayed as `XXXX XXXX`. It is single use and expires after 10 minutes. The host burns it only on success or expiry; failed attempts are limited by the relay's pairing budget below, so an attacker cannot burn a code by failing on purpose.
 - The first 3 characters are the relay pairing slot; the last 5 are the secret (2^25 values), which never leaves the two devices.
-- While pairing is open, the host's relay uplink registers the slot with a PAIR_SLOT control frame (see "Relay"). A client that has only the typed code calls `GET /v1/pair/<slot>` and gets `{hostId, noiseStaticPub, signPub}` as base64url strings. That answer is untrusted; the psk and the fingerprint check (step 3 of the pairing UI) authenticate it. On a slot collision the relay answers 409 and the host draws a new code. A QR/URL pairing already carries hostId and keys, so it skips the slot lookup.
+- While pairing is open, the host's relay uplink registers the slot with a PAIR_SLOT control frame (see "Relay"). A client that has only the typed code calls `GET /v1/pair/<slot>` and gets `{hostId, noiseStaticPub, signPub}`: `hostId` is the 26-character lowercase base32 string defined above, and the two public keys are base64url strings without padding. That answer is untrusted; the psk and the fingerprint check (step 3 of the pairing UI) authenticate it. The relay answers each PAIR_SLOT with a PAIR_SLOT_ACK (see "Relay"); on a collision the host draws a new code and registers again. A QR/URL pairing already carries hostId and keys, so it skips the slot lookup.
 - The first session uses `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` with psk = HKDF-SHA256(ikm = UTF-8 of all 8 code characters, salt = empty, info = "doriface pair v1", 32 bytes).
 - On success the host appends `{clientStaticPub, name, pairedAt}` to its paired-devices store and burns the code.
 - Every later session uses `Noise_IK_25519_ChaChaPoly_BLAKE2s`. The host rejects a client static key that is not in the store (close code 4401).
@@ -55,16 +55,17 @@ So msg1 carries nothing secret, and the typed-code UI requires the fingerprint c
 - Default public relay: `https://relay-doriface.omo.dev`. Self-hosting is one `wrangler deploy`.
 - `GET /healthz` -> `{ok:true, version}`.
 - Host uplink: `GET /v1/host/<hostId>` (WebSocket). The relay sends a 32-byte random challenge as the first binary message. The host answers with `signPub(32) || Ed25519-signature(64)` over `"doriface-relay-v1" || relayOrigin || hostId || challenge`, where `relayOrigin` is the exact `wss://host[:port]` the host dialed. The relay rebuilds `relayOrigin` from its own request URL and checks the signature and that `hostId` matches signPub; otherwise it closes with 4403. Binding the origin stops a second relay from replaying a challenge from this one. One uplink per hostId; a newer authenticated uplink replaces the old one.
-- Client: `GET /v1/client/<hostId>` (WebSocket). There is no relay-level auth (E2EE authenticates). An offline host closes the socket with 4404.
+- Client: `GET /v1/client/<hostId>` (WebSocket). There is no relay-level auth (E2EE authenticates). An offline host closes the socket with 4404. A pairing session adds `?pair=<slot>`: the relay charges it to that slot's pairing budget, refuses it with 4404 when the slot is not registered to this hostId, and sends the host an OPEN whose payload is the 3 slot characters (an ordinary OPEN has no payload).
 - Session admission: a client session counts against the 32-session cap only after the host has sent its first DATA on it. Before that it is pending: at most 8 pending sessions per host, with 10 s to the host's first DATA (else close 4408). When the pending cap is full, the relay evicts the pending socket from the source IP that holds the most pending sockets. Connections are also rate limited per IP (4429).
 - One Durable Object per hostId (`idFromName(hostId)`), using the WebSocket Hibernation API. Socket attachments carry `{role, sessionId}`.
 - Relay <-> host multiplexing frame: `[type u8][sessionId u32 LE][payload]`.
-  - 1 OPEN: no payload.
+  - 1 OPEN: no payload, or the 3 slot characters for a pairing session.
   - 2 DATA: opaque bytes.
   - 3 CLOSE: payload = u16 LE close code.
-  - 4 PAIR_SLOT (host to relay only): payload = `slot (3 ASCII) || noiseStaticPub (32)` = 35 bytes. An empty payload clears the slot.
+  - 4 PAIR_SLOT (host to relay only, sessionId 0): payload = `slot (3 ASCII) || noiseStaticPub (32)` = 35 bytes. An empty payload clears the host's slot.
+  - 5 PAIR_SLOT_ACK (relay to host only, sessionId 0): payload = `status u8` (0 registered, 1 slot taken by another host, 2 malformed) followed by the 3 slot characters. A host that gets status 1 draws a new code and sends PAIR_SLOT again.
 - The relay assigns sessionIds. Client <-> relay messages are the raw opaque bytes, with no header.
-- Pairing budget: at most 10 `GET /v1/pair/<slot>` and 10 pairing-session OPENs per slot per 10 minutes (429 / 4429 beyond).
+- Pairing budget: at most 10 `GET /v1/pair/<slot>` and 10 pairing sessions (client connections with `?pair=<slot>`) per slot per 10 minutes (429 / 4429 beyond). Ordinary sessions are never charged to a slot.
 - The relay never decrypts, never logs payloads, enforces a 1 MiB message cap, and forwards immediately with no batching.
 
 ### Relay text messages
@@ -77,8 +78,9 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 | `pong`                     | the relay, via `setWebSocketAutoResponse` (no Durable Object wake-up) | keepalive reply              |
 | `a:<total bytes received>` | the receiver of relay traffic (client or host uplink), every 64 KiB   | backpressure acknowledgement |
 
-- Backpressure: the Durable Object keeps `sent - acked` per socket in its attachment and closes the sending side with 4408 when it exceeds 4 MiB.
-- Keepalive: an alarm reaps sockets whose auto-response timestamp is more than 90 s old, with 4408. On the direct path the host runs the same 90 s check.
+- Backpressure: the Durable Object keeps `sent - acked` per socket in its attachment and closes the sending side with 4408 when it exceeds 4 MiB. Acknowledgements are cumulative and must be monotonic: an `a:<n>` that is not a decimal integer, is smaller than the last acknowledgement, or is larger than the bytes actually sent to that socket is a protocol error and closes the socket with 4400, so a peer cannot ack bytes it never received to make the relay buffer without bound.
+- Keepalive: an alarm reaps sockets whose auto-response timestamp is more than 90 s old, with 4408.
+- Direct path: there is no relay, so the host itself answers each text `ping` with a text `pong`, and closes a `/v1/e2ee` socket with 4408 when it has received nothing (no record and no `ping`) for 90 s. Clients send `ping` every 30 s on the direct path too.
 
 ## Direct path
 
@@ -96,6 +98,6 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 
 ## Change log
 
-- v1.2: pending-session admission; the `a:<n>` backpressure acknowledgement; the relay origin in the uplink signature; non-extractable device keys with a raw fallback; `ping`/`pong` keepalive; the pairing budget moved to the relay, with codes burned only on success or expiry (replacing "burn after 3 failed handshakes"); PAIR_SLOT carrying the Noise static key; pinned prologue, payload and nonce rules. Resume without a repaint is deferred.
+- v1.2: pending-session admission; the `a:<n>` backpressure acknowledgement; the relay origin in the uplink signature; non-extractable device keys with a raw fallback; `ping`/`pong` keepalive; the pairing budget moved to the relay, with codes burned only on success or expiry (replacing "burn after 3 failed handshakes"); PAIR_SLOT carrying the Noise static key, acknowledged by PAIR_SLOT_ACK; pairing sessions marked with `?pair=<slot>`; monotonic, clamped acknowledgements; direct-path keepalive; pinned prologue, payload and nonce rules. Resume without a repaint is deferred.
 - v1.1: the 8-character typed code with a relay pairing slot; the SHA-256 hex fingerprint; the `doriface-host pair` and `doriface-host fingerprint` command names.
 - v1: initial contract.
