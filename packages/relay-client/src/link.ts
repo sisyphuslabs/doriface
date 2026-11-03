@@ -18,8 +18,8 @@ export class RelayCloseError extends Error {
   override readonly name = "RelayCloseError";
   readonly code: number;
 
-  constructor(code: number, reason: string) {
-    super(`relay socket closed with ${code}${reason === "" ? "" : `: ${reason}`}`);
+  constructor(code: number, reason: string, options?: ErrorOptions) {
+    super(`relay socket closed with ${code}${reason === "" ? "" : `: ${reason}`}`, options);
     this.code = code;
   }
 }
