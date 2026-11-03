@@ -13,6 +13,8 @@ export interface Machines {
   readonly dismissFailure: () => void;
   /** Why the last machine.list failed, until one succeeds. */
   readonly listError: string | undefined;
+  /** Shows how to add a machine (the pairing commands). */
+  readonly openAddMachine: () => void;
 }
 
 export const MachinesContext = createContext<Machines>({
@@ -21,6 +23,7 @@ export const MachinesContext = createContext<Machines>({
   failure: undefined,
   dismissFailure: () => {},
   listError: undefined,
+  openAddMachine: () => {},
 });
 
 export const useMachinesContext = (): Machines => useContext(MachinesContext);
