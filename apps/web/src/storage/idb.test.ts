@@ -23,7 +23,11 @@ function settle(outcome: { readonly result: unknown } | { readonly error: Error 
  * One database for the whole file, since the store caches its open: writes succeed as requests, and
  * `fake.commit` decides whether each transaction then completes or aborts.
  */
-const fake: { values: Map<string, unknown>; commit: "complete" | "abort" } = { values: new Map(), commit: "complete" };
+const fake: { values: Map<string, unknown>; commit: "complete" | "abort"; abortCause: Error } = {
+  values: new Map(),
+  commit: "complete",
+  abortCause: new Error("transaction aborted"),
+};
 const db = {
   transaction: () => {
     const tx: Fake = new EventTarget();
@@ -33,9 +37,15 @@ const db = {
         const req = settle({ result: key });
         req.addEventListener("success", () =>
           queueMicrotask(() => {
-            if (fake.commit === "complete") fake.values.set(key, value);
-            else tx.error = new Error("transaction aborted");
-            tx.dispatchEvent(new Event(fake.commit));
+            if (fake.commit === "complete") {
+              fake.values.set(key, value);
+              tx.dispatchEvent(new Event("complete"));
+              return;
+            }
+            // As in IndexedDB: an error event reaches the transaction before it aborts and sets error.
+            tx.dispatchEvent(new Event("error"));
+            tx.error = fake.abortCause;
+            tx.dispatchEvent(new Event("abort"));
           }),
         );
         return req;
@@ -67,12 +77,19 @@ describe("deviceStore", () => {
 
   test("a put rejects when its transaction aborts after the request succeeded", async () => {
     fake.commit = "abort";
-    await expect(deviceStore.put("k", "v")).rejects.toThrow("transaction aborted");
+    const cause = new Error("quota exceeded while committing");
+    fake.abortCause = cause;
+    const failure = await deviceStore.put("k", "v").then(
+      () => null,
+      (rejected: unknown) => rejected,
+    );
+    expect(failure).toBe(cause);
   });
 
   test("an aborted migration write keeps the legacy font size", async () => {
     fake.values = new Map();
     fake.commit = "abort";
+    fake.abortCause = new Error("transaction aborted");
     const items = new Map([["doriface.appearance", JSON.stringify({ fontSize: 18 })]]);
     const local = {
       getItem: (key: string) => items.get(key) ?? null,
