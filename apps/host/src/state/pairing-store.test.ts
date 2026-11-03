@@ -74,7 +74,7 @@ describe("typed-code attempt reservations", () => {
   });
 
   test("a claim while another process holds the lock mid-reservation waits for it instead of reserving beside it", async () => {
-    const pairing = new PairingStore(dir);
+    const pairing = new PairingStore(dir, () => {}, { lockTimeoutMs: 50 });
     const slot = pairingSlotOf(pairing.offer().code);
     for (let i = 0; i < PAIRING_CODE_ATTEMPTS - 1; i++) claimed(pairing.claimCode(slot));
     const other = Bun.spawn([process.execPath, RESERVATION_WORKER, dir], { stdin: "pipe", stdout: "pipe" });
