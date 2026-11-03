@@ -7,13 +7,14 @@ import {
   type SessionLink,
   type WebSocketLink,
 } from "@doriface/relay-client";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { startRawHost } from "./support/raw-host.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { startTestHost, type TestHost } from "./support/test-host.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 // Short deadlines so the reaper runs within a test; production uses 10 s and 90 s.
 const PENDING_TIMEOUT_MS = 1_000;
@@ -24,7 +25,7 @@ const NO_PING_MS = 600_000;
 
 let relay: LocalRelay;
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relay = await startLocalRelay({
     PENDING_TIMEOUT_MS: String(PENDING_TIMEOUT_MS),
     IDLE_TIMEOUT_MS: String(IDLE_TIMEOUT_MS),
@@ -32,7 +33,7 @@ beforeAll(async () => {
   });
 }, 120_000);
 
-afterAll(() => relay.stop());
+afterAll(() => relay?.stop());
 
 afterEach(runDeferred);
 

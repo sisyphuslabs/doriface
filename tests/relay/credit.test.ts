@@ -1,18 +1,19 @@
 import { CloseCode, encodeAck, encodeCredit, encodeData, MuxType } from "@doriface/relay-client";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { testIp } from "./support/probe.ts";
 import { AsyncQueue } from "./support/queue.ts";
 import { type RawHost, startRawHost } from "./support/raw-host.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 let relay: LocalRelay;
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relay = await startLocalRelay();
 }, 120_000);
 
-afterAll(() => relay.stop());
+afterAll(() => relay?.stop());
 
 afterEach(runDeferred);
 
