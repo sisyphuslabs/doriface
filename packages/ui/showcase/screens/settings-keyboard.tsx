@@ -60,7 +60,7 @@ export function KeyboardSection() {
     <>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="flex-1 text-lg font-semibold text-foreground">Keyboard</h2>
+          <h2 className="flex-1 text-lg font-semibold text-foreground md:text-xl">Keyboard</h2>
           <Button size="sm">
             <FileUp />
             Import Ghostty keybinds…
