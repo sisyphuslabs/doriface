@@ -46,11 +46,22 @@ describe("handshake payloads: one JSON line, then raw stream bytes", () => {
     expect(() => decodeHello(pattern, bytes(payload))).toThrow();
   });
 
+  test("a reply keeps an explicit default port", () => {
+    const lan = ["ws://192.0.2.10:80/v1/e2ee"];
+    expect(decodeReply(encodeReply(lan))).toEqual(lan);
+  });
+
   test.each([
     ["ws://doriface.local:7766/v1/e2ee"],
     ["wss://192.0.2.10:7766/v1/e2ee"],
     ["ws://192.0.2.10/v1/e2ee"],
     ["ws://192.0.2.10:7766/v1/hc"],
+    ["ws://user:pass@192.0.2.10:7766/v1/e2ee"],
+    ["ws://192.0.2.10:7766/v1/e2ee?x=1"],
+    ["ws://192.0.2.10:7766/v1/e2ee#x"],
+    ["ws://192.0.2.10:0/v1/e2ee"],
+    ["ws://999.0.2.10:7766/v1/e2ee"],
+    ["ws://[fe80::1%25en0]:7766/v1/e2ee"],
   ])("a reply refuses %p", (url) => {
     expect(() => encodeReply([url])).toThrow();
     expect(() => decodeReply(bytes(`{"v":1,"lan":["${url}"]}\n`))).toThrow();
