@@ -1,6 +1,6 @@
 import { IconButton, Input, NumberStepper, SegmentedControl, Switch, cn } from "@doriface/ui";
 import { Plus, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyDef } from "../ghostty/schema.ts";
 import { checkValue, parseColor } from "../ghostty/values.ts";
 
@@ -39,7 +39,11 @@ function TextValue({
   const [invalid, setInvalid] = useState(false);
   useEffect(() => setDraft(value), [value]);
   const commit = (): void => {
-    if (draft === value) return;
+    if (draft === value) {
+      setInvalid(false);
+      onInvalid(null);
+      return;
+    }
     const checked = draft === "" ? { ok: true as const } : checkValue(def.kind, draft);
     setInvalid(!checked.ok);
     onInvalid(checked.ok ? null : checked.reason);
@@ -76,8 +80,21 @@ function TextValue({
 }
 
 /** Repeatable keys: one field per line of the config, plus one to add the next. */
+/** Each entry reports its own error; the row shows the first one still invalid. */
+function useEntryErrors(
+  onInvalid: (reason: string | null) => void,
+): (entry: string) => (reason: string | null) => void {
+  const errors = useRef(new Map<string, string>());
+  return (entry) => (reason) => {
+    if (reason === null) errors.current.delete(entry);
+    else errors.current.set(entry, reason);
+    onInvalid(errors.current.values().next().value ?? null);
+  };
+}
+
 function ListValue({ def, values, disabled, onCommit, onInvalid }: KeyControlProps) {
   const [adding, setAdding] = useState(false);
+  const errorFor = useEntryErrors(onInvalid);
   const set = (index: number, value: string): void => {
     const next = values.map((entry, at) => (at === index ? value : entry)).filter((entry) => entry !== "");
     onCommit(next);
@@ -91,7 +108,7 @@ function ListValue({ def, values, disabled, onCommit, onInvalid }: KeyControlPro
             value={value}
             disabled={disabled}
             onCommit={(next) => set(index, next)}
-            onInvalid={onInvalid}
+            onInvalid={errorFor(`entry-${index}`)}
           />
           <IconButton label={`Remove ${value}`} icon={<X />} disabled={disabled} onClick={() => set(index, "")} />
         </li>
@@ -107,7 +124,7 @@ function ListValue({ def, values, disabled, onCommit, onInvalid }: KeyControlPro
               setAdding(false);
               if (next !== "") onCommit([...values, next]);
             }}
-            onInvalid={onInvalid}
+            onInvalid={errorFor("new")}
           />
         ) : (
           <IconButton label={`Add ${def.key}`} icon={<Plus />} disabled={disabled} onClick={() => setAdding(true)} />
