@@ -19,6 +19,7 @@ const env = {
   SHELL: "/bin/sh",
   PS1: "$ ",
   ENV: "",
+  BASH_SILENCE_DEPRECATION_WARNING: "1",
 };
 const coreDir = join(dir, "state", "herdr-core", session);
 mkdirSync(coreDir, { recursive: true });
