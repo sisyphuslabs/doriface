@@ -7,8 +7,13 @@ export type Overrides = ReadonlyMap<string, string | null>;
 
 export const NO_OVERRIDES: Overrides = new Map();
 
-export function resolveKeymap(platform: Platform, overrides: Overrides): Keymap {
-  const map = new Map(defaultKeymap(platform));
+/** Defaults are resolved at read time; a test can pass a different default set. */
+export function resolveKeymap(
+  platform: Platform,
+  overrides: Overrides,
+  defaults: Keymap = defaultKeymap(platform),
+): Keymap {
+  const map = new Map(defaults);
   for (const [trigger, action] of overrides) {
     if (action === null) map.delete(trigger);
     else map.set(trigger, action);
