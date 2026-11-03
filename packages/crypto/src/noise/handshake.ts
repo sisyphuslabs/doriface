@@ -48,6 +48,8 @@ export class Handshake {
   #ephemeral: KeyPair | undefined;
   #psk: Uint8Array | undefined;
   #step = 0;
+  #failed = false;
+  #finished = false;
 
   constructor(options: HandshakeOptions) {
     if (options.psk !== undefined) assertPsk(options.psk);
@@ -74,10 +76,17 @@ export class Handshake {
     this.#psk = psk;
   }
 
-  async writeMessage(payload: Uint8Array): Promise<Uint8Array> {
-    const expected = this.#options.role === "initiator" ? 0 : 1;
-    if (this.#step !== expected) throw new Error("handshake message out of turn");
-    this.#step++;
+  writeMessage(payload: Uint8Array): Promise<Uint8Array> {
+    this.#enter(this.#options.role === "initiator" ? 0 : 1);
+    return this.#latch(this.#write(payload));
+  }
+
+  readMessage(message: Uint8Array): Promise<Uint8Array> {
+    this.#enter(this.#options.role === "responder" ? 0 : 1);
+    return this.#latch(this.#read(message));
+  }
+
+  async #write(payload: Uint8Array): Promise<Uint8Array> {
     const e = this.#ephemeralKey();
     const parts: Uint8Array[] = [e.publicKey];
     this.#mixEphemeral(e.publicKey);
@@ -97,11 +106,8 @@ export class Handshake {
     return message;
   }
 
-  async readMessage(message: Uint8Array): Promise<Uint8Array> {
-    const expected = this.#options.role === "responder" ? 0 : 1;
-    if (this.#step !== expected) throw new Error("handshake message out of turn");
+  async #read(message: Uint8Array): Promise<Uint8Array> {
     if (message.byteLength > MAX_MESSAGE) throw new Error("handshake message exceeds 65535 bytes");
-    this.#step++;
     const re = this.#slice(message, 0, KEY_LENGTH);
     this.#remoteEphemeral = re;
     this.#mixEphemeral(re);
@@ -121,9 +127,10 @@ export class Handshake {
     return this.#symmetric.decryptAndHash(message.subarray(offset));
   }
 
-  /** Splits into transport states once both messages are done. */
+  /** Splits into transport states once, and only after both messages succeeded. */
   finish(rekeyInterval?: number): HandshakeResult {
-    if (this.#step !== 2) throw new Error("the handshake is not complete");
+    if (this.#failed || this.#finished || this.#step !== 2) throw new Error("the handshake is not complete");
+    this.#finished = true;
     const [first, second] = this.#symmetric.split(rekeyInterval);
     const initiator = this.#options.role === "initiator";
     return {
@@ -132,6 +139,21 @@ export class Handshake {
       handshakeHash: this.#symmetric.handshakeHash,
       remoteStatic: this.#required(this.#remoteStatic, "remote static"),
     };
+  }
+
+  #enter(expected: number): void {
+    if (this.#failed || this.#step !== expected) throw new Error("handshake message out of turn");
+    this.#step++;
+  }
+
+  /** A message that fails leaves the handshake failed for good, so it can never be finished. */
+  async #latch<T>(work: Promise<T>): Promise<T> {
+    try {
+      return await work;
+    } catch (error) {
+      this.#failed = true;
+      throw error;
+    }
   }
 
   #ephemeralKey(): KeyPair {

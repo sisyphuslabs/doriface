@@ -22,4 +22,37 @@ describe("Noise state guards", () => {
       });
     expect(build).toThrow("a psk is 32 bytes");
   });
+
+  test("a handshake whose message 2 failed can never be finished, and a good one finishes once", async () => {
+    const host = generateHostIdentity();
+    const pair = () => {
+      const prologue = new Uint8Array(0);
+      const initiator = new Handshake({
+        pattern: "IK",
+        role: "initiator",
+        prologue,
+        staticKey: rawStaticKey(generateX25519()),
+        remoteStatic: host.noise.publicKey,
+      });
+      const responder = new Handshake({
+        pattern: "IK",
+        role: "responder",
+        prologue,
+        staticKey: rawStaticKey(host.noise),
+      });
+      return { initiator, responder };
+    };
+    const bad = pair();
+    await bad.responder.readMessage(await bad.initiator.writeMessage(new Uint8Array(0)));
+    const reply = await bad.responder.writeMessage(new Uint8Array(0));
+    reply[reply.length - 1] = (reply.at(-1) ?? 0) ^ 1;
+    await expect(bad.initiator.readMessage(reply)).rejects.toThrow();
+    expect(() => bad.initiator.finish()).toThrow("not complete");
+
+    const good = pair();
+    await good.responder.readMessage(await good.initiator.writeMessage(new Uint8Array(0)));
+    await good.initiator.readMessage(await good.responder.writeMessage(new Uint8Array(0)));
+    good.initiator.finish();
+    expect(() => good.initiator.finish()).toThrow("not complete");
+  });
 });
