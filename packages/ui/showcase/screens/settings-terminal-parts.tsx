@@ -35,8 +35,16 @@ export function useFontStack(initial: readonly string[]) {
   };
 }
 
-export function Toggle({ label, on }: { readonly label: string; readonly on: boolean }) {
-  return <Switch aria-label={label} defaultChecked={on} />;
+export function Toggle({
+  label,
+  on,
+  disabled = false,
+}: {
+  readonly label: string;
+  readonly on: boolean;
+  readonly disabled?: boolean;
+}) {
+  return <Switch aria-label={label} defaultChecked={on} disabled={disabled} />;
 }
 
 export function Mono({
