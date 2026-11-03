@@ -93,3 +93,41 @@ jobs:
             apps/web/playwright-report
             apps/web/test-results
           if-no-files-found: ignore
+
+  desktop:
+    name: Desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: Install herdr-core
+        env:
+          HC_URL: https://releases.herdr.dev/core/0.1.17/herdr-core-linux-x86_64.tar.gz
+          HC_SHA256: 82ec44043f6894bfdb716b979b87cda43fd7fa46b0104e7b7bd93e64d1a9b877
+        run: |
+          mkdir -p "$RUNNER_TEMP/hc"
+          curl -fsSL "$HC_URL" -o "$RUNNER_TEMP/hc.tar.gz"
+          echo "$HC_SHA256  $RUNNER_TEMP/hc.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/hc.tar.gz" -C "$RUNNER_TEMP/hc" herdr-core
+          ln -s herdr-core "$RUNNER_TEMP/hc/hc"
+          echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
+      - run: bun install --frozen-lockfile
+      # Ubuntu's AppArmor blocks the unprivileged user namespaces Chromium's sandbox needs; the app keeps its sandbox on.
+      - name: Allow the Chromium sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Package (electron-builder --dir)
+        working-directory: apps/desktop
+        run: bun run pack
+      - name: Launch the packaged app
+        working-directory: apps/desktop
+        env:
+          DORIFACE_E2E_EXECUTABLE: ${{ github.workspace }}/apps/desktop/dist/release/linux-unpacked/doriface
+        run: xvfb-run --auto-servernum bun run test:e2e
