@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/protocol" },
     { "path": "packages/client" },
+    { "path": "packages/relay-client" },
     { "path": "apps/host" },
     { "path": "packages/ui" },
     { "path": "apps/web" },

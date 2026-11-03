@@ -87,6 +87,10 @@
       "name": "@doriface/protocol",
       "version": "0.0.0",
     },
+    "packages/relay-client": {
+      "name": "@doriface/relay-client",
+      "version": "0.0.0",
+    },
     "packages/ui": {
       "name": "@doriface/ui",
       "version": "0.0.0",
@@ -318,6 +322,8 @@
     "@doriface/host": ["@doriface/host@workspace:apps/host"],
 
     "@doriface/protocol": ["@doriface/protocol@workspace:packages/protocol"],
+
+    "@doriface/relay-client": ["@doriface/relay-client@workspace:packages/relay-client"],
 
     "@doriface/ui": ["@doriface/ui@workspace:packages/ui"],
 

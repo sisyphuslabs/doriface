@@ -1,0 +1,23 @@
+/** WebSocket close codes on relay sockets: the contract's 44xx codes plus the standard ones the relay uses. */
+export const CloseCode = {
+  Normal: 1000,
+  GoingAway: 1001,
+  ProtocolError: 1002,
+  UnsupportedData: 1003,
+  MessageTooBig: 1009,
+  InternalError: 1011,
+  CryptoFailure: 4400,
+  UnknownDevice: 4401,
+  RelayAuthFailed: 4403,
+  HostOffline: 4404,
+  IdleTimeout: 4408,
+  /** The relay accepted a newer authenticated uplink for the same hostId. */
+  UplinkReplaced: 4409,
+  RateLimited: 4429,
+} as const;
+export type CloseCode = (typeof CloseCode)[keyof typeof CloseCode];
+
+/** Codes an endpoint may pass to `WebSocket.close()`; anything else is reported as a normal close. */
+export function sendableCloseCode(code: number): number {
+  return code === CloseCode.Normal || (code >= 3000 && code <= 4999) ? code : CloseCode.Normal;
+}
