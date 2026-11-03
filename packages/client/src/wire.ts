@@ -1,0 +1,138 @@
+import {
+  decodeJsonRpc,
+  encodeFailure,
+  encodeFrame,
+  FrameDecoder,
+  FrameKind,
+  RPC_CHANNEL,
+  type Frame,
+  type HelloResult,
+  type JsonRpcMessage,
+  type JsonRpcNotification,
+} from "@doriface/protocol";
+import { HcConnectionClosedError } from "./errors.ts";
+import { HELLO_REQUEST_LINE, HelloReader } from "./hello.ts";
+import type { ByteLink } from "./link.ts";
+import { Listeners, type Unsubscribe } from "./listeners.ts";
+
+export interface ChannelHandler {
+  frame(frame: Frame): void;
+  connectionClosed(error: Error | undefined): void;
+}
+
+const utf8 = new TextEncoder();
+
+/** Owns one link: the plain-mode hello, then frame decoding and routing by channel. */
+export class Wire {
+  readonly incoming = new Listeners<Frame>();
+  readonly notifications = new Listeners<JsonRpcNotification>();
+  readonly closed = new Listeners<Error | undefined>();
+  readonly hello: Promise<HelloResult>;
+  readonly #link: ByteLink;
+  readonly #helloReader = new HelloReader();
+  readonly #frames = new FrameDecoder();
+  readonly #channels = new Map<number, ChannelHandler>();
+  readonly #helloSettle: PromiseWithResolvers<HelloResult>;
+  readonly #linkListeners: readonly Unsubscribe[];
+  #framed = false;
+  #closeState: { readonly error: Error | undefined } | undefined;
+
+  constructor(link: ByteLink) {
+    this.#link = link;
+    this.#helloSettle = Promise.withResolvers<HelloResult>();
+    this.hello = this.#helloSettle.promise;
+    this.#linkListeners = [
+      link.onData((chunk) => this.#receive(chunk)),
+      link.onClose((error) => this.#shutdown(error ?? new HcConnectionClosedError("link closed"))),
+    ];
+    link.send(utf8.encode(HELLO_REQUEST_LINE));
+  }
+
+  get isClosed(): boolean {
+    return this.#closeState !== undefined;
+  }
+
+  get closeError(): Error | undefined {
+    return this.#closeState?.error;
+  }
+
+  send(channel: number, kind: number, payload?: Uint8Array): void {
+    if (this.#closeState !== undefined) throw new HcConnectionClosedError("connection is closed");
+    this.#link.send(encodeFrame(channel, kind, payload));
+  }
+
+  sendRpc(text: string): void {
+    this.send(RPC_CHANNEL, FrameKind.Data, utf8.encode(text));
+  }
+
+  register(channel: number, handler: ChannelHandler): void {
+    this.#channels.set(channel, handler);
+  }
+
+  unregister(channel: number): void {
+    this.#channels.delete(channel);
+  }
+
+  close(error?: Error): void {
+    if (this.#closeState !== undefined) return;
+    this.#shutdown(error);
+    this.#link.close();
+  }
+
+  #receive(chunk: Uint8Array): void {
+    if (this.#closeState !== undefined) return;
+    try {
+      let framed = chunk;
+      if (!this.#framed) {
+        const step = this.#helloReader.push(chunk);
+        if (!step.done) return;
+        this.#framed = true;
+        this.#helloSettle.resolve(step.hello);
+        framed = step.framedBytes;
+      }
+      for (const frame of this.#frames.push(framed)) this.#dispatch(frame);
+    } catch (error) {
+      this.close(error instanceof Error ? error : new HcConnectionClosedError(String(error)));
+    }
+  }
+
+  #dispatch(frame: Frame): void {
+    this.incoming.emit(frame);
+    if (frame.channel !== RPC_CHANNEL) {
+      this.#channels.get(frame.channel)?.frame(frame);
+      return;
+    }
+    if (frame.kind === FrameKind.Data) this.#rpc(decodeJsonRpc(frame.payload));
+  }
+
+  #rpc(message: JsonRpcMessage): void {
+    switch (message.kind) {
+      case "notification":
+        this.notifications.emit(message);
+        return;
+      case "request":
+        this.sendRpc(
+          encodeFailure(message.id, {
+            code: -32601,
+            message: `this client serves no method ${message.method}`,
+            data: { kind: "unknown_method" },
+          }),
+        );
+        return;
+      case "success":
+      case "failure":
+        return;
+    }
+  }
+
+  #shutdown(error: Error | undefined): void {
+    if (this.#closeState !== undefined) return;
+    this.#closeState = { error };
+    for (const unsubscribe of this.#linkListeners) unsubscribe();
+    this.#helloSettle.reject(error ?? new HcConnectionClosedError("closed before the hello reply"));
+    const handlers = [...this.#channels.values()];
+    this.#channels.clear();
+    for (const handler of handlers) handler.connectionClosed(error);
+    this.closed.emit(error);
+  }
+}

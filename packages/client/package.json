@@ -1,0 +1,16 @@
+{
+  "name": "@doriface/client",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "files": [
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@doriface/protocol": "workspace:*"
+  }
+}
