@@ -153,6 +153,21 @@ test(
 );
 
 test(
+  "a checkout already at the pin needs no relay repository configured",
+  async () => {
+    const parent = await publicCheckout("pinned");
+    expect(await fetchFrom(parent)).toBe(0);
+    const before = await snapshot(parent);
+
+    expect(await fetchFrom(parent, {}, null)).toBe(0);
+
+    expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
+    expect(await snapshot(parent)).toBe(before);
+  },
+  ROW_TIMEOUT_MS,
+);
+
+test(
   "a fresh fetch checks out the pin, and the relay's install sees none of the fetch credentials",
   async () => {
     const parent = await publicCheckout("fresh");
