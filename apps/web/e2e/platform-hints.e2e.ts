@@ -59,7 +59,7 @@ test("with New tab unbound the tab bar shows no shortcut for it", async ({ page 
   const removes = page.getByRole("button", { name: /^Remove .* from New tab$/ });
   await expect(removes.first()).toBeVisible();
   await removeAll(removes);
-  await page.getByRole("link", { name: "Back to workspace" }).first().click();
+  await page.getByRole("button", { name: "Close settings" }).first().click();
   const newTab = page.getByRole("button", { name: "New tab" });
   await newTab.hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "New tab" }).last();

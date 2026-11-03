@@ -1,5 +1,4 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
-import { Link } from "@tanstack/react-router";
 import { ArrowLeft, Keyboard, Link2, Palette, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AppearanceSection } from "../settings/appearance-section.tsx";
@@ -7,6 +6,8 @@ import { ConnectionSection } from "../settings/connection-section.tsx";
 import { DevicesSection } from "../settings/devices-section.tsx";
 import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
+import { useCloseSettings } from "../settings/use-close-settings.ts";
+import { triggerKeys, currentPlatform } from "../keys/trigger.ts";
 
 const SECTIONS = [
   { id: "connections", label: "Connections", icon: <Link2 /> },
@@ -28,11 +29,19 @@ function Group({ title, children }: { readonly title: string; readonly children:
 /** Section navigation beside the form; changes apply as they are made. */
 export function SettingsRoute() {
   const [section, setSection] = useState<SectionId>("connections");
-  const back = <IconButton label="Back to workspace" icon={<ArrowLeft />} render={<Link to="/" />} />;
+  const close = useCloseSettings();
+  const back = (
+    <IconButton
+      label="Close settings"
+      keys={triggerKeys("escape", currentPlatform())}
+      icon={<ArrowLeft />}
+      onClick={close}
+    />
+  );
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-background md:flex-row">
       <Tabs value={section} onValueChange={(value: SectionId) => setSection(value)} className="md:hidden">
-        <div className="flex items-center gap-1 px-2 pt-3 pb-1">
+        <div data-titlebar className="flex items-center gap-1 pt-3 pr-2 pb-1 pl-[var(--titlebar-inset-start,0.5rem)]">
           {back}
           <h1 className="text-xl font-semibold text-foreground">Settings</h1>
         </div>
@@ -46,9 +55,12 @@ export function SettingsRoute() {
       </Tabs>
       <nav
         aria-label="Settings"
-        className="hidden w-56 shrink-0 flex-col gap-px border-r border-sidebar-border bg-sidebar p-2 md:flex"
+        className="hidden w-56 shrink-0 flex-col gap-px border-r border-sidebar-border bg-sidebar px-2 pb-2 md:flex"
       >
-        <div className="flex items-center gap-1 pt-1 pb-3">
+        <div
+          data-titlebar
+          className="mb-1 flex h-11 shrink-0 items-center gap-1 pl-[calc(var(--titlebar-inset-start,0.5rem)-0.5rem)]"
+        >
           {back}
           <h1 className="text-lg font-semibold text-foreground">Settings</h1>
         </div>

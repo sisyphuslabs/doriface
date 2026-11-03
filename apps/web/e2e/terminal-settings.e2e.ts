@@ -30,7 +30,7 @@ test("font-size and cursor-style apply to an open terminal", async ({ page }) =>
     .first()
     .click();
 
-  await page.getByRole("link", { name: "Back to workspace" }).first().click();
+  await page.getByRole("button", { name: "Close settings" }).first().click();
   const focused = page.locator('[data-focused="true"] [data-terminal]');
   await expect(focused).toContainText("$", { timeout: 20_000 });
   await expect
