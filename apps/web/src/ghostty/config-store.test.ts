@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { KeyValueStore } from "../storage/idb.ts";
+import { memoryStore, type KeyValueStore } from "../storage/idb.ts";
 import { single } from "./config.ts";
 import { TerminalConfigStore, legacyFontSize } from "./config-store.ts";
 
@@ -62,6 +62,18 @@ describe("TerminalConfigStore", () => {
     await store.update((current) => new Map([...current, ["font-size", ["20"]]]));
     expect(puts).toEqual([]);
     expect(store.error?.message).toBe("legacy settings unreadable");
+  });
+
+  test("a successful migration clears the old font size from localStorage", async () => {
+    const items = new Map<string, string>([["doriface.appearance", JSON.stringify({ theme: "day", fontSize: 18 })]]);
+    const local = {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => void items.set(key, value),
+    };
+    const store = new TerminalConfigStore(memoryStore(), legacyFontSize(local));
+    await store.loaded;
+    expect(single(store.config, "font-size")).toBe("13.5");
+    expect(JSON.parse(items.get("doriface.appearance") ?? "{}")).toEqual({ theme: "day" });
   });
 
   test("the old font size stays in localStorage when the IndexedDB write fails", async () => {
