@@ -3,12 +3,15 @@ import { cn } from "../lib/cn.ts";
 export interface KbdProps {
   /** One entry per key, e.g. ["⌘", "⇧", "P"]. */
   readonly keys: readonly string[];
+  /** Keep the chips on touch layouts too, where a value (a binding) rather than a hint is shown. */
+  readonly persistent?: boolean;
   readonly className?: string;
 }
 
-export function Kbd({ keys, className }: KbdProps) {
+/** Keyboard shortcut chips. They are hints, so touch layouts hide them unless `persistent`. */
+export function Kbd({ keys, persistent = false, className }: KbdProps) {
   return (
-    <kbd className={cn("inline-flex items-center gap-0.5 font-sans", className)}>
+    <kbd className={cn("inline-flex items-center gap-0.5 font-sans", !persistent && "coarse:hidden", className)}>
       {keys.map((key) => (
         <span
           key={key}

@@ -1,12 +1,22 @@
 import type { ReactNode } from "react";
 import { cn } from "../../src/index.ts";
 
-/** A phone-sized viewport drawn on the desktop board, so phone screens can be reviewed beside each other. */
+/**
+ * A phone-sized viewport drawn on the desktop board, so phone screens can be reviewed beside each other.
+ * It uses the coarse-pointer density and an iPhone 14's safe areas, and draws the home indicator.
+ */
 export function PhoneFrame({ label, children }: { readonly label: string; readonly children: ReactNode }) {
   return (
     <figure className="flex flex-col items-center gap-3">
-      <div className="h-[844px] w-[390px] overflow-hidden rounded-[2.5rem] border border-border bg-background shadow-overlay">
+      <div
+        data-density="coarse"
+        className="relative h-[844px] [--safe-bottom:34px] [--safe-top:47px] w-[390px] overflow-hidden rounded-[2.5rem] border border-border bg-background text-base shadow-overlay"
+      >
         {children}
+        <span
+          aria-hidden
+          className="absolute bottom-2 left-1/2 h-1.5 w-32 -translate-x-1/2 rounded-full bg-foreground/80"
+        />
       </div>
       <figcaption className="text-sm text-muted-foreground">{label}</figcaption>
     </figure>

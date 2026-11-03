@@ -8,10 +8,13 @@ function readRoute(): RouteId {
   return ROUTES.find((route) => route.id === id)?.id ?? "primitives";
 }
 
+/** ?theme=<name> pins a theme; ?insets=phone applies an iPhone 14's safe areas to the whole page. */
 function applyTheme(): void {
-  const theme = new URLSearchParams(window.location.search).get("theme");
+  const params = new URLSearchParams(window.location.search);
+  const theme = params.get("theme");
   if (theme === null) document.documentElement.removeAttribute("data-theme");
   else document.documentElement.dataset["theme"] = theme;
+  if (params.get("insets") === "phone") document.documentElement.dataset["insets"] = "phone";
 }
 
 function App() {

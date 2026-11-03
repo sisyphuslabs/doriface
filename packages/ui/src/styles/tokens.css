@@ -5,6 +5,23 @@
  */
 @import "./themes.css";
 
+/* Coarse-pointer layouts: a touch device, or a region that previews one (data-density="coarse"). */
+@custom-variant coarse {
+  @media (pointer: coarse) {
+    @slot;
+  }
+  &:where([data-density="coarse"], [data-density="coarse"] *) {
+    @slot;
+  }
+}
+@custom-variant fine {
+  @media (pointer: fine) {
+    &:not(:where([data-density="coarse"], [data-density="coarse"] *)) {
+      @slot;
+    }
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -109,10 +126,28 @@
   --tabbar-height: 2.625rem;
   --statusbar-height: 1.75rem;
   --pane-header-height: 1.875rem;
+  /* Device safe areas; a preview frame sets them to a real device's insets. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   --duration-micro: 120ms;
   --duration-standard: 220ms;
   --overlay-shadow: 0 12px 32px -8px rgb(0 0 0 / 0.28), 0 2px 6px rgb(0 0 0 / 0.12);
+}
+
+[data-density="coarse"] {
+  --type-2xs: 0.75rem;
+  --type-xs: 0.8125rem;
+  --type-sm: 0.9375rem;
+  --type-base: 1.0625rem;
+  --type-lg: 1.125rem;
+  --type-xl: 1.375rem;
+  --type-2xl: 1.75rem;
+  --control-sm: 2.75rem;
+  --control: 2.75rem;
+  --control-lg: 3rem;
+  --row: 2.75rem;
+  --hit: 2.75rem;
 }
 
 @media (pointer: coarse) {
