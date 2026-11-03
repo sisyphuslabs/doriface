@@ -65,11 +65,15 @@ async function shutdown(): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);
 }
-if (process.env["CAPTURE"] === "1") {
-  await seed(hc, env, join(dir, "work"));
-  stopMachine = await addMachine(hc, env, join(dir, "machine"));
-}
 process.once("SIGTERM", () => void shutdown());
 process.once("SIGINT", () => void shutdown());
+try {
+  const capture = process.env["CAPTURE"] === "1";
+  if (capture) await seed(hc, env, join(dir, "work"));
+  stopMachine = await addMachine(hc, env, join(dir, "machine"), capture);
+} catch (error) {
+  console.error(`e2e host setup failed: ${String(error)}`);
+  await shutdown();
+}
 await host.exited;
 if (!stopping) await shutdown();
