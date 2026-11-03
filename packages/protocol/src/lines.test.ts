@@ -25,6 +25,19 @@ describe("LineDecoder", () => {
     expect(decoder.bufferedBytes).toBe(0);
   });
 
+  test("refuses a terminated line past the limit", () => {
+    expect(() => new LineDecoder(4).push(bytes("12345\n"))).toThrow(LineTooLongError);
+    expect(new LineDecoder(4).push(bytes("1234\n"))).toEqual(["1234"]);
+  });
+
+  test("joins a line that arrives one byte per chunk", () => {
+    const line = "x".repeat(5_000);
+    const decoder = new LineDecoder();
+    const lines = [...bytes(`${line}\nnext`)].flatMap((byte) => decoder.push(new Uint8Array([byte])));
+    expect(lines).toEqual([line]);
+    expect(decoder.takeBuffered()).toEqual(bytes("next"));
+  });
+
   test("refuses an unterminated line past the limit", () => {
     const decoder = new LineDecoder(8);
     expect(decoder.push(bytes("12345678"))).toEqual([]);
