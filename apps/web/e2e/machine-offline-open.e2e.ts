@@ -19,7 +19,7 @@ test.describe("opening a session on a machine that went offline", () => {
     await page.goto("/");
     await expect(agentRow(page, "crunch", true)).toBeVisible({ timeout: 20_000 });
     switchTo("drop");
-    await expect(machineRow(page)).toContainText("unreachable", { timeout: STATE_BOUND_MS });
+    await expect(machineRow(page)).toContainText("offline", { timeout: STATE_BOUND_MS });
     await expect(page.getByRole("status").filter({ hasText: OFFLINE }).first()).toBeVisible();
 
     await agentRow(page, "crunch", true).click();
