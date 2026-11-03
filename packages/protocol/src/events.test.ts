@@ -39,7 +39,8 @@ describe("event stream notifications", () => {
     );
     const missed = parseStreamNotification(
       notification(
-        '{"jsonrpc":"2.0","method":"missed","params":{"seq":57,"terminals":[{"address":"t1","labels":{}}]}}',
+        '{"jsonrpc":"2.0","method":"missed","params":{"seq":57,"terminals":[{"address":"t1","argv":["/bin/sh"],' +
+          '"cols":80,"created_ms":1,"cwd":"/home/example","labels":{},"rows":24,"screen":"exact","state":"live"}]}}',
       ),
     );
     expect(missed.kind === "missed" && missed.snapshot.seq).toBe(57);
@@ -56,6 +57,9 @@ describe("event stream notifications", () => {
     ['{"jsonrpc":"2.0","method":"event","params":{"data":{},"seq":-1,"type":"title"}}'],
     ['{"jsonrpc":"2.0","method":"event","params":{"data":null,"seq":1,"type":"title"}}'],
     ['{"jsonrpc":"2.0","method":"missed","params":{"seq":1,"terminals":[{}]}}'],
+    ['{"jsonrpc":"2.0","method":"missed","params":{"seq":1,"terminals":[{"address":"t1","labels":{}}]}}'],
+    ['{"jsonrpc":"2.0","method":"event","params":{"data":{"cols":"wide","rows":30},"seq":1,"type":"size"}}'],
+    ['{"jsonrpc":"2.0","method":"event","params":{"data":{"address":"t1"},"seq":1,"type":"created"}}'],
     ['{"jsonrpc":"2.0","method":"wobble","params":{}}'],
   ])("passes %s through as unknown", (line) => {
     expect(parseStreamNotification(notification(line)).kind).toBe("unknown");

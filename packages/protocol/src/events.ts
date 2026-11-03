@@ -1,4 +1,5 @@
 import type { Foreground, Status, Terminal } from "./__generated__/hc-api.ts";
+import { EVENT_DATA_GUARDS, isTerminal } from "./event-guards.ts";
 import { isJsonObject } from "./json.ts";
 import type { JsonRpcNotification } from "./jsonrpc.ts";
 
@@ -55,22 +56,6 @@ export type HcStreamMessage =
   | { readonly kind: "missed"; readonly snapshot: HcSnapshot }
   | { readonly kind: "unknown"; readonly notification: JsonRpcNotification };
 
-const EVENT_TYPES = {
-  created: true,
-  lost: true,
-  restarted: true,
-  keep: true,
-  finished: true,
-  removed: true,
-  status: true,
-  turn: true,
-  title: true,
-  labels: true,
-  size: true,
-  foreground: true,
-  doc: true,
-} as const satisfies Record<HcEventType, true>;
-
 /**
  * Classifies one notification from an `events.subscribe` channel. Unknown methods and event
  * types newer than this schema come back as `unknown` instead of failing the stream.
@@ -99,22 +84,22 @@ export function isHcEvent(value: unknown): value is HcEvent {
   const data = value["data"];
   return (
     typeof type === "string" &&
-    Object.hasOwn(EVENT_TYPES, type) &&
+    isEventType(type) &&
     isSeq(value["seq"]) &&
     (terminal === undefined || typeof terminal === "string") &&
     (machine === undefined || typeof machine === "string") &&
-    (isJsonObject(data) || (data === null && type === "foreground"))
+    EVENT_DATA_GUARDS[type](data)
   );
 }
 
 export function isSnapshot(value: unknown): value is HcSnapshot {
   if (!isJsonObject(value)) return false;
   const terminals = value["terminals"];
-  return (
-    isSeq(value["seq"]) &&
-    Array.isArray(terminals) &&
-    terminals.every((terminal) => isJsonObject(terminal) && typeof terminal["address"] === "string")
-  );
+  return isSeq(value["seq"]) && Array.isArray(terminals) && terminals.every(isTerminal);
+}
+
+function isEventType(type: string): type is HcEventType {
+  return Object.hasOwn(EVENT_DATA_GUARDS, type);
 }
 
 function isSeq(value: unknown): value is number {
