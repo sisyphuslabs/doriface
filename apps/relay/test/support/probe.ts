@@ -6,11 +6,16 @@ export interface Closed {
   readonly reason: string;
 }
 
+const TEST_IP_COUNT = 508;
 let issued = 0;
 
-/** A fresh TEST-NET-2 or TEST-NET-3 (RFC 5737) address per caller, so each test has its own rate-limit bucket. */
+/**
+ * A TEST-NET-2 or TEST-NET-3 (RFC 5737) address no other caller in this run got, so each test has its own rate-limit
+ * bucket. Running out throws rather than reusing an address another test already spent its budget from.
+ */
 export function testIp(): string {
-  const index = issued % 508;
+  if (issued >= TEST_IP_COUNT) throw new Error(`all ${TEST_IP_COUNT} test IPs were already handed out in this run`);
+  const index = issued;
   issued += 1;
   return index < 254 ? `198.51.100.${index + 1}` : `203.0.113.${index - 253}`;
 }
