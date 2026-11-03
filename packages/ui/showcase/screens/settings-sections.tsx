@@ -26,9 +26,9 @@ const THEMES: readonly ThemeOption[] = [
 ];
 
 const DEVICES = [
-  { id: "d1", name: "MacBook Pro", kind: <Laptop />, seen: "This device" },
-  { id: "d2", name: "iPhone", kind: <Smartphone />, seen: "Active 5 min ago" },
-  { id: "d3", name: "iPad", kind: <Tablet />, seen: "Active 3 days ago" },
+  { id: "d1", name: "MacBook Pro", kind: <Laptop />, seen: "This device", current: true },
+  { id: "d2", name: "iPhone", kind: <Smartphone />, seen: "Active 5 min ago", current: false },
+  { id: "d3", name: "iPad", kind: <Tablet />, seen: "Active 3 days ago", current: false },
 ] as const;
 
 export function Group({ title, children }: { readonly title: string; readonly children: ReactNode }) {
@@ -81,7 +81,7 @@ export function ConnectionSection() {
             }
             description={device.seen}
             control={
-              device.seen === "This device" ? null : (
+              device.current ? null : (
                 <Button
                   variant="ghost"
                   size="sm"
