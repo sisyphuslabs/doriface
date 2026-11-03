@@ -95,7 +95,7 @@ Version gate (SOURCE): the client refuses a core whose `hello.generation !== 1` 
 
 Two shapes considered for the host (INFERRED): (A) pass-through, chosen; (B) host terminates hc, keeps a session table and re-multiplexes several clients onto one `hc connect`. B would save one `hc connect` process per client session and allow host-side replay, but it duplicates the core's channel/credit state, must track every method's semantics (`terminal.attach` channels, `events.subscribe` `seq`), and breaks the moment the core adds a kind. A costs one child process per session (cheap: a byte pump) and keeps correctness in one place. B's one real benefit, resume without repaint, is the deferred C2 of the spec (section 7).
 
-## 5. Latency budget and techniques
+## 5. Latency (measured) and techniques
 
 Measured on 2026-11-03 with `apps/host/scripts/latency-bench.ts` (`relay --relay <url> --code <typed code>` for the relayed rows, `direct` for the last row): 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, on a host whose load average stayed above its core count), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink (INFERRED from the topology in section 6).
 
