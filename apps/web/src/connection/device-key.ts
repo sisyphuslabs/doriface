@@ -106,6 +106,8 @@ export function loadDeviceKey(
   const loading =
     locks === undefined ? readOrCreate(storage, subtle) : locks.request(LOCK, () => readOrCreate(storage, subtle));
   pending.set(storage, loading);
+  // A failure is not remembered: the next call tries the store again.
+  loading.catch(() => pending.delete(storage));
   return loading;
 }
 
