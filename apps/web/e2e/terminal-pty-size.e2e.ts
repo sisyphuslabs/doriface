@@ -92,12 +92,15 @@ test("an unfocused split pane keeps its pty size through a reattach until it is 
   await page.goto("/");
   await openNewTerminal(page);
   await openNewTerminal(page);
-  await page.getByRole("button", { name: "Split" }).click();
   const focused = page.locator('[data-focused="true"] [data-terminal]');
+  const single = await gridSize(focused);
+  await page.getByRole("button", { name: "Split" }).click();
   const unfocused = page.locator('[data-focused="false"] [data-terminal]:visible');
   await expect(unfocused).toHaveCount(1);
   const address = (await unfocused.getAttribute("data-terminal")) ?? "";
-  await expect.poll(() => coreSize(address), { timeout: 15_000 }).toBe(await gridSize(unfocused));
+  // The pane starts at the single-pane width; read its size once the split has laid it out and the core has it.
+  await expect.poll(() => gridSize(unfocused)).not.toBe(single);
+  await expect.poll(async () => coreSize(address) === (await gridSize(unfocused)), { timeout: 15_000 }).toBe(true);
   const before = coreSize(address);
 
   const opened = link.opened();
