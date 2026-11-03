@@ -1,13 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { KnownHosts } from "../../host/src/state/known-hosts.ts";
 import { HELLO, rpcFrame } from "../../host/src/testing/hc-session.ts";
 import { runConnect } from "./support/connect-cli.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { within } from "./support/watch.ts";
 
 const decoder = new TextDecoder();
+/** A refusal must end the process well inside hc's 20 s dial deadline, never by it. */
+const REFUSAL_MS = 5_000;
+const phone = generateX25519();
 const scratch = mkdtempSync(join(tmpdir(), "connect-"));
 const deviceState = join(scratch, "device");
 let relayed: RelayedHost | undefined;
@@ -19,6 +24,7 @@ function host(): RelayedHost {
 
 beforeAll(async () => {
   relayed = await startRelayedHost("doriface-relay-connect");
+  await relayed.pair(phone, "phone");
 }, 120_000);
 
 afterAll(async () => {
@@ -75,9 +81,36 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     expect(await within(run.exited, "exit")).toBe(0);
   }, 60_000);
 
+  test("the shell line hc appends to a --via command is taken and ignored", async () => {
+    const line =
+      "sh -c 'p=$(command -v herdr-core) || p=$HOME/.local/bin/herdr-core; HC_SESSION=other exec \"$p\" connect'";
+    const run = runConnect(deviceState, host().relayUrl, host().hostId, line);
+    await run.write(HELLO);
+    const own = await host().connect(phone);
+    own.close();
+    expect(JSON.parse(decoder.decode(await within(run.reader.line(), "hello"))).result.core.id).toBe(own.hello.core.id);
+    run.end();
+    expect(await within(run.exited, "exit")).toBe(0);
+  }, 30_000);
+
+  test("a paired host that is not on the relay (4404) fails within a few seconds, exit 1", async () => {
+    const offline = join(scratch, "offline");
+    const absent = generateHostIdentity();
+    new KnownHosts(offline).add({ hostId: absent.hostId, hostKey: absent.noise.publicKey, relayUrl: host().relayUrl });
+    const run = runConnect(offline, host().relayUrl, absent.hostId);
+    expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
+    expect((await run.stderr()).trim().split("\n").at(-1)).toMatch(/is not connected to the relay: .*\(4404\)$/);
+  }, 30_000);
+
+  test("a typed code no host is pairing with (the 4410 case) fails within a few seconds, exit 1", async () => {
+    const run = runConnect(join(scratch, "nocode"), host().relayUrl, "ZZZZ-ZZZZ");
+    expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
+    expect((await run.stderr()).trim().split("\n").at(-1)).toContain("no host is pairing with this code");
+  }, 30_000);
+
   test("a host this machine never paired fails fast with one clear last line and exit 1", async () => {
     const run = runConnect(join(scratch, "stranger"), host().relayUrl, host().hostId);
-    expect(await within(run.exited, "the refusal")).toBe(1);
+    expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
     const lines = (await run.stderr()).trim().split("\n");
     expect(lines.at(-1)).toContain("has not paired with host");
   }, 30_000);
@@ -89,7 +122,7 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     expect(await within(pair.exited, "pairing")).toBe(0);
     await host().revokeAll();
     const run = runConnect(stranger, host().relayUrl, host().hostId);
-    expect(await within(run.exited, "the refusal")).toBe(1);
-    expect((await run.stderr()).trim().split("\n").at(-1)).toContain("pair it again");
+    expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
+    expect((await run.stderr()).trim().split("\n").at(-1)).toContain("pair it again (4401)");
   }, 60_000);
 });
