@@ -30,7 +30,10 @@ export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew,
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
     return (
       <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar">
-        <header className="flex h-12 shrink-0 items-center gap-1 px-4 pt-[env(safe-area-inset-top)]">
+        <header
+          data-titlebar
+          className="flex h-12 shrink-0 items-center gap-1 pt-[env(safe-area-inset-top)] pr-4 pl-[var(--titlebar-inset-start,1rem)]"
+        >
           <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
           <IconButton label="Command palette" icon={<Search />} size="md" onClick={onPalette} />
           <IconButton label={NEW_TAB.label} icon={<Plus />} size="md" onClick={onNew} />
@@ -82,7 +85,10 @@ function PhoneTerminal(props: {
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome px-1.5 pt-[env(safe-area-inset-top)]">
+      <header
+        data-titlebar
+        className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
+      >
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <h1 className="truncate text-base font-semibold text-foreground">{title}</h1>
