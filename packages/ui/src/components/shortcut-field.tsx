@@ -46,7 +46,14 @@ export function ShortcutField({
       <div className="flex items-center gap-1">
         <button
           type="button"
-          aria-label={state === "idle" ? `${action}: ${keys.join(" ")}. Record a new shortcut` : `${action}: recording`}
+          aria-label={
+            {
+              idle: `${action}: ${keys.join(" ")}. Record a new shortcut`,
+              recording: `${action}: recording, press the new keys`,
+              conflict: `${action}: ${pending.join(" ")} is already used by ${conflictWith ?? "another action"}`,
+            }[state]
+          }
+          aria-disabled={state === "idle" ? undefined : true}
           onClick={state === "idle" ? onRecord : undefined}
           className={cn(
             "flex h-(--control-sm) min-w-32 items-center justify-center gap-1.5 rounded-md border px-2 text-sm outline-none focus-visible:outline-2 focus-visible:outline-ring",
