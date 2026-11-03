@@ -43,7 +43,7 @@ describe("SendWindow", () => {
   });
 
   test("once credit flows, sends wait past the window and go in order as credit returns", () => {
-    const window = new SendWindow(500);
+    const window = new SendWindow(500, 1);
     expect(window.credit(0)).toBe(true);
     const sent = sendsOf(window);
     expect(sent).toEqual([300]);
@@ -57,8 +57,31 @@ describe("SendWindow", () => {
     expect(sent).toEqual([300, 300, 300]);
   });
 
+  test("a residue below the 64 KiB credit step never holds back a message, even one bigger than the window", () => {
+    const window = new SendWindow(500, 64);
+    window.credit(0);
+    const sent: number[] = [];
+    window.admit(
+      63,
+      () => sent.push(63),
+      () => {},
+    );
+    window.admit(
+      600,
+      () => sent.push(600),
+      () => {},
+    );
+    expect(sent).toEqual([63, 600]);
+    window.admit(
+      10,
+      () => sent.push(10),
+      () => {},
+    );
+    expect(sent).toEqual([63, 600]);
+  });
+
   test("a send bigger than the window goes once nothing is in flight", () => {
-    const window = new SendWindow(100);
+    const window = new SendWindow(100, 1);
     window.credit(0);
     const sent: number[] = [];
     window.admit(
@@ -80,7 +103,7 @@ describe("SendWindow", () => {
   });
 
   test("drained resolves once the waiting sends went; drop fails them instead", async () => {
-    const window = new SendWindow(100);
+    const window = new SendWindow(100, 1);
     window.credit(0);
     const failed: string[] = [];
     window.admit(
