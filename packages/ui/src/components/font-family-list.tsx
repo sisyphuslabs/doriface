@@ -22,9 +22,10 @@ export function FontFamilyList({ families, missing = [], onRemove, onAdd, classN
       <ol aria-label="Font families, in fallback order" className="flex flex-col rounded-md border border-input">
         {families.map((family, index) => {
           const absent = missing.includes(family);
+          const repeat = families.slice(0, index).filter((entry) => entry === family).length;
           return (
             <li
-              key={family}
+              key={`${family}#${repeat}`}
               className="flex h-(--row) items-center gap-2 border-b border-border pr-1 pl-2 last:border-b-0"
             >
               <GripVertical aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
