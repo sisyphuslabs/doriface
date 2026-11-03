@@ -5,6 +5,11 @@ import { ghosttyBuild, ghosttyWasmUrl } from "./index.ts";
 
 const PAGE = '<!doctype html><meta charset="utf-8"><script type="module" src="/app.js"></script>';
 const WASM_HEADERS = { "content-type": "application/wasm" };
+/** navigate() can settle before the module script runs, so wait for the entry to publish its result. */
+const AWAIT_SCENARIO = `new Promise((resolve) => {
+  if ("ghosttyScenario" in globalThis) resolve(globalThis.ghosttyScenario);
+  else addEventListener("ghostty-scenario", () => resolve(globalThis.ghosttyScenario), { once: true });
+})`;
 const PROGRAM_STATUS_REPLY = "\x1b]7501;?:states=idle,working,done,blocked,error:kinds=permission,question,auth\x1b\\";
 
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -39,7 +44,7 @@ describe("@wterm/ghostty 0.5.8 core on the rebuilt wasm (browser)", () => {
     if (server === undefined) throw new Error("server did not start");
     await using view = new Bun.WebView({ width: 800, height: 600 });
     await view.navigate(server.url.href);
-    const result = await view.evaluate("globalThis.ghosttyScenario");
+    const result = await view.evaluate(AWAIT_SCENARIO);
     console.log(`webview scenario: ${JSON.stringify(result)}`);
 
     expect(result).toMatchObject({

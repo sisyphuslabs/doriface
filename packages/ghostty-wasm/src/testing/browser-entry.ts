@@ -5,3 +5,4 @@ const result = Promise.all([runScenario("/ours.wasm"), runScenario("/stock.wasm"
   stock,
 }));
 Reflect.set(globalThis, "ghosttyScenario", result);
+dispatchEvent(new Event("ghostty-scenario"));
