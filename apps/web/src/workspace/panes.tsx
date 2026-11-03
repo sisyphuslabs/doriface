@@ -1,5 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
+import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { Pane } from "./pane.tsx";
 
 export interface PanesProps {
@@ -9,14 +10,14 @@ export interface PanesProps {
   readonly active: string | null;
   readonly split: string | null;
   readonly onFocus: (address: string) => void;
-  readonly onClosed: (address: string) => void;
+  readonly onEnd: (address: string, end: TerminalEnd) => void;
 }
 
 /**
  * Every open tab stays mounted so its stream and scrollback survive tab switches; hidden
  * tabs keep parsing output. The split shows the active tab beside one other.
  */
-export function Panes({ connection, terminals, open, active, split, onFocus, onClosed }: PanesProps) {
+export function Panes({ connection, terminals, open, active, split, onFocus, onEnd }: PanesProps) {
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   return (
     <div className="flex min-h-0 flex-1 gap-2 p-2">
@@ -37,7 +38,7 @@ export function Panes({ connection, terminals, open, active, split, onFocus, onC
               index={address === split ? 2 : 1}
               split={split !== null}
               onFocus={onFocus}
-              onClosed={onClosed}
+              onEnd={onEnd}
             />
           </div>
         );

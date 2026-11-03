@@ -12,6 +12,7 @@ import { CursorResets } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
+import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
 /** Typed text, or the bytes a bound key sends. */
@@ -27,7 +28,8 @@ export interface TerminalViewProps {
   readonly transformInput?: (data: string) => string;
   /** The view's input path for keys pressed outside it (the phone's extra keys); null once it unmounts. */
   readonly onSend?: (send: ((data: TerminalInput) => void) | null) => void;
-  readonly onClosed?: (address: string) => void;
+  /** Every time the stream ends, with why; see TerminalEnd. */
+  readonly onEnd?: (address: string, end: TerminalEnd) => void;
 }
 
 const HISTORY_LINES = 2_000;
@@ -36,7 +38,7 @@ const FULL_RESET = "\u001bc";
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
-  const { connection, address, focused, label, className, transformInput, onSend, onClosed } = props;
+  const { connection, address, focused, label, className, transformInput, onSend, onEnd } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const [core, setCore] = useState<GhosttyCore | null>(null);
@@ -124,10 +126,9 @@ export function TerminalView(props: TerminalViewProps) {
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
             if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
-          // Only the program ending closes the tab; a detach (unmount) or a lost connection leaves it open.
           attached.onClose((close) => {
             if (stream.current === attached) stream.current = null;
-            if (close.by === "core") onClosed?.(address);
+            onEnd?.(address, terminalEnd(close));
           });
           for (const data of pending.current.splice(0)) attached.write(data);
           // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
@@ -141,8 +142,8 @@ export function TerminalView(props: TerminalViewProps) {
           if (!attachedBefore.current) return setError(message);
           // A program that ended while the connection was down sent no CLOSE; its tab closes as that CLOSE would have.
           void connection.call("terminal.get", { terminal: address }).then(
-            (terminal) => (terminal.state === "live" ? setError(message) : onClosed?.(address)),
-            () => (connection.closed ? undefined : onClosed?.(address)),
+            (terminal) => (terminal.state === "live" ? setError(message) : onEnd?.(address, "finished")),
+            () => (connection.closed ? undefined : onEnd?.(address, "finished")),
           );
         },
       );

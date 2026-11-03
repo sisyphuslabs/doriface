@@ -4,6 +4,7 @@ import { StatusChip, cn } from "@doriface/ui";
 import { SquareTerminal } from "lucide-react";
 import { currentPlatform } from "../keys/trigger.ts";
 import { useActionKeys } from "../keys/use-action-keys.ts";
+import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { agentStatus, machineOf, spaceName, terminalTitle } from "./model.ts";
 
@@ -16,11 +17,11 @@ export interface PaneProps {
   /** True while two panes are shown; unfocused-split-opacity dims only those. */
   readonly split: boolean;
   readonly onFocus: (address: string) => void;
-  readonly onClosed: (address: string) => void;
+  readonly onEnd: (address: string, end: TerminalEnd) => void;
 }
 
 /** A terminal card: header with title, state and where it runs, then the live terminal. */
-export function Pane({ connection, terminal, focused, index, split, onFocus, onClosed }: PaneProps) {
+export function Pane({ connection, terminal, focused, index, split, onFocus, onEnd }: PaneProps) {
   const title = terminalTitle(terminal);
   const keys = useActionKeys(`tab.select:${index}`);
   // macOS writes shortcuts as joined glyphs (⌘1); elsewhere they read Ctrl+1.
@@ -58,7 +59,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onC
         address={terminal.address}
         focused={focused}
         label={`${title} output`}
-        onClosed={onClosed}
+        onEnd={onEnd}
       />
     </section>
   );
