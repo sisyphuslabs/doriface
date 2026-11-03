@@ -18,6 +18,18 @@ export const SCHEMA_PATH = join(PACKAGE_DIR, "schema", "hc.openrpc.json");
 export const OUTPUT_PATH = join(PACKAGE_DIR, "src", "__generated__", "hc-api.ts");
 const FORMAT_CONFIG_PATH = join(PACKAGE_DIR, "..", "..", ".oxfmtrc.json");
 
+/**
+ * Fields the vendored schema marks required that hc leaves out in practice. They are generated as
+ * optional so callers handle the absence; the schema file stays identical to hc's.
+ * - ListResult.machines: hc 0.1.17 answers terminal.list with {"hidden_finished":0,"terminals":[]}.
+ */
+const OMITTED_IN_PRACTICE: Readonly<Record<string, readonly string[]>> = { ListResult: ["machines"] };
+
+function requiredFields(name: string, node: JsonObject): ReadonlySet<string> {
+  const omitted = new Set(OMITTED_IN_PRACTICE[name] ?? []);
+  return new Set([...requiredSet(node)].filter((field) => !omitted.has(field)));
+}
+
 interface MethodShape {
   readonly name: string;
   readonly description: JsonValue | undefined;
@@ -56,7 +68,7 @@ function renderComponents(schemas: JsonObject, ctx: RenderContext): readonly str
   return Object.entries(schemas).map(([name, node]) => {
     const doc = docComment(isJsonObject(node) ? node["description"] : undefined);
     if (isJsonObject(node) && node["type"] === "object" && objectProperties(node).length > 0) {
-      return `${doc}export interface ${name} {\n${renderMembers(objectProperties(node), requiredSet(node), ctx)}\n}`;
+      return `${doc}export interface ${name} {\n${renderMembers(objectProperties(node), requiredFields(name, node), ctx)}\n}`;
     }
     return `${doc}export type ${name} = ${renderType(node, ctx)};`;
   });

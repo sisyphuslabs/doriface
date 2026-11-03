@@ -1,5 +1,5 @@
 import type { HcConnection } from "@doriface/client";
-import type { Terminal } from "@doriface/protocol";
+import type { ListResult, Terminal } from "@doriface/protocol";
 import { useEffect, useState } from "react";
 import { applyEvent, fromSnapshot, type TerminalMap } from "./terminals.ts";
 
@@ -9,10 +9,9 @@ export interface TerminalsState {
   readonly error: string | null;
 }
 
-/** Hosts may answer terminal.list without machines; the answer is network data, so it is read defensively. */
-export function machineCount(list: object): number {
-  const machines: unknown = Reflect.get(list, "machines");
-  return Array.isArray(machines) ? machines.length : 0;
+/** hc 0.1.17 leaves machines out of terminal.list answers when it has none, so absent counts as none. */
+export function machineCount(list: Pick<ListResult, "machines">): number {
+  return list.machines?.length ?? 0;
 }
 
 const EMPTY: TerminalsState = { terminals: [], machines: 0, error: null };
