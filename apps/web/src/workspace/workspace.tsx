@@ -3,6 +3,7 @@ import { useToastManager } from "@doriface/ui";
 import { useCallback, useMemo, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
+import { AddMachineDialog } from "./add-machine-dialog.tsx";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
 import { SessionContext, type SessionAsk } from "./session-context.ts";
@@ -29,6 +30,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   const [phoneOpen, setPhoneOpen] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
   const [ask, setAsk] = useState<SessionAsk | null>(null);
+  const [adding, setAdding] = useState(false);
   useActionHandler("app", (action) => {
     if (action !== "app.palette") return false;
     setPalette((shown) => !shown);
@@ -78,7 +80,11 @@ export function Workspace({ connection }: WorkspaceProps) {
   const desktopTabs: Tabs = { ...tabs, close: (address) => setAsk({ kind: "close", address }) };
   const done = useCallback(() => setAsk(null), []);
 
-  const machines = useMemo(() => ({ entries, listError, ...runs }), [entries, listError, runs]);
+  const openAddMachine = useCallback(() => setAdding(true), []);
+  const machines = useMemo(
+    () => ({ entries, listError, openAddMachine, ...runs }),
+    [entries, listError, openAddMachine, runs],
+  );
   return (
     <MachinesContext value={machines}>
       <SessionContext value={setAsk}>
@@ -105,6 +111,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           />
         )}
       </SessionContext>
+      <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
       <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={tabs.drop} />
       {palette ? (
         <Palette
