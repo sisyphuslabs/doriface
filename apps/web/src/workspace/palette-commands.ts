@@ -6,6 +6,7 @@ import { triggersFor } from "../keys/keymap.ts";
 import { triggerKeys, type Platform } from "../keys/trigger.ts";
 import type { AgentStatus } from "@doriface/ui";
 import { agentStatus, machineOf, terminalTitle } from "./model.ts";
+import type { ShellAction } from "./shell-actions.ts";
 
 const AGENT = "agent:";
 /** The palette leads with the agent that needs you, as the sidebar sections do. */
@@ -19,7 +20,7 @@ export interface PaletteSource {
   readonly keymap: Keymap;
   readonly platform: Platform;
   /** The app actions this shell handles now, from availableActions. */
-  readonly actions: readonly string[];
+  readonly actions: readonly ShellAction[];
 }
 
 export type PaletteChoice =
@@ -27,12 +28,12 @@ export type PaletteChoice =
   | { readonly kind: "action"; readonly id: string }
   | { readonly kind: "settings" };
 
-function command(source: PaletteSource, id: string, group: string): Command {
+function command(source: PaletteSource, { id, unavailable }: ShellAction, group: string): Command {
   const label = ACTION_BY_ID.get(id)?.label ?? id;
   const [trigger] = triggersFor(source.keymap, id);
-  return trigger === undefined
-    ? { id, label, group }
-    : { id, label, group, keys: triggerKeys(trigger, source.platform) };
+  const row: Command = { id, label, group };
+  if (trigger !== undefined) Object.assign(row, { keys: triggerKeys(trigger, source.platform) });
+  return unavailable === undefined ? row : Object.assign(row, { disabled: true, hint: unavailable });
 }
 
 /** Agents (live terminals with their state), then Actions, Hosts and General, as DESIGN.md brief (c) lists them. */
@@ -48,9 +49,13 @@ export function paletteCommands(source: PaletteSource): Command[] {
     });
   return [
     ...agents,
-    ...source.actions.filter((id) => id !== "app.settings").map((id) => command(source, id, "Actions")),
+    ...source.actions
+      .filter((action) => action.id !== "app.settings")
+      .map((action) => command(source, action, "Actions")),
     { id: `${HOST}${source.host}`, label: source.host, group: "Hosts", hint: source.route },
-    ...(source.actions.includes("app.settings") ? [command(source, "app.settings", "General")] : []),
+    ...source.actions
+      .filter((action) => action.id === "app.settings")
+      .map((action) => command(source, action, "General")),
   ];
 }
 
