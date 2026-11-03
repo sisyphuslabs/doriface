@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -54,6 +54,26 @@ describe("startHost", () => {
       await again.stop(true);
     } finally {
       await taken.stop(true);
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("the control socket", () => {
+  test("a host that cannot open it refuses to start instead of serving without revocation", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "dh-noctl-"));
+    mkdirSync(join(stateDir, "host.sock"));
+    writeFileSync(join(stateDir, "host.sock", "keep"), "");
+    try {
+      const start = startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        token: generateToken(),
+        hc: resolveHcBin(),
+        stateDir,
+        log: () => {},
+      });
+      await expect(start).rejects.toThrow("control socket");
+    } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
