@@ -68,27 +68,33 @@ export async function pairingRefusal(
   return undefined;
 }
 
+export type ChargeOutcome = "charged" | "spent" | "failed";
+
 /**
  * Charges answered pairing sessions to their slot's budget. The charge happens on the host's first DATA; later DATA
- * on the same session waits for it, so frames stay in order and nothing passes a refused charge.
+ * on the same session waits for it, so frames stay in order and nothing passes a refused or failed charge.
  */
 export class PairingCharges {
-  readonly #env: PairSlotsEnv;
-  readonly #pending = new Map<number, Promise<boolean>>();
+  readonly #chargeSession: (slot: string) => Promise<boolean>;
+  readonly #pending = new Map<number, Promise<ChargeOutcome>>();
 
-  constructor(env: PairSlotsEnv) {
-    this.#env = env;
+  constructor(chargeSession: (slot: string) => Promise<boolean>) {
+    this.#chargeSession = chargeSession;
   }
 
-  charge(sessionId: number, slot: string): Promise<boolean> {
-    const charged = this.#env.PAIR_SLOTS.get(this.#env.PAIR_SLOTS.idFromName(slot)).chargeSession();
-    this.#pending.set(sessionId, charged);
-    void charged.finally(() => this.#pending.delete(sessionId));
-    return charged;
+  /** "failed" when the slot could not be charged at all; the caller closes the session either way it is not charged. */
+  charge(sessionId: number, slot: string): Promise<ChargeOutcome> {
+    const outcome = this.#chargeSession(slot).then(
+      (charged): ChargeOutcome => (charged ? "charged" : "spent"),
+      (): ChargeOutcome => "failed",
+    );
+    this.#pending.set(sessionId, outcome);
+    void outcome.finally(() => this.#pending.delete(sessionId));
+    return outcome;
   }
 
   /** The session's charge while it is still running; later DATA awaits it. */
-  inFlight(sessionId: number): Promise<boolean> | undefined {
+  inFlight(sessionId: number): Promise<ChargeOutcome> | undefined {
     return this.#pending.get(sessionId);
   }
 }

@@ -2,7 +2,6 @@ import {
   CHALLENGE_BYTES,
   CloseCode,
   decodeMux,
-  encodeClose,
   encodeData,
   encodeOpen,
   HOST_ID_PATTERN,
@@ -33,6 +32,7 @@ import { handlePairSlot, PairingCharges, pairingRefusal } from "./pairing.ts";
 import { PendingAuths } from "./pending-auths.ts";
 import { alarmBy, overdue, type TimeoutVars, timeoutsOf } from "./reaper.ts";
 import { closedSocket } from "./reject.ts";
+import { dropHost, endClient, endSession } from "./session-end.ts";
 import {
   CLIENT_TAG,
   clientSocket,
@@ -57,7 +57,9 @@ export interface RoomEnv extends PairSlotsEnv, TimeoutVars {}
 export class Room extends DurableObject<RoomEnv> {
   /** Hosts that have not finished the challenge yet; a client arriving meanwhile waits for them to settle. */
   readonly #authenticating = new PendingAuths();
-  readonly #charges = new PairingCharges(this.env);
+  readonly #charges = new PairingCharges((slot) =>
+    this.env.PAIR_SLOTS.get(this.env.PAIR_SLOTS.idFromName(slot)).chargeSession(),
+  );
 
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
@@ -105,8 +107,8 @@ export class Room extends DurableObject<RoomEnv> {
   override async alarm(): Promise<void> {
     const { expired, next } = overdue(this.ctx, timeoutsOf(this.env), Date.now());
     for (const { ws, attachment, reason } of expired) {
-      if (attachment.role === "client") this.#endSession(ws, attachment, CloseCode.IdleTimeout, reason);
-      else if (attachment.state === "online") this.#dropHost(ws, CloseCode.IdleTimeout, reason);
+      if (attachment.role === "client") endSession(this.ctx, ws, attachment, CloseCode.IdleTimeout, reason);
+      else if (attachment.state === "online") dropHost(this.ctx, ws, CloseCode.IdleTimeout, reason);
       // A socket that never became (or no longer is) the uplink owns no sessions.
       else closeIfOpen(ws, CloseCode.IdleTimeout, reason);
     }
@@ -148,7 +150,7 @@ export class Room extends DurableObject<RoomEnv> {
     if (pending.length >= MAX_PENDING_SESSIONS) {
       const victim = evictionVictim(pending, ({ attachment }) => attachment);
       if (victim !== undefined) {
-        this.#endSession(victim.ws, victim.attachment, CloseCode.RateLimited, "too many pending sessions");
+        endSession(this.ctx, victim.ws, victim.attachment, CloseCode.RateLimited, "too many pending sessions");
       }
     }
     const sessionId = freshSessionId(this.ctx);
@@ -186,7 +188,7 @@ export class Room extends DurableObject<RoomEnv> {
   #promote(ws: WebSocket, signPub: Uint8Array): void {
     for (const { ws: old, attachment } of withAttachment(this.ctx, HOST_TAG)) {
       if (old === ws || attachment.role !== "host" || attachment.state !== "online") continue;
-      this.#dropHost(old, CloseCode.UplinkReplaced, "replaced by a newer uplink");
+      dropHost(this.ctx, old, CloseCode.UplinkReplaced, "replaced by a newer uplink");
     }
     patchHost(ws, { state: "online", signPub });
   }
@@ -194,9 +196,9 @@ export class Room extends DurableObject<RoomEnv> {
   #fromClient(ws: WebSocket, attachment: ClientAttachment, bytes: Uint8Array): void {
     if (attachment.ended) return;
     const host = onlineHost(this.ctx);
-    if (host === undefined) return this.#endClient(ws, CloseCode.HostOffline, "host offline");
+    if (host === undefined) return endClient(ws, CloseCode.HostOffline, "host offline");
     if (!forward(host, encodeData(attachment.sessionId, bytes))) {
-      this.#endSession(ws, attachment, CloseCode.IdleTimeout, "the host is too far behind");
+      endSession(this.ctx, ws, attachment, CloseCode.IdleTimeout, "the host is too far behind");
     }
   }
 
@@ -217,26 +219,33 @@ export class Room extends DurableObject<RoomEnv> {
     const session = client === undefined ? undefined : attachmentOf(client);
     // A session the relay or the client just ended: its CLOSE is already on the way to the host.
     if (client === undefined || session?.role !== "client" || session.ended) return;
-    if (frame.type === MuxType.Close) return this.#endClient(client, sendableCloseCode(frame.code), "closed by host");
+    if (frame.type === MuxType.Close) return endClient(client, sendableCloseCode(frame.code), "closed by host");
     if (session.pending) {
       if (!this.#activate(client, session)) return;
       // A pairing session is charged to its slot once the host has answered it, i.e. on this first DATA.
-      if (session.pairSlot !== undefined && !(await this.#charges.charge(session.sessionId, session.pairSlot))) {
-        return this.#endSession(client, session, CloseCode.RateLimited, "pairing budget spent for this slot");
+      if (session.pairSlot !== undefined) {
+        const outcome = await this.#charges.charge(session.sessionId, session.pairSlot);
+        if (outcome !== "charged") return this.#refuseCharge(client, session, outcome);
       }
     } else {
       const charging = this.#charges.inFlight(session.sessionId);
-      if (charging !== undefined && !(await charging)) return;
+      if (charging !== undefined && (await charging) !== "charged") return;
     }
     if (!forward(client, frame.payload.slice())) {
-      this.#endSession(client, session, CloseCode.IdleTimeout, "the client is too far behind");
+      endSession(this.ctx, client, session, CloseCode.IdleTimeout, "the client is too far behind");
     }
+  }
+
+  #refuseCharge(client: WebSocket, session: ClientAttachment, outcome: "spent" | "failed"): void {
+    if (outcome === "spent")
+      endSession(this.ctx, client, session, CloseCode.RateLimited, "pairing budget spent for this slot");
+    else endSession(this.ctx, client, session, CloseCode.InternalError, "could not charge the pairing session");
   }
 
   #activate(client: WebSocket, session: ClientAttachment): boolean {
     const active = liveClients(this.ctx).filter(({ attachment }) => !attachment.pending).length;
     if (active >= MAX_ACTIVE_SESSIONS) {
-      this.#endSession(client, session, CloseCode.RateLimited, "too many sessions for this host");
+      endSession(this.ctx, client, session, CloseCode.RateLimited, "too many sessions for this host");
       return false;
     }
     patchClient(client, { pending: false });
@@ -246,27 +255,8 @@ export class Room extends DurableObject<RoomEnv> {
   #closed(ws: WebSocket, code: number): void {
     this.#authenticating.settle(ws);
     const attachment = attachmentOf(ws);
-    if (attachment?.role === "client" && !attachment.ended) this.#endSession(ws, attachment, code, "");
-    if (attachment?.role === "host" && attachment.state === "online") this.#dropHost(ws, code, "");
+    if (attachment?.role === "client" && !attachment.ended) endSession(this.ctx, ws, attachment, code, "");
+    if (attachment?.role === "host" && attachment.state === "online") dropHost(this.ctx, ws, code, "");
     completeClose(ws, sendableCloseCode(code));
-  }
-
-  #dropHost(ws: WebSocket, code: number, reason: string): void {
-    patchHost(ws, { state: "replaced" });
-    for (const { ws: client } of liveClients(this.ctx)) this.#endClient(client, CloseCode.HostOffline, "host offline");
-    closeIfOpen(ws, code, reason);
-  }
-
-  /** Ends a session from the relay's side and tells the host with a CLOSE frame. */
-  #endSession(ws: WebSocket, session: ClientAttachment, code: number, reason: string): void {
-    this.#endClient(ws, code, reason);
-    const host = onlineHost(this.ctx);
-    if (host !== undefined) sendControl(host, encodeClose(session.sessionId, code));
-  }
-
-  /** Ends a session without telling the host: the host closed it, or the host is gone. */
-  #endClient(ws: WebSocket, code: number, reason: string): void {
-    patchClient(ws, { ended: true });
-    closeIfOpen(ws, sendableCloseCode(code), reason);
   }
 }
