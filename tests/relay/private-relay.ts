@@ -31,6 +31,9 @@ class RelayUnreachable extends Error {}
 /** `.relay` holds something that is not a repository of its own; it is left exactly as found. */
 class RelayCheckoutInvalid extends Error {}
 
+/** The exit code of that refusal, distinct from a crash or a git error (1) and a usage error (2). */
+const REFUSED_EXIT = 3;
+
 async function readPin(): Promise<RelayPin> {
   const pin: unknown = await Bun.file(join(REPO_ROOT, "relay-pin.json")).json();
   if (
@@ -210,6 +213,7 @@ if (import.meta.main) {
       console.error(`
 relay: ${error.message} is not a git checkout of its own, so relay:fetch leaves it alone. Move it aside or delete
 it (rm -rf .relay), then run \`bun run relay:fetch\` again to clone the relay afresh.`);
+      process.exitCode = REFUSED_EXIT;
     } else if (error instanceof RelayUnreachable) {
       console.error(`
 Could not fetch the relay (${error.message}).
@@ -218,9 +222,9 @@ The relay is a separate private service, github.com/sisyphuslabs/doriface-relay.
 docs/transport.md. Without access, \`bun run check\` still runs every other suite; only the relay suites in tests/relay
 need this checkout. With access, let git reach the repository (\`gh auth setup-git\`, or
 DORIFACE_RELAY_REPO=git@github.com:sisyphuslabs/doriface-relay.git for SSH) and run \`bun run relay:fetch\` again.`);
+      process.exitCode = 1;
     } else {
       throw error;
     }
-    process.exitCode = 1;
   }
 }
