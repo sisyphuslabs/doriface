@@ -5,6 +5,8 @@ import { routeHcSocket } from "./hc-socket.ts";
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 
+const attaches = (frames: readonly string[]) => frames.filter((frame) => frame.includes('"terminal.attach"'));
+
 test("a connection blip keeps the terminal on screen and runs what was typed meanwhile exactly once", async ({
   page,
 }) => {
@@ -25,6 +27,7 @@ test("a connection blip keeps the terminal on screen and runs what was typed mea
   const linesBefore = await lines();
   expect(linesBefore).toBeGreaterThan(200);
   const opened = socket.opened();
+  const sentBefore = socket.sent().length;
 
   await socket.drop(true);
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
@@ -46,6 +49,11 @@ test("a connection blip keeps the terminal on screen and runs what was typed mea
   expect(text.match(/typed-42/g)).toHaveLength(1);
   // The reattach replays history into the same view; it must replace what was shown, not append a second copy.
   expect((await lines()) - linesBefore).toBeLessThan(20);
+  // The first attach is a plain one; the reattach after the drop carries resumed: true (docs/transport.md).
+  expect(attaches(socket.sent().slice(0, sentBefore)).join("")).not.toContain('"resumed"');
+  const reattaches = attaches(socket.sent().slice(sentBefore));
+  expect(reattaches.length).toBeGreaterThan(0);
+  for (const frame of reattaches) expect(frame).toContain('"resumed":true');
 });
 
 test("a terminal whose program ends while the connection is down closes its tab once it is back", async ({
