@@ -9,6 +9,7 @@ import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
 import { agentStatus, terminalTitle } from "./model.ts";
+import { usePhoneActions } from "./use-app-actions.ts";
 
 export interface PhoneShellProps {
   readonly connection: HcConnection;
@@ -22,6 +23,7 @@ export interface PhoneShellProps {
 
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
 export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew, onPalette }: PhoneShellProps) {
+  usePhoneActions(onNew);
   const terminal = terminals.find((entry) => entry.address === open);
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";

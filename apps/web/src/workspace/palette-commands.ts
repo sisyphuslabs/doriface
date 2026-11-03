@@ -7,8 +7,6 @@ import { triggerKeys, type Platform } from "../keys/trigger.ts";
 import type { AgentStatus } from "@doriface/ui";
 import { agentStatus, machineOf, terminalTitle } from "./model.ts";
 
-/** The app actions the palette offers, in the order it lists them. */
-const ACTIONS = ["tab.new", "pane.split", "layout.toggle:sidebar", "app.zoom_in", "app.zoom_out"] as const;
 const AGENT = "agent:";
 /** The palette leads with the agent that needs you, as the sidebar sections do. */
 const URGENCY: Readonly<Record<AgentStatus, number>> = { blocked: 0, done: 1, working: 2, idle: 3, unknown: 4 };
@@ -20,6 +18,8 @@ export interface PaletteSource {
   readonly route: string;
   readonly keymap: Keymap;
   readonly platform: Platform;
+  /** The app actions this shell handles now, from availableActions. */
+  readonly actions: readonly string[];
 }
 
 export type PaletteChoice =
@@ -48,9 +48,9 @@ export function paletteCommands(source: PaletteSource): Command[] {
     });
   return [
     ...agents,
-    ...ACTIONS.map((id) => command(source, id, "Actions")),
+    ...source.actions.filter((id) => id !== "app.settings").map((id) => command(source, id, "Actions")),
     { id: `${HOST}${source.host}`, label: source.host, group: "Hosts", hint: source.route },
-    command(source, "app.settings", "General"),
+    ...(source.actions.includes("app.settings") ? [command(source, "app.settings", "General")] : []),
   ];
 }
 

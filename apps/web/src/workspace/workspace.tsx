@@ -4,6 +4,7 @@ import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
+import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
 import { useNarrow } from "./use-narrow.ts";
 import { useTabs } from "./use-tabs.ts";
@@ -64,6 +65,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           terminals={terminals}
           host={connection.hello.core.name}
           route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
+          actions={availableActions(narrow ? "phone" : "desktop", tabs)}
           onOpenTerminal={openTerminal}
           onClose={() => setPalette(false)}
         />
