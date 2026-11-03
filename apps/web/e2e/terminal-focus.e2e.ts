@@ -70,6 +70,8 @@ test("dismissing the palette over the paste dialog leaves focus in that dialog, 
   });
   const paste = page.getByRole("dialog", { name: /Paste 3 lines/ });
   await expect(paste).toBeVisible();
+  // The dialog moves focus into itself just after it opens; the palette is opened from there.
+  await expect.poll(() => paste.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
   await page.keyboard.press("ControlOrMeta+Shift+P");
   // The paste dialog marks everything outside it aria-hidden, the palette included.
   const palette = page.getByRole("combobox", { name: "Command", includeHidden: true });
