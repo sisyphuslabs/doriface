@@ -1,16 +1,20 @@
-import { app, BrowserWindow, Menu, session, shell } from "electron";
+import { app, BrowserWindow, Menu, nativeTheme, screen, session, shell } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { contextMenuTemplate } from "../config/context-menu.ts";
 import { contentSecurityPolicy } from "../config/csp.ts";
 import { APP_ORIGIN, loopbackDevUrl } from "../config/origin.ts";
-import { MAC_DRAG_BAND_CSS, secureWebPreferences, windowOptions } from "../config/window.ts";
-import { parsePlatform } from "../shared/bridge.ts";
+import { restorePlacement } from "../config/window-state.ts";
+import { secureWebPreferences, windowOptions } from "../config/window.ts";
+import { Channel, parsePlatform } from "../shared/bridge.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
 import { findHc, hostCommand, type HostContext } from "./host-command.ts";
 import { registerIpc } from "./ipc.ts";
 import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
+import { applyMacTitlebar } from "./titlebar.ts";
+import { rememberPlacement, savedPlacement } from "./window-state.ts";
 
 const platform = parsePlatform(process.platform);
 const devSetting = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
@@ -40,17 +44,32 @@ const openExternal = (url: string): void => {
 
 let mainWindow: BrowserWindow | undefined;
 
+/** The app has one window: brings it back when it exists and creates it only when it does not. */
+function showWindow(): void {
+  if (mainWindow !== undefined && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    return;
+  }
+  createWindow();
+}
+
 function createWindow(): void {
-  const window = new BrowserWindow(windowOptions(platform, webPreferences));
+  const placementFile = join(app.getPath("userData"), "window-placement.json");
+  const workAreas = screen.getAllDisplays().map((display) => display.workArea);
+  const placement = restorePlacement(savedPlacement(placementFile), workAreas);
+  const window = new BrowserWindow(
+    windowOptions(platform, webPreferences, { dark: nativeTheme.shouldUseDarkColors, placement }),
+  );
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
-  if (platform === "darwin") {
-    window.webContents.on("dom-ready", () => {
-      window.webContents.insertCSS(MAC_DRAG_BAND_CSS).catch((error: unknown) => {
-        console.error(`could not add the titlebar drag band: ${String(error)}`);
-      });
-    });
-  }
+  if (platform === "darwin") applyMacTitlebar(window);
+  rememberPlacement(window, placementFile);
+  window.webContents.on("context-menu", (_event, params) => {
+    const template = contextMenuTemplate(params);
+    if (template.length > 0) Menu.buildFromTemplate(template).popup({ window });
+  });
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = undefined;
   });
@@ -71,12 +90,14 @@ function ready(): void {
   lockPermissions(session.defaultSession, origin);
   if (devUrl === undefined) serveApp(webRoot(), csp);
   else applyDevCsp(session.defaultSession, origin, csp);
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate({ platform, openExternal })));
+  const openSettings = (): void => {
+    showWindow();
+    mainWindow?.webContents.send(Channel.openSettings);
+  };
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings })));
   registerIpc({ origin, startLocalHost: () => localHost.start(), openExternal: (url) => shell.openExternal(url) });
-  createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  showWindow();
+  app.on("activate", showWindow);
 }
 
 registerAppScheme();
@@ -84,11 +105,9 @@ app.enableSandbox();
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("web-contents-created", (_event, contents) => hardenContents(contents, origin, webPreferences));
+  app.on("web-contents-created", (_event, contents) => hardenContents(contents, origin));
   app.on("second-instance", () => {
-    if (mainWindow === undefined) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+    if (app.isReady()) showWindow();
   });
   app.on("window-all-closed", () => {
     if (platform !== "darwin") app.quit();

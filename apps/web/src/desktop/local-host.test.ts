@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type ConnectionSettings } from "../connection/settings.ts";
-import { desktopBridge } from "./bridge.ts";
+import { desktopBridge, onDesktopOpenSettings } from "./bridge.ts";
+
+const noop = (): void => undefined;
 import { bootConnection, startThisComputer } from "./local-host.ts";
 
 function target(settings: ConnectionSettings) {
@@ -72,5 +74,18 @@ describe("desktop local host", () => {
     expect(desktopBridge({ doriface: { version: "1" } })).toBeNull();
     const bad = desktopBridge({ doriface: { startLocalHost: async () => ({ url: 1 }) } });
     await expect(bad?.startLocalHost() ?? Promise.resolve()).rejects.toThrow("no local host address");
+  });
+
+  test("the app menu's Settings item opens Settings only through a bridge that offers it", () => {
+    const opened: string[] = [];
+    let fire = noop;
+    onDesktopOpenSettings(() => opened.push("menu"), {
+      doriface: { onOpenSettings: (listener: () => void) => (fire = listener) },
+    });
+    fire();
+    fire();
+    onDesktopOpenSettings(() => opened.push("web"), {});
+    onDesktopOpenSettings(() => opened.push("old"), { doriface: { version: "0.1.0" } });
+    expect(opened).toEqual(["menu", "menu"]);
   });
 });

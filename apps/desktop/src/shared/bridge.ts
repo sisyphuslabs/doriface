@@ -2,6 +2,8 @@
 export const Channel = {
   openExternal: "doriface:open-external",
   startLocalHost: "doriface:start-local-host",
+  /** Main to renderer: the app menu's Settings… item. */
+  openSettings: "doriface:open-settings",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -24,6 +26,8 @@ export interface DorifaceBridge {
   openExternal(url: string): Promise<boolean>;
   /** Starts (or reuses) doriface-host + hc on this machine. */
   startLocalHost(): Promise<LocalHostEndpoint>;
+  /** Calls `listener` each time the app menu's Settings… item is chosen. */
+  onOpenSettings(listener: () => void): void;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {
