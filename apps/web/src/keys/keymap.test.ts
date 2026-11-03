@@ -3,6 +3,8 @@ import { memoryStore } from "../storage/idb.ts";
 import { KEYMAP_VERSION, KeymapStore } from "./keymap-store.ts";
 import {
   checkBinding,
+  importKeybinds,
+  isChanged,
   parseKeybinds,
   resetAction,
   resolveKeymap,
@@ -85,6 +87,36 @@ describe("keybind import and export", () => {
     expect(parsed.overrides.get("shift+super+n")).toBe("tab.new");
     expect(parsed.overrides.get("super+t")).toBeNull();
     expect(parsed.overrides.get("alt+b")).toBe("send:\u001bb");
+  });
+
+  test("keybind = clear drops every default before the file's own lines", () => {
+    const parsed = parseKeybinds("keybind = clear\nkeybind = super+shift+n=new_tab");
+    expect(parsed.clear).toBe(true);
+    const keymap = resolveKeymap("mac", importKeybinds("mac", new Map(), parsed));
+    expect([...keymap]).toEqual([["shift+super+n", "tab.new"]]);
+  });
+
+  test("a parameter doriface does not have is unknown, not another action", () => {
+    expect(parseKeybinds("keybind = super+x=goto_tab:12").lines[0]?.status).toBe("unknown");
+    expect(parseKeybinds("keybind = super+x=new_split:down").lines[0]?.status).toBe("unknown");
+  });
+
+  test("the = key and actions without a Ghostty name export so they import back", () => {
+    const text = serializeKeybinds(
+      new Map([
+        ["ctrl+=", "app.zoom_in"],
+        ["super+j", "agent.next"],
+      ]),
+    );
+    expect(text).toContain("keybind = ctrl+equal=increase_font_size:1");
+    expect(text).toContain("# keybind = super+j=agent.next (no Ghostty equivalent)");
+    expect([...parseKeybinds(text).overrides]).toEqual([["ctrl+=", "app.zoom_in"]]);
+  });
+
+  test("reset and changed cover a default moved to another action", () => {
+    const moved = withBinding("mac", new Map(), "super+t", "tab.close");
+    expect(isChanged("mac", moved, "tab.new")).toBe(true);
+    expect(resolveKeymap("mac", resetAction("mac", moved, "tab.new")).get("super+t")).toBe("tab.new");
   });
 
   test("export then import round-trips", () => {

@@ -1,9 +1,10 @@
 import { Badge, Button, Dialog, Input } from "@doriface/ui";
 import { useMemo, useState } from "react";
 import { ACTIONS, actionFor, type ActionDef, type Scope } from "../keys/actions.ts";
-import { defaultKeymap } from "../keys/defaults.ts";
 import { keymapStore, useOverrides } from "../keys/keymap-store.ts";
 import {
+  importKeybinds,
+  isChanged,
   NO_OVERRIDES,
   parseKeybinds,
   resetAction,
@@ -39,7 +40,9 @@ function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedKeybinds; r
             variant="primary"
             disabled={applied === 0}
             onClick={() => {
-              void keymapStore.update(new Map([...keymapStore.overrides, ...parsed.overrides]));
+              void keymapStore.loaded.then(() =>
+                keymapStore.update(importKeybinds(currentPlatform(), keymapStore.overrides, parsed)),
+              );
               onClose();
             }}
           >
@@ -81,12 +84,10 @@ export function KeybindingsSection() {
   const keymap = useMemo(() => resolveKeymap(platform, overrides), [platform, overrides]);
   const [query, setQuery] = useState("");
   const [parsed, setParsed] = useState<ParsedKeybinds | null>(null);
-  const defaults = defaultKeymap(platform);
-  const sends = [...keymap.values()].filter((id) => id.startsWith("send:")).map(actionFor);
+  const sends = [...new Set(keymap.values())].filter((id) => id.startsWith("send:")).map(actionFor);
   const actions = [...ACTIONS, ...sends.filter((action): action is ActionDef => action !== null)];
   const shown = actions.filter((action) => matches(action, query));
-  const changed = (action: string): boolean =>
-    [...overrides].some(([trigger, bound]) => bound === action || (bound === null && defaults.get(trigger) === action));
+  const changed = (action: string): boolean => isChanged(platform, overrides, action);
   const pick = (): void => {
     const input = document.createElement("input");
     input.type = "file";

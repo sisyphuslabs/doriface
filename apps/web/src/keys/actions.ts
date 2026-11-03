@@ -23,7 +23,7 @@ export const ACTIONS: readonly ActionDef[] = [
     app(`tab.select:${index + 1}`, `Go to tab ${index + 1}`, `goto_tab:${index + 1}`),
   ),
   app("tab.last", "Go to last tab", "last_tab"),
-  app("pane.split", "Split or unsplit", "new_split:right"),
+  app("pane.split", "Split or unsplit"),
   app("pane.close", "Close pane"),
   app("pane.go:left", "Focus pane left", "goto_split:left"),
   app("pane.go:right", "Focus pane right", "goto_split:right"),
@@ -94,8 +94,5 @@ function unescapeGhostty(text: string): string {
 export function actionFromGhostty(name: string): string | null | undefined {
   if (name === "unbind") return null;
   if (name.startsWith("text:")) return `send:${unescapeGhostty(name.slice(5))}`;
-  const known = ACTION_BY_GHOSTTY.get(name);
-  if (known !== undefined) return known.id;
-  const stripped = name.replace(/:\d+$/, ":1");
-  return ACTION_BY_GHOSTTY.get(stripped)?.id;
+  return ACTION_BY_GHOSTTY.get(name)?.id;
 }
