@@ -3,8 +3,13 @@ import { cn } from "@doriface/ui";
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
+import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
+import { PasteDialog } from "./paste-dialog.tsx";
+import { readThemeColors } from "./theme-colors.ts";
+import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 
 export interface TerminalViewProps {
   readonly connection: HcConnection;
@@ -23,14 +28,20 @@ const HISTORY_LINES = 2_000;
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, focused, label, className, transformInput, onStream, onClosed } = props;
+  const config = useTerminalConfig();
+  const options = useMemo(() => rendererOptions(config), [config]);
   const [core, setCore] = useState<GhosttyCore | null>(null);
+  const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
 
   useEffect(() => {
     let live = true;
-    loadGhosttyCore().then(
+    // scrollback-limit applies to new terminals, so the core reads it once.
+    const scrollbackLimit = rendererOptions(terminalConfigStore.config).scrollbackLines;
+    loadGhosttyCore({ scrollbackLimit }).then(
       (loaded) => (live ? setCore(loaded) : loaded.dispose()),
       (cause: unknown) => setError(`The terminal renderer failed to load: ${String(cause)}`),
     );
@@ -51,11 +62,30 @@ export function TerminalView(props: TerminalViewProps) {
     if (focused) handle.current?.focus();
   }, [focused]);
 
-  const attach = (wt: WTerm): void => {
-    const display = readDisplay(wt.element);
+  // The default cursor shape is the terminal's own state, set locally; programs still override it.
+  useEffect(() => handle.current?.write(options.cursorSequence), [wt, options.cursorSequence]);
+
+  // After the stylesheet changes, tell libghostty and the core the colors programs may query.
+  useEffect(() => {
+    if (wt === null) return undefined;
+    const frame = requestAnimationFrame(() => {
+      const colors = readThemeColors(wt.element);
+      if (colors !== null) wt.setThemeColors(colors);
+      stream.current?.facts(readDisplay(wt.element));
+      wt.fit();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [wt, config]);
+
+  const onUnsafePaste = useCallback((pending: PendingPaste) => setPaste(pending), []);
+  useBehaviors(wt, stream, options, onUnsafePaste);
+
+  const attach = (ready: WTerm): void => {
+    setWt(ready);
+    const display = readDisplay(ready.element);
     connection
       .attach(
-        { terminal: address, cols: wt.cols, rows: wt.rows, history: HISTORY_LINES, display },
+        { terminal: address, cols: ready.cols, rows: ready.rows, history: HISTORY_LINES, display },
         { autoCredit: false },
       )
       .then(
@@ -67,7 +97,7 @@ export function TerminalView(props: TerminalViewProps) {
             attached.consumed(bytes.byteLength);
           });
           attached.onClose(() => onClosed?.(address));
-          if (focused) wt.focus();
+          if (focused) ready.focus();
           return attached;
         },
         (cause: unknown) => setError(`Could not open ${address}: ${String(cause)}`),
@@ -77,19 +107,30 @@ export function TerminalView(props: TerminalViewProps) {
   if (error !== null) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
-    <Terminal
-      ref={handle}
-      core={core}
-      autoResize
-      aria-label={label}
-      data-slot="terminal-viewport"
-      data-terminal={address}
-      className={cn("min-h-0 flex-1 bg-term-bg", className)}
-      onReady={attach}
-      onData={(data) => stream.current?.write(transformInput === undefined ? data : transformInput(data))}
-      onResize={(cols, rows) => stream.current?.resize(cols, rows)}
-      onFocus={() => stream.current?.focus(true)}
-      onBlur={() => stream.current?.focus(false)}
-    />
+    <>
+      <Terminal
+        ref={handle}
+        core={core}
+        autoResize
+        {...(options.cursorBlink === undefined ? {} : { cursorBlink: options.cursorBlink })}
+        aria-label={label}
+        data-slot="terminal-viewport"
+        data-terminal={address}
+        className={cn("min-h-0 flex-1 bg-term-bg", options.hollowCursor && "cursor-hollow", className)}
+        onReady={attach}
+        onData={(data) => stream.current?.write(transformInput === undefined ? data : transformInput(data))}
+        onResize={(cols, rows) => stream.current?.resize(cols, rows)}
+        onFocus={() => stream.current?.focus(true)}
+        onBlur={() => stream.current?.focus(false)}
+      />
+      <PasteDialog
+        paste={paste}
+        onCancel={() => setPaste(null)}
+        onPaste={(text) => {
+          stream.current?.write(text);
+          setPaste(null);
+        }}
+      />
+    </>
   );
 }
