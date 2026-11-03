@@ -55,7 +55,7 @@ So msg1 carries nothing secret, and the typed-code UI requires the fingerprint c
 - Default public relay: `https://relay-doriface.omo.dev`. Self-hosting is one `wrangler deploy`.
 - `GET /healthz` -> `{ok:true, version}`.
 - Host uplink: `GET /v1/host/<hostId>` (WebSocket). The relay sends a 32-byte random challenge as the first binary message. The host answers with `signPub(32) || Ed25519-signature(64)` over `"doriface-relay-v1" || relayOrigin || hostId || challenge`, where `relayOrigin` is the exact `wss://host[:port]` the host dialed. The relay rebuilds `relayOrigin` from its own request URL and checks the signature and that `hostId` matches signPub; otherwise it closes with 4403. Binding the origin stops a second relay from replaying a challenge from this one. One uplink per hostId; a newer authenticated uplink replaces the old one.
-- Client: `GET /v1/client/<hostId>` (WebSocket). There is no relay-level auth (E2EE authenticates). An offline host closes the socket with 4404. A pairing session adds `?pair=<slot>`: the relay charges it to that slot's pairing budget, refuses it with 4404 when the slot is not registered to this hostId, and sends the host an OPEN whose payload is the 3 slot characters (an ordinary OPEN has no payload).
+- Client: `GET /v1/client/<hostId>` (WebSocket). There is no relay-level auth (E2EE authenticates). An offline host closes the socket with 4404. A pairing session adds `?pair=<slot>`: the relay charges it to that slot's pairing budget, refuses it with 4410 when the slot is not registered to this hostId, and sends the host an OPEN whose payload is the 3 slot characters (an ordinary OPEN has no payload).
 - Session admission: a client session counts against the 32-session cap only after the host has sent its first DATA on it. Before that it is pending: at most 8 pending sessions per host, with 10 s to the host's first DATA (else close 4408). When the pending cap is full, the relay evicts the pending socket from the source IP that holds the most pending sockets. Connections are also rate limited per IP (4429).
 - One Durable Object per hostId (`idFromName(hostId)`), using the WebSocket Hibernation API. Socket attachments carry `{role, sessionId}`.
 - Relay <-> host multiplexing frame: `[type u8][sessionId u32 LE][payload]`.
@@ -66,6 +66,7 @@ So msg1 carries nothing secret, and the typed-code UI requires the fingerprint c
   - 5 PAIR_SLOT_ACK (relay to host only, sessionId 0): payload = `status u8` (0 registered, 1 slot taken by another host, 2 malformed) followed by the 3 slot characters. A host that gets status 1 draws a new code and sends PAIR_SLOT again.
 - The relay assigns sessionIds. Client <-> relay messages are the raw opaque bytes, with no header.
 - Pairing budget: at most 10 `GET /v1/pair/<slot>` and 10 pairing sessions (client connections with `?pair=<slot>`) per slot per 10 minutes (429 / 4429 beyond). Ordinary sessions are never charged to a slot.
+- Per-source pairing quota: each source IP may open at most 3 pairing sessions per slot per 10 minutes, and the slot budget is charged only when the host has answered the session's IKpsk2 msg1 (its first DATA on that session). A single source therefore cannot drain a slot's budget with connections that never reach the host, and a slot stays pairable while its code is valid unless many independent sources each spend a real guess.
 - The relay never decrypts, never logs payloads, enforces a 1 MiB message cap, and forwards immediately with no batching.
 
 ### Relay text messages
@@ -78,7 +79,7 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 | `pong`                     | the relay, via `setWebSocketAutoResponse` (no Durable Object wake-up) | keepalive reply              |
 | `a:<total bytes received>` | the receiver of relay traffic (client or host uplink), every 64 KiB   | backpressure acknowledgement |
 
-- Backpressure: the Durable Object keeps `sent - acked` per socket in its attachment and closes the sending side with 4408 when it exceeds 4 MiB. Acknowledgements are cumulative and must be monotonic: an `a:<n>` that is not a decimal integer, is smaller than the last acknowledgement, or is larger than the bytes actually sent to that socket is a protocol error and closes the socket with 4400, so a peer cannot ack bytes it never received to make the relay buffer without bound.
+- Backpressure: the Durable Object keeps `sent - acked` per socket in its attachment and closes the sending side with 4408 when it exceeds 4 MiB. Acknowledgements are cumulative and must be monotonic: an `a:<n>` that is not a decimal integer, is smaller than the last acknowledgement, or is larger than the bytes actually sent to that socket is a protocol error and closes the socket with 4402, so a peer cannot ack bytes it never received to make the relay buffer without bound.
 - Keepalive: an alarm reaps sockets whose auto-response timestamp is more than 90 s old, with 4408.
 - Direct path: there is no relay, so the host itself answers each text `ping` with a text `pong`, and closes a `/v1/e2ee` socket with 4408 when it has received nothing (no record and no `ping`) for 90 s. Clients send `ping` every 30 s on the direct path too.
 
@@ -90,14 +91,16 @@ Exactly three text messages are allowed on relay sockets; everything else must b
 ## Close codes
 
 - 4400: crypto failure
+- 4402: relay protocol error (for example an invalid `a:<n>` acknowledgement)
 - 4401: unknown device
 - 4403: relay auth failed
 - 4404: host offline
+- 4410: pairing slot not registered to this host (expired or never opened)
 - 4408: idle or backpressure timeout
 - 4429: rate limited
 
 ## Change log
 
-- v1.2: pending-session admission; the `a:<n>` backpressure acknowledgement; the relay origin in the uplink signature; non-extractable device keys with a raw fallback; `ping`/`pong` keepalive; the pairing budget moved to the relay, with codes burned only on success or expiry (replacing "burn after 3 failed handshakes"); PAIR_SLOT carrying the Noise static key, acknowledged by PAIR_SLOT_ACK; pairing sessions marked with `?pair=<slot>`; monotonic, clamped acknowledgements; direct-path keepalive; pinned prologue, payload and nonce rules. Resume without a repaint is deferred.
+- v1.2: pending-session admission; the `a:<n>` backpressure acknowledgement; the relay origin in the uplink signature; non-extractable device keys with a raw fallback; `ping`/`pong` keepalive; the pairing budget moved to the relay, with codes burned only on success or expiry (replacing "burn after 3 failed handshakes"); PAIR_SLOT carrying the Noise static key, acknowledged by PAIR_SLOT_ACK; pairing sessions marked with `?pair=<slot>`; monotonic acknowledgements, rejected with 4402 when out of range; a per-source pairing quota with the slot budget charged only after the host answers; close codes 4402 and 4410; direct-path keepalive; pinned prologue, payload and nonce rules. Resume without a repaint is deferred.
 - v1.1: the 8-character typed code with a relay pairing slot; the SHA-256 hex fingerprint; the `doriface-host pair` and `doriface-host fingerprint` command names.
 - v1: initial contract.
