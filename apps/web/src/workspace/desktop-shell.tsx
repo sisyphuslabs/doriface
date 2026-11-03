@@ -63,6 +63,7 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
           onSelect={tabs.select}
           onClose={tabs.close}
           onNew={onNew}
+          {...(sidebar ? {} : { className: "pl-[var(--titlebar-inset-start,0.625rem)]" })}
           trailing={
             sidebar ? (
               toggle
