@@ -9,7 +9,7 @@ import {
   encodeSessionHello,
   PayloadError,
 } from "./payloads.ts";
-import { type SecureLink, SecuredLink, type SessionInfo } from "./secured-link.ts";
+import { MAX_HELD_BYTES, type SecureLink, SecuredLink, type SessionInfo } from "./secured-link.ts";
 import type { StaticKey } from "./static-key.ts";
 import { REKEY_INTERVAL, Transport } from "./transport.ts";
 
@@ -73,6 +73,7 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
   const prologue = prologueFor(options.hostId);
   const rekeyInterval = options.rekeyInterval ?? REKEY_INTERVAL;
   const inbox: Uint8Array[] = [];
+  let inboxBytes = 0;
   let session: SecuredLink | undefined;
   let done = false;
   let draining = false;
@@ -118,6 +119,7 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
       draining = false;
       return;
     }
+    inboxBytes -= bytes.byteLength;
     await step(bytes);
     return drain();
   };
@@ -130,6 +132,8 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
     if (session !== undefined) return session.receive(bytes);
     if (done) return;
     inbox.push(bytes);
+    inboxBytes += bytes.byteLength;
+    if (inboxBytes > MAX_HELD_BYTES) return fail(failure(CloseCode.IdleTimeout, "too much data during the handshake"));
     if (draining) return;
     draining = true;
     void drain();
