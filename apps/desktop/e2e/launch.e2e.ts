@@ -13,6 +13,7 @@ declare global {
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** CI points this at the electron-builder --dir output so the packaged app is what launches. */
 const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
+const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
 const hc = scratchHcSession();
 /** Playwright wants a string-only environment. */
 const launchEnv = (): Record<string, string> =>
@@ -23,7 +24,7 @@ let launched: ElectronApplication | undefined;
 
 test.beforeAll(async () => {
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: [appDir] } : { executablePath, args: [] }),
+    ...(executablePath === undefined ? { args: [appDir] } : { executablePath: attachAfterFirstLoad, args: [] }),
     env: launchEnv(),
   });
 });
