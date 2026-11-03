@@ -1,5 +1,5 @@
 import { ChevronLeft, Keyboard, Link2, Palette, SquareTerminal, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "../../src/index.ts";
 import { KeyboardSection } from "./settings-keyboard.tsx";
 import { AppearanceSection, ConnectionSection } from "./settings-sections.tsx";
@@ -22,10 +22,15 @@ const BODY: Readonly<Record<SettingsSection, () => ReactNode>> = {
 };
 
 /** List-detail settings: section navigation beside one section's form, which scrolls on its own. */
-export function SettingsScreen({ section = "connection" }: { readonly section?: SettingsSection }) {
+export function SettingsScreen({ section: initial = "connection" }: { readonly section?: SettingsSection }) {
+  const [section, setSection] = useState<SettingsSection>(initial);
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-background md:flex-row">
-      <Tabs value={section} className="md:hidden">
+      <Tabs
+        value={section}
+        onValueChange={(value) => setSection(SECTIONS.find((entry) => entry.id === value)?.id ?? section)}
+        className="md:hidden"
+      >
         <header className="box-content flex h-12 items-center gap-1 px-1.5 pt-(--safe-top)">
           <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" />
           <h1 className="text-xl font-semibold text-foreground">Settings</h1>
@@ -53,6 +58,7 @@ export function SettingsScreen({ section = "connection" }: { readonly section?: 
             key={entry.id}
             variant="ghost"
             aria-current={entry.id === section ? "page" : undefined}
+            onClick={() => setSection(entry.id)}
             className={cn(
               "justify-start gap-2.5 px-2 text-sm [&_svg]:size-3.5",
               entry.id === section && "bg-selected text-foreground",
