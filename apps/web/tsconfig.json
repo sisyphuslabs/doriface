@@ -26,6 +26,9 @@
     },
     {
       "path": "../../packages/ui"
+    },
+    {
+      "path": "../host"
     }
   ]
 }

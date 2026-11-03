@@ -1,5 +1,5 @@
 import { HcConnection } from "@doriface/client";
-import { closeCodeOf, type PairingSecret, secureLink } from "@doriface/crypto";
+import { base64urlEncode, closeCodeOf, type PairingSecret, secureLink } from "@doriface/crypto";
 import { CloseCode, connectRelayClient } from "@doriface/relay-client";
 import { BROWSER_DEPS, deviceKeyFor, type RelayDeps } from "../connection/relay-deps.ts";
 import { slotOf } from "./code.ts";
@@ -70,4 +70,22 @@ export async function pairWithHost(offer: PairingOffer, name: string, deps: Rela
     const reason = pairingFailureReason(secret.mode, error instanceof Error ? closeCodeOf(error) : undefined);
     throw reason === undefined ? error : new PairingFailedError(reason, { cause: error });
   }
+}
+
+/** The paired host as connection settings remember it. */
+export interface RememberedHost {
+  readonly hostId: string;
+  readonly hostKey: string;
+  readonly relayUrl: string;
+}
+
+/** Pairs, and saves the host only once the pairing session answered `hello`; a failed pairing saves nothing. */
+export async function pairAndRemember(
+  offer: PairingOffer,
+  name: string,
+  save: (host: RememberedHost) => void,
+  deps: RelayDeps = BROWSER_DEPS,
+): Promise<void> {
+  await pairWithHost(offer, name, deps);
+  save({ hostId: offer.hostId, hostKey: base64urlEncode(offer.noiseStaticPub), relayUrl: offer.relayUrl });
 }

@@ -29,6 +29,7 @@
     "workbox-window": "7.4.1"
   },
   "devDependencies": {
+    "@doriface/host": "workspace:*",
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.4",
     "@types/react": "19.3.0",
