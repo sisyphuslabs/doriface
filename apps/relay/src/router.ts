@@ -1,5 +1,6 @@
 import { CloseCode, HOST_ID_PATTERN, PAIR_SLOT_PATTERN } from "@doriface/relay-client/wire";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import packageJson from "../package.json" with { type: "json" };
 import type { Env } from "./env.ts";
 import { allowFromIp, sourceOf } from "./limits.ts";
@@ -22,6 +23,9 @@ app.get("/v1/:role{host|client}/:hostId", async (c) => {
   if (!(await allowFromIp(c.env.CONNECT_LIMIT, c.req.raw))) return closedSocket(CloseCode.RateLimited, "rate limited");
   return c.env.ROOM.get(c.env.ROOM.idFromName(hostId)).fetch(c.req.raw);
 });
+
+// The web app looks slots up from its own origin; the answer is public and untrusted, so any origin may read it.
+app.use("/v1/pair/*", cors({ origin: "*", allowMethods: ["GET"] }));
 
 app.get("/v1/pair/:slot", async (c) => {
   const slot = c.req.param("slot");

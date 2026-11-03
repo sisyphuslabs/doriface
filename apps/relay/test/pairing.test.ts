@@ -70,6 +70,19 @@ describe("pairing slots", () => {
     other.uplink.stop();
   });
 
+  test("slot lookups are readable from a web origin, found or not", async () => {
+    const host = await startTestHost(relay.url, testIp());
+    const slot = randomSlot();
+    await host.uplink.registerPairSlot(slot, crypto.getRandomValues(new Uint8Array(32)));
+    const get = (target: string) =>
+      fetch(`${relay.url}/v1/pair/${target}`, {
+        headers: { origin: "https://app.example", "cf-connecting-ip": testIp() },
+      });
+    const [found, missing] = await Promise.all([get(slot), get(randomSlot())]);
+    expect([found.status, found.headers.get("access-control-allow-origin")]).toEqual([200, "*"]);
+    expect([missing.status, missing.headers.get("access-control-allow-origin")]).toEqual([404, "*"]);
+  });
+
   test("an unknown slot is not found", async () => {
     expect(await lookup(typed(randomSlot()))).toBeUndefined();
   });
