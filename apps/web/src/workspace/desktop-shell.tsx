@@ -17,12 +17,14 @@ const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
 export interface DesktopShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Terminal[];
+  /** False until the core has listed its terminals; the count would read 0 until then. */
+  readonly loaded: boolean;
   readonly tabs: Tabs;
   readonly onNew: () => void;
   readonly onPalette: () => void;
 }
 
-export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: DesktopShellProps) {
+export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette }: DesktopShellProps) {
   const [sidebar, setSidebar] = useState(true);
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
@@ -98,10 +100,12 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
           start={
             <>
               <StatusBarItem icon={<Monitor aria-hidden />}>{connection.hello.core.name}</StatusBarItem>
-              <StatusBarItem>
-                {live.length} {live.length === 1 ? "terminal" : "terminals"}
-                {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
-              </StatusBarItem>
+              {loaded ? (
+                <StatusBarItem>
+                  {live.length} {live.length === 1 ? "terminal" : "terminals"}
+                  {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
+                </StatusBarItem>
+              ) : null}
               <ReconnectStatus />
             </>
           }
