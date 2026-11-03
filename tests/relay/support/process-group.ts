@@ -1,12 +1,20 @@
 import type { Subprocess } from "bun";
+import { rmSync } from "node:fs";
+import { rm } from "node:fs/promises";
 
 const TERM_GRACE_MS = 5_000;
 const KILL_GRACE_MS = 2_000;
 const POLL_MS = 25;
 const INTERRUPTS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
-/** Groups started and not yet stopped. A group of its own no longer gets the signals that end this process. */
-const liveGroups = new Set<number>();
+interface Adopted {
+  readonly leader: Subprocess;
+  /** Scratch the group used, removed once the group is gone. */
+  readonly dir: string;
+}
+
+/** Groups started and not yet stopped, by pgid. A group of its own gets none of the signals that end this process. */
+const liveGroups = new Map<number, Adopted>();
 let interruptsHooked = false;
 
 function isErrno(error: unknown, code: string): boolean {
@@ -45,32 +53,57 @@ async function goneBy(pgid: number, deadline: number): Promise<boolean> {
 
 const goneWithin = (pgid: number, ms: number): Promise<boolean> => goneBy(pgid, performance.now() + ms);
 
-function killLiveGroups(): void {
-  for (const pgid of liveGroups) signalGroup(pgid, "SIGKILL");
+/**
+ * SIGKILLs every live group and returns what it killed. The caller works from this snapshot: the leader's exit watcher
+ * may unregister a group as soon as it dies.
+ */
+function killLiveGroups(): Adopted[] {
+  const groups = [...liveGroups.values()];
+  for (const { leader } of groups) signalGroup(leader.pid, "SIGKILL");
+  return groups;
+}
+
+function removeDirs(groups: readonly Adopted[]): void {
+  for (const { dir } of groups) rmSync(dir, { recursive: true, force: true });
 }
 
 /**
- * When this process exits, or ends on SIGINT, SIGTERM or SIGHUP before `stopProcessGroup` ran, every live group gets
- * SIGKILL. On a signal the groups are awaited (bounded) and the signal raised again, its listener gone, so the process
- * ends the way the signal asks and only after its groups did.
+ * When this process ends on SIGINT, SIGTERM or SIGHUP before `stopProcessGroup` ran, every live group gets SIGKILL, is
+ * awaited (bounded) and has its scratch removed; the signal is then raised again, its listener gone, so the process
+ * ends the way the signal asks and only after its groups did. A plain script's `exit` event does the same, without the
+ * wait. `bun test` emits no `exit` event: there `stopAdoptedGroups`, preloaded as an `afterAll`, ends what tests left.
  */
 function hookInterrupts(): void {
   if (interruptsHooked) return;
   interruptsHooked = true;
-  process.once("exit", killLiveGroups);
+  process.once("exit", () => removeDirs(killLiveGroups()));
   for (const signal of INTERRUPTS) {
     process.once(signal, async () => {
-      killLiveGroups();
-      await Promise.all([...liveGroups].map((pgid) => goneWithin(pgid, KILL_GRACE_MS)));
+      const groups = killLiveGroups();
+      await Promise.all(groups.map(({ leader }) => goneWithin(leader.pid, KILL_GRACE_MS)));
+      removeDirs(groups);
       process.kill(process.pid, signal);
     });
   }
 }
 
-/** Registers `leader`'s group, spawned with `detached: true`, to be killed if this process ends before it is stopped. */
-export function adoptProcessGroup(leader: Subprocess): void {
-  liveGroups.add(leader.pid);
+/**
+ * Registers `leader`'s group, spawned with `detached: true`, and the scratch `dir` it uses, to be ended and removed if
+ * nothing stops it first.
+ */
+export function adoptProcessGroup(leader: Subprocess, dir: string): void {
+  liveGroups.set(leader.pid, { leader, dir });
   hookInterrupts();
+}
+
+/** Stops every group still registered and removes its scratch: the end-of-run cleanup for relays a test left running. */
+export async function stopAdoptedGroups(): Promise<void> {
+  await Promise.all(
+    [...liveGroups.values()].map(async ({ leader, dir }) => {
+      await stopProcessGroup(leader);
+      await rm(dir, { recursive: true, force: true });
+    }),
+  );
 }
 
 /**

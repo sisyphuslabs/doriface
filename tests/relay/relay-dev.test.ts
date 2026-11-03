@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { liveAmong, liveDescendants } from "./support/processes.ts";
 import { BindRace, type LocalRelayOptions, startLocalRelay } from "./support/relay-dev.ts";
@@ -8,6 +10,15 @@ import { BindRace, type LocalRelayOptions, startLocalRelay } from "./support/rel
 const EPHEMERAL_FLOOR = 32_768;
 
 afterEach(runDeferred);
+
+/** An empty directory for a child process's TMPDIR, removed after the test. */
+function scratchTmp(): string {
+  const dir = mkdtempSync(join(tmpdir(), "relay-dev-test-"));
+  defer(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+const relayDirsIn = (dir: string): string[] => readdirSync(dir).filter((name) => name.startsWith("relay-"));
 
 /** A port another process holds, as one that took a picked port before wrangler bound it would. */
 function takenPort(): number {
@@ -77,7 +88,9 @@ describe("startLocalRelay", () => {
   }, 120_000);
 
   test("a process ended by a signal takes the relay it started down with it", async () => {
+    const tmp = scratchTmp();
     const proc = Bun.spawn([process.execPath, join(import.meta.dir, "fixtures", "relay-until-signal.ts")], {
+      env: { ...process.env, TMPDIR: tmp },
       stdout: "pipe",
       stderr: "inherit",
     });
@@ -86,9 +99,26 @@ describe("startLocalRelay", () => {
     expect(new TextDecoder().decode((await reader.read()).value)).toBe("ready\n");
     const started = await liveDescendants(proc.pid);
     expect(started.length).toBeGreaterThanOrEqual(3);
+    expect(relayDirsIn(tmp)).toHaveLength(1);
     proc.kill("SIGTERM");
     await proc.exited;
     expect(proc.signalCode).toBe("SIGTERM");
     expect(await liveAmong(started)).toEqual([]);
+    expect(relayDirsIn(tmp)).toEqual([]);
   }, 120_000);
+
+  test("a relay a test never stopped is stopped, and its scratch removed, once the test run ends", async () => {
+    const tmp = scratchTmp();
+    const fixture = join(import.meta.dir, "fixtures", "relay-left-running.fixture.ts");
+    const proc = Bun.spawn(
+      [process.execPath, "test", "--path-ignore-patterns", ".relay/**", `./${relative(process.cwd(), fixture)}`],
+      { env: { ...process.env, TMPDIR: tmp }, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(await proc.exited).toBe(0);
+    const pids: unknown = JSON.parse(readFileSync(join(tmp, "pids.json"), "utf8"));
+    if (!Array.isArray(pids) || !pids.every((pid) => typeof pid === "number")) throw new Error("bad pid list");
+    expect(pids.length).toBeGreaterThanOrEqual(3);
+    expect(await liveAmong(pids)).toEqual([]);
+    expect(relayDirsIn(tmp)).toEqual([]);
+  }, 180_000);
 });
