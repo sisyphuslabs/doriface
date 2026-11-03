@@ -37,6 +37,7 @@ export {
   pairingPsk,
   pairingSlotOf,
   PairingGuard,
+  pairingWebOrigin,
   relayWebSocketUrl,
   parsePairingUrl,
   type PairingGuardState,
