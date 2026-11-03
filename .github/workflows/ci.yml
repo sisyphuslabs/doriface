@@ -168,6 +168,21 @@ jobs:
           # Electron's own stdout/stderr, so a launch that never connects says why.
           DEBUG: pw:browser
         run: xvfb-run --auto-servernum bun run test:e2e
+      - name: DIAG(#80) repeated launches
+        if: always()
+        continue-on-error: true
+        working-directory: apps/desktop
+        env:
+          DORIFACE_E2E_EXECUTABLE: ${{ github.workspace }}/apps/desktop/dist/release/linux-unpacked/doriface
+        run: xvfb-run --auto-servernum bunx playwright test e2e/diag.e2e.ts --repeat-each=10 --output=diag-results
+      - name: DIAG(#80) upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diag80-${{ github.run_attempt }}
+          path: |
+            apps/desktop/test-results
+            apps/desktop/diag-results
 
   ghostty-wasm:
     name: Ghostty wasm provenance

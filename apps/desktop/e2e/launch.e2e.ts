@@ -29,6 +29,23 @@ test.beforeAll(async () => {
     ...(executablePath === undefined ? { args: appArgs() } : { executablePath: attachAfterFirstLoad, args: [] }),
     env: launchEnv(session),
   });
+  // DIAG(#80): main-process timeline of the window from the moment Playwright attaches.
+  await launched.evaluate(({ BrowserWindow }) => {
+    const log: unknown[] = [];
+    Reflect.set(globalThis, "__diag80", log);
+    const w = BrowserWindow.getAllWindows()[0];
+    log.push(["attach", Date.now(), BrowserWindow.getAllWindows().length, w?.isVisible()]);
+    if (w === undefined) return;
+    w.on("show", () => log.push(["show", Date.now()]));
+    w.on("ready-to-show", () => log.push(["ready-to-show", Date.now()]));
+    w.on("focus", () => log.push(["focus", Date.now()]));
+    const c = w.webContents;
+    c.on("did-start-navigation", (d) => log.push(["start-nav", Date.now(), d.url, d.isMainFrame]));
+    c.on("did-navigate", (_e, url) => log.push(["did-navigate", Date.now(), url]));
+    c.on("dom-ready", () => log.push(["dom-ready", Date.now()]));
+    c.on("did-finish-load", () => log.push(["finish-load", Date.now()]));
+    c.on("did-fail-load", (_e, code, desc) => log.push(["fail-load", Date.now(), code, desc]));
+  });
 });
 
 test.afterAll(async () => {
@@ -101,7 +118,53 @@ test("the window opens locked down and reaches a local host", async () => {
 
   expect(violations).toEqual([]);
 
+  const app2 = app;
+  const state = () =>
+    app2.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows()[0];
+      return {
+        now: Date.now(),
+        visible: w?.isVisible(),
+        focused: w?.isFocused(),
+        bounds: w?.getBounds(),
+        log: Reflect.get(globalThis, "__diag80"),
+      };
+    });
+  console.log(`DIAG80 before ${JSON.stringify(await state())}`);
+  console.log(
+    `DIAG80 doc ${JSON.stringify(await page.evaluate(() => ({ vis: document.visibilityState, focus: document.hasFocus(), now: Date.now() })))}`,
+  );
+  const tracePath = test.info().outputPath("trace.json");
+  await app.evaluate(({ contentTracing }) =>
+    contentTracing
+      .startRecording({
+        included_categories: [
+          "viz",
+          "cc",
+          "gpu",
+          "ui",
+          "views",
+          "renderer",
+          "renderer.scheduler",
+          "devtools",
+          "benchmark",
+          "toplevel",
+          "blink",
+          "input",
+          "disabled-by-default-devtools.timeline",
+          "disabled-by-default-devtools.timeline.frame",
+          "disabled-by-default-viz.surface_id_flow",
+        ],
+      })
+      .then(() => undefined),
+  );
   const screenshot = test.info().outputPath("launch.png");
-  await page.screenshot({ path: screenshot });
+  const shotStart = Date.now();
+  try {
+    await page.screenshot({ path: screenshot });
+  } finally {
+    console.log(`DIAG80 shotMs ${Date.now() - shotStart} after ${JSON.stringify(await state())}`);
+    await app.evaluate(({ contentTracing }, p) => contentTracing.stopRecording(p), tracePath);
+  }
   console.log(`screenshot ${screenshot}`);
 });
