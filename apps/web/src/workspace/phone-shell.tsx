@@ -128,7 +128,8 @@ function PhoneTerminal(props: {
         <MachineOffline machine={machine} />
       ) : (
         <TerminalView
-          key={terminal.pid ?? undefined}
+          // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
+          key={`${terminal.address}#${terminal.pid ?? ""}`}
           connection={connection}
           address={terminal.address}
           pid={terminal.pid ?? null}

@@ -144,6 +144,11 @@ export function TerminalView(props: TerminalViewProps) {
   useEffect(() => {
     isFocused.current = focused;
   }, [focused]);
+  // Read when the stream ends, not when it attached, so an end acts on the tabs as they are by then.
+  const onEndNow = useRef(onEnd);
+  useEffect(() => {
+    onEndNow.current = onEnd;
+  }, [onEnd]);
 
   /** The core ended the stream, or refused an attach, with the program not known to be over: ask it what is left. */
   const settle = (ready: WTerm, refusal: { readonly cause: unknown } | null): void => {
@@ -151,7 +156,7 @@ export function TerminalView(props: TerminalViewProps) {
       // The line dropped again: the next connection attaches anew.
       if (connection.closed || unmounted.current) return undefined;
       const then: Record<Settled, () => void> = {
-        finished: () => onEnd?.(address, "finished"),
+        finished: () => onEndNow.current?.(address, "finished"),
         restarting: () => setRestarting(true),
         reattach: () => attach(ready),
         replaced: () => undefined,
@@ -162,8 +167,8 @@ export function TerminalView(props: TerminalViewProps) {
   };
   // Waiting for a restart that will not come: the program ended (killed during the grace, or the core gave up on it).
   useEffect(() => {
-    if (restarting && !live) onEnd?.(address, "finished");
-  }, [restarting, live, address, onEnd]);
+    if (restarting && !live) onEndNow.current?.(address, "finished");
+  }, [restarting, live, address]);
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
@@ -206,7 +211,7 @@ export function TerminalView(props: TerminalViewProps) {
           attached.onClose((close) => {
             if (stream.current === attached) stream.current = null;
             const end = terminalEnd(close);
-            onEnd?.(address, end);
+            onEndNow.current?.(address, end);
             if (end === "lost") settle(ready, null);
           });
           for (const data of pending.current.splice(0)) attached.write(data);

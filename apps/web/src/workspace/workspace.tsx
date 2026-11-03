@@ -14,6 +14,7 @@ import { useMachineRuns } from "./use-machine-runs.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
+import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
 
@@ -27,7 +28,11 @@ export function Workspace({ connection }: WorkspaceProps) {
   const { entries, terminals, refresh, listError, views, retry, listed } = useMachines(connection, fed.terminals);
   const tabs = useTabs(connection.hello.core.id, fed.loaded ? terminals : null, views, listed);
   const narrow = useNarrow();
-  const [phoneOpen, setPhoneOpen] = useState<string | null>(null);
+  const ids = useMemo(() => machineIds(views), [views]);
+  // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
+  const [phoneKey, setPhoneKey] = useState<string | null>(null);
+  const phoneOpen = phoneKey === null ? null : (tabAddress(phoneKey, ids) ?? null);
+  const showOnPhone = useCallback((address: string) => setPhoneKey(tabKey(address, ids)), [ids]);
   const [palette, setPalette] = useState(false);
   const [ask, setAsk] = useState<SessionAsk | null>(null);
   const [adding, setAdding] = useState(false);
@@ -40,9 +45,9 @@ export function Workspace({ connection }: WorkspaceProps) {
   const opened = useCallback(
     (address: string): void => {
       select(address);
-      setPhoneOpen(address);
+      showOnPhone(address);
     },
-    [select],
+    [select, showOnPhone],
   );
   const runs = useMachineRuns(connection, opened, refresh);
   const inView = narrow ? phoneOpen : tabs.active;
@@ -52,7 +57,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   };
   const openTerminal = (address: string): void => {
     tabs.select(address);
-    setPhoneOpen(address);
+    showOnPhone(address);
   };
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
@@ -77,8 +82,8 @@ export function Workspace({ connection }: WorkspaceProps) {
             connection={connection}
             terminals={terminals}
             open={phoneOpen}
-            onOpen={setPhoneOpen}
-            onBack={() => setPhoneOpen(null)}
+            onOpen={showOnPhone}
+            onBack={() => setPhoneKey(null)}
             onNew={() => newTerminal()}
             onPalette={onPalette}
             onSession={onSession}
