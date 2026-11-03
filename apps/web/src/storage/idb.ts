@@ -1,4 +1,8 @@
-/** A tiny promise wrapper over one IndexedDB object store; null where IndexedDB is unavailable. */
+/**
+ * A tiny promise wrapper over one IndexedDB object store. Where IndexedDB is unavailable or denied its
+ * calls reject; the settings stores fall back to defaults, and the device key fails, because a key that
+ * is not stored would give the device a new identity on every load.
+ */
 export interface KeyValueStore {
   get(key: string): Promise<unknown>;
   put(key: string, value: unknown): Promise<void>;
