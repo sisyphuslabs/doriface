@@ -1,5 +1,6 @@
 export { fromBase64Url, toBase64Url } from "./base64url.ts";
 export { CloseCode, sendableCloseCode } from "./close-codes.ts";
+export { CREDIT_QUERY, encodeCreditText, parseCreditText, SESSION_WINDOW_BYTES } from "./credit.ts";
 export {
   ACK_INTERVAL_BYTES,
   encodeAck,
@@ -27,6 +28,7 @@ export { MAX_SESSION_SEND_BYTES, RELAY_MESSAGE_CAP } from "./limits.ts";
 export {
   decodeMux,
   encodeClose,
+  encodeCredit,
   encodeData,
   encodeOpen,
   MUX_HEADER_BYTES,
