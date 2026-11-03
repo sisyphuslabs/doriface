@@ -4,8 +4,10 @@
  * array: the launch helper's executable and arguments) with the arguments electron.launch() adds, and points
  * Playwright at a CDP proxy instead of the app. The proxy holds each page session's Page.enable until that page has an
  * app: execution context, so a session attached during the first navigation never receives that commit's
- * Page.frameNavigated: the event lost in #13. A session attached after the first load is unaffected.
+ * Page.frameNavigated: the event lost in #13. A session attached after the first load is unaffected. Every hold is
+ * recorded in the file DORIFACE_E2E_RACE_REPORT names, so the test can tell that the race was forced.
  */
+import { appendFileSync } from "node:fs";
 import { argv, env, exit, stderr } from "node:process";
 
 const APP_ORIGIN = "app://doriface";
@@ -19,10 +21,37 @@ if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((part) => typ
 const inner: string[] = parsed;
 
 interface Message {
-  readonly method?: string;
-  readonly sessionId?: string;
-  readonly params?: { readonly context?: { readonly origin?: string } };
+  readonly method: string | undefined;
+  readonly sessionId: string | undefined;
+  readonly origin: string | undefined;
 }
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === "object" && value !== null;
+const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+
+/** The fields the proxy routes on; anything that is not a JSON object passes through untouched. */
+const parseMessage = (data: string): Message | undefined => {
+  let message: unknown;
+  try {
+    message = JSON.parse(data);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(message)) return undefined;
+  const params = message["params"];
+  const context = isRecord(params) ? params["context"] : undefined;
+  return {
+    method: text(message["method"]),
+    sessionId: text(message["sessionId"]),
+    origin: isRecord(context) ? text(context["origin"]) : undefined,
+  };
+};
+
+const report = (line: string): void => {
+  const path = env["DORIFACE_E2E_RACE_REPORT"];
+  if (path !== undefined && path !== "") appendFileSync(path, `${line}\n`);
+};
 
 interface Connection {
   readonly upstream: WebSocket;
@@ -56,12 +85,12 @@ function serveProxy(upstreamUrl: string): string {
         upstream.addEventListener("open", () => connection.pending.splice(0).forEach((data) => upstream.send(data)));
         upstream.addEventListener("message", (event) => {
           const data = String(event.data);
-          const message: Message = JSON.parse(data);
-          const session = message.sessionId;
+          const message = parseMessage(data);
+          const session = message?.sessionId;
           if (
             session !== undefined &&
-            message.method === "Runtime.executionContextCreated" &&
-            message.params?.context?.origin === APP_ORIGIN &&
+            message?.method === "Runtime.executionContextCreated" &&
+            message.origin === APP_ORIGIN &&
             !connection.committed.has(session)
           ) {
             connection.committed.add(session);
@@ -75,10 +104,11 @@ function serveProxy(upstreamUrl: string): string {
       message(client, raw) {
         const connection = client.data;
         const data = String(raw);
-        const message: Message = JSON.parse(data);
-        const session = message.sessionId;
-        if (message.method === "Page.enable" && session !== undefined && !connection.committed.has(session)) {
+        const message = parseMessage(data);
+        const session = message?.sessionId;
+        if (message?.method === "Page.enable" && session !== undefined && !connection.committed.has(session)) {
           connection.held.set(session, [...(connection.held.get(session) ?? []), data]);
+          report("held a Page.enable");
         } else {
           toApp(connection, data);
         }

@@ -5,6 +5,7 @@
  * electron.launch() waits for it forever (#13); Playwright's loader, which prevents this for unpackaged apps by
  * deferring `ready`, cannot be loaded into a packaged one.
  */
+import { appendFileSync } from "node:fs";
 import { argv, env, exit, stderr } from "node:process";
 
 const APP_ORIGIN = "app://doriface";
@@ -19,9 +20,9 @@ interface CdpEvent {
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null;
 
-const parseEvent = (data: unknown): CdpEvent | undefined => {
-  if (typeof data !== "string") return undefined;
-  const message: unknown = JSON.parse(data);
+const parseJson = (data: unknown): unknown => (typeof data === "string" ? JSON.parse(data) : undefined);
+
+const parseEvent = (message: unknown): CdpEvent | undefined => {
   if (!isRecord(message) || typeof message["method"] !== "string" || !isRecord(message["params"])) return undefined;
   const sessionId = message["sessionId"];
   return {
@@ -31,31 +32,82 @@ const parseEvent = (data: unknown): CdpEvent | undefined => {
   };
 };
 
+const NETWORK_SERVICE = "network.mojom.NetworkService";
+
+/** Whether a SystemInfo.getProcessInfo response lists the network service, or undefined when it is not one. */
+const hasNetworkService = (response: unknown): boolean | undefined => {
+  const result = isRecord(response) ? response["result"] : undefined;
+  const info = isRecord(result) ? result["processInfo"] : undefined;
+  if (!Array.isArray(info)) return undefined;
+  return info.some((entry: unknown) => isRecord(entry) && entry["type"] === NETWORK_SERVICE);
+};
+
+/**
+ * With DORIFACE_E2E_RACE_REPORT set, records in that file what this wrapper saw at its attach, the moment a launch
+ * without it would have attached (whether the first navigation was in flight and whether the network service had
+ * started), and whether the network service was running by the time it releases Playwright. first-document.e2e.ts
+ * checks these to know it forced the race; the second check keeps the first from passing if the service is renamed or
+ * stops being a process of its own.
+ */
+function reportAttach(path: string, frameTree: unknown, processes: unknown): void {
+  const result = isRecord(frameTree) ? frameTree["result"] : undefined;
+  const tree = isRecord(result) ? result["frameTree"] : undefined;
+  const frame = isRecord(tree) ? tree["frame"] : undefined;
+  if (isRecord(frame) && frame["url"] === "") appendFileSync(path, "first navigation in flight at attach\n");
+  if (hasNetworkService(processes) === false) appendFileSync(path, "network service not started at attach\n");
+}
+
 /** Runtime events still arrive when the commit itself is lost, so the app origin's context marks the document. */
 function appDocumentCreated(endpoint: string): Promise<void> {
   const socket = new WebSocket(endpoint);
   let lastId = 0;
-  const send = (method: string, sessionId?: string): void => {
+  const raceReport = env["DORIFACE_E2E_RACE_REPORT"] ?? "";
+  const ids = { frameTree: -1, attachProcesses: -1, releaseProcesses: -1 };
+  const answers = new Map<number, unknown>();
+  const send = (method: string, sessionId?: string): number => {
     lastId += 1;
     const params =
       method === "Target.setAutoAttach" ? { autoAttach: true, waitForDebuggerOnStart: false, flatten: true } : {};
     socket.send(JSON.stringify({ id: lastId, method, params, ...(sessionId === undefined ? {} : { sessionId }) }));
+    return lastId;
   };
   return new Promise<void>((resolve, reject) => {
+    const release = (): void => {
+      socket.close();
+      resolve();
+    };
     socket.addEventListener("open", () => send("Target.setAutoAttach"));
     socket.addEventListener("message", (message) => {
-      const event = parseEvent(message.data);
+      const parsed = parseJson(message.data);
+      const event = parseEvent(parsed);
       if (event?.method === "Target.attachedToTarget") {
         const targetInfo = event.params["targetInfo"];
         const sessionId = event.params["sessionId"];
         if (isRecord(targetInfo) && targetInfo["type"] === "page" && typeof sessionId === "string") {
           send("Runtime.enable", sessionId);
+          if (ids.frameTree < 0 && raceReport !== "") {
+            ids.frameTree = send("Page.getFrameTree", sessionId);
+            ids.attachProcesses = send("SystemInfo.getProcessInfo");
+          }
         }
       }
+      const id = isRecord(parsed) ? parsed["id"] : undefined;
+      if (typeof id === "number") answers.set(id, parsed);
+      if (answers.has(ids.frameTree) && answers.has(ids.attachProcesses)) {
+        reportAttach(raceReport, answers.get(ids.frameTree), answers.get(ids.attachProcesses));
+        answers.delete(ids.frameTree);
+        answers.delete(ids.attachProcesses);
+      }
+      if (id === ids.releaseProcesses && answers.has(ids.releaseProcesses)) {
+        if (hasNetworkService(answers.get(ids.releaseProcesses)) === true) {
+          appendFileSync(raceReport, "network service running at release\n");
+        }
+        release();
+      }
       const context = event?.method === "Runtime.executionContextCreated" ? event.params["context"] : undefined;
-      if (isRecord(context) && context["origin"] === APP_ORIGIN) {
-        socket.close();
-        resolve();
+      if (isRecord(context) && context["origin"] === APP_ORIGIN && ids.releaseProcesses < 0) {
+        if (raceReport === "") release();
+        else ids.releaseProcesses = send("SystemInfo.getProcessInfo");
       }
     });
     socket.addEventListener("error", () => reject(new Error(`could not watch ${endpoint}`)));
