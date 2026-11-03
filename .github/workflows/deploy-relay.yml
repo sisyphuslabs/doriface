@@ -1,0 +1,54 @@
+name: Deploy relay
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - apps/relay/**
+      - packages/relay-client/**
+      - packages/client/**
+      - bun.lock
+      - .github/workflows/deploy-relay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-relay
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      # wrangler needs Node 22 or newer.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - name: wrangler deploy
+        working-directory: apps/relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler deploy
+      - name: Wait for healthz
+        run: |
+          deadline=$((SECONDS + 120))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if body=$(curl -fsS --max-time 10 https://relay-doriface.omo.dev/healthz) &&
+              echo "$body" | jq -e '.ok == true' > /dev/null; then
+              echo "healthz: $body"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::https://relay-doriface.omo.dev/healthz did not return ok:true within 2 minutes"
+          exit 1
