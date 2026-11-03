@@ -65,6 +65,25 @@ describe("PairingSlots", () => {
     expect(await within(relay.released, "release")).toBe(pairingSlotOf(offer.code));
   });
 
+  test("concurrent opens each get their own offer, registered before it is returned", async () => {
+    const registered: string[] = [];
+    const registrar: PairingSlotRegistrar = {
+      register: async (slot) => {
+        await new Promise((resolve) => setImmediate(resolve));
+        registered.push(slot);
+        return "registered";
+      },
+      release: () => {},
+    };
+    slots = new PairingSlots(store, KEY, registrar, () => {});
+    slots.start();
+    const [a, b] = await Promise.all([slots.open(), slots.open()]);
+    expect(a.code).not.toBe(b.code);
+    expect([a.slot, b.slot]).toEqual(["registered", "registered"]);
+    expect(registered).toContain(pairingSlotOf(a.code));
+    expect(store.read()?.code).toBe(b.code);
+  });
+
   test("a registration the relay failed is tried again", async () => {
     store.offer();
     let calls = 0;
