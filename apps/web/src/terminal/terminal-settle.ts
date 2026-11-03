@@ -24,4 +24,13 @@ export function settled(answer: CoreAnswer, program: number | null, first: boole
   return refused ? "error" : "reattach";
 }
 
+/** Why input still queued in a view that goes away was never sent, as the notice words it; null names no reason. */
+export type Unsent = "restarted" | "ended" | null;
+
+export function unsentReason(answer: CoreAnswer, program: number | null): Unsent {
+  if ("error" in answer) return unknownToCore(answer.error) ? "ended" : null;
+  if (answer.terminal.state !== "live") return "ended";
+  return (answer.terminal.pid ?? null) === program ? null : "restarted";
+}
+
 const unknownToCore = (error: unknown): boolean => error instanceof HcRpcError && error.kind === "not_found";
