@@ -4,10 +4,15 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "files": [
-    "src"
+    "src",
+    "schema"
   ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "scripts": {
+    "gen:api": "bun scripts/gen-api.ts",
+    "gen:api:check": "bun scripts/gen-api.ts --check"
   }
 }

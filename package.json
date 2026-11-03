@@ -12,8 +12,9 @@
     "lint": "oxlint --deny-warnings",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
+    "gen:api:check": "bun run --cwd packages/protocol gen:api:check",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run test"
+    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run gen:api:check && bun run test"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
