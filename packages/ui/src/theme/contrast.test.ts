@@ -20,10 +20,11 @@ describe.each(Object.entries(BUILTIN_PALETTES))("%s meets WCAG 2.2 AA", (_, pale
   };
   const base = parseRgba(theme.roles.background)?.rgb ?? 0;
   const opaque = ["canvas", "surface", "chrome", "popover", "raised"].map((name) => flatten(role(name), base));
-  const [canvasRgb, surfaceRgb, , popoverRgb] = opaque;
-  if (canvasRgb === undefined || surfaceRgb === undefined || popoverRgb === undefined)
+  const [canvasRgb, surfaceRgb, chromeRgb, popoverRgb] = opaque;
+  if (canvasRgb === undefined || surfaceRgb === undefined || chromeRgb === undefined || popoverRgb === undefined)
     throw new Error("missing surface");
-  const surfaces = [...opaque, ...[surfaceRgb, canvasRgb, popoverRgb].map((under) => flatten(role("selected"), under))];
+  const underSelected = [surfaceRgb, canvasRgb, chromeRgb, popoverRgb];
+  const surfaces = [...opaque, ...underSelected.map((under) => flatten(role("selected"), under))];
 
   test.each(["foreground", "muted-foreground", "brand", "destructive"])("--%s text on every surface", (name) => {
     expect(worstContrast(role(name), surfaces)).toBeGreaterThanOrEqual(AA_TEXT);
