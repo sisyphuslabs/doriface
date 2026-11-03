@@ -110,6 +110,17 @@ describe("secureLink failures", () => {
     expect((await settledError(responder)).code).toBe(CloseCode.CryptoFailure);
   });
 
+  test.each([
+    ["a short psk", { clientPsk: new Uint8Array(5), name: "phone" }],
+    ["an empty device name", { clientPsk: psk, name: " " }],
+    ["too many early bytes", { early: new Uint8Array(8192) }],
+  ])("bad initiator options (%s) reject and close the link instead of throwing", async (_, setup) => {
+    const pair = connect(setup);
+    expect((await settledError(pair.initiator)).code).toBe(CloseCode.CryptoFailure);
+    expect(pair.clientEnd.closeCode).toBe(CloseCode.CryptoFailure);
+    await settledError(pair.responder);
+  });
+
   test("a silent peer times out with 4408", async () => {
     const [, hostEnd] = memoryLinkPair();
     const responder = secureLink(hostEnd, {

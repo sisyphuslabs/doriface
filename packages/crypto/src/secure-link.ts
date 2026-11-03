@@ -143,23 +143,27 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
   else runResponder(options);
   return settled.promise;
 
+  /** Setup runs inside the failure path too, so a bad psk, name or early payload rejects instead of throwing. */
   function runInitiator(opts: InitiatorOptions): void {
-    const handshake = new Handshake({
-      pattern: opts.pairing === undefined ? "IK" : "IKpsk2",
-      role: "initiator",
-      prologue,
-      staticKey: opts.staticKey,
-      remoteStatic: opts.remoteStatic,
-      psk: opts.pairing?.psk,
+    const start = guarded(async () => {
+      const handshake = new Handshake({
+        pattern: opts.pairing === undefined ? "IK" : "IKpsk2",
+        role: "initiator",
+        prologue,
+        staticKey: opts.staticKey,
+        remoteStatic: opts.remoteStatic,
+        psk: opts.pairing?.psk,
+      });
+      const hello = opts.pairing === undefined ? encodeSessionHello(opts.early) : encodePairingHello(opts.pairing.name);
+      step = guarded(async (bytes) => {
+        const lanUrls = decodeReply(await handshake.readMessage(bytes));
+        const secured = establish(handshake, { peerName: undefined, lanUrls });
+        resolve(secured);
+        secured.send(EMPTY);
+      });
+      link.send(await handshake.writeMessage(hello));
     });
-    step = guarded(async (bytes) => {
-      const lanUrls = decodeReply(await handshake.readMessage(bytes));
-      const secured = establish(handshake, { peerName: undefined, lanUrls });
-      resolve(secured);
-      secured.send(EMPTY);
-    });
-    const hello = opts.pairing === undefined ? encodeSessionHello(opts.early) : encodePairingHello(opts.pairing.name);
-    void guarded(async () => link.send(await handshake.writeMessage(hello)))(EMPTY);
+    void start(EMPTY);
   }
 
   function runResponder(opts: ResponderOptions): void {
