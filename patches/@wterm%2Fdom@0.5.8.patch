@@ -1,0 +1,117 @@
+diff --git a/dist/renderer.js b/dist/renderer.js
+index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae35453c12 100644
+--- a/dist/renderer.js
++++ b/dist/renderer.js
+@@ -157,8 +157,42 @@ function cellSpanPart(className, style, text) {
+         html: `${opening}${content}</span>`,
+         opening: flat ? opening : undefined,
+         text: flat ? text : undefined,
++        span: { className, style, text, strike: !flat },
+     };
+ }
++// A part's html is its identity for diffing; its nodes are built here. A
++// Content-Security-Policy without 'unsafe-inline' drops style attributes parsed
++// from markup (so each run would lose its width and colors), but not styles
++// set through CSSOM.
++function cellSpanNode(doc, span) {
++    const element = doc.createElement("span");
++    if (span.className)
++        element.className = span.className;
++    if (span.style)
++        element.style.cssText = span.style;
++    if (span.strike) {
++        const strike = doc.createElement("span");
++        strike.style.cssText = "text-decoration:line-through solid currentColor;";
++        strike.textContent = span.text;
++        element.appendChild(strike);
++    }
++    else if (span.text) {
++        element.textContent = span.text;
++    }
++    return element;
++}
++function partNode(doc, part) {
++    if (!part.link)
++        return cellSpanNode(doc, part.span);
++    const link = doc.createElement("a");
++    link.className = "term-link";
++    link.setAttribute("href", part.link.href);
++    link.target = "_blank";
++    link.rel = "noopener noreferrer";
++    for (const span of part.link.spans)
++        link.appendChild(cellSpanNode(doc, span));
++    return link;
++}
+ function safeLinkHref(uri) {
+     if (!uri)
+         return undefined;
+@@ -549,6 +583,8 @@ export class Renderer {
+         // Keeping their boundaries lets a redraw preserve unchanged Unicode cells.
+         const parts = [];
+         let linkHtml = "";
++        let linkHref = "";
++        let linkSpans = [];
+         const content = {
+             text: "",
+             specialCells: [],
+@@ -590,14 +626,18 @@ export class Renderer {
+             const nextLinkKey = href ? linkKey : "";
+             if (nextLinkKey !== outputLinkKey) {
+                 if (outputLinkKey)
+-                    parts.push({ html: linkHtml + "</a>" });
++                    parts.push({ html: linkHtml + "</a>", link: { href: linkHref, spans: linkSpans } });
+                 if (nextLinkKey) {
+                     linkHtml = `<a class="term-link" href="${escapeHTML(href)}" target="_blank" rel="noopener noreferrer">`;
++                    linkHref = href;
++                    linkSpans = [];
+                 }
+                 outputLinkKey = nextLinkKey;
+             }
+-            if (outputLinkKey)
++            if (outputLinkKey) {
+                 linkHtml += content.html;
++                linkSpans.push(content.span);
++            }
+             else
+                 parts.push(content);
+         };
+@@ -818,7 +858,7 @@ export class Renderer {
+         flushRun(this.cols);
+         flushCanvasRun();
+         if (outputLinkKey)
+-            parts.push({ html: linkHtml + "</a>" });
++            parts.push({ html: linkHtml + "</a>", link: { href: linkHref, spans: linkSpans } });
+         this.updateRowParts(rowEl, parts);
+         this.rowText.set(rowEl, content);
+         if (canvasTop)
+@@ -871,9 +911,9 @@ export class Renderer {
+         }
+         const retained = start + parts.length - newEnd;
+         const replaced = Math.max(oldEnd - start, newEnd - start);
+-        // Parsing the whole row is cheaper when there is little to retain.
++        // Rebuilding the whole row is cheaper when there is little to retain.
+         if (retained < replaced) {
+-            row.innerHTML = parts.map((part) => part.html).join("");
++            row.replaceChildren(...parts.map((part) => partNode(row.ownerDocument, part)));
+         }
+         else {
+             // Replace only the changed middle, retaining the native text nodes and
+@@ -882,12 +922,12 @@ export class Renderer {
+             range.setStart(row, start);
+             range.setEnd(row, oldEnd);
+             range.deleteContents();
+-            const html = parts
+-                .slice(start, newEnd)
+-                .map((part) => part.html)
+-                .join("");
+-            if (html)
+-                range.insertNode(range.createContextualFragment(html));
++            if (newEnd > start) {
++                const fragment = row.ownerDocument.createDocumentFragment();
++                for (const part of parts.slice(start, newEnd))
++                    fragment.appendChild(partNode(row.ownerDocument, part));
++                range.insertNode(fragment);
++            }
+         }
+         this.rowParts.set(row, parts);
+     }
