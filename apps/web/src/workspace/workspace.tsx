@@ -27,7 +27,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPalette((shown) => !shown);
     return true;
   });
-  const entries = useMachines(connection, terminals);
+  const { entries } = useMachines(connection, terminals);
   const newTerminal = (on?: string): void => {
     void connection.call("terminal.run", on === undefined ? {} : { on }).then((started) => {
       tabs.select(started.address);
