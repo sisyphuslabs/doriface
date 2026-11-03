@@ -39,7 +39,9 @@ export class WebSocketLink implements ByteLink {
     this.#stopPings = keepAlive(ws, pingIntervalMs);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
-      if (this.#credit && typeof event.data === "string") return this.#credited(event.data);
+      if (this.#credit && typeof event.data === "string" && event.data.startsWith("c:")) {
+        return this.#credited(event.data);
+      }
       if (!(event.data instanceof ArrayBuffer)) return this.#shut(CloseCode.UnsupportedData, "binary messages only");
       this.#inbox.push(new Uint8Array(event.data));
     });
