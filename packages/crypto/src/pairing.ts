@@ -5,7 +5,6 @@ import { hostIdOf } from "./identity.ts";
 
 export const PAIRING_TTL_MS = 10 * 60 * 1000;
 export const DEFAULT_RELAY_URL = "https://relay-doriface.omo.dev";
-const MAX_DEVICE_NAME = 64;
 /** Crockford base32: no I, L, O or U. */
 export const PAIRING_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const PAIRING_CODE_LENGTH = 8;
@@ -99,34 +98,6 @@ export function encodePairSlot(slot: string, noiseStaticPub: Uint8Array): Uint8A
 /** An empty PAIR_SLOT payload clears the host's slot. */
 export const PAIR_SLOT_CLEAR = new Uint8Array(0);
 
-/** Message 1's payload for the pairing session: UTF-8 JSON `{"name": "<device name>"}`. */
-export const encodePairingHello = (name: string): Uint8Array => utf8(JSON.stringify({ name: deviceName(name) }));
-
-export function decodePairingHello(payload: Uint8Array): string {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payload));
-  } catch (error) {
-    throw new Error("the pairing hello is not UTF-8 JSON", { cause: error });
-  }
-  if (typeof parsed !== "object" || parsed === null || !("name" in parsed) || typeof parsed.name !== "string") {
-    throw new Error('the pairing hello must be {"name": string}');
-  }
-  return deviceName(parsed.name);
-}
-
-/** Control, format and bidi characters could rewrite a terminal or a UI line that shows the name. */
-const UNSAFE_NAME_CHARACTER = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
-
-function deviceName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed === "" || trimmed.length > MAX_DEVICE_NAME) {
-    throw new Error(`a device name is 1-${MAX_DEVICE_NAME} characters`);
-  }
-  if (UNSAFE_NAME_CHARACTER.test(trimmed)) throw new Error("a device name cannot contain control characters");
-  return trimmed;
-}
-
 export interface PairingLink {
   readonly webOrigin: string;
   readonly hostId: string;
@@ -168,7 +139,6 @@ export function parsePairingUrl(url: string): PairingLink {
   };
   const noiseStaticPub = key("k");
   const signPub = key("s");
-  if (noiseStaticPub.byteLength !== 32 || signPub.byteLength !== 32) throw new Error("the pairing URL has a bad key");
   const hostId = get("h");
   if (hostIdOf(signPub) !== hostId) throw new Error("the pairing URL's hostId does not match its signing key");
   const code = normalizePairingCode(get("c"));

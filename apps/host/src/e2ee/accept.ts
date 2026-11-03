@@ -2,7 +2,6 @@ import {
   type Authorization,
   type ClientHello,
   CloseCode,
-  decodePairingHello,
   type HostIdentity,
   rawStaticKey,
   type SecureLink,
@@ -17,6 +16,8 @@ export interface E2eeDeps {
   readonly devices: DeviceStore;
   readonly pairing: PairingStore;
   readonly log: (line: string) => void;
+  /** IP-literal LAN URLs of this host's `/v1/e2ee`, sent to clients in message 2. */
+  readonly lanUrls: readonly string[];
   /** For tests: messages per direction between rekeys. */
   readonly rekeyInterval?: number | undefined;
 }
@@ -33,11 +34,7 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
     if (hello.pattern === "IK") {
       return deps.devices.has(hello.remoteStatic) ? { accept: true } : { accept: false, reason: "unknown device" };
     }
-    try {
-      deviceName = decodePairingHello(hello.payload);
-    } catch (error) {
-      return { accept: false, reason: error instanceof Error ? error.message : "bad pairing hello" };
-    }
+    deviceName = hello.name ?? "";
     claim = deps.pairing.claim();
     return claim === undefined ? { accept: false, reason: "no pairing is pending" } : { accept: true, psk: claim.psk };
   };
@@ -48,6 +45,7 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
       hostId: deps.identity.hostId,
       staticKey: rawStaticKey(deps.identity.noise),
       authorize,
+      lanUrls: deps.lanUrls,
       rekeyInterval: deps.rekeyInterval,
     });
   } catch (error) {
