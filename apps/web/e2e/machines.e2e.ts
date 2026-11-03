@@ -10,9 +10,9 @@ const STATE_BOUND_MS = 25_000;
 const machineRow = (page: Page) => page.getByRole("button", { name: new RegExp(`^${MACHINE_NAME}\\b`) });
 const newOn = (page: Page) => page.getByRole("button", { name: `New terminal on ${MACHINE_NAME}` });
 
-/** Makes the next dial to the machine fail, then stops its core so the open line drops. */
-function switchOff(): void {
-  writeFileSync(MACHINE_SWITCH, "off");
+/** Makes the next dial to the machine fail (`off`) or ask for a login (`login`), then stops its core so the open line drops. */
+function switchTo(mode: "off" | "login"): void {
+  writeFileSync(MACHINE_SWITCH, mode);
   const saved: unknown = JSON.parse(readFileSync(MACHINE_ENV, "utf8"));
   if (typeof saved !== "object" || saved === null || !("hc" in saved) || !("env" in saved)) {
     throw new Error("the e2e host saved no machine environment");
@@ -48,10 +48,24 @@ test.describe("machines added with hc machine add", () => {
     await page.goto("/");
     await expect(machineRow(page)).toContainText("connected", { timeout: 20_000 });
     try {
-      switchOff();
+      switchTo("off");
       await expect(machineRow(page)).toContainText("unreachable", { timeout: STATE_BOUND_MS });
       await expect(newOn(page)).toBeDisabled();
       expect(errors).toEqual([]);
+    } finally {
+      rmSync(MACHINE_SWITCH, { force: true });
+    }
+  });
+
+  test("a machine that asks for a login reads needs login in the attention tone", async ({ page }) => {
+    await page.goto("/");
+    await expect(machineRow(page)).toContainText("connected", { timeout: 20_000 });
+    try {
+      switchTo("login");
+      const state = machineRow(page).getByText("needs login", { exact: true });
+      await expect(state).toBeVisible({ timeout: STATE_BOUND_MS });
+      await expect(state).toHaveClass(/text-status-blocked-text/);
+      await expect(newOn(page)).toBeDisabled();
     } finally {
       rmSync(MACHINE_SWITCH, { force: true });
     }
