@@ -8,6 +8,7 @@ import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
+import { resetsCursor } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
@@ -97,6 +98,8 @@ export function TerminalView(props: TerminalViewProps) {
           attached.onData((bytes) => {
             handle.current?.write(bytes);
             attached.consumed(bytes.byteLength);
+            // DECSCUSR 0 means the default shape, and the default is the configured cursor-style.
+            if (resetsCursor(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
           attached.onClose(() => onClosed?.(address));
           if (focused) ready.focus();
