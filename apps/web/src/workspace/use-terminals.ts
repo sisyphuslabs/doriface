@@ -5,6 +5,8 @@ import { applyEvent, fromSnapshot, type TerminalMap } from "./terminals.ts";
 
 export interface TerminalsState {
   readonly terminals: readonly Terminal[];
+  /** False until the core's first answer: an empty list before it means unknown, not none. */
+  readonly loaded: boolean;
   readonly machines: number;
   readonly error: string | null;
 }
@@ -14,7 +16,7 @@ export function machineCount(list: Pick<ListResult, "machines">): number {
   return list.machines?.length ?? 0;
 }
 
-const EMPTY: TerminalsState = { terminals: [], machines: 0, error: null };
+const EMPTY: TerminalsState = { terminals: [], loaded: false, machines: 0, error: null };
 
 /** terminal.list for the first picture and machine count, then events.subscribe keeps it live. */
 export function useTerminals(connection: HcConnection | null): TerminalsState {
@@ -29,7 +31,7 @@ export function useTerminals(connection: HcConnection | null): TerminalsState {
     let machines = 0;
     let disposed = false;
     const publish = (): void => {
-      if (!disposed) setState({ terminals: [...map.values()], machines, error: null });
+      if (!disposed) setState({ terminals: [...map.values()], loaded: true, machines, error: null });
     };
     const fail = (cause: unknown): void => {
       if (!disposed) setState((prev) => ({ ...prev, error: String(cause) }));

@@ -18,8 +18,8 @@ export interface WorkspaceProps {
 
 /** The live terminals of one core: the desktop shell from `md` up, the phone navigation below. */
 export function Workspace({ connection }: WorkspaceProps) {
-  const { terminals } = useTerminals(connection);
-  const tabs = useTabs(terminals);
+  const { terminals, loaded } = useTerminals(connection);
+  const tabs = useTabs(connection.hello.core.id, loaded ? terminals : null);
   const narrow = useNarrow();
   const [phoneOpen, setPhoneOpen] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
