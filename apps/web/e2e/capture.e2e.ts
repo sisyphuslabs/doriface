@@ -9,7 +9,7 @@ const OUT = join(import.meta.dirname, "../../../docs/design/app");
 const b64url = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64url");
 const signPub = new Uint8Array(32).map((_, index) => (index * 37 + 11) % 256);
 const noisePub = new Uint8Array(32).map((_, index) => (index * 53 + 7) % 256);
-const PAIR_LINK = `/pair#h=${hostIdOf(signPub)}&k=${b64url(noisePub)}&s=${b64url(signPub)}&c=7KQ39D2M&r=wss://relay-doriface.omo.dev`;
+const PAIR_LINK = `/pair#h=${hostIdOf(signPub)}&k=${b64url(noisePub)}&s=${b64url(signPub)}&p=${b64url(new Uint8Array(32).fill(3))}&r=wss://relay-doriface.omo.dev`;
 
 type Width = "1440" | "390";
 type Theme = "day" | "night";

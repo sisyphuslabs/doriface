@@ -1,6 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { normalizeCode } from "./code.ts";
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
@@ -38,11 +37,16 @@ export function fingerprintOf(noiseStaticPub: Uint8Array): string {
   return hex.match(/.{4}/g)?.join(" ") ?? hex;
 }
 
+/** How this offer pairs: the typed code (CPace over `?pair`) or the link secret from a QR/URL (contract v1.3). */
+export type OfferSecret =
+  | { readonly mode: "code"; readonly code: string }
+  | { readonly mode: "link"; readonly linkSecret: Uint8Array };
+
 export interface PairingOffer {
   readonly hostId: string;
   readonly noiseStaticPub: Uint8Array;
   readonly signPub: Uint8Array;
-  readonly code: string;
+  readonly secret: OfferSecret;
   readonly relayUrl: string;
   readonly fingerprint: string;
 }
@@ -51,18 +55,22 @@ export type PairingParse =
   | { readonly ok: true; readonly offer: PairingOffer }
   | { readonly ok: false; readonly reason: string };
 
-/** Parses `#h=&k=&s=&c=&r=` and checks that hostId belongs to the signing key it came with. */
+const OLDER_HOST = "This pairing link comes from an older doriface-host. Run doriface-host pair again.";
+
+/** Parses `#h=&k=&s=&p=&r=` and checks that hostId belongs to the signing key it came with. */
 export function parsePairingFragment(hash: string): PairingParse {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
+  if (!params.has("p") && params.has("c")) return { ok: false, reason: OLDER_HOST };
   const hostId = params.get("h") ?? "";
   const noiseStaticPub = fromBase64Url(params.get("k") ?? "");
   const signPub = fromBase64Url(params.get("s") ?? "");
-  const code = normalizeCode(params.get("c") ?? "");
+  const link = params.get("p") ?? "";
+  const linkSecret = link.length === 43 ? fromBase64Url(link) : null;
   const relayUrl = params.get("r") ?? "";
   if (noiseStaticPub === null || signPub === null) return { ok: false, reason: "The host's keys are missing." };
-  if (code === null) return { ok: false, reason: "The pairing code is malformed." };
+  if (linkSecret?.byteLength !== 32) return { ok: false, reason: "The pairing link's secret is malformed." };
   if (!/^wss?:\/\//.test(relayUrl)) return { ok: false, reason: "The relay address is not a WebSocket URL." };
-  return offerFrom({ hostId, noiseStaticPub, signPub }, code, relayUrl);
+  return offerFrom({ hostId, noiseStaticPub, signPub }, { mode: "link", linkSecret }, relayUrl);
 }
 
 export interface HostKeys {
@@ -72,11 +80,11 @@ export interface HostKeys {
 }
 
 /** Checks that hostId belongs to the signing key, then attaches the fingerprint to show. */
-export function offerFrom(keys: HostKeys, code: string, relayUrl: string): PairingParse {
+export function offerFrom(keys: HostKeys, secret: OfferSecret, relayUrl: string): PairingParse {
   if (keys.noiseStaticPub.byteLength !== 32 || keys.signPub.byteLength !== 32) {
     return { ok: false, reason: "The host's keys are malformed." };
   }
   if (hostIdOf(keys.signPub) !== keys.hostId)
     return { ok: false, reason: "The host ID does not match its signing key." };
-  return { ok: true, offer: { ...keys, code, relayUrl, fingerprint: fingerprintOf(keys.noiseStaticPub) } };
+  return { ok: true, offer: { ...keys, secret, relayUrl, fingerprint: fingerprintOf(keys.noiseStaticPub) } };
 }
