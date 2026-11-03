@@ -31,8 +31,12 @@ export function machineEntries(
   ];
 }
 
-/** Changes only when a machine's terminals appear or all go: the moment to read machine.list again. */
+/**
+ * Which added machines have live terminals: it changes when a machine's terminals appear, finish or go, which is
+ * also what hc does to them when that machine's line drops, so it is one of the moments to read machine.list again.
+ */
 export function machineKey(terminals: readonly Terminal[]): string {
-  const names = new Set(terminals.flatMap((terminal) => machineOf(terminal.address) ?? []));
+  const live = terminals.filter((terminal) => terminal.state === "live");
+  const names = new Set(live.flatMap((terminal) => machineOf(terminal.address) ?? []));
   return [...names].toSorted().join(" ");
 }
