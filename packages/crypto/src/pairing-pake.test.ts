@@ -1,7 +1,7 @@
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { describe, expect, test } from "bun:test";
-import { clientFlight } from "./client-flight.ts";
+import { clientFlight, type PairingSecret } from "./client-flight.ts";
 import { CpaceError } from "./cpace.ts";
 import { concatBytes, utf8 } from "./encoding.ts";
 import { generateHostIdentity, generateX25519, x25519FromSecret } from "./identity.ts";
@@ -89,6 +89,28 @@ describe("typed-code pairing binds the host and the slot", () => {
     expect(cause).toBeInstanceOf(DecryptError);
     expect(answered).toBe(0);
   });
+});
+
+const REPLY_BOUNDS: readonly [string, PairingSecret | undefined, number][] = [
+  ["a session reply of 305 bytes", undefined, 305],
+  ["a pair-code reply of 337 bytes", codePairing("phone"), 337],
+  ["a pair-code reply of 79 bytes", codePairing("phone"), 79],
+  ["a pair-link reply of 47 bytes", { mode: "link", linkSecret: offer.linkSecret, name: "phone" }, 47],
+];
+
+describe("host replies outside the contract's size bounds", () => {
+  test.each(REPLY_BOUNDS)(
+    "%s is refused by the size gate before the share or message 2 is read",
+    async (_, pairing, size) => {
+      const flight = await clientFlight({
+        hostId: host.hostId,
+        staticKey: rawStaticKey(generateX25519()),
+        remoteStatic: host.noise.publicKey,
+        pairing,
+      });
+      await expect(flight.reply(new Uint8Array(size).fill(1))).rejects.toBeInstanceOf(PayloadError);
+    },
+  );
 });
 
 describe("first messages the host never answers", () => {
