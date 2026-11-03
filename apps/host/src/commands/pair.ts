@@ -1,4 +1,11 @@
-import { buildPairingUrl, DEFAULT_RELAY_URL, fingerprintOf, formatPairingCode, PAIRING_TTL_MS } from "@doriface/crypto";
+import {
+  buildPairingUrl,
+  DEFAULT_RELAY_URL,
+  fingerprintOf,
+  formatPairingCode,
+  PAIRING_TTL_MS,
+  relayWebSocketUrl,
+} from "@doriface/crypto";
 import { parseArgs } from "node:util";
 import { renderUnicodeCompact } from "uqr";
 import { requestControl } from "../control.ts";
@@ -54,7 +61,7 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
     },
   });
   if (values.help) return out(`${PAIR_USAGE}\n`);
-  if (!URL.canParse(values.relay)) throw new Error(`--relay wants a URL, got ${JSON.stringify(values.relay)}`);
+  relayWebSocketUrl(values.relay);
   const stateDir = values["state-dir"] ?? defaultStateDir();
   const identity = loadHostIdentity(stateDir);
   const offer = await openOffer(stateDir);

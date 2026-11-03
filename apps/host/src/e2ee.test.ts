@@ -139,7 +139,7 @@ afterAll(async () => {
 describe("/v1/e2ee against a real hc", () => {
   test("pair prints a link for this host and keeps its state owner-only", () => {
     expect(pairing.hostId).toBe(endpoint().hostId);
-    expect(pairing.relayUrl).toBe("https://relay-doriface.omo.dev");
+    expect(pairing.relayUrl).toBe("wss://relay-doriface.omo.dev");
     expect(statSync(stateDir).mode & 0o777).toBe(0o700);
     expect(statSync(join(stateDir, "host-keys.json")).mode & 0o777).toBe(0o600);
     expect(statSync(join(stateDir, "pairing.json")).mode & 0o777).toBe(0o600);

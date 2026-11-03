@@ -97,7 +97,24 @@ describe("pairing URL", () => {
   test("puts everything in the fragment and parses back", () => {
     expect(url.startsWith(`https://doriface.omo.dev/pair#h=${identity.hostId}&k=`)).toBe(true);
     expect(new URL(url).search).toBe("");
-    expect(parsePairingUrl(url)).toEqual({ ...link, webOrigin: "https://doriface.omo.dev" });
+    expect(parsePairingUrl(url)).toEqual({
+      ...link,
+      webOrigin: "https://doriface.omo.dev",
+      relayUrl: "wss://relay-doriface.omo.dev",
+    });
+  });
+
+  test.each([
+    ["https://relay-doriface.omo.dev", "wss://relay-doriface.omo.dev"],
+    ["https://relay.example:8443/doriface/", "wss://relay.example:8443/doriface"],
+    ["http://127.0.0.1:8787", "ws://127.0.0.1:8787"],
+    ["wss://relay.example", "wss://relay.example"],
+  ])("carries relay %p as the WebSocket URL %p", (relayUrl, expected) => {
+    expect(new URLSearchParams(new URL(buildPairingUrl({ ...link, relayUrl })).hash.slice(1)).get("r")).toBe(expected);
+  });
+
+  test.each(["ftp://relay.example", "file:///relay", "relay"])("refuses relay %p", (relayUrl) => {
+    expect(() => buildPairingUrl({ ...link, relayUrl })).toThrow();
   });
 
   test.each([
