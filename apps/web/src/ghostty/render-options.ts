@@ -11,7 +11,6 @@ export interface RendererOptions {
   readonly copyOnSelect: boolean;
   readonly hideMouseWhileTyping: boolean;
   readonly pasteProtection: boolean;
-  readonly confirmClose: "never" | "running" | "always";
 }
 
 const SHAPES: Readonly<Record<string, readonly [blinking: number, steady: number]>> = {
@@ -25,7 +24,6 @@ export function rendererOptions(config: TerminalConfig): RendererOptions {
   const blink = single(config, "cursor-style-blink");
   const style = single(config, "cursor-style");
   const [blinking, steady] = SHAPES[style] ?? [1, 2];
-  const close = single(config, "confirm-close-surface");
   return {
     cursorBlink: blink === "" ? undefined : blink === "true",
     cursorSequence: `\u001b[${blink === "false" ? steady : blinking} q`,
@@ -34,6 +32,5 @@ export function rendererOptions(config: TerminalConfig): RendererOptions {
     copyOnSelect: single(config, "copy-on-select") !== "false",
     hideMouseWhileTyping: single(config, "mouse-hide-while-typing") === "true",
     pasteProtection: single(config, "clipboard-paste-protection") === "true",
-    confirmClose: close === "always" ? "always" : close === "false" ? "never" : "running",
   };
 }
