@@ -10,7 +10,8 @@ export function PhoneFrame({ label, children }: { readonly label: string; readon
     <figure className="flex flex-col items-center gap-3">
       <div
         data-density="coarse"
-        className="relative h-[844px] [--safe-bottom:34px] [--safe-top:47px] w-[390px] overflow-hidden rounded-[2.5rem] border border-border bg-background text-base shadow-overlay"
+        data-insets="phone"
+        className="relative h-[844px] w-[390px] overflow-hidden rounded-[2.5rem] border border-border bg-background text-base shadow-overlay"
       >
         {children}
         <span
