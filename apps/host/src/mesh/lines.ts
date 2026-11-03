@@ -150,10 +150,7 @@ export class MeshLines {
   expect(...types: LineType[]): void {
     this.#expected = new Set(types);
     const stray = this.#queue.find(({ line }) => !this.#expected.has(line.t));
-    if (stray === undefined) return;
-    this.#queue.length = 0;
-    this.#queuedBytes = 0;
-    this.#unexpected(stray.line.t);
+    if (stray !== undefined) this.#unexpected(stray.line.t);
   }
 
   send(line: MeshLine): void {
@@ -225,7 +222,10 @@ export class MeshLines {
     return true;
   }
 
+  /** Closes 4400 on a line the protocol state does not take; what was queued before it goes too, unread. */
   #unexpected(type: LineType): false {
+    this.#queue.length = 0;
+    this.#queuedBytes = 0;
     this.close(CloseCode.CryptoFailure, `unexpected ${type} line`);
     return false;
   }

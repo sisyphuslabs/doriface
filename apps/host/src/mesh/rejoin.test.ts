@@ -1,4 +1,4 @@
-import { generateX25519 } from "@doriface/crypto";
+import { generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { MAX_MESH_MEMBERS, parseRecord, type Signed, signCard } from "@doriface/mesh";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cardBody } from "../state/mesh.ts";
@@ -13,7 +13,7 @@ import {
   side,
   type Side,
 } from "../testing/join-harness.ts";
-import { signPubOf } from "../testing/mesh-history.ts";
+import { cardFor, machine, signPubOf } from "../testing/mesh-history.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 afterEach(removeSides);
@@ -90,6 +90,35 @@ describe("section 4.4 step 3: a member whose welcome was lost joins again", () =
     pending.decide(asked.nonce, true);
     expect(await failure(run.invited)).toContain("this host is a member with another Noise key");
     expect(b.mesh.read()).toBeUndefined();
+  });
+
+  test("a twin whose Noise key a member took while its join waited is refused inside the admit transaction", async () => {
+    const [a, twinSide] = [side("alpha"), side("twin")];
+    a.mesh.found(a.m.identity, ownOf(a));
+    const meshId = a.mesh.read()?.meshId ?? "";
+    const z = machine("zeta");
+    const twin = { ...generateHostIdentity(), noise: z.identity.noise };
+    const pending = new PendingJoins();
+    const run = runJoin(
+      inviteDeps(a, pending),
+      { ...joinerContext(twinSide, a), identity: twin },
+      twin.noise.publicKey,
+    );
+    const asked = await pending.next();
+    const card = cardFor(z, meshId, a.m);
+    a.mesh.sign(a.m.identity, (n, prev) => ({
+      v: 2,
+      mesh: meshId,
+      type: "admit",
+      by: signPubOf(a.m),
+      n,
+      prev,
+      subject: { card },
+    }));
+    pending.decide(asked.nonce, true);
+    expect(await failure(run.invited)).toBe("this Noise key is another mesh member's");
+    expect(types(a)).toEqual(["found", "admit"]);
+    expect(twinSide.mesh.read()).toBeUndefined();
   });
 
   test("a mesh that filled up while a join waited for approval refuses it and writes no admit", async () => {

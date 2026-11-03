@@ -50,6 +50,19 @@ describe("mesh stream lines (section 10.2)", () => {
     expect(receiver.closeCode).toBe(CloseCode.CryptoFailure);
   });
 
+  test("a stray line that closes the session takes the lines queued before it along", async () => {
+    const { sender, receiver, lines } = pair();
+    sender.send(encode('{"t":"done","mesh":"m"}\n{"t":"card","body":"b","sig":"s"}\n'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(receiver.closeCode).toBe(CloseCode.CryptoFailure);
+    expect(
+      await lines.next().then(
+        () => "read",
+        (error: unknown) => String(error),
+      ),
+    ).toContain("unexpected card line");
+  });
+
   test("detach stops listening to the session", () => {
     const data = new Set<(bytes: Uint8Array) => void>();
     const closes = new Set<(error: Error | undefined) => void>();
