@@ -200,18 +200,18 @@ Nested corners are concentric: segments (6) inside the 8 px track with 2 px padd
 
 Target WCAG 2.2 AA.
 
-| Criterion                                      | How it holds                                                                        | Evidence                                             |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 1.4.3 Contrast (text)                          | AA guard, selected wash included; worst case per theme in section 2 (min 4.50)      | `contrast.test.ts`                                   |
-| 1.4.11 Non-text contrast                       | input edge, ring, status glyphs >= 3:1 (min 3.00)                                   | `contrast.test.ts`                                   |
-| 1.4.1 Use of colour                            | status shape + word; fingerprint mismatch bold + the word "differs" under the group | StatusIndicator, Fingerprint                         |
-| 2.4.7 / 2.4.11 Focus visible, not obscured     | 2 px `--ring` outline on every control                                              | showcase focus-visible cells                         |
-| 2.5.8 Target size (minimum)                    | >= 24x24 CSS px fine pointer, 44x44 coarse                                          | `--control-*`, `::after` hit areas, 44 px extra keys |
-| 2.1.1 Keyboard                                 | Base UI keyboard models; palette arrows/Enter; Escape closes overlays               | CommandPalette, Dialog, Menu                         |
-| 1.4.10 Reflow (320 px) and 1.4.12 Text spacing | single column below 768 px, no fixed-height text boxes, wrapping terminal preview   | 390 captures                                         |
-| 3.3.2 Labels                                   | visible labels on fields; icon buttons require `label`                              | Field, IconButton                                    |
-| State-stable controls                          | states change colour/opacity/0.97 scale only, never size                            | Button, AgentRow                                     |
-| 2.3.3 Animation from interactions              | reduced-motion path in base.css                                                     | base.css                                             |
+| Criterion                                      | How it holds                                                                                                       | Evidence                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 1.4.3 Contrast (text)                          | AA guard, selected wash included; worst case per theme in section 2 (min 4.50)                                     | `contrast.test.ts`                                   |
+| 1.4.11 Non-text contrast                       | input edge, ring, status glyphs >= 3:1 (min 3.00)                                                                  | `contrast.test.ts`                                   |
+| 1.4.1 Use of colour                            | status shape + word; fingerprint mismatch bold + the word "differs" under the group                                | StatusIndicator, Fingerprint                         |
+| 2.4.7 / 2.4.11 Focus visible, not obscured     | 2 px solid `--ring` outline on every control (`outline-solid`: Tailwind 4's `outline-none` sets the style to none) | `focus-ring.e2e.ts`, light and dark                  |
+| 2.5.8 Target size (minimum)                    | >= 24x24 CSS px fine pointer, 44x44 coarse                                                                         | `--control-*`, `::after` hit areas, 44 px extra keys |
+| 2.1.1 Keyboard                                 | Base UI keyboard models; palette arrows/Enter; Escape closes overlays                                              | CommandPalette, Dialog, Menu                         |
+| 1.4.10 Reflow (320 px) and 1.4.12 Text spacing | single column below 768 px, no fixed-height text boxes, wrapping terminal preview                                  | 390 captures                                         |
+| 3.3.2 Labels                                   | visible labels on fields; icon buttons require `label`                                                             | Field, IconButton                                    |
+| State-stable controls                          | states change colour/opacity/0.97 scale only, never size                                                           | Button, AgentRow                                     |
+| 2.3.3 Animation from interactions              | reduced-motion path in base.css                                                                                    | base.css                                             |
 
 ### Detect findings
 
