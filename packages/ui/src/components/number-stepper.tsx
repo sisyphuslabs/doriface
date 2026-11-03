@@ -10,6 +10,7 @@ export interface NumberStepperProps {
   readonly max: number;
   readonly step?: number;
   readonly onValueChange?: (value: number | null) => void;
+  readonly disabled?: boolean;
   readonly className?: string;
 }
 
