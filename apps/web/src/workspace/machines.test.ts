@@ -1,7 +1,7 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { activeMachineId, machineEntries, machineKey, showMachines } from "./machines.ts";
-import { toSpaces } from "./model.ts";
+import { machineEntries, machineKey, showMachines } from "./machines.ts";
+import { machineId, toSpaces } from "./model.ts";
 
 const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => ({
   address,
@@ -68,7 +68,7 @@ describe("selection with an added machine named like this one", () => {
   test("rows get distinct ids, and only the machine the active terminal is on is selected", () => {
     const entries = machineEntries("boxb", [view("boxb", "connected")], [terminal("t1"), terminal("boxb/t1")]);
     expect(new Set(entries.map((entry) => entry.id)).size).toBe(2);
-    const selected = (active: string) => entries.filter((entry) => entry.id === activeMachineId(active));
+    const selected = (active: string) => entries.filter((entry) => entry.id === machineId(active));
     expect(selected("boxb/t1").map((entry) => entry.local)).toEqual([false]);
     expect(selected("t1").map((entry) => entry.local)).toEqual([true]);
   });
