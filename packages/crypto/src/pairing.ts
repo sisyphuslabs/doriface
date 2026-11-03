@@ -11,8 +11,6 @@ export const PAIRING_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const PAIRING_CODE_LENGTH = 8;
 /** The leading characters that name the relay pairing slot; the rest is the secret. */
 export const PAIRING_SLOT_LENGTH = 3;
-/** Failed handshakes after which the host burns a code. */
-export const MAX_PAIRING_FAILURES = 3;
 
 /** 8 Crockford base32 characters; each byte's low 5 bits pick one, so every character is uniform. */
 export function generatePairingCode(): string {
@@ -58,42 +56,28 @@ export const createPairingOffer = (now = Date.now()): PairingOffer => ({
   expiresAt: now + PAIRING_TTL_MS,
 });
 
-export type PairingGuardState = "open" | "used" | "burned" | "expired";
+export type PairingGuardState = "open" | "used" | "expired";
 
 /**
- * One offer's single-use lifecycle on the host. Claiming only reads the psk, so an unauthenticated message 1 cannot
- * lock a real attempt out; the first confirmed handshake uses the code up, and the third failed one burns it. Expiry is
- * latched, so a clock that later goes back cannot revive the code.
+ * One offer's single-use lifecycle on the host: it ends only on the first confirmed handshake or at expiry, never on
+ * failures (the relay bounds guesses per slot), so nobody can burn a code they do not know. Claiming only reads the
+ * psk, so an attempt in flight never locks another out; expiry is latched against a clock that later goes back.
  */
 export class PairingGuard {
   readonly offer: PairingOffer;
   #state: PairingGuardState = "open";
-  #failures: number;
 
-  constructor(offer: PairingOffer, failures = 0) {
+  constructor(offer: PairingOffer) {
     this.offer = offer;
-    this.#failures = failures;
-    if (failures >= MAX_PAIRING_FAILURES) this.#state = "burned";
   }
 
   get state(): PairingGuardState {
     return this.#state;
   }
 
-  get failures(): number {
-    return this.#failures;
-  }
-
   claim(now = Date.now()): Uint8Array | undefined {
     if (this.#state === "open" && now >= this.offer.expiresAt) this.#state = "expired";
     return this.#state === "open" ? pairingPsk(this.offer.code) : undefined;
-  }
-
-  /** A handshake with this code failed; the third failure burns it. */
-  fail(): void {
-    if (this.#state !== "open") return;
-    this.#failures++;
-    if (this.#failures >= MAX_PAIRING_FAILURES) this.#state = "burned";
   }
 
   /** A handshake with this code completed; true only for the first, which uses the code up. */

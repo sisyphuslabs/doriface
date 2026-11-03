@@ -9,7 +9,7 @@ import type { PairingStore, PendingPairing } from "./state/pairing.ts";
 export interface PairingSlotRegistrar {
   /** Registers the slot; "collision" when the relay answers 409 because another host holds it. */
   register(slot: string): Promise<"registered" | "collision">;
-  /** The offer behind the slot ended: paired, burned, expired or replaced. */
+  /** The offer behind the slot ended: paired, expired or replaced. */
   release?(slot: string): void;
 }
 
@@ -61,7 +61,8 @@ export class PairingSlots {
     const pending = this.#store.read();
     const live = pending !== undefined && Date.now() < pending.expiresAt;
     if (!live || pending.code !== this.#registered?.code) this.#release();
-    if (!live || pending.slot !== "pending") return;
+    if (!live) return this.#store.expire();
+    if (pending.slot !== "pending") return;
     if (this.#registrar === undefined) return this.#store.setSlot(pending.code, "unavailable");
     return this.#register(this.#registrar, pending, 0);
   }

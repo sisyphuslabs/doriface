@@ -103,6 +103,16 @@ describe("pairing consumption", () => {
     expect(devices.list().map((device) => device.name)).toEqual(["a"]);
   });
 
+  test("a failed attempt settles nothing; the code ends at expiry", () => {
+    const pairing = new PairingStore(dir);
+    const offer = pairing.offer(0);
+    expect(pairing.claim(1)).toBeDefined();
+    expect(pairing.claim(1)).toBeDefined();
+    expect(pairing.read()?.code).toBe(offer.code);
+    expect(pairing.claim(offer.expiresAt)).toBeUndefined();
+    expect(existsSync(join(dir, "pairing.json"))).toBe(false);
+  });
+
   test("settling an old claim leaves a newer offer alone", () => {
     const pairing = new PairingStore(dir);
     pairing.offer();
