@@ -1,7 +1,7 @@
+import { fitLanUrls } from "@doriface/crypto";
 import { networkInterfaces } from "node:os";
 import { formatHost } from "./listen.ts";
 
-const MAX_LAN_URLS = 8;
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
 const isWildcard = (hostname: string): boolean => hostname === "0.0.0.0" || hostname === "::";
@@ -18,10 +18,11 @@ function interfaceAddresses(): string[] {
 
 /**
  * The `ws://<IP literal>:<port>/v1/e2ee` URLs a client can try directly: the bound address when it is a literal, every
- * interface address for a wildcard bind, nothing for a hostname (clients never resolve names on this path).
+ * interface address for a wildcard bind, nothing for a hostname (clients never resolve names on this path). The list is
+ * cut to what fits message 2's 256-byte reply line.
  */
-export function lanUrlsFor(hostname: string, port: number): string[] {
+export function lanUrlsFor(hostname: string, port: number): readonly string[] {
   const literal = IPV4.test(hostname) || hostname.includes(":");
   const hosts = isWildcard(hostname) ? interfaceAddresses() : literal ? [hostname] : [];
-  return hosts.slice(0, MAX_LAN_URLS).map((host) => `ws://${formatHost(host)}:${port}/v1/e2ee`);
+  return fitLanUrls(hosts.map((host) => `ws://${formatHost(host)}:${port}/v1/e2ee`));
 }

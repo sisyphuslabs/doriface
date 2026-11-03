@@ -5,6 +5,7 @@ import {
   encodePairingHello,
   encodeReply,
   encodeSessionHello,
+  fitLanUrls,
   MAX_EARLY_BYTES,
 } from "./payloads.ts";
 
@@ -44,6 +45,16 @@ describe("handshake payloads: one JSON line, then raw stream bytes", () => {
     ["IK", `{"v":1}\n${"x".repeat(MAX_EARLY_BYTES + 1)}`],
   ] as const)("%s refuses %p", (pattern, payload) => {
     expect(() => decodeHello(pattern, bytes(payload))).toThrow();
+  });
+
+  test("fitLanUrls keeps the leading URLs that fit one reply line", () => {
+    const lan = Array.from({ length: 8 }, (_, i) => `ws://[2001:db8:1234:5678:9abc:def0:1234:56${i}0]:65535/v1/e2ee`);
+    const fitted = fitLanUrls(lan);
+    expect(fitted.length).toBeGreaterThan(0);
+    expect(fitted.length).toBeLessThan(lan.length);
+    expect(fitted).toEqual(lan.slice(0, fitted.length));
+    expect(decodeReply(encodeReply(fitted))).toEqual(fitted);
+    expect(fitLanUrls(lan.slice(0, 2))).toEqual(lan.slice(0, 2));
   });
 
   test("a reply keeps an explicit default port", () => {

@@ -48,6 +48,7 @@ export {
   encodePairingHello,
   encodeReply,
   encodeSessionHello,
+  fitLanUrls,
   MAX_EARLY_BYTES,
   PayloadError,
   type Hello,
