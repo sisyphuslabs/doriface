@@ -35,6 +35,16 @@ describe("parseBuildInfo", () => {
     ["a patch that is not an object", withPatch(1, "0002.patch"), "patches[1]"],
     ["a patch without a path", withPatch(2, { sha256: "0".repeat(64) }), "patches[2].path"],
     [
+      "a patch path outside patches/",
+      withPatch(3, { path: "patches/../package.json", sha256: "0".repeat(64) }),
+      "patches[3].path",
+    ],
+    [
+      "a patch path that is not a .patch",
+      withPatch(0, { path: "patches/ghostty/0001.diff", sha256: "0".repeat(64) }),
+      "patches[0].path",
+    ],
+    [
       "a patch with a bad digest",
       withPatch(4, { path: "patches/ghostty/0005.patch", sha256: "abc" }),
       "patches[4].sha256",

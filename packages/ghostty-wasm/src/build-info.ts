@@ -29,6 +29,7 @@ export class BuildInfoError extends Error {
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const COMMIT = /^[0-9a-f]{40}$/;
+const PATCH_PATH = /^patches\/(?:ghostty|wterm)\/[\w.-]+\.patch$/;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,7 +45,7 @@ function text(source: Readonly<Record<string, unknown>>, field: string, pattern?
 function patchRecord(value: unknown, index: number): PatchRecord {
   if (!isRecord(value)) throw new BuildInfoError(`patches[${index}]`, "must be an object");
   return {
-    path: text(value, "path", undefined, `patches[${index}].path`),
+    path: text(value, "path", PATCH_PATH, `patches[${index}].path`),
     sha256: text(value, "sha256", SHA256, `patches[${index}].sha256`),
   };
 }
