@@ -52,7 +52,7 @@ export class LocalHost {
   #spawn(): Promise<LocalHostEndpoint> {
     const { command, hc, env, log } = this.#options;
     const token = randomBytes(32).toString("base64url");
-    const args = [...command.args, "--listen", "127.0.0.1:0", ...(hc === undefined ? [] : ["--hc", hc])];
+    const args = [...command.args, "--listen", "127.0.0.1:0", "--no-relay", ...(hc === undefined ? [] : ["--hc", hc])];
     const child = spawn(command.file, args, {
       env: { ...env, DORIFACE_HOST_TOKEN: token },
       stdio: ["ignore", "ignore", "pipe"],
