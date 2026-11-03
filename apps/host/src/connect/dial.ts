@@ -28,7 +28,7 @@ export interface Dialed {
   readonly link: WebSocketLink;
 }
 
-/** Pairs first when the target is a link or code this machine has not used, then opens an IK session. */
+/** Pairs first when the target is a link or code (again, if this machine paired before), then opens an IK session. */
 export async function dial(target: ConnectTarget, options: DialOptions): Promise<Dialed> {
   const host = await resolveHost(target, options);
   const link = await connectRelayClient({ relayUrl: options.relayUrl ?? host.relayUrl, hostId: host.hostId });
@@ -80,13 +80,13 @@ async function resolveHost(target: ConnectTarget, options: DialOptions): Promise
   if (target.kind === "link") {
     const { hostId, noiseStaticPub, linkSecret } = target.link;
     const host = { hostId, hostKey: noiseStaticPub, relayUrl: options.relayUrl ?? target.link.relayUrl };
-    return known.get(hostId) ?? pair(known, host, { mode: "link", linkSecret, name: options.deviceName }, options);
+    return pair(known, host, { mode: "link", linkSecret, name: options.deviceName }, options);
   }
   const record = await lookupPairSlot({ relayUrl, code: target.code });
   if (record === undefined) throw new Error("no host is pairing with this code on the relay: it may have expired");
   const host = { hostId: record.hostId, hostKey: record.noiseStaticPub, relayUrl };
   const pairing = { mode: "code", code: target.code, name: options.deviceName } as const;
-  return known.get(host.hostId) ?? pair(known, host, pairing, options, pairSlotOf(target.code));
+  return pair(known, host, pairing, options, pairSlotOf(target.code));
 }
 
 /**
