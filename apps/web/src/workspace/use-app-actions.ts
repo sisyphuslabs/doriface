@@ -29,7 +29,7 @@ function zoom(delta: number | null): void {
 }
 
 /** Whether selecting the address does anything: a null target or the active tab leaves the key unhandled. */
-export function shouldSelect(address: string | null, active: string | null): address is string {
+export function shouldSelect(address: string | null, active: string | null): boolean {
   return address !== null && address !== active;
 }
 
@@ -46,7 +46,7 @@ export function useAppActions({ terminals, tabs, onNew, onToggleSidebar }: AppAc
     const live = terminals.filter((terminal) => terminal.state === "live").map((terminal) => terminal.address);
     const select = (address: string | null): boolean => {
       // Nothing to do leaves the key to the terminal (alt+up in a shell with one tab open).
-      if (!shouldSelect(address, tabs.active)) return false;
+      if (address === null || !shouldSelect(address, tabs.active)) return false;
       tabs.select(address);
       return true;
     };
