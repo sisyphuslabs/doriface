@@ -1,9 +1,12 @@
 import type { HcConnection } from "@doriface/client";
+import type { TerminalRunParams } from "@doriface/protocol";
 import { useCallback, useMemo, useState } from "react";
-import { type RunFailure, startOn } from "./start-on.ts";
+import { type RunFailure, type Started, startOn, startTerminal } from "./start-on.ts";
 
 export interface MachineRuns {
   readonly newTerminalOn: (machine: string) => void;
+  /** New terminal with these run parameters, on this machine or the one `on` names; a failure lands in `failure`. */
+  readonly start: (params: TerminalRunParams) => void;
   readonly failure: RunFailure | undefined;
   readonly dismissFailure: () => void;
 }
@@ -15,23 +18,38 @@ export function useMachineRuns(
   refresh: () => void,
 ): MachineRuns {
   const [failure, setFailure] = useState<RunFailure | undefined>(undefined);
+  const settle = useCallback(
+    (started: Started): Started => {
+      if (started.ok) opened(started.address);
+      else {
+        setFailure(started.failure);
+        refresh();
+      }
+      return started;
+    },
+    [opened, refresh],
+  );
   const newTerminalOn = useCallback(
     (machine: string): void => {
       setFailure(undefined);
-      startOn((params) => connection.call("terminal.run", params), machine).then(
-        (started) => {
-          if (started.ok) opened(started.address);
-          else {
-            setFailure(started.failure);
-            refresh();
-          }
-          return started;
-        },
-        (error: unknown) => setFailure({ machine, kind: "connection", message: String(error) }),
+      startOn((params) => connection.call("terminal.run", params), machine).then(settle, (error: unknown) =>
+        setFailure({ machine, kind: "connection", message: String(error) }),
       );
     },
-    [connection, opened, refresh],
+    [connection, settle],
+  );
+  const start = useCallback(
+    (params: TerminalRunParams): void => {
+      setFailure(undefined);
+      void startTerminal((run) => connection.call("terminal.run", run), params, connection.hello.core.name).then(
+        settle,
+      );
+    },
+    [connection, settle],
   );
   const dismissFailure = useCallback(() => setFailure(undefined), []);
-  return useMemo(() => ({ newTerminalOn, failure, dismissFailure }), [newTerminalOn, failure, dismissFailure]);
+  return useMemo(
+    () => ({ newTerminalOn, start, failure, dismissFailure }),
+    [newTerminalOn, start, failure, dismissFailure],
+  );
 }

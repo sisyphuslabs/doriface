@@ -1,4 +1,4 @@
-import { HcRpcError } from "@doriface/protocol";
+import { HcRpcError, type TerminalRunParams } from "@doriface/protocol";
 
 export interface RunFailure {
   readonly machine: string;
@@ -29,5 +29,31 @@ export async function startOn(
     if (!(error instanceof HcRpcError)) throw error;
     const message = ADVICE[error.kind]?.(machine) ?? error.message;
     return { ok: false, failure: { machine, kind: error.kind, message } };
+  }
+}
+
+/**
+ * New terminal anywhere: `on` names an added machine, else it starts on this one (`localName`). Every failure comes
+ * back as one naming the machine, a closed connection included, so the caller reports it instead of dropping it.
+ */
+export async function startTerminal(
+  run: (params: TerminalRunParams) => Promise<{ readonly address: string }>,
+  params: TerminalRunParams,
+  localName: string,
+): Promise<Started> {
+  const machine = params.on ?? localName;
+  try {
+    return { ok: true, address: (await run(params)).address };
+  } catch (error) {
+    if (error instanceof HcRpcError) {
+      return {
+        ok: false,
+        failure: { machine, kind: error.kind, message: ADVICE[error.kind]?.(machine) ?? error.message },
+      };
+    }
+    return {
+      ok: false,
+      failure: { machine, kind: "connection", message: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
