@@ -25,7 +25,8 @@ import {
   patchHost,
 } from "./attachment.ts";
 import { verifyAuthAnswer } from "./auth.ts";
-import { applyAck, forward, sendControl } from "./flow.ts";
+import { asksForCredit, creditFromHost, forwardedToHost, hostServesCredit, openCredit, textFrom } from "./credit.ts";
+import { forward, sendControl } from "./flow.ts";
 import { sourceOf } from "./limits.ts";
 import type { PairSlotsEnv } from "./pair-slot.ts";
 import { handlePairSlot, PairingCharges, pairingRefusal } from "./pairing.ts";
@@ -70,23 +71,20 @@ export class Room extends DurableObject<RoomEnv> {
     const url = new URL(request.url);
     const [, , role, hostId = ""] = url.pathname.split("/");
     if (!HOST_ID_PATTERN.test(hostId)) return new Response("bad hostId", { status: 400 });
-    if (role === "host") return this.#acceptHost(hostId, relayOriginOf(request.url));
+    if (role === "host") return this.#acceptHost(hostId, relayOriginOf(request.url), asksForCredit(url));
     if (role !== "client") return new Response("not found", { status: 404 });
     if ((await this.#settledHost()) === undefined) return closedSocket(CloseCode.HostOffline, "host offline");
     const source = sourceOf(request);
     const pairSlot = url.searchParams.get("pair") ?? undefined;
     const refusal = pairSlot === undefined ? undefined : await pairingRefusal(this.env, hostId, pairSlot, source);
     if (refusal !== undefined) return closedSocket(refusal.code, refusal.reason);
-    return this.#acceptClient(source, pairSlot);
+    return this.#acceptClient(source, pairSlot, asksForCredit(url));
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = attachmentOf(ws);
     if (attachment === undefined) return ws.close(CloseCode.InternalError, "unknown socket");
-    if (typeof message === "string") {
-      if (!applyAck(ws, message)) ws.close(CloseCode.RelayProtocolError, "binary messages, pings and valid acks only");
-      return;
-    }
+    if (typeof message === "string") return textFrom(this.ctx, ws, attachment, message);
     // A client's message becomes an uplink frame with a 5-byte header, which must fit the same 1 MiB cap.
     const cap = attachment.role === "client" ? MAX_SESSION_SEND_BYTES : RELAY_MESSAGE_CAP;
     if (message.byteLength > cap) return ws.close(CloseCode.MessageTooBig, "message too big");
@@ -115,12 +113,22 @@ export class Room extends DurableObject<RoomEnv> {
     if (next !== undefined) await this.ctx.storage.setAlarm(next);
   }
 
-  async #acceptHost(hostId: string, relayOrigin: string): Promise<Response> {
+  async #acceptHost(hostId: string, relayOrigin: string, credit: boolean): Promise<Response> {
     const { client, server } = newSocketPair();
     this.ctx.acceptWebSocket(server, [HOST_TAG]);
     const challenge = crypto.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
     const openedAt = Date.now();
-    attach(server, { role: "host", hostId, relayOrigin, challenge, state: "challenged", sent: 0, acked: 0, openedAt });
+    attach(server, {
+      role: "host",
+      hostId,
+      relayOrigin,
+      challenge,
+      state: "challenged",
+      credit,
+      sent: 0,
+      acked: 0,
+      openedAt,
+    });
     const { authMs, idleMs } = timeoutsOf(this.env);
     this.#authenticating.begin(server, authMs, () =>
       closeIfOpen(server, CloseCode.RelayAuthFailed, "relay auth timed out"),
@@ -139,7 +147,7 @@ export class Room extends DurableObject<RoomEnv> {
   }
 
   /** Admits a session as pending (contract v1.2 C1); it counts against the 32 only once the host sends DATA. */
-  async #acceptClient(ip: string, pairSlot: string | undefined): Promise<Response> {
+  async #acceptClient(ip: string, pairSlot: string | undefined, credit: boolean): Promise<Response> {
     const host = onlineHost(this.ctx);
     if (host === undefined) return closedSocket(CloseCode.HostOffline, "host offline");
     const live = liveClients(this.ctx);
@@ -157,18 +165,21 @@ export class Room extends DurableObject<RoomEnv> {
     const { client, server } = newSocketPair();
     this.ctx.acceptWebSocket(server, [CLIENT_TAG, sessionTag(sessionId)]);
     const openedAt = Date.now();
-    attach(server, {
+    const session = {
       role: "client",
       sessionId,
       ended: false,
       pending: true,
       ip,
       pairSlot,
+      credit: credit && hostServesCredit(host),
       sent: 0,
       acked: 0,
       openedAt,
-    });
+    } as const;
+    attach(server, session);
     sendControl(host, encodeOpen(sessionId, pairSlot));
+    openCredit(host, server, session);
     await alarmBy(this.ctx, openedAt + timeoutsOf(this.env).pendingMs);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -198,8 +209,9 @@ export class Room extends DurableObject<RoomEnv> {
     const host = onlineHost(this.ctx);
     if (host === undefined) return endClient(ws, CloseCode.HostOffline, "host offline");
     if (!forward(host, encodeData(attachment.sessionId, bytes))) {
-      endSession(this.ctx, ws, attachment, CloseCode.IdleTimeout, "the host is too far behind");
+      return endSession(this.ctx, ws, attachment, CloseCode.IdleTimeout, "the host is too far behind");
     }
+    forwardedToHost(host, ws, attachment, bytes.byteLength);
   }
 
   async #fromHost(host: WebSocket, attachment: HostAttachment, bytes: Uint8Array): Promise<void> {
@@ -210,9 +222,10 @@ export class Room extends DurableObject<RoomEnv> {
       if (error instanceof MuxError) return host.close(CloseCode.RelayProtocolError, error.message);
       throw error;
     }
-    if (frame.type === MuxType.Open || frame.type === MuxType.PairSlotAck || frame.type === MuxType.Credit) {
-      return host.close(CloseCode.RelayProtocolError, "OPEN, PAIR_SLOT_ACK and CREDIT go relay to host only");
+    if (frame.type === MuxType.Open || frame.type === MuxType.PairSlotAck) {
+      return host.close(CloseCode.RelayProtocolError, "OPEN and PAIR_SLOT_ACK go relay to host only");
     }
+    if (frame.type === MuxType.Credit) return creditFromHost(this.ctx, host, frame.sessionId, frame.bytes);
     if (frame.type === MuxType.PairSlot)
       return handlePairSlot(this.env, this.ctx.storage, host, attachment, frame.payload);
     const client = clientSocket(this.ctx, frame.sessionId);

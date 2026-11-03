@@ -21,10 +21,14 @@ export interface RawHost {
  * An uplink that answers the challenge and then only records frames: it never pings and never acks, which is how
  * the tests reach the relay's idle and backpressure limits from the host side.
  */
-export async function startRawHost(relayUrl: string, ip: string): Promise<RawHost> {
+export async function startRawHost(
+  relayUrl: string,
+  ip: string,
+  options: { readonly credit?: boolean } = {},
+): Promise<RawHost> {
   const signer = ed25519Signer(generateSigningKey());
   const hostId = await hostIdOf(signer.publicKey);
-  const url = `${relayUrl.replace("http", "ws")}/v1/host/${hostId}`;
+  const url = `${relayUrl.replace("http", "ws")}/v1/host/${hostId}${options.credit === true ? "?credit=1" : ""}`;
   const probe = new Probe(url, ip);
   defer(() => probe.socket.close());
   const challenge = await probe.next();
