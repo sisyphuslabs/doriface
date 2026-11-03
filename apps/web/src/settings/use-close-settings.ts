@@ -2,12 +2,31 @@ import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect } from "react";
 import { useActionHandler } from "../keys/dispatcher.ts";
 
-/** Whatever owns Escape while it is open: dialogs, menus, lists and a shortcut being recorded. */
-const ESCAPE_LAYERS = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-captures-keys]';
+/** Whatever owns the keyboard while it is open: dialogs, menus, lists and a shortcut being recorded. */
+const LAYERS = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-captures-keys]';
+const TEXT_INPUTS: ReadonlySet<string> = new Set(["text", "search", "url", "email", "number", "password", "tel"]);
+
+const layerOpen = (): boolean => document.querySelector(LAYERS) !== null;
 
 /**
- * Leaves Settings for the view it was opened from. Escape closes it unless a layer above owns the key, and the
- * keymap's settings toggle and close-tab shortcuts close it too, so the key never falls through to the window.
+ * Whether a focused text field takes this Escape instead of Settings: a search with text clears itself (the browser's
+ * own Escape action, so the key is left alone), and any other text field gives up focus first.
+ */
+function fieldTakesEscape(event: KeyboardEvent): boolean {
+  const target = event.target;
+  const field =
+    target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && TEXT_INPUTS.has(target.type));
+  if (!field) return false;
+  if (target instanceof HTMLInputElement && target.type === "search") return target.value !== "";
+  event.preventDefault();
+  target.blur();
+  return true;
+}
+
+/**
+ * Leaves Settings for the view it was opened from. Escape closes it unless a layer above or a focused text field takes
+ * the key first. The keymap's settings toggle and close-tab shortcuts close it too; while a layer is open they are taken
+ * and do nothing, so they neither close Settings under a dialog or recording nor fall through to the window.
  */
 export function useCloseSettings(): () => void {
   const router = useRouter();
@@ -22,7 +41,7 @@ export function useCloseSettings(): () => void {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
       if (event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) return;
-      if (document.querySelector(ESCAPE_LAYERS) !== null) return;
+      if (layerOpen() || fieldTakesEscape(event)) return;
       event.preventDefault();
       close();
     };
@@ -32,7 +51,7 @@ export function useCloseSettings(): () => void {
 
   useActionHandler("app", (action) => {
     if (action !== "app.settings" && action !== "tab.close") return false;
-    close();
+    if (!layerOpen()) close();
     return true;
   });
   return close;
