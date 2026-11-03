@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { memoryStore } from "../storage/idb.ts";
-import { decodeZigString, sendBytes } from "./actions.ts";
+import { actionFor, decodeZigString, sendBytes } from "./actions.ts";
 import { KEYMAP_VERSION, KeymapStore } from "./keymap-store.ts";
 import {
   checkBinding,
@@ -125,6 +125,12 @@ describe("keybind import and export", () => {
     expect(decodeZigString("\\u{110000}")).toBeNull();
     expect(sendBytes(`send:${decodeZigString("\\x80\\xffé") ?? ""}`)).toEqual(new Uint8Array([0x80, 0xff, 0xc3, 0xa9]));
     expect(sendBytes("send:\u001bb")).toEqual(new Uint8Array([0x1b, 0x62]));
+  });
+
+  test("send labels show UTF-8 text and \\xNN only for bytes that are not UTF-8", () => {
+    const parsed = parseKeybinds("keybind = super+j=text:héllo 😀 世界\nkeybind = super+k=text:\\x80ok\\xc3");
+    expect(actionFor(parsed.overrides.get("super+j") ?? "")?.label).toBe('Send "héllo 😀 世界"');
+    expect(actionFor(parsed.overrides.get("super+k") ?? "")?.label).toBe('Send "\\x80ok\\xc3"');
   });
 
   test("a parameter doriface does not have is unknown, not another action", () => {
