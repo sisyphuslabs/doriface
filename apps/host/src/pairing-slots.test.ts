@@ -1,4 +1,4 @@
-import { PAIRING_TTL_MS, pairingSlotOf } from "@doriface/crypto";
+import { PAIRING_CODE_ATTEMPTS, PAIRING_TTL_MS, pairingSlotOf } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -101,6 +101,23 @@ describe("PairingSlots", () => {
     slots.start();
     await within(second.promise, "a second registration");
     expect(calls).toBe(2);
+  });
+
+  test("a code whose attempts are spent has its relay slot released", async () => {
+    const offer = store.offer();
+    const relay = controlledRegistrar();
+    slots = new PairingSlots(store, KEY, relay.registrar, () => {});
+    slots.start();
+    await within(relay.asked, "register");
+    const registered = Promise.withResolvers<void>();
+    store.onChange(() => {
+      if (store.read()?.slot === "registered") registered.resolve();
+    });
+    relay.answer.resolve("registered");
+    await within(registered.promise, "registration");
+    const slot = pairingSlotOf(offer.code);
+    for (let attempt = 0; attempt < PAIRING_CODE_ATTEMPTS; attempt++) store.claimCode(slot);
+    expect(await within(relay.released, "release")).toBe(slot);
   });
 
   test("an offer an earlier host process registered is registered again", async () => {
