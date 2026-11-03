@@ -15,3 +15,4 @@ export {
   type HostIdentity,
   type KeyPair,
 } from "./identity.ts";
+export { PROTOCOL_NAMES, type Pattern } from "./noise/handshake.ts";
