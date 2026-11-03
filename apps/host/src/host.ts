@@ -1,6 +1,6 @@
 import packageJson from "../package.json" with { type: "json" };
 import { fingerprintOf } from "@doriface/crypto";
-import { listenControl } from "./control.ts";
+import { controlIsLive, listenControl } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
 import { LiveSessions } from "./e2ee/sessions.ts";
 import { createGateway } from "./gateway.ts";
@@ -58,6 +58,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
     throw new Error(
       `refusing to listen on ${hostname}: the endpoint is plaintext; bind loopback or pass --unsafe-listen`,
     );
+  }
+  if (options.stateDir !== undefined && (await controlIsLive(options.stateDir))) {
+    throw new Error(`another doriface-host is already running on ${options.stateDir}`);
   }
   const hcVersion = await readHcVersion(options.hc);
   const e2ee = options.stateDir === undefined ? undefined : e2eeDeps(options.stateDir, options);

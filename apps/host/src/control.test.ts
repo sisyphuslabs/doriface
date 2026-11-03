@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { controlSocketPath, type ControlListener, listenControl } from "./control.ts";
+import { controlIsLive, controlSocketPath, type ControlListener, listenControl } from "./control.ts";
 
 let dir: string;
 const listeners: ControlListener[] = [];
@@ -41,5 +41,13 @@ describe("control socket", () => {
     listeners.push(listenControl(dir, () => Promise.resolve("handled")));
     const answer = await exchange("x".repeat(8192));
     expect(JSON.parse(answer)).toEqual({ ok: false, error: "request too large" });
+  });
+
+  test("a live socket is reported as live, a stale or missing one is not", async () => {
+    expect(await controlIsLive(dir)).toBe(false);
+    const listener = listenControl(dir, () => Promise.resolve(undefined));
+    expect(await controlIsLive(dir)).toBe(true);
+    listener.stop();
+    expect(await controlIsLive(dir)).toBe(false);
   });
 });
