@@ -1,5 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, openNewTerminalBehindLatency, test } from "./fixtures.ts";
+import { coreSize, gridSize } from "./core-size.ts";
+import { expect, openNewTerminal, openNewTerminalBehindLatency, test } from "./fixtures.ts";
+import { routeHcSocket } from "./hc-socket.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -21,12 +23,7 @@ async function sizes(page: Page, terminal: Locator): Promise<{ readonly pty: str
   const reply = terminal.locator(".term-row:not(.term-scrollback-row)").filter({ hasText: replyText });
   await expect(reply).toHaveCount(1, { timeout: 15_000 });
   const pty = ((await reply.textContent()) ?? "").trim().slice(tag.length + 1);
-  // A blank row renders one cell per column, so the last (blank) live row's length is the column count.
-  const view = await terminal.evaluate((element) => {
-    const rows = element.querySelectorAll(".term-row:not(.term-scrollback-row)");
-    return `${rows.length} ${rows[rows.length - 1]?.textContent?.length ?? 0}`;
-  });
-  return { pty, view };
+  return { pty, view: await gridSize(terminal) };
 }
 
 test("a new terminal's pty has the size of the grid it renders", async ({ page }) => {
@@ -65,4 +62,59 @@ test("the pty follows the grid when the device pixel ratio changes", async ({ pa
   await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBe(1.75);
   const { pty, view } = await sizes(page, terminal);
   expect(pty).toBe(view);
+});
+
+test("a terminal resized while the link is down has its grid's pty size after the reattach, with no key pressed", async ({
+  page,
+}) => {
+  const { terminal, link } = await openNewTerminalBehindLatency(page, RELAY_LATENCY_MS);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  await expect.poll(() => coreSize(address), { timeout: 15_000 }).toBe(await gridSize(terminal));
+  const opened = link.opened();
+  await link.drop(true);
+  const reconnecting = page.getByRole("status").filter({ hasText: "Reconnecting" });
+  await expect(reconnecting).toBeVisible();
+  const before = await gridSize(terminal);
+  await page.setViewportSize({ width: 900, height: 600 });
+  await expect.poll(() => gridSize(terminal)).not.toBe(before);
+
+  link.restore();
+  await expect.poll(link.opened, { timeout: 15_000 }).toBeGreaterThan(opened);
+  await expect(reconnecting).toBeHidden({ timeout: 15_000 });
+  // Read from the core, so nothing typed can make this viewer active and apply the size for it.
+  await expect.poll(() => coreSize(address), { timeout: 10_000 }).toBe(await gridSize(terminal));
+});
+
+test("an unfocused split pane keeps its pty size through a reattach until it is focused, then takes its grid's", async ({
+  page,
+}) => {
+  const link = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  await openNewTerminal(page);
+  await page.getByRole("button", { name: "Split" }).click();
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  const unfocused = page.locator('[data-focused="false"] [data-terminal]:visible');
+  await expect(unfocused).toHaveCount(1);
+  const address = (await unfocused.getAttribute("data-terminal")) ?? "";
+  await expect.poll(() => coreSize(address), { timeout: 15_000 }).toBe(await gridSize(unfocused));
+  const before = coreSize(address);
+
+  const opened = link.opened();
+  await link.drop(true);
+  const reconnecting = page.getByRole("status").filter({ hasText: "Reconnecting" });
+  await expect(reconnecting).toBeVisible();
+  await page.setViewportSize({ width: 900, height: 600 });
+  await expect.poll(() => gridSize(unfocused)).not.toBe(before);
+  link.restore();
+  await expect.poll(link.opened, { timeout: 15_000 }).toBeGreaterThan(opened);
+  await expect(reconnecting).toBeHidden({ timeout: 15_000 });
+
+  // resumed: true defers a background viewer's size, so another device in use keeps its own; the pane in use applies.
+  const focusedAddress = (await focused.getAttribute("data-terminal")) ?? "";
+  await expect.poll(() => coreSize(focusedAddress), { timeout: 10_000 }).toBe(await gridSize(focused));
+  expect(coreSize(address)).toBe(before);
+  // Focusing the pane (no key pressed) makes it the active viewer, and its size applies.
+  await unfocused.getByRole("textbox").focus();
+  await expect.poll(() => coreSize(address), { timeout: 10_000 }).toBe(await gridSize(unfocused));
 });
