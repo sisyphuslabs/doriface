@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { KeyValueStore } from "../storage/idb.ts";
 import { single } from "./config.ts";
-import { TerminalConfigStore, takeLegacyFontSize } from "./config-store.ts";
+import { TerminalConfigStore, legacyFontSize } from "./config-store.ts";
 
 /** A store whose first get resolves only when the test says so. */
 function gatedStore(stored: unknown): {
@@ -51,8 +51,11 @@ describe("TerminalConfigStore", () => {
     const puts: unknown[] = [];
     const store = new TerminalConfigStore(
       { get: async () => undefined, put: async (_key, value) => void puts.push(value) },
-      () => {
-        throw new Error("legacy settings unreadable");
+      {
+        read: () => {
+          throw new Error("legacy settings unreadable");
+        },
+        clear: () => undefined,
       },
     );
     await store.update((current) => new Map([...current, ["cursor-style", ["bar"]]]));
@@ -61,22 +64,44 @@ describe("TerminalConfigStore", () => {
     expect(store.error?.message).toBe("legacy settings unreadable");
   });
 
+  test("the old font size stays in localStorage when the IndexedDB write fails", async () => {
+    const items = new Map<string, string>([["doriface.appearance", JSON.stringify({ theme: "day", fontSize: 18 })]]);
+    const local = {
+      getItem: (key: string) => items.get(key) ?? null,
+      setItem: (key: string, value: string) => void items.set(key, value),
+    };
+    const store = new TerminalConfigStore(
+      {
+        get: async () => undefined,
+        put: async () => {
+          throw new Error("IndexedDB write failed");
+        },
+      },
+      legacyFontSize(local),
+    );
+    await store.loaded;
+    expect(store.error?.message).toBe("IndexedDB write failed");
+    expect(JSON.parse(items.get("doriface.appearance") ?? "{}")).toEqual({ theme: "day", fontSize: 18 });
+  });
+
   test("an old appearance font size moves into font-size once", async () => {
     const gated = gatedStore(undefined);
-    const store = new TerminalConfigStore(gated.storage, () => 18);
+    const store = new TerminalConfigStore(gated.storage, { read: () => 18, clear: () => undefined });
     gated.release();
     await store.loaded;
     expect(single(store.config, "font-size")).toBe("13.5");
     expect(gated.puts).toEqual([[["font-size", ["13.5"]]]]);
   });
 
-  test("the legacy reader strips fontSize and ignores the old default", () => {
+  test("the legacy source ignores the old default and clear strips fontSize", () => {
     const items = new Map<string, string>([["doriface.appearance", JSON.stringify({ theme: "day", fontSize: 14 })]]);
     const storage = {
       getItem: (key: string) => items.get(key) ?? null,
       setItem: (key: string, value: string) => void items.set(key, value),
     };
-    expect(takeLegacyFontSize(storage)).toBeNull();
+    const legacy = legacyFontSize(storage);
+    expect(legacy.read()).toBeNull();
+    legacy.clear();
     expect(JSON.parse(items.get("doriface.appearance") ?? "{}")).toEqual({ theme: "day" });
   });
 });
