@@ -149,6 +149,23 @@ describe("backpressure (C3)", () => {
     host.probe.socket.close();
   });
 
+  test("a credit uplink that never acks is held to the same 4 MiB: the overflowing client is closed with 4408", async () => {
+    const ip = testIp();
+    const host = await startRawHost(relay.url, ip, { credit: true });
+    const client = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
+    expect((await host.frame()).type).toBe(MuxType.Open);
+    expect((await host.frame()).type).toBe(MuxType.Credit);
+    const clientClosed = closedWith(client);
+    for (const index of times(5)) client.send(new Uint8Array(MAX_SESSION_SEND_BYTES).fill(index));
+    expect(await clientClosed).toBe(CloseCode.IdleTimeout);
+    const frames = await untilClose(() => host.frame());
+    // The challenge, OPEN and the zero CREDIT count against the uplink's window too.
+    const control = CHALLENGE_BYTES + 2 * MUX_HEADER_BYTES + 4;
+    const forwarded = Math.floor((MAX_UNACKED_BYTES - control) / RELAY_MESSAGE_CAP);
+    expect(frames.map((frame) => frame.type)).toEqual([...times(forwarded).map(() => MuxType.Data), MuxType.Close]);
+    host.probe.socket.close();
+  });
+
   test("an uplink acks a session's bytes on arrival, even while that session's consumer is busy", async () => {
     const ip = testIp();
     const acks = new AsyncQueue<string>();
