@@ -2,7 +2,7 @@ import { DEFAULT_RELAY_URL } from "@doriface/crypto";
 import { hostname } from "node:os";
 import { parseArgs } from "node:util";
 import { dial, type Dialed } from "../connect/dial.ts";
-import { HeldLink, type Output, pipe } from "../connect/pipe.ts";
+import { type Output, pipe } from "../connect/pipe.ts";
 import { parseTarget } from "../connect/target.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadDeviceKey } from "../state/known-hosts.ts";
@@ -69,8 +69,7 @@ export async function connectCommand(args: readonly string[], log: (line: string
     log,
   };
   const dialed: Dialed = await within(dial(target, options), DIAL_TIMEOUT_MS, "reaching the host through the relay");
-  const { secure, link } = dialed;
-  const held = new HeldLink(link);
+  const { secure, link, held } = dialed;
   const stop = (): void => secure.close();
   process.once("SIGTERM", stop);
   process.once("SIGINT", stop);
