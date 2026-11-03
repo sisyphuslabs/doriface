@@ -1,6 +1,26 @@
 import { describe, expect, test } from "bun:test";
 import { evictionVictim } from "../src/admission.ts";
 import { PAIR_BUDGET, PAIR_BUDGET_WINDOW_MS, spendAttempt } from "../src/pair-budget.ts";
+import { sourceKey } from "../src/source-ip.ts";
+
+describe("source keys", () => {
+  test("IPv6 addresses share a key per /64, however they are written", () => {
+    const key = sourceKey("2001:db8:1:2::1");
+    expect(key).toBe("2001:db8:1:2::/64");
+    for (const same of ["2001:db8:1:2:ffff:ffff:ffff:ffff", "2001:0DB8:0001:0002::abcd", "2001:db8:1:2:0:0:1.2.3.4"]) {
+      expect(sourceKey(same)).toBe(key);
+    }
+    expect(sourceKey("2001:db8:1:3::1")).not.toBe(key);
+    expect(sourceKey("::1")).toBe("0:0:0:0::/64");
+    expect(sourceKey("fe80::1%en0")).toBe("fe80:0:0:0::/64");
+  });
+
+  test("IPv4 stays per address, including IPv4-mapped IPv6", () => {
+    expect(sourceKey("198.51.100.7")).toBe("198.51.100.7");
+    expect(sourceKey("::ffff:198.51.100.7")).toBe("198.51.100.7");
+    expect(sourceKey("not an address")).toBe("not an address");
+  });
+});
 
 interface Pending {
   readonly id: string;
