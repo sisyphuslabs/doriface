@@ -1,22 +1,39 @@
 import { base64urlEncode } from "@doriface/crypto";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceStore } from "./devices.ts";
-import { breakStaleLock } from "./lock.ts";
+import { withStateLock } from "./lock.ts";
 
 const WORKER = join(import.meta.dir, "..", "testing", "devices-worker.ts");
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "dh-lock-"));
 });
-afterEach(() => rmSync(dir, { recursive: true, force: true }));
+afterEach(() => {
+  mock.restore();
+  rmSync(dir, { recursive: true, force: true });
+});
 
 /** A pid that is no longer running: a child that already exited. */
 function deadPid(): number {
   const child = Bun.spawnSync(["sh", "-c", "echo $$"], { stdout: "pipe" });
   return Number(child.stdout.toString().trim());
+}
+
+const probe = process.kill.bind(process);
+
+/** Another process breaks the dead holder's lock and takes its own just as this one finds the holder dead. */
+function whenFoundDead(pid: number, replace: () => void): void {
+  let pending = true;
+  spyOn(process, "kill").mockImplementation((target: number, signal?: string | number) => {
+    if (pending && target === pid) {
+      pending = false;
+      replace();
+    }
+    return probe(target, signal);
+  });
 }
 
 const run = (...args: string[]) => Bun.spawn([process.execPath, WORKER, ...args], { stdout: "ignore", stderr: "pipe" });
@@ -30,12 +47,15 @@ describe("state lock", () => {
     expect(devices.list()).toHaveLength(1);
   });
 
-  test("breaking a stale lock puts back a fresh lock that replaced it in the meantime", () => {
+  test("a stale lock replaced by a live holder after it was read is waited for, never removed", () => {
     const path = join(dir, "state.lock");
-    const stale = `${deadPid()} stale-token`;
+    const dead = deadPid();
     const fresh = `${process.pid} fresh-token`;
-    writeFileSync(path, fresh);
-    breakStaleLock(path, stale);
+    writeFileSync(path, `${dead} stale-token`);
+    whenFoundDead(dead, () => writeFileSync(path, fresh));
+    let ran = false;
+    expect(() => withStateLock(dir, () => (ran = true), 50)).toThrow("locked");
+    expect(ran).toBe(false);
     expect(readFileSync(path, "utf8")).toBe(fresh);
   });
 

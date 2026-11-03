@@ -43,7 +43,7 @@ function isHeld(path: string, content: string): boolean {
  * Removes a stale lock whose content was `observed`. It is renamed aside first and only deleted if it is still that
  * lock; a fresh lock that replaced it in the meantime is put back instead of being deleted.
  */
-export function breakStaleLock(path: string, observed: string): void {
+function breakStaleLock(path: string, observed: string): void {
   const aside = `${path}.stale.${crypto.randomUUID()}`;
   try {
     renameSync(path, aside);
