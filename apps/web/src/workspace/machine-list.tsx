@@ -40,7 +40,8 @@ export function MachineList({
           <div
             key={machine.id}
             className={cn(
-              "group flex h-(--row) min-w-0 items-center rounded-md hover:bg-hover",
+              "group flex h-(--row) min-w-0 items-center rounded-md",
+              machine.first !== undefined && "hover:bg-hover",
               selected && "bg-selected",
             )}
           >
@@ -49,7 +50,7 @@ export function MachineList({
               aria-current={selected ? "true" : undefined}
               disabled={machine.first === undefined}
               onClick={() => machine.first !== undefined && onOpen(machine.first)}
-              className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 text-left text-sm text-foreground outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:cursor-default"
+              className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 text-left text-sm text-foreground outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-45"
             >
               <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">{machine.name}</span>
