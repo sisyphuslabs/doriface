@@ -1,5 +1,5 @@
 import { _electron as electron, expect, test } from "@playwright/test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
@@ -12,18 +12,20 @@ test("the packaged launch settles when the first navigation's commit event would
   const dir = mkdtempSync(join(tmpdir(), "dd-first-document-"));
   const hc = scratchHcSession();
   try {
-    const shim = join(dir, "hold-renderer.so");
-    buildPreloadShim("hold-renderer.c", shim);
+    const shim = join(dir, "hold-gpu-process.so");
+    buildPreloadShim("hold-gpu-process.c", shim);
     const launch = launchOptions([`--user-data-dir=${join(dir, "profile")}`]);
-    const inner = "executablePath" in launch ? [launch.executablePath, ...launch.args] : launch.args;
+    if (!("executablePath" in launch)) throw new Error("the skip above keeps this spec to packaged launches");
+    const raceReport = join(dir, "race-report");
     const env = Object.fromEntries(
       Object.entries({
         ...process.env,
         ...hc.env,
         LD_PRELOAD: shim,
         // Far longer than Playwright takes to attach, so an attach that does not wait lands inside the first navigation.
-        DORIFACE_E2E_HOLD_RENDERER_MS: "3000",
-        DORIFACE_E2E_INNER: JSON.stringify(inner),
+        DORIFACE_E2E_HOLD_GPU_PROCESS_MS: "3000",
+        DORIFACE_E2E_INNER: JSON.stringify([launch.executablePath, ...launch.args]),
+        DORIFACE_E2E_RACE_REPORT: raceReport,
       }).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
     const app = await electron.launch({ executablePath: join(appDir, "e2e", "late-page-enable.ts"), args: [], env });
@@ -34,6 +36,17 @@ test("the packaged launch settles when the first navigation's commit event would
     } finally {
       await app.close();
     }
+    // The race was really forced. The shim held the GPU process; the browser launches the network service only after
+    // it, so at the moment a bare launch attaches the first navigation was in flight with no network service yet, and
+    // the service was running by the release (so its absence at attach means something). The proxy held the page's
+    // Page.enable. Without these, this pass would not show that the wrapper is needed.
+    const forced = existsSync(raceReport) ? readFileSync(raceReport, "utf8") : "";
+    expect(forced).toMatch(/^gpu process held pid=\d+$/m);
+    expect(forced).toMatch(/^gpu process released pid=\d+$/m);
+    expect(forced).toContain("first navigation in flight at attach");
+    expect(forced).toContain("network service not started at attach");
+    expect(forced).toContain("network service running at release");
+    expect(forced).toContain("held a Page.enable");
   } finally {
     await hc.dispose();
     rmSync(dir, { recursive: true, force: true });
