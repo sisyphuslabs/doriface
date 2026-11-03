@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures.ts";
+import { expect, terminalCount, test } from "./fixtures.ts";
 
 test("rebinding New tab makes the new shortcut open a tab", async ({ page }) => {
   await page.goto("/settings");
@@ -13,14 +13,7 @@ test("rebinding New tab makes the new shortcut open a tab", async ({ page }) => 
   await expect(page.getByText("Changed")).toBeVisible();
 
   await page.getByRole("link", { name: "Back to workspace" }).first().click();
-  await expect(
-    page
-      .getByRole("button", { name: "New tab" })
-      .or(page.getByRole("button", { name: "New terminal" }))
-      .first(),
-  ).toBeVisible({ timeout: 20_000 });
-  const tabs = page.getByRole("tab");
-  const before = await tabs.count();
+  const count = await terminalCount(page);
   await page.keyboard.press("Control+Alt+N");
-  await expect(tabs).toHaveCount(before + 1, { timeout: 15_000 });
+  await count.grown();
 });
