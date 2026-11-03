@@ -3,12 +3,21 @@ import {
   authMessage,
   base32,
   decodeMux,
+  decodePairSlotReply,
+  decodePairSlotRequest,
   encodeClose,
   encodeData,
   encodeOpen,
+  encodePairSlotReply,
+  encodePairSlotRequest,
+  fromBase64Url,
   hostIdOf,
   MuxError,
   MuxType,
+  normalizePairCode,
+  pairSlotOf,
+  PairSlotStatus,
+  toBase64Url,
 } from "./wire/index.ts";
 
 const encoder = new TextEncoder();
@@ -61,5 +70,36 @@ describe("host identity", () => {
     expect(authMessage("abc", challenge)).toEqual(
       new Uint8Array([...encoder.encode("doriface-relay-v1abc"), ...challenge]),
     );
+  });
+
+  test("base64url round-trips and rejects other alphabets", () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    expect(fromBase64Url(toBase64Url(bytes))).toEqual(bytes);
+    expect(toBase64Url(new Uint8Array([0xfb, 0xff]))).toBe("-_8");
+    expect(fromBase64Url("a+b/")).toBeUndefined();
+  });
+});
+
+describe("pairing codes and slots", () => {
+  test("typed codes normalize like Crockford base32", () => {
+    expect(normalizePairCode("ab3k 9xqz")).toBe("AB3K9XQZ");
+    expect(normalizePairCode("IlO0-0000")).toBe("11000000");
+    expect(normalizePairCode("AB3K9XQ")).toBeUndefined();
+    expect(normalizePairCode("AB3K9XQU")).toBeUndefined();
+    expect(pairSlotOf("AB3K9XQZ")).toBe("AB3");
+  });
+
+  test("PAIR_SLOT requests and replies round-trip", () => {
+    const key = crypto.getRandomValues(new Uint8Array(32));
+    const request = decodeMux(encodePairSlotRequest("AB3", key));
+    expect(request.type).toBe(MuxType.PairSlot);
+    expect(request.type === MuxType.PairSlot && decodePairSlotRequest(request.payload)).toEqual({
+      slot: "AB3",
+      noiseStaticPub: key,
+    });
+    const reply = decodeMux(encodePairSlotReply("AB3", PairSlotStatus.Taken));
+    expect(reply.type === MuxType.PairSlot && decodePairSlotReply(reply.payload)).toEqual({ slot: "AB3", status: 409 });
+    expect(() => encodePairSlotRequest("AB", key)).toThrow(RangeError);
+    expect(decodePairSlotRequest(new Uint8Array(10))).toBeUndefined();
   });
 });

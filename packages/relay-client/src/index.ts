@@ -9,6 +9,8 @@ export {
   RelayCloseError,
   type Unsubscribe,
 } from "./link.ts";
+export { lookupPairSlot, PairLookupError, type PairLookupOptions, type PairSlotRecord } from "./pair-lookup.ts";
+export type { PairSlotResult } from "./pair-requests.ts";
 export { SessionLink, type SessionTransport } from "./session-link.ts";
 export { ed25519Signer, generateSigningKey, type HostSigner } from "./signer.ts";
 export { type CreateSocket, relaySocketUrl } from "./socket.ts";

@@ -1,3 +1,4 @@
+export { fromBase64Url, toBase64Url } from "./base64url.ts";
 export { CloseCode, sendableCloseCode } from "./close-codes.ts";
 export {
   AUTH_ANSWER_BYTES,
@@ -22,3 +23,19 @@ export {
   muxHeader,
   MuxType,
 } from "./mux.ts";
+export {
+  CROCKFORD_ALPHABET,
+  normalizePairCode,
+  PAIR_CODE_LENGTH,
+  PAIR_SLOT_LENGTH,
+  PAIR_SLOT_PATTERN,
+  pairSlotOf,
+} from "./pair-code.ts";
+export {
+  decodePairSlotReply,
+  decodePairSlotRequest,
+  encodePairSlotReply,
+  encodePairSlotRequest,
+  NOISE_STATIC_PUB_BYTES,
+  PairSlotStatus,
+} from "./pair-slot.ts";

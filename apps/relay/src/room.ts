@@ -14,6 +14,8 @@ import { DurableObject } from "cloudflare:workers";
 import { attach, type ClientAttachment, type HostAttachment, attachmentOf } from "./attachment.ts";
 import { verifyAuthAnswer } from "./auth.ts";
 import { AUTH_TIMEOUT_MS, MAX_MESSAGE_BYTES, MAX_SESSIONS_PER_HOST } from "./limits.ts";
+import type { PairSlotsEnv } from "./pair-slot.ts";
+import { registerPairSlot } from "./pairing.ts";
 import { closedSocket } from "./reject.ts";
 import {
   CLIENT_TAG,
@@ -35,7 +37,7 @@ import {
  * One room per hostId: the host's uplink and every client session to it. All state lives in socket attachments,
  * so the object can hibernate between messages. Payloads are forwarded as they arrive and never inspected.
  */
-export class Room extends DurableObject {
+export class Room extends DurableObject<PairSlotsEnv> {
   /** Hosts that have not finished the challenge yet; a client arriving meanwhile waits for them to settle. */
   readonly #pending = new Map<WebSocket, PromiseWithResolvers<void>>();
 
@@ -54,7 +56,7 @@ export class Room extends DurableObject {
     if (message.byteLength > MAX_MESSAGE_BYTES) return ws.close(CloseCode.MessageTooBig, "message too big");
     const bytes = new Uint8Array(message);
     if (attachment.role === "client") return this.#fromClient(ws, attachment, bytes);
-    if (attachment.state === "online") return this.#fromHost(ws, bytes);
+    if (attachment.state === "online") return this.#fromHost(ws, attachment, bytes);
     return this.#authenticate(ws, attachment, bytes);
   }
 
@@ -134,7 +136,7 @@ export class Room extends DurableObject {
     host.send(encodeData(attachment.sessionId, bytes));
   }
 
-  #fromHost(host: WebSocket, bytes: Uint8Array): void {
+  async #fromHost(host: WebSocket, attachment: HostAttachment, bytes: Uint8Array): Promise<void> {
     let frame;
     try {
       frame = decodeMux(bytes);
@@ -143,6 +145,7 @@ export class Room extends DurableObject {
       throw error;
     }
     if (frame.type === MuxType.Open) return host.close(CloseCode.ProtocolError, "the relay assigns sessions");
+    if (frame.type === MuxType.PairSlot) return registerPairSlot(this.env, host, attachment, frame.payload);
     const client = clientSocket(this.ctx, frame.sessionId);
     const session = client === undefined ? undefined : attachmentOf(client);
     // A session the client just closed: its CLOSE is already on the way to the host.
