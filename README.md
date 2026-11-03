@@ -45,17 +45,21 @@ hc machine add --via 'doriface-host connect <B hostId>' --name b   # on A: B's t
 
 ## Layout
 
-| Path                    | What it is                                                                  |
-| ----------------------- | --------------------------------------------------------------------------- |
-| `packages/protocol`     | herdr-core wire codec: frames and JSON-RPC types                            |
-| `packages/client`       | client SDK for web, desktop and future native apps                          |
-| `packages/relay-client` | relay uplink and session client                                             |
-| `packages/ghostty-wasm` | libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with provenance  |
-| `packages/ui`           | design system: tokens, themes and components                                |
-| `apps/host`             | `doriface-host`, the Bun + Hono gateway that runs beside `hc`               |
-| `apps/relay`            | Cloudflare Workers + Durable Objects relay ([README](apps/relay/README.md)) |
-| `apps/web`              | React web client and installable PWA                                        |
-| `apps/desktop`          | Electron shell                                                              |
+| Path                    | What it is                                                                 |
+| ----------------------- | -------------------------------------------------------------------------- |
+| `packages/protocol`     | herdr-core wire codec: frames and JSON-RPC types                           |
+| `packages/client`       | client SDK for web, desktop and future native apps                         |
+| `packages/relay-client` | relay uplink and session client                                            |
+| `packages/ghostty-wasm` | libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with provenance |
+| `packages/ui`           | design system: tokens, themes and components                               |
+| `apps/host`             | `doriface-host`, the Bun + Hono gateway that runs beside `hc`              |
+| `apps/web`              | React web client and installable PWA                                       |
+| `apps/desktop`          | Electron shell                                                             |
+| `tests/relay`           | the host and client against the relay, end to end                          |
+
+The relay (Cloudflare Workers + Durable Objects, `relay-doriface.omo.dev`) is a separate private service,
+`sisyphuslabs/doriface-relay`. Its public contract is the relay section of [docs/transport.md](docs/transport.md),
+which every package here is built against.
 
 ## Development
 
@@ -70,7 +74,7 @@ bun run --cwd apps/desktop start      # the desktop app
 bun run --cwd packages/ui showcase    # every component and screen mockup
 ```
 
-`bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`. Self-hosting the relay is `bun run --cwd apps/relay deploy` with your own Cloudflare account and hostname; see its README.
+`bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`. `bun run relay:test` runs `tests/relay` against the private relay at the commit `relay-pin.json` names: it clones it into `.relay` when your git credentials can read `sisyphuslabs/doriface-relay`, and otherwise says so and stops. `bun run check` does not need it. `bun run relay:dev` serves that relay locally.
 
 ## Design
 
