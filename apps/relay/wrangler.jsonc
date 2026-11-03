@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "doriface-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  // Production route of the public relay. Self-hosters: put your own hostname here, or delete "routes" to serve
+  // from workers.dev.
+  "routes": [{ "pattern": "relay-doriface.omo.dev", "custom_domain": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "ROOM", "class_name": "Room" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // WebSocket upgrades per connecting IP. The namespace id only has to be unique within the deploying account.
+  "ratelimits": [{ "name": "CONNECT_LIMIT", "namespace_id": "4429", "simple": { "limit": 60, "period": 60 } }],
+}
