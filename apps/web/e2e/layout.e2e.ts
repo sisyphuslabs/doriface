@@ -19,13 +19,22 @@ const VIEWPORTS = [
   },
   { name: "390x844@3", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, narrow: true, inset: false },
 ] as const;
-/** The live terminal draws its own grid; the sidebar and the phone's list of the same rows have their own fix. */
-const SKIP = ["[data-terminal]", 'aside[aria-label="Workspace"]', '[data-slot="agents-list"]'];
+/** The live terminal draws its own grid. */
+const SKIP = ["[data-terminal]"];
 /** A spinning glyph's box grows as it turns; measure every box at rest. */
 const AT_REST = "*, ::before, ::after { animation: none !important; transition: none !important; }";
-const DESKTOP_INSET = ":root { --titlebar-inset-start: 78px; }";
+/** What the macOS app sets beside its window buttons (apps/desktop TITLEBAR_INSET_START). */
+const INSET = 78;
+const DESKTOP_INSET = `:root { --titlebar-inset-start: ${INSET}px; }`;
 const BROKEN_STORAGE = `IDBFactory.prototype.open = () => { throw new DOMException("IndexedDB is not available here", "InvalidStateError"); };`;
 const OUT = process.env["LAYOUT_OUT"];
+/** Where each visible titlebar in the window buttons' corner starts its content. */
+const cornerStarts = (inset: number): number[] =>
+  [...document.querySelectorAll("[data-titlebar]")].flatMap((el) => {
+    const box = el.getBoundingClientRect();
+    if (!el.checkVisibility() || box.top > 1 || box.left >= inset) return [];
+    return [box.left + Number.parseFloat(getComputedStyle(el).paddingLeft)];
+  });
 
 test.use({ serviceWorkers: "block" });
 
@@ -56,6 +65,7 @@ for (const { name: size, narrow, inset, ...use } of VIEWPORTS) {
         await page.evaluate(() => document.fonts.ready);
         await page.addStyleTag({ content: AT_REST });
         if (inset) await page.addStyleTag({ content: DESKTOP_INSET });
+        const corner = await page.evaluate(cornerStarts, INSET);
         const found = await page.evaluate(findOverflows, SKIP);
         if (OUT !== undefined) {
           const file = join(OUT, `${screen.name}-${size}-${theme}`);
@@ -64,6 +74,9 @@ for (const { name: size, narrow, inset, ...use } of VIEWPORTS) {
           writeFileSync(`${file}.json`, JSON.stringify(found, null, 1));
         }
         await context.close();
+        // Every workspace screen has a titlebar under the window buttons, and each one starts past them.
+        if (inset && screen.start === "layout") expect(corner.length).toBeGreaterThan(0);
+        if (inset) expect(corner.filter((start) => start < INSET)).toEqual([]);
         expect(found).toEqual([]);
       });
     }
