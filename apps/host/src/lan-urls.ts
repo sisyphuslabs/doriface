@@ -4,6 +4,10 @@ import { formatHost } from "./listen.ts";
 
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
+/** A dotted-quad whose four octets are each at most 255. */
+const isIpv4 = (hostname: string): boolean =>
+  IPV4.test(hostname) && hostname.split(".").every((octet) => Number(octet) <= 255);
+
 /** The canonical form of an IPv6 literal (`::0` and `0:0::0` both become `::`), or undefined for anything else. */
 function canonicalIpv6(hostname: string): string | undefined {
   const bare = hostname.replace(/^\[(.*)\]$/, "$1");
@@ -25,7 +29,7 @@ function interfaceAddresses(): string[] {
 
 /** The addresses a client can dial for this bind: every interface for a wildcard, the literal itself, or none. */
 function dialableHosts(hostname: string): string[] {
-  if (IPV4.test(hostname)) return hostname === "0.0.0.0" ? interfaceAddresses() : [hostname];
+  if (isIpv4(hostname)) return hostname === "0.0.0.0" ? interfaceAddresses() : [hostname];
   const ipv6 = canonicalIpv6(hostname);
   if (ipv6 === undefined || isLinkLocal(ipv6)) return [];
   return ipv6 === "::" ? interfaceAddresses() : [ipv6];
