@@ -2,7 +2,6 @@ import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Monitor, PanelLeft } from "lucide-react";
-import { useState } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import { agentStatus, terminalTitle } from "./model.ts";
@@ -13,6 +12,7 @@ import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions } from "./use-app-actions.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
+import { useSidebarShown } from "./layout-store.ts";
 import type { Tabs } from "./use-tabs.ts";
 
 const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
@@ -28,7 +28,7 @@ export interface DesktopShellProps {
 }
 
 export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette }: DesktopShellProps) {
-  const [sidebar, setSidebar] = useState(true);
+  const [sidebar, setSidebar] = useSidebarShown();
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
