@@ -1,7 +1,8 @@
-import { shell, type Session, type WebContents, type WebPreferences } from "electron";
+import { shell, type Session, type WebContents } from "electron";
 import { allowedExternal } from "../config/external.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import { isGrantable } from "../config/permissions.ts";
+import { routeWindowOpen } from "../config/window-open.ts";
 
 const openAllowed = (candidate: string): void => {
   const url = allowedExternal(candidate);
@@ -9,8 +10,8 @@ const openAllowed = (candidate: string): void => {
   shell.openExternal(url).catch((error: unknown) => console.error(`openExternal failed: ${String(error)}`));
 };
 
-/** Keeps every web contents on the app origin: no foreign navigation, popups or webviews. */
-export function hardenContents(contents: WebContents, origin: string, webPreferences: WebPreferences): void {
+/** Keeps every web contents on the app origin: no foreign navigation, popups, second windows or webviews. */
+export function hardenContents(contents: WebContents, origin: string): void {
   const lock = (event: { preventDefault(): void }, url: string): void => {
     if (isSameOrigin(url, origin)) return;
     event.preventDefault();
@@ -20,8 +21,14 @@ export function hardenContents(contents: WebContents, origin: string, webPrefere
   contents.on("will-redirect", lock);
   contents.on("will-attach-webview", (event) => event.preventDefault());
   contents.setWindowOpenHandler(({ url }) => {
-    if (isSameOrigin(url, origin)) return { action: "allow", overrideBrowserWindowOptions: { webPreferences } };
-    openAllowed(url);
+    const route = routeWindowOpen(url, origin);
+    if (route.kind === "same-window") {
+      contents
+        .loadURL(route.url)
+        .catch((error: unknown) => console.error(`could not open ${route.url}: ${String(error)}`));
+    } else if (route.kind === "browser") {
+      openAllowed(route.url);
+    }
     return { action: "deny" };
   });
 }

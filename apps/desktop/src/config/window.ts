@@ -1,14 +1,42 @@
 import type { BrowserWindowConstructorOptions, WebPreferences } from "electron";
 import { VERSION_ARG, type DesktopPlatform } from "../shared/bridge.ts";
 
-/** herdr-app's traffic-light inset under a hidden-inset titlebar. */
-export const TRAFFIC_LIGHT_POSITION = { x: 12, y: 16 } as const;
+/** The web app's top row (sidebar and Settings headers, h-11) that the window buttons share. */
+export const TITLEBAR_ROW_HEIGHT = 44;
+
+/** The three window buttons macOS draws: 14 pt buttons 20 pt apart in a 16 pt tall frame. */
+const WINDOW_BUTTONS_SIZE = { width: 54, height: 16 } as const;
+
+/** herdr-app's 12 pt side inset, centred on the top row so the buttons line up with its titles and controls. */
+export const TRAFFIC_LIGHT_POSITION = {
+  x: 12,
+  y: (TITLEBAR_ROW_HEIGHT - WINDOW_BUTTONS_SIZE.height) / 2,
+} as const;
+
+export const TRAFFIC_LIGHTS = { ...TRAFFIC_LIGHT_POSITION, ...WINDOW_BUTTONS_SIZE } as const;
+
+/** Where content beside the window buttons may start, one button-gap past the last button. */
+export const TITLEBAR_INSET_START = TRAFFIC_LIGHTS.x + TRAFFIC_LIGHTS.width + 12;
+
+/** Controls inside a titlebar row that must keep taking clicks instead of moving the window. */
+const TITLEBAR_CONTROLS = 'a, button, input, select, textarea, [role="tab"], [role="button"], [tabindex]';
 
 /**
- * Under the hidden-inset titlebar the band above the traffic lights still has to move the window, whether or not
- * the web app declares a titlebar region of its own.
+ * Under the hidden-inset titlebar the band above the traffic lights still has to move the window, whether or not the
+ * page has a titlebar row. Rows the web app marks data-titlebar are the window's titlebar: they move the window and
+ * take the system's double-click action, while the controls in them stay clickable.
  */
-export const MAC_DRAG_BAND_CSS = `html::before { content: ""; position: fixed; inset: 0 0 auto 0; height: ${TRAFFIC_LIGHT_POSITION.y}px; -webkit-app-region: drag; z-index: 2147483647; }`;
+export const MAC_TITLEBAR_CSS = [
+  `html::before { content: ""; position: fixed; inset: 0 0 auto 0; height: ${TRAFFIC_LIGHT_POSITION.y}px; -webkit-app-region: drag; z-index: 2147483647; }`,
+  "[data-titlebar] { -webkit-app-region: drag; }",
+  `[data-titlebar] :is(${TITLEBAR_CONTROLS}) { -webkit-app-region: no-drag; }`,
+].join(" ");
+
+/**
+ * The web app reads --titlebar-inset-start to keep what it draws in the top-left corner out from under the window
+ * buttons. Full screen hides the buttons, so the shell removes this sheet there.
+ */
+export const MAC_INSET_CSS = `:root { --titlebar-inset-start: ${TITLEBAR_INSET_START}px; }`;
 
 export function secureWebPreferences(preload: string, version: string): WebPreferences {
   return {
@@ -29,18 +57,38 @@ export function secureWebPreferences(preload: string, version: string): WebPrefe
   };
 }
 
+/** Each system appearance's page background (themes.css --background), painted before the page so nothing flashes. */
+export const WINDOW_BACKGROUND = { light: "#f7f6f3", dark: "#121210" } as const;
+
+/** The sidebar beside a terminal; narrower would drop below the 768 px phone breakpoint inside a desktop window. */
+export const MIN_WINDOW_SIZE = { width: 800, height: 500 } as const;
+
+export const DEFAULT_WINDOW_SIZE = { width: 1280, height: 820 } as const;
+
+export interface WindowPlacement {
+  readonly x?: number;
+  readonly y?: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface WindowLook {
+  readonly dark: boolean;
+  readonly placement: WindowPlacement;
+}
+
 export function windowOptions(
   platform: DesktopPlatform,
   webPreferences: WebPreferences,
+  look: WindowLook,
 ): BrowserWindowConstructorOptions {
   const base: BrowserWindowConstructorOptions = {
     title: "doriface",
-    width: 1280,
-    height: 820,
-    minWidth: 720,
-    minHeight: 480,
+    ...look.placement,
+    minWidth: MIN_WINDOW_SIZE.width,
+    minHeight: MIN_WINDOW_SIZE.height,
     show: false,
-    backgroundColor: "#0b0b0c",
+    backgroundColor: look.dark ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light,
     webPreferences,
   };
   if (platform !== "darwin") return base;
