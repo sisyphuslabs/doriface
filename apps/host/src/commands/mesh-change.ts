@@ -1,5 +1,5 @@
 import { requestControl } from "../control.ts";
-import { parseLeaveReply, parseRenameReply, parseRevokeReply } from "../mesh/command-replies.ts";
+import { type MemberRef, parseLeaveReply, parseRenameReply, parseRevokeReply } from "../mesh/command-replies.ts";
 import { printable } from "./devices.ts";
 
 // `mesh revoke`, `mesh rename` and `mesh leave`: each asks the running host on the state dir, which signs (design
@@ -21,33 +21,46 @@ async function ask(context: ChangeContext, request: Parameters<typeof requestCon
 
 const line = (context: ChangeContext, text: string): void => context.out(`${printable(text)}\n`);
 
-export async function revokeMember(context: ChangeContext, member: string, compromised: boolean, yes: boolean) {
-  const first = await ask(context, { op: "mesh-revoke", member, compromised, yes });
-  if (first === null) return 1;
-  let reply = parseRevokeReply(first);
-  for (const text of reply.lines) line(context, text);
-  if (!reply.written && (await context.confirm("write this revoke? [y/N] "))) {
-    const again = await ask(context, { op: "mesh-revoke", member, compromised, yes: true });
-    if (again === null) return 1;
-    reply = parseRevokeReply(again);
-  }
-  if (!reply.written) {
+const refs = (members: readonly MemberRef[]): string =>
+  members.map((member) => `${member.name} (${member.hostId})`).join(", ");
+
+export async function revokeMember(
+  context: ChangeContext,
+  member: string,
+  compromised: boolean,
+  yes: boolean,
+): Promise<number> {
+  const request = { op: "mesh-revoke", member, compromised } as const;
+  const shown = await ask(context, { ...request, yes, preview: true, expect: undefined });
+  if (shown === null) return 1;
+  const preview = parseRevokeReply(shown);
+  line(context, `revoke ${refs(preview.subjects)} (${preview.reason})`);
+  for (const text of preview.lines) line(context, text);
+  if (preview.needsYes && !yes && !(await context.confirm("write this revoke? [y/N] "))) {
     line(context, "not written: run it again with --yes to write this revoke");
     return 1;
   }
-  line(context, `revoked ${reply.subjects.map((subject) => subject.name).join(", ")} (${reply.reason})`);
+  const expect = preview.subjects.map((subject) => subject.hostId);
+  const answer = await ask(context, { ...request, yes: true, preview: false, expect });
+  if (answer === null) return 1;
+  const reply = parseRevokeReply(answer);
+  if (!reply.written) {
+    line(context, "not written: the running host did not write the previewed revoke");
+    return 1;
+  }
+  line(context, `revoked ${refs(reply.subjects)} (${reply.reason})`);
   return 0;
 }
 
-export async function renameMember(context: ChangeContext, member: string, name: string) {
+export async function renameMember(context: ChangeContext, member: string, name: string): Promise<number> {
   const answer = await ask(context, { op: "mesh-rename", member, name });
   if (answer === null) return 1;
   const reply = parseRenameReply(answer);
   line(
     context,
     reply.written
-      ? `renamed ${reply.member.name} to ${reply.name}`
-      : `${reply.member.name} is already named ${reply.name}`,
+      ? `renamed ${refs([reply.member])} to ${reply.name}`
+      : `${refs([reply.member])} is already named ${reply.name}`,
   );
   return 0;
 }
@@ -56,7 +69,7 @@ export async function leaveMesh(context: ChangeContext) {
   const answer = await ask(context, { op: "mesh-leave" });
   if (answer === null) return 1;
   const reply = parseLeaveReply(answer);
-  const names = (refs: typeof reply.members) => refs.map((ref) => ref.name).join(", ");
+  const names = (members: typeof reply.members) => members.map((ref) => ref.name).join(", ");
   if (!reply.signed) line(context, "this host was no member in its own view, so it had no revoke to sign");
   if (reply.members.length === 0) line(context, "left the mesh; no other member was in it");
   else if (reply.confirmed.length > 0) {
