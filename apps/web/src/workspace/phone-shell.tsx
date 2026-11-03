@@ -2,7 +2,7 @@ import type { HcConnection, TerminalStream } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
 import { ExtraKeysBar, IconButton, ScrollArea, StatusBar, StatusBarItem, StatusChip } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, Monitor, Plus, Settings } from "lucide-react";
+import { ChevronLeft, Monitor, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
@@ -17,10 +17,11 @@ export interface PhoneShellProps {
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   readonly onNew: () => void;
+  readonly onPalette: () => void;
 }
 
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
-export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew }: PhoneShellProps) {
+export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew, onPalette }: PhoneShellProps) {
   const terminal = terminals.find((entry) => entry.address === open);
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
@@ -28,6 +29,7 @@ export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew 
       <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar">
         <header className="flex h-12 shrink-0 items-center gap-1 px-4 pt-[env(safe-area-inset-top)]">
           <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
+          <IconButton label="Command palette" icon={<Search />} size="md" onClick={onPalette} />
           <IconButton label="New terminal" icon={<Plus />} size="md" onClick={onNew} />
           <IconButton label="Settings" icon={<Settings />} size="md" render={<Link to="/settings" />} />
         </header>

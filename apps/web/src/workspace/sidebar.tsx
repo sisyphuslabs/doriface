@@ -1,7 +1,7 @@
 import type { Terminal } from "@doriface/protocol";
 import { Button, IconButton, ScrollArea } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
-import { PanelLeft, Settings } from "lucide-react";
+import { PanelLeft, Search, Settings } from "lucide-react";
 import { AgentLists } from "./agent-lists.tsx";
 
 export interface SidebarProps {
@@ -9,9 +9,10 @@ export interface SidebarProps {
   readonly active: string | null;
   readonly onOpen: (address: string) => void;
   readonly onHide: () => void;
+  readonly onPalette: () => void;
 }
 
-export function Sidebar({ terminals, active, onOpen, onHide }: SidebarProps) {
+export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: SidebarProps) {
   return (
     <aside
       aria-label="Workspace"
@@ -19,6 +20,7 @@ export function Sidebar({ terminals, active, onOpen, onHide }: SidebarProps) {
     >
       <div className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-3.5">
         <span className="flex-1 text-sm font-semibold text-sidebar-foreground">doriface</span>
+        <IconButton label="Command palette" keys={["⌘", "⇧", "P"]} icon={<Search />} onClick={onPalette} />
         <IconButton label="Hide sidebar" keys={["⌘", "B"]} icon={<PanelLeft />} onClick={onHide} />
       </div>
       <ScrollArea slot="agents-list" className="flex-1">
