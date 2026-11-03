@@ -4,7 +4,7 @@ import { Button, Dialog, Notice } from "@doriface/ui";
 import { useEffect, useState } from "react";
 import { terminalTitle } from "./model.ts";
 import { RenameDialog } from "./rename-dialog.tsx";
-import { endSession, renameSession } from "./session-actions.ts";
+import { endSession, renameSession, sessionCalls } from "./session-actions.ts";
 import type { SessionAsk } from "./session-context.ts";
 
 export interface SessionDialogsProps {
@@ -48,7 +48,7 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
       },
     );
   };
-  const end = (): void => run(() => endSession(connection, ask.address), onDone);
+  const end = (): void => run(() => endSession(sessionCalls(connection), ask.address), onDone);
   if (ask.kind === "rename") {
     return (
       <RenameDialog
@@ -56,7 +56,7 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
         busy={busy}
         error={error}
         onCancel={onDone}
-        onRename={(name) => run(() => renameSession(connection, ask.address, name), onDone)}
+        onRename={(name) => run(() => renameSession(sessionCalls(connection), ask.address, name), onDone)}
       />
     );
   }
