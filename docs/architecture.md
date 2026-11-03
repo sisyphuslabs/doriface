@@ -97,7 +97,7 @@ Two shapes considered for the host (INFERRED): (A) pass-through, chosen; (B) hos
 
 ## 5. Latency budget and techniques
 
-Measured on 2026-11-03 with `apps/host/scripts/latency-bench.ts` (`relay --relay <url> --code <typed code>` for the relayed rows, `direct` for the last row): 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, the host's load average 17-22 on 18 cores), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink (INFERRED from the topology in section 6).
+Measured on 2026-11-03 with `apps/host/scripts/latency-bench.ts` (`relay --relay <url> --code <typed code>` for the relayed rows, `direct` for the last row): 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, on a host whose load average stayed above its core count), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink (INFERRED from the topology in section 6).
 
 | Path                                                                         | p50      | p95      | p99      | min      |
 | ---------------------------------------------------------------------------- | -------- | -------- | -------- | -------- |
