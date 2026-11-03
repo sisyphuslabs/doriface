@@ -17,8 +17,14 @@ export interface TestHost {
   readonly states: readonly UplinkState[];
 }
 
+export interface TestHostOptions {
+  readonly secretKey?: Uint8Array;
+  readonly pingIntervalMs?: number;
+}
+
 /** Starts an uplink and resolves once it has answered the relay's challenge. */
-export async function startTestHost(relayUrl: string, ip: string, secretKey = generateSigningKey()): Promise<TestHost> {
+export async function startTestHost(relayUrl: string, ip: string, options: TestHostOptions = {}): Promise<TestHost> {
+  const secretKey = options.secretKey ?? generateSigningKey();
   const signer = ed25519Signer(secretKey);
   const sessions = new AsyncQueue<SessionLink>();
   const states: UplinkState[] = [];
@@ -27,6 +33,7 @@ export async function startTestHost(relayUrl: string, ip: string, secretKey = ge
     relayUrl,
     signer,
     createSocket: socketFrom(ip),
+    ...(options.pingIntervalMs === undefined ? {} : { pingIntervalMs: options.pingIntervalMs }),
     onSession: (session) => sessions.push(session),
     onState: (state) => {
       states.push(state);

@@ -1,4 +1,4 @@
-import { type Attachment, attachmentOf } from "./attachment.ts";
+import { type Attachment, attachmentOf, type ClientAttachment } from "./attachment.ts";
 
 export const HOST_TAG = "host";
 export const CLIENT_TAG = "client";
@@ -11,11 +11,6 @@ export function isOpen(ws: WebSocket): boolean {
   return ws.readyState === OPEN;
 }
 
-/** Sends if the socket is still open; a peer that is mid-close simply misses the message. */
-export function sendIfOpen(ws: WebSocket, bytes: Uint8Array<ArrayBuffer>): void {
-  if (isOpen(ws)) ws.send(bytes);
-}
-
 export function closeIfOpen(ws: WebSocket, code: number, reason: string): void {
   if (isOpen(ws)) ws.close(code, reason);
 }
@@ -25,7 +20,7 @@ export function completeClose(ws: WebSocket, code: number): void {
   if (ws.readyState !== CLOSED) ws.close(code, "");
 }
 
-export function withAttachment(ctx: DurableObjectState, tag: string): { ws: WebSocket; attachment: Attachment }[] {
+export function withAttachment(ctx: DurableObjectState, tag?: string): { ws: WebSocket; attachment: Attachment }[] {
   return ctx.getWebSockets(tag).flatMap((ws) => {
     const attachment = attachmentOf(ws);
     return attachment === undefined ? [] : [{ ws, attachment }];
@@ -38,8 +33,11 @@ export function onlineHost(ctx: DurableObjectState): WebSocket | undefined {
   )?.ws;
 }
 
-export function openClients(ctx: DurableObjectState): WebSocket[] {
-  return ctx.getWebSockets(CLIENT_TAG).filter(isOpen);
+/** Client sessions still running: open, and not yet ended by the relay or the host. */
+export function liveClients(ctx: DurableObjectState): { ws: WebSocket; attachment: ClientAttachment }[] {
+  return withAttachment(ctx, CLIENT_TAG).flatMap(({ ws, attachment }) =>
+    attachment.role === "client" && !attachment.ended && isOpen(ws) ? [{ ws, attachment }] : [],
+  );
 }
 
 export function clientSocket(ctx: DurableObjectState, sessionId: number): WebSocket | undefined {
