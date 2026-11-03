@@ -1,10 +1,12 @@
 import { type EventFeed, HcConnection } from "@doriface/client";
 import { generateX25519 } from "@doriface/crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { generateHostIdentity } from "@doriface/crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProcessLink } from "../../../packages/client/src/testing/process-link.ts";
+import { KnownHosts } from "../../host/src/state/known-hosts.ts";
 import { createHcSession, type HcSession } from "../../host/src/testing/hc-session.ts";
 import { connectCommand, runConnect } from "./support/connect-cli.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
@@ -70,7 +72,37 @@ afterAll(async () => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+async function hcAdd(core: HcSession, via: string, name: string) {
+  const add = Bun.spawn([core.hc, "machine", "add", "--via", via, "--name", name, "--json"], {
+    env: core.env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exit] = await Promise.all([
+    new Response(add.stdout).text(),
+    new Response(add.stderr).text(),
+    add.exited,
+  ]);
+  return { stdout, stderr, exit };
+}
+
 describe("hc machine add --via 'doriface-host connect <hostId>': machine A's hc reaches machine B through the relay", () => {
+  test("a host that is not on the relay makes hc's add fail fast with the bridge's reason, and adds nothing", async () => {
+    const { a, coreA: core, machineB: hostB } = setup();
+    const absent = generateHostIdentity();
+    new KnownHosts(deviceA).add({ hostId: absent.hostId, hostKey: absent.noise.publicKey, relayUrl: hostB.relayUrl });
+    const startedAt = performance.now();
+    const refused = await within(
+      hcAdd(core, connectCommand(deviceA, hostB.relayUrl, absent.hostId), "gone"),
+      "hc's add",
+    );
+    expect(performance.now() - startedAt).toBeLessThan(5_000);
+    expect(refused.exit).not.toBe(0);
+    expect(JSON.parse(refused.stderr)).toMatchObject({ error: { kind: "unreachable" } });
+    expect(refused.stderr).toContain("is not connected to the relay");
+    expect((await a.call("machine.list")).machines).toEqual([]);
+  }, 30_000);
+
   test("B's terminals show up on A as boxb/t1, run and attach work from A's client, and its terminal and doc events reach A", async () => {
     const { a, b, coreA: core, machineB: hostB, eventsA: events } = setup();
     const dir = join(hostB.scratch, "work");
