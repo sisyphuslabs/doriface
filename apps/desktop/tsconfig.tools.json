@@ -9,5 +9,5 @@
     "tsBuildInfoFile": "types/tools.tsbuildinfo"
   },
   "include": ["scripts", "test", "e2e", "playwright.config.ts", "package.json"],
-  "references": [{ "path": "." }, { "path": "../host" }]
+  "references": [{ "path": "." }, { "path": "../host" }, { "path": "../../packages/crypto" }]
 }
