@@ -1,14 +1,8 @@
-import { expect, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test } from "./fixtures.ts";
 
 test("font-size and cursor-style apply to an open terminal", async ({ page }) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click();
-  const terminal = page.locator('[data-focused="true"] [data-terminal]');
-  await expect(terminal).toContainText("$", { timeout: 20_000 });
+  const terminal = await openNewTerminal(page);
   const fontSize = () => terminal.evaluate((el) => getComputedStyle(el).getPropertyValue("--term-font-size").trim());
   expect(await fontSize()).toBe("13pt");
 
