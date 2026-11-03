@@ -1,7 +1,7 @@
 import { CloseCode } from "@doriface/crypto";
 import { memoryLinkPair } from "@doriface/crypto/testing";
 import { describe, expect, test } from "bun:test";
-import { MAX_LINE_BYTES, MeshLines } from "./lines.ts";
+import { type LineLink, MAX_LINE_BYTES, MAX_QUEUED_BYTES, MeshLines } from "./lines.ts";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 
@@ -32,4 +32,48 @@ describe("mesh stream lines (section 10.2)", () => {
     expect(await read).toBe("closed");
     expect(receiver.closeCode).toBe(CloseCode.CryptoFailure);
   });
+
+  test("lines nobody reads close the session with 4400 once they pass 4 MiB, before the line bound", async () => {
+    const { sender, receiver, lines } = pair();
+    const big = `{"t":"done","mesh":"${"x".repeat(200 * 1024)}"}\n`;
+    for (let i = 0; i < 30; i++) sender.send(encode(big));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(receiver.closeCode).toBe(CloseCode.CryptoFailure);
+    const held = await drain(lines);
+    expect(held * 200 * 1024).toBeLessThanOrEqual(MAX_QUEUED_BYTES);
+  });
+
+  test("256 KiB without a line feed closes the session with 4400", async () => {
+    const { sender, receiver } = pair();
+    sender.send(encode(`{"t":"done","mesh":"${"x".repeat(MAX_LINE_BYTES)}`));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(receiver.closeCode).toBe(CloseCode.CryptoFailure);
+  });
+
+  test("detach stops listening to the session", () => {
+    const data = new Set<(bytes: Uint8Array) => void>();
+    const closes = new Set<(error: Error | undefined) => void>();
+    const link: LineLink = {
+      send: () => {},
+      onData: (listener) => {
+        data.add(listener);
+        return () => void data.delete(listener);
+      },
+      onClose: (listener) => {
+        closes.add(listener);
+        return () => void closes.delete(listener);
+      },
+      close: () => {},
+    };
+    const lines = new MeshLines(link, ["done"]);
+    expect([data.size, closes.size]).toEqual([1, 1]);
+    lines.detach();
+    expect([data.size, closes.size]).toEqual([0, 0]);
+  });
 });
+
+const drain = (lines: MeshLines, count = 0): Promise<number> =>
+  lines.next().then(
+    () => drain(lines, count + 1),
+    () => count,
+  );

@@ -6,7 +6,17 @@ import {
   hostIdOf,
   PAIRING_TTL_MS,
 } from "@doriface/crypto";
-import { door, hashOf, MAX_RECORDS, meshIdOf, parseRecord, type Signed, signCard, viewOf } from "@doriface/mesh";
+import {
+  door,
+  hashOf,
+  MAX_BODY_BYTES,
+  MAX_RECORDS,
+  meshIdOf,
+  parseRecord,
+  type Signed,
+  signCard,
+  viewOf,
+} from "@doriface/mesh";
 import { cardBody, type MeshStore, type OwnCard } from "../state/mesh.ts";
 import { byDeadline, JoinRefused } from "./invite.ts";
 import type { MeshLine, MeshLines } from "./lines.ts";
@@ -27,13 +37,23 @@ export const JOIN_DEADLINE_MS = PAIRING_TTL_MS + 60_000;
 
 type Offer = Extract<MeshLine, { t: "offer" }>;
 
+/** The most a welcome can carry: every record of a full set at the door's body cap (about 8 MiB). */
+const MAX_WELCOME_BYTES = MAX_RECORDS * MAX_BODY_BYTES;
+const encoder = new TextEncoder();
+const bytesOf = (records: readonly Signed[]): number =>
+  records.reduce(
+    (sum, record) => sum + encoder.encode(record.body).byteLength + encoder.encode(record.sig).byteLength,
+    0,
+  );
+
 /**
  * Reads `records` lines until `done`, then expects nothing more; a `refused` line ends the join with the inviter's
- * reason, and more records than a mesh may hold close the session with 4400.
+ * reason, and more records, or more bytes, than a mesh may hold close the session with 4400.
  */
 async function welcome(
   lines: MeshLines,
   records: Signed[] = [],
+  bytes = 0,
 ): Promise<{ readonly records: readonly Signed[]; readonly mesh: string }> {
   const line = await lines.next();
   if (line.t === "done") {
@@ -43,19 +63,24 @@ async function welcome(
   if (line.t === "refused") throw new JoinRefused(`the inviting member refused: ${line.reason}`);
   if (line.t !== "records") throw new JoinRefused(`unexpected ${line.t} line in the welcome`);
   records.push(...line.records);
-  if (records.length > MAX_RECORDS) {
-    lines.close(CloseCode.CryptoFailure, "the welcome holds more records than a mesh may");
-    throw new JoinRefused("the welcome holds more records than a mesh may");
-  }
-  return welcome(lines, records);
+  const total = bytes + bytesOf(line.records);
+  if (records.length > MAX_RECORDS) return tooLarge(lines, "the welcome holds more records than a mesh may");
+  if (total > MAX_WELCOME_BYTES) return tooLarge(lines, "the welcome is larger than a mesh may be");
+  return welcome(lines, records, total);
+}
+
+function tooLarge(lines: MeshLines, reason: string): never {
+  lines.close(CloseCode.CryptoFailure, reason);
+  throw new JoinRefused(reason);
 }
 
 /**
  * Section 4.4 step 5: every record passes the door in order; exactly one found, whose id is the offered mesh; the
  * dialed member is in the view with the hostId and Noise key this host authenticated; and this host is a member,
- * governed by an admit of that member, with this host's current Noise key. The door already proved that the admit's
- * card is signed by this host's own key, so it is this host's own card: the one just sent, or the one an earlier
- * attempt sent when that attempt's welcome was lost (step 3's idempotent re-join). Trusts nothing else in the welcome.
+ * governed by an admit of a member of the view, with this host's current Noise key. The door already proved that the
+ * admit's card is signed by this host's own key, so it is this host's own card: the one just sent, or the one an
+ * earlier attempt sent when that attempt's welcome was lost (step 3's idempotent re-join, through any member).
+ * Trusts nothing else in the welcome.
  */
 export function checkWelcome(records: readonly Signed[], doneMesh: string, offer: Offer, ctx: JoinerContext): void {
   const stored: Signed[] = [];
@@ -79,7 +104,8 @@ export function checkWelcome(records: readonly Signed[], doneMesh: string, offer
     throw new JoinRefused("the inviting member's key in the mesh is not the key this host dialed");
   }
   const self = base64urlEncode(ctx.identity.sign.publicKey);
-  if (!view.members.has(self) || view.admitter.get(self) !== inviter) {
+  const admitter = view.admitter.get(self);
+  if (!view.members.has(self) || admitter === undefined || !view.members.has(admitter)) {
     throw new JoinRefused("the welcome does not admit this host with its own card");
   }
   if (view.noise.get(self) !== base64urlEncode(ctx.identity.noise.publicKey)) {

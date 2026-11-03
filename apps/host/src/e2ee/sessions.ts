@@ -17,8 +17,11 @@ export class LiveSessions {
     this.#log = log;
   }
 
-  /** Registers a session, then re-checks the stores: a revoke that ran during its handshake still closes it. */
-  add(session: SecureLink): void {
+  /**
+   * Registers a session, then re-checks the stores: a revoke that ran during its handshake still closes it. False when
+   * that re-check closed it.
+   */
+  add(session: SecureLink): boolean {
     const key = base64urlEncode(session.remoteStatic);
     const sessions = this.#byKey.get(key) ?? new Set();
     sessions.add(session);
@@ -27,7 +30,7 @@ export class LiveSessions {
       sessions.delete(session);
       if (sessions.size === 0 && this.#byKey.get(key) === sessions) this.#byKey.delete(key);
     });
-    this.closeRevoked();
+    return !this.#closeRevoked().has(session);
   }
 
   /**
@@ -36,6 +39,11 @@ export class LiveSessions {
    * no session can be shown to be authorized, so every one is closed.
    */
   closeRevoked(): void {
+    this.#closeRevoked();
+  }
+
+  #closeRevoked(): ReadonlySet<SecureLink> {
+    const closed = new Set<SecureLink>();
     let paired: ReadonlySet<string>;
     let index: AuthorizeIndex | undefined;
     try {
@@ -49,7 +57,11 @@ export class LiveSessions {
     for (const [key, sessions] of this.#byKey) {
       const member = index?.member(key) !== undefined;
       if (member || (paired.has(key) && index?.deviceRefusal(key) === undefined)) continue;
-      for (const session of sessions) session.close(REVOKED.code, REVOKED.reason);
+      for (const session of sessions) {
+        closed.add(session);
+        session.close(REVOKED.code, REVOKED.reason);
+      }
     }
+    return closed;
   }
 }
