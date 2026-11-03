@@ -12,26 +12,28 @@ export interface PaletteProps {
   readonly terminals: readonly Terminal[];
   readonly host: string;
   readonly route: string;
+  readonly actions: readonly string[];
   readonly onOpenTerminal: (address: string) => void;
   readonly onClose: () => void;
 }
 
 /** The palette over the dimmed workspace, near the top; Escape or the backdrop closes it. */
-export function Palette({ terminals, host, route, onOpenTerminal, onClose }: PaletteProps) {
+export function Palette({ terminals, host, route, actions, onOpenTerminal, onClose }: PaletteProps) {
   const navigate = useNavigate();
   const overrides = useOverrides();
   const commands = useMemo(() => {
     const platform = currentPlatform();
-    return paletteCommands({ terminals, host, route, platform, keymap: resolveKeymap(platform, overrides) });
-  }, [terminals, host, route, overrides]);
+    return paletteCommands({ terminals, host, route, actions, platform, keymap: resolveKeymap(platform, overrides) });
+  }, [terminals, host, route, actions, overrides]);
   const frame = useRef<HTMLDivElement>(null);
   useEffect(() => frame.current?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus(), []);
   const run = (id: string): void => {
-    onClose();
     const choice = choiceOf(id);
+    // An action nobody took leaves the palette open on its row instead of closing on nothing.
+    if (choice.kind === "action") return void (runAction(choice.id) && onClose());
+    onClose();
     if (choice.kind === "agent") onOpenTerminal(choice.address);
-    else if (choice.kind === "settings") void navigate({ to: "/settings" });
-    else runAction(choice.id);
+    else void navigate({ to: "/settings" });
   };
   return (
     <>
