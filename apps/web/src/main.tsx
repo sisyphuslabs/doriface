@@ -1,4 +1,4 @@
-import { TooltipProvider } from "@doriface/ui";
+import { ToastProvider, ToastViewport, TooltipProvider } from "@doriface/ui";
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -59,9 +59,12 @@ function Keys() {
 createRoot(container).render(
   <StrictMode>
     <TooltipProvider>
-      <TerminalStyle />
-      <Keys />
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <TerminalStyle />
+        <Keys />
+        <RouterProvider router={router} />
+        <ToastViewport />
+      </ToastProvider>
     </TooltipProvider>
   </StrictMode>,
 );
