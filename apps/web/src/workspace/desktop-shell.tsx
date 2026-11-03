@@ -23,6 +23,7 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
   const [sidebar, setSidebar] = useState(true);
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
+  const newTabKeys = useActionKeys("tab.new");
   useAppActions({ terminals, tabs, onNew, onToggleSidebar: () => setSidebar((shown) => !shown) });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
@@ -58,6 +59,7 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
         <TabBar
           tabs={tabList}
           activeId={tabs.active ?? ""}
+          {...(newTabKeys === undefined ? {} : { newTabKeys })}
           onSelect={tabs.select}
           onClose={tabs.close}
           onNew={onNew}
