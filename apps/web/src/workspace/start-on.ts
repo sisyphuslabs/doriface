@@ -13,12 +13,10 @@ export type Started =
 const ADVICE: Readonly<Record<string, (machine: string) => string>> = {
   unavailable: (machine) => `${machine} is not connected`,
   machine_unknown: (machine) => `${machine} is no longer added here`,
-  needs_login: (machine) => `${machine} wants a login: run hc machine login ${machine} in a terminal`,
-  needs_update: (machine) => `${machine} runs an hc too old for this: run hc machine update ${machine}`,
 };
 
 /**
- * Starts a shell on an added machine. hc's refusal (the machine dropped, was removed, wants a login or an update)
+ * Starts a shell on an added machine. hc's refusal (the machine is unavailable or no longer added)
  * comes back as a failure naming the machine; anything else, such as a closed connection, still throws.
  */
 export async function startOn(
