@@ -1,4 +1,5 @@
 import { Badge, Button, IconButton, Input, Notice, SettingRow, TerminalPreview, type TerminalLine } from "@doriface/ui";
+import { asSentence } from "../storage/sentence.ts";
 import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { EMPTY_CONFIG, effective, isDefault, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
@@ -110,7 +111,7 @@ export function TerminalSection() {
       {storageError === null ? null : (
         <Notice tone="error" title="Terminal settings could not be read from this browser's storage">
           Changes are not saved, so the stored terminal settings stay as they are. Reload the page to try again.{" "}
-          {storageError.message}
+          {asSentence(storageError.message)}
         </Notice>
       )}
       <div className="wterm overflow-hidden rounded-lg border border-border" data-terminal-preview>
