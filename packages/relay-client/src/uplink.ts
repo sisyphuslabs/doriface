@@ -177,7 +177,9 @@ export class Uplink {
       return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
     const link = new SessionLink(frame.sessionId, {
       sendFrame: (out) => {
-        if (isOpen(ws)) ws.send(out);
+        if (!isOpen(ws)) return false;
+        ws.send(out);
+        return true;
       },
       release: (sessionId) => this.#sessions.delete(sessionId),
       consumed,
