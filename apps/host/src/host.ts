@@ -28,6 +28,8 @@ export interface HostOptions {
   readonly lanListen?: ListenAddress | undefined;
   /** For tests: messages per direction between rekeys. */
   readonly rekeyInterval?: number | undefined;
+  /** For tests: the direct-path idle close (default 90 s). */
+  readonly directIdleMs?: number | undefined;
   /** Registers typed-code pairing slots with the relay (PAIR_SLOT over the host uplink). */
   readonly pairingSlots?: PairingSlotRegistrar | undefined;
   readonly log: (line: string) => void;
@@ -70,6 +72,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     hostVersion: HOST_VERSION,
     hcVersion,
     log: options.log,
+    directIdleMs: options.directIdleMs,
     openPipe: () => new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log }),
   });
   const server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });

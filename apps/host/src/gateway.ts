@@ -8,7 +8,7 @@ import { acceptE2ee, type E2eeDeps } from "./e2ee/accept.ts";
 import { plaintextLink, WsByteLink } from "./e2ee/links.ts";
 import type { LiveSessions } from "./e2ee/sessions.ts";
 import type { Link } from "./link.ts";
-import { WsLink } from "./ws-link.ts";
+import { DIRECT_IDLE_MS, WsLink } from "./ws-link.ts";
 
 /** A link backed by a child process; `exited` settles once the child is gone. */
 export type ChildLink = Link & { readonly exited: Promise<unknown> };
@@ -21,6 +21,8 @@ export interface GatewayOptions {
   readonly log: (line: string) => void;
   /** Enables `/v1/e2ee`: the Noise record layer in front of the same `hc connect` pipe. */
   readonly e2ee?: (E2eeDeps & { readonly sessions: LiveSessions }) | undefined;
+  /** For tests: the direct-path idle close (default {@link DIRECT_IDLE_MS}). */
+  readonly directIdleMs?: number | undefined;
 }
 
 export interface Gateway {
@@ -97,11 +99,12 @@ export function createGateway(options: GatewayOptions): Gateway {
   const websocket: WebSocketHandler<BunWebSocketData> = {
     perMessageDeflate: false,
     open(ws) {
-      const link = new WsLink(ws);
+      const direct = e2ee !== undefined && e2eeEvents.has(ws.data.events);
+      const link = new WsLink(ws, { keepaliveIdleMs: direct ? (options.directIdleMs ?? DIRECT_IDLE_MS) : undefined });
       links.set(ws.data.events, link);
       sockets.add(link);
       link.onClose(() => sockets.delete(link));
-      if (e2ee !== undefined && e2eeEvents.has(ws.data.events)) {
+      if (direct) {
         openE2ee(link, e2ee).catch((error: unknown) => {
           log(`e2ee session failed: ${String(error)}`);
           link.close(1011, "internal error");
