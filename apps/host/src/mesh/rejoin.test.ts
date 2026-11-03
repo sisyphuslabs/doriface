@@ -1,3 +1,4 @@
+import { generateX25519 } from "@doriface/crypto";
 import { MAX_MESH_MEMBERS, parseRecord, type Signed, signCard } from "@doriface/mesh";
 import { afterEach, describe, expect, test } from "bun:test";
 import { cardBody } from "../state/mesh.ts";
@@ -64,6 +65,30 @@ describe("section 4.4 step 3: a member whose welcome was lost joins again", () =
     expect(await run.joined).toBe(meshId);
     expect(types(a)).toEqual(["found", "admit"]);
     expect(records(b)).toEqual(records(a));
+  });
+
+  test("a joiner admitted with another Noise key while its join waited for approval gets no welcome", async () => {
+    const [a, b] = [side("alpha"), side("beta")];
+    a.mesh.found(a.m.identity, ownOf(a));
+    const meshId = a.mesh.read()?.meshId ?? "";
+    const pending = new PendingJoins();
+    const run = runJoin(inviteDeps(a, pending), joinerContext(b, a), b.m.identity.noise.publicKey);
+    const asked = await pending.next();
+    const otherKey = Buffer.from(generateX25519().publicKey).toString("base64url");
+    const body = { ...cardBody(b.m.identity, ownOf(b), meshId, signPubOf(a.m)), noisePub: otherKey };
+    const card = signCard(body, b.m.identity.sign.secretKey);
+    a.mesh.sign(a.m.identity, (n, prev) => ({
+      v: 2,
+      mesh: meshId,
+      type: "admit",
+      by: signPubOf(a.m),
+      n,
+      prev,
+      subject: { card },
+    }));
+    pending.decide(asked.nonce, true);
+    expect(await failure(run.invited)).toContain("this host is a member with another Noise key");
+    expect(b.mesh.read()).toBeUndefined();
   });
 
   test("a mesh that filled up while a join waited for approval refuses it and writes no admit", async () => {
