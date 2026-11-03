@@ -1,7 +1,9 @@
 /**
  * Roving focus over the sidebar lists: every `section` is one list and one Tab stop. A row is a button that is a
  * direct child of the section, or the first button of a direct child (a machine row); the other buttons of that child
- * are the row's actions, reached with the arrow keys instead of Tab.
+ * are the row's actions, reached with ArrowRight instead of Tab. A row that is disabled (a machine with nothing to
+ * open) is still a stop, so its actions stay reachable; it stays focusable through aria-disabled instead of disabled.
+ * ArrowUp, ArrowDown, Home and End move inside the focused list; Tab moves to the next list.
  */
 const STOP = "data-roving-stop";
 
@@ -23,17 +25,14 @@ function actionsOf(row: HTMLButtonElement): HTMLButtonElement[] {
   return [...parent.querySelectorAll("button")].filter((button) => button !== row);
 }
 
-const usable = (rows: readonly HTMLButtonElement[]): HTMLButtonElement[] => rows.filter((row) => !row.disabled);
-
 /** Keeps one row per list in the Tab order: the last one focused, else the selected one, else the first. */
 export function syncStops(root: Element): void {
   for (const section of root.querySelectorAll("section")) {
     const rows = rowsOf(section);
-    const enabled = usable(rows);
     const stop =
-      enabled.find((row) => row.hasAttribute(STOP)) ??
-      enabled.find((row) => row.getAttribute("aria-current") === "true") ??
-      enabled[0];
+      rows.find((row) => row.hasAttribute(STOP)) ??
+      rows.find((row) => row.getAttribute("aria-current") === "true") ??
+      rows[0];
     for (const row of rows) {
       row.tabIndex = row === stop ? 0 : -1;
       row.toggleAttribute(STOP, row === stop);
@@ -52,11 +51,6 @@ export function rememberStop(target: EventTarget | null): void {
   }
 }
 
-function neighbourRow(root: Element, row: HTMLButtonElement, step: 1 | -1): HTMLButtonElement | undefined {
-  const all = [...root.querySelectorAll("section")].flatMap((section) => usable(rowsOf(section)));
-  return all[all.indexOf(row) + step];
-}
-
 function ownRow(target: HTMLButtonElement): HTMLButtonElement | undefined {
   const first = target.parentElement?.firstElementChild;
   return isButton(first) && first !== target && actionsOf(first).includes(target) ? first : undefined;
@@ -69,13 +63,14 @@ export function rovingTarget(root: Element, target: EventTarget | null, key: str
   if (section === null || !root.contains(section)) return undefined;
   const owner = ownRow(target);
   if (owner !== undefined) return key === "ArrowLeft" ? owner : undefined;
-  const rows = usable(rowsOf(section));
-  if (!rows.includes(target)) return undefined;
+  const rows = rowsOf(section);
+  const index = rows.indexOf(target);
+  if (index === -1) return undefined;
   switch (key) {
     case "ArrowDown":
-      return neighbourRow(root, target, 1);
+      return rows[index + 1];
     case "ArrowUp":
-      return neighbourRow(root, target, -1);
+      return rows[index - 1];
     case "Home":
       return rows[0];
     case "End":
