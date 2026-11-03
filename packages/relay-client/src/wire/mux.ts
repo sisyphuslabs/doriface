@@ -59,7 +59,9 @@ export function decodeMux(bytes: Uint8Array): MuxFrame {
       if (rest !== 0) throw new MuxError(`OPEN carries ${rest} payload bytes`);
       return { type, sessionId };
     case MuxType.Data:
+      return { type, sessionId, payload: bytes.subarray(MUX_HEADER_BYTES) };
     case MuxType.PairSlot:
+      if (sessionId !== 0) throw new MuxError(`PAIR_SLOT is a control frame on sessionId 0, got ${sessionId}`);
       return { type, sessionId, payload: bytes.subarray(MUX_HEADER_BYTES) };
     case MuxType.Close:
       if (rest !== 2) throw new MuxError(`CLOSE payload must be 2 bytes, got ${rest}`);

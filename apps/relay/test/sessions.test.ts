@@ -134,9 +134,12 @@ describe("client sessions through the relay", () => {
 
   test("connections over the per-IP rate are refused with 4429", async () => {
     const ip = testIp();
-    const codes = await inOrder(times(61), async () => (await new Probe(clientUrl("b".repeat(26)), ip).closed).code);
+    const codes = await inOrder(
+      times(61),
+      async () => (await new Probe(clientUrl(`${"b".repeat(25)}a`), ip).closed).code,
+    );
     expect(codes.slice(0, 60)).toEqual(Array.from({ length: 60 }, () => CloseCode.HostOffline));
     expect(codes[60]).toBe(CloseCode.RateLimited);
-    expect((await new Probe(clientUrl("b".repeat(26)), testIp()).closed).code).toBe(CloseCode.HostOffline);
+    expect((await new Probe(clientUrl(`${"b".repeat(25)}a`), testIp()).closed).code).toBe(CloseCode.HostOffline);
   });
 });
