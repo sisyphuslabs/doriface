@@ -28,10 +28,11 @@ function zoom(delta: number | null): void {
   void terminalConfigStore.update((current) => zoomedConfig(current, delta));
 }
 
-function neighbour(list: readonly string[], current: string | null, step: 1 | -1): string | null {
+export function neighbour(list: readonly string[], current: string | null, step: 1 | -1): string | null {
   if (list.length === 0) return null;
   const index = current === null ? -1 : list.indexOf(current);
-  return list[(index + step + list.length) % list.length] ?? null;
+  const target = list[(index + step + list.length) % list.length] ?? null;
+  return target === current ? null : target;
 }
 
 export function useAppActions({ terminals, tabs, onNew, onToggleSidebar }: AppActionTargets): void {
@@ -39,7 +40,8 @@ export function useAppActions({ terminals, tabs, onNew, onToggleSidebar }: AppAc
   useActionHandler("app", (action) => {
     const live = terminals.filter((terminal) => terminal.state === "live").map((terminal) => terminal.address);
     const select = (address: string | null): boolean => {
-      if (address === null) return false;
+      // Nothing to do leaves the key to the terminal (alt+up in a shell with one tab open).
+      if (address === null || address === tabs.active) return false;
       tabs.select(address);
       return true;
     };
