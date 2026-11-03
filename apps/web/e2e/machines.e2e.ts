@@ -20,16 +20,14 @@ test.describe("machines added with hc machine add", () => {
     await expect(machineRow(page).getByText(MACHINE_NAME, { exact: true })).toHaveCSS("opacity", "0.45");
   });
 
-  test("a machine that goes offline with the page open reads unreachable and offers no new terminal", async ({
-    page,
-  }) => {
+  test("a machine that goes offline with the page open reads offline and offers no new terminal", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/");
     await expect(machineRow(page)).toContainText("connected", { timeout: 20_000 });
     try {
       switchTo("off");
-      await expect(machineRow(page)).toContainText("unreachable", { timeout: STATE_BOUND_MS });
+      await expect(machineRow(page)).toContainText("offline", { timeout: STATE_BOUND_MS });
       await expect(newOn(page)).toBeDisabled();
       expect(errors).toEqual([]);
     } finally {

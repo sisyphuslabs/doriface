@@ -13,7 +13,8 @@ export interface MachineEntry {
   readonly first: string | undefined;
 }
 
-const LABELS: Readonly<Record<string, string>> = { needs_login: "needs login" };
+/** hc's states in the sidebar's words; "offline" is what Settings > Machines and an offline pane say. */
+const LABELS: Readonly<Record<string, string>> = { needs_login: "needs login", unreachable: "offline" };
 
 export const stateLabel = (state: string): string => LABELS[state] ?? state;
 
