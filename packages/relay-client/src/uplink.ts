@@ -95,10 +95,12 @@ export class Uplink {
     });
   }
 
-  /** Releases the slot this host registered last (an empty PAIR_SLOT), e.g. once pairing succeeded or expired. */
-  clearPairSlot(): Promise<void> {
+  /**
+   * Releases the host's registered slot (an empty PAIR_SLOT), e.g. once pairing succeeded or expired. The relay keeps
+   * the slot per host, so this works across reconnects; a new process passes `slot` from its own pairing state.
+   */
+  clearPairSlot(slot: string | undefined = this.#pairSlot): Promise<void> {
     return this.#onePairSlotRequest(async () => {
-      const slot = this.#pairSlot;
       if (slot === undefined) return;
       await this.#pairSlotRequest(slot, encodePairSlotClear());
       this.#pairSlot = undefined;
@@ -210,7 +212,6 @@ export class Uplink {
   #lost(ws: WebSocket, code: number): void {
     if (ws !== this.#socket) return;
     this.#socket = undefined;
-    this.#pairSlot = undefined;
     this.#pairSlots.failAll(`the uplink closed with ${code} before the relay answered`);
     if (FINAL_CODES.has(code)) return this.#finish(code);
     const stable = this.#answeredAt !== undefined && Date.now() - this.#answeredAt >= STABLE_MS;
