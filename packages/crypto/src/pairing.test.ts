@@ -58,8 +58,8 @@ describe("PairingGuard", () => {
     const guard = new PairingGuard(createPairingOffer(0));
     expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
     expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
-    expect(guard.use()).toBe(true);
-    expect(guard.use()).toBe(false);
+    expect(guard.use(1)).toBe(true);
+    expect(guard.use(1)).toBe(false);
     expect([guard.state, guard.claim(1)]).toEqual(["used", undefined]);
   });
 
@@ -67,6 +67,13 @@ describe("PairingGuard", () => {
     const guard = new PairingGuard(createPairingOffer(0));
     for (let attempt = 0; attempt < 20; attempt++) expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
     expect(guard.state).toBe("open");
+  });
+
+  test("a handshake that completes after expiry does not use the code", () => {
+    const guard = new PairingGuard(createPairingOffer(0));
+    expect(guard.claim(1)).toBeDefined();
+    expect(guard.use(PAIRING_TTL_MS)).toBe(false);
+    expect(guard.state).toBe("expired");
   });
 
   test("never yields after expiry, even if the clock later goes back", () => {

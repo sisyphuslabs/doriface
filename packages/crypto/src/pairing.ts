@@ -75,15 +75,23 @@ export class PairingGuard {
   }
 
   claim(now = Date.now()): Uint8Array | undefined {
-    if (this.#state === "open" && now >= this.offer.expiresAt) this.#state = "expired";
+    this.#expireAt(now);
     return this.#state === "open" ? pairingPsk(this.offer.code) : undefined;
   }
 
-  /** A handshake with this code completed; true only for the first, which uses the code up. */
-  use(): boolean {
+  /**
+   * A handshake with this code completed; true only for the first, which uses the code up, and only before expiry: a
+   * handshake that started in time but finishes late does not pair.
+   */
+  use(now = Date.now()): boolean {
+    this.#expireAt(now);
     if (this.#state !== "open") return false;
     this.#state = "used";
     return true;
+  }
+
+  #expireAt(now: number): void {
+    if (this.#state === "open" && now >= this.offer.expiresAt) this.#state = "expired";
   }
 }
 
