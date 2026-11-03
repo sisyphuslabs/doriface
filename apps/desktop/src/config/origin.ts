@@ -14,10 +14,16 @@ export function loopbackDevUrl(candidate: string): string {
 }
 
 /**
- * Compares scheme and host instead of `URL.origin`, which is the string "null" for custom schemes such as app:.
+ * Compares scheme and host instead of `URL.origin`, which is the string "null" for custom schemes such as app:. Hosts of
+ * such schemes keep their case when parsed, so they are compared case-insensitively.
  */
 export function isSameOrigin(candidate: string, origin: string): boolean {
   const url = URL.parse(candidate);
   const expected = URL.parse(origin);
-  return url !== null && expected !== null && url.protocol === expected.protocol && url.host === expected.host;
+  return (
+    url !== null &&
+    expected !== null &&
+    url.protocol === expected.protocol &&
+    url.host.toLowerCase() === expected.host.toLowerCase()
+  );
 }

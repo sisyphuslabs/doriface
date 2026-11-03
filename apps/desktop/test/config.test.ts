@@ -81,6 +81,7 @@ describe("content security policy", () => {
 describe("origin, external links and permissions", () => {
   test("the app origin matches by scheme and host", () => {
     expect(isSameOrigin("app://doriface/index.html", APP_ORIGIN)).toBe(true);
+    expect(isSameOrigin("app://DoriFace/index.html", APP_ORIGIN)).toBe(true);
     expect(isSameOrigin("app://evil/index.html", APP_ORIGIN)).toBe(false);
     expect(isSameOrigin("https://doriface/", APP_ORIGIN)).toBe(false);
     expect(isSameOrigin("not a url", APP_ORIGIN)).toBe(false);
