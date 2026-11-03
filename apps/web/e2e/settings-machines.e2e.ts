@@ -15,7 +15,12 @@ test.describe("Settings, Machines", () => {
     });
     const added = list.getByRole("listitem").filter({ hasText: MACHINE_NAME });
     await expect(added).toContainText("Connected", { timeout: STATE_BOUND_MS });
-    await expect(page.getByText("hc machine add")).toBeVisible();
+    await page.getByRole("button", { name: "Add a machine" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add a machine" });
+    await expect(dialog).toContainText("doriface-host pair");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText(/ssh target/)).toHaveCount(0);
     try {
       switchTo("drop");
       await expect(added).toContainText("Offline", { timeout: STATE_BOUND_MS });
