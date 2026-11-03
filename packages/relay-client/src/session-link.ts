@@ -12,7 +12,8 @@ import { CloseCode, encodeClose, encodeData, MUX_HEADER_BYTES } from "./wire/ind
 
 /** What a session needs from the uplink socket it is multiplexed over. */
 export interface SessionTransport {
-  sendFrame(frame: Uint8Array<ArrayBuffer>): void;
+  /** False when the uplink socket can no longer carry the frame. */
+  sendFrame(frame: Uint8Array<ArrayBuffer>): boolean;
   release(sessionId: number): void;
   /** A DATA frame of this many bytes was consumed or dropped, so the uplink may ack it. */
   consumed(frameBytes: number): void;
@@ -39,7 +40,9 @@ export class SessionLink implements ByteLink {
     if (bytes.byteLength > MAX_SESSION_SEND_BYTES) {
       throw new RangeError(`${bytes.byteLength} bytes exceed the relay's ${MAX_SESSION_SEND_BYTES}-byte message cap`);
     }
-    this.#transport.sendFrame(encodeData(this.sessionId, bytes));
+    if (!this.#transport.sendFrame(encodeData(this.sessionId, bytes))) {
+      throw new LinkClosedError(`the uplink carrying session ${this.sessionId} is closed`);
+    }
   }
 
   onData(listener: DataListener): Unsubscribe {
