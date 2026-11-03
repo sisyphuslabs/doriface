@@ -91,17 +91,24 @@ async function snapshot(parent: string): Promise<string> {
   });
 }
 
-async function fetchFrom(parent: string, extra: Readonly<Record<string, string>> = {}): Promise<number> {
+async function fetchFrom(
+  parent: string,
+  extra: Readonly<Record<string, string>> = {},
+): Promise<{ readonly code: number; readonly stderr: string }> {
   const env: Record<string, string | undefined> = { ...gitEnv, ...extra, DORIFACE_RELAY_REPO: `file://${standIn}` };
   delete env["DORIFACE_RELAY_DIR"];
   const proc = Bun.spawn([process.execPath, join(parent, "tests", "relay", "private-relay.ts"), "fetch"], {
     cwd: parent,
     env,
     stdout: "ignore",
-    stderr: "ignore",
+    stderr: "pipe",
   });
-  return proc.exited;
+  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
+  return { code, stderr };
 }
+
+// The script's own refusal, as opposed to a crash or a git error that also exits non-zero.
+const REFUSAL = "is not a git checkout of its own";
 
 interface Variant {
   readonly name: string;
@@ -184,6 +191,15 @@ const variants: readonly Variant[] = [
     },
   },
   {
+    name: "a symlink loop inside .relay/.git",
+    outcome: "refused",
+    arrange: async (p) => {
+      await emptyRepo(p);
+      symlinkSync("..", join(relay(p), ".git", "objects", "loop"));
+      return {};
+    },
+  },
+  {
     name: "core.worktree in .relay/.git/config naming the parent",
     outcome: "fetched",
     arrange: async (p) => {
@@ -234,11 +250,11 @@ describe("relay:fetch never acts on the repository around .relay", () => {
       const caller = await variant.arrange(parent);
       const before = await snapshot(parent);
 
-      const code = await fetchFrom(parent, caller);
+      const { code, stderr } = await fetchFrom(parent, caller);
 
       expect(await snapshot(parent)).toBe(before);
       if (variant.outcome === "refused") {
-        expect(code).not.toBe(0);
+        expect({ code, refused: stderr.includes(REFUSAL) }).toEqual({ code: 1, refused: true });
       } else {
         expect(code).toBe(0);
         expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
@@ -262,7 +278,7 @@ test(
       GIT_CONFIG_VALUE_0: "false",
     };
 
-    expect(await fetchFrom(parent, credentials)).toBe(0);
+    expect((await fetchFrom(parent, credentials)).code).toBe(0);
 
     expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
     expect(readFileSync(join(relay(parent), "install-saw.txt"), "utf8")).toBe("0");
