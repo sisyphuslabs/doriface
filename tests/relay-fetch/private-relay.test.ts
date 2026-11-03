@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkoutVariants, relay } from "./checkout-variants.ts";
@@ -56,7 +65,7 @@ async function publicCheckout(name: string): Promise<string> {
   mkdirSync(join(parent, "tests", "relay"), { recursive: true });
   await git(parent, "init", "--quiet");
   copyFileSync(SCRIPT, join(parent, "tests", "relay", "private-relay.ts"));
-  writeFileSync(join(parent, "relay-pin.json"), JSON.stringify({ repository: "example/relay", rev: standInRev }));
+  writeFileSync(join(parent, "relay-pin.json"), JSON.stringify({ rev: standInRev }));
   writeFileSync(join(parent, "work.txt"), "committed\n");
   writeFileSync(join(parent, "staged.txt"), "committed\n");
   await git(parent, "add", ".");
@@ -83,8 +92,15 @@ async function snapshot(parent: string): Promise<string> {
   });
 }
 
-async function fetchFrom(parent: string, extra: Readonly<Record<string, string>> = {}): Promise<number> {
-  const env: Record<string, string | undefined> = { ...gitEnv, ...extra, DORIFACE_RELAY_REPO: `file://${standIn}` };
+async function fetchFrom(
+  parent: string,
+  extra: Readonly<Record<string, string>> = {},
+  source: string | null = `file://${standIn}`,
+): Promise<number> {
+  const env: Record<string, string | undefined> = { ...gitEnv, ...extra };
+  if (source === null) delete env["DORIFACE_RELAY_REPO"];
+  else env["DORIFACE_RELAY_REPO"] = source;
+  delete env["RELAY_REPO"];
   delete env["DORIFACE_RELAY_DIR"];
   const proc = Bun.spawn([process.execPath, join(parent, "tests", "relay", "private-relay.ts"), "fetch"], {
     cwd: parent,
@@ -121,6 +137,20 @@ describe("relay:fetch never acts on the repository around .relay", () => {
     ROW_TIMEOUT_MS,
   );
 });
+
+test(
+  "with no relay repository configured, the fetch stops before it creates .relay",
+  async () => {
+    const parent = await publicCheckout("unset");
+    const before = await snapshot(parent);
+
+    expect(await fetchFrom(parent, {}, null)).toBe(1);
+
+    expect(existsSync(relay(parent))).toBe(false);
+    expect(await snapshot(parent)).toBe(before);
+  },
+  ROW_TIMEOUT_MS,
+);
 
 test(
   "a fresh fetch checks out the pin, and the relay's install sees none of the fetch credentials",
