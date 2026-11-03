@@ -49,6 +49,7 @@ test("the fetch suite leaves the repository that runs it alone, even with git's 
     proc.exited,
   ]);
 
-  expect({ code, failed: /\n\s*[1-9]\d* fail\n/.test(report) }).toEqual({ code: 0, failed: false });
+  const failed = report.split("\n").filter((line) => line.startsWith("(fail)"));
+  expect({ code, failed }).toEqual({ code: 0, failed: [] });
   expect(await state()).toBe(before);
 }, 180_000);

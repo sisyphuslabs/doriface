@@ -18,6 +18,8 @@ import { isolatedGitEnv } from "./git-env.ts";
 const SCRIPT = join(import.meta.dir, "..", "relay", "private-relay.ts");
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "relay-fetch-")));
 const SECRET_NAMES = ["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"];
+// Each row spawns bun, git and an install; on a loaded host one took 4.9 s, so the 5 s default passes by luck.
+const ROW_TIMEOUT_MS = 60_000;
 const gitEnv = isolatedGitEnv(scratch);
 
 async function git(cwd: string, ...args: string[]): Promise<string> {
@@ -215,38 +217,46 @@ const variants: readonly Variant[] = [
 ];
 
 describe("relay:fetch never acts on the repository around .relay", () => {
-  test.each(variants.map((v) => [v.name, v] as const))("%s", async (_name, variant) => {
-    const parent = await publicCheckout(variant.name.replaceAll(/\W+/g, "-"));
-    const caller = await variant.arrange(parent);
+  test.each(variants.map((v) => [v.name, v] as const))(
+    "%s",
+    async (_name, variant) => {
+      const parent = await publicCheckout(variant.name.replaceAll(/\W+/g, "-"));
+      const caller = await variant.arrange(parent);
+      const before = await snapshot(parent);
+
+      const code = await fetchFrom(parent, caller);
+
+      expect(await snapshot(parent)).toBe(before);
+      if (variant.outcome === "refused") {
+        expect(code).not.toBe(0);
+      } else {
+        expect(code).toBe(0);
+        expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
+      }
+    },
+    ROW_TIMEOUT_MS,
+  );
+});
+
+test(
+  "a fresh fetch checks out the pin, and the relay's install sees none of the fetch credentials",
+  async () => {
+    const parent = await publicCheckout("fresh");
     const before = await snapshot(parent);
+    const credentials = {
+      RELAY_READ_TOKEN: "synthetic-not-a-token",
+      GH_TOKEN: "synthetic-not-a-token",
+      GITHUB_TOKEN: "synthetic-not-a-token",
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "core.quotePath",
+      GIT_CONFIG_VALUE_0: "false",
+    };
 
-    const code = await fetchFrom(parent, caller);
+    expect(await fetchFrom(parent, credentials)).toBe(0);
 
+    expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
+    expect(readFileSync(join(relay(parent), "install-saw.txt"), "utf8")).toBe("0");
     expect(await snapshot(parent)).toBe(before);
-    if (variant.outcome === "refused") {
-      expect(code).not.toBe(0);
-    } else {
-      expect(code).toBe(0);
-      expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
-    }
-  });
-});
-
-test("a fresh fetch checks out the pin, and the relay's install sees none of the fetch credentials", async () => {
-  const parent = await publicCheckout("fresh");
-  const before = await snapshot(parent);
-  const credentials = {
-    RELAY_READ_TOKEN: "synthetic-not-a-token",
-    GH_TOKEN: "synthetic-not-a-token",
-    GITHUB_TOKEN: "synthetic-not-a-token",
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "core.quotePath",
-    GIT_CONFIG_VALUE_0: "false",
-  };
-
-  expect(await fetchFrom(parent, credentials)).toBe(0);
-
-  expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
-  expect(readFileSync(join(relay(parent), "install-saw.txt"), "utf8")).toBe("0");
-  expect(await snapshot(parent)).toBe(before);
-});
+  },
+  ROW_TIMEOUT_MS,
+);
