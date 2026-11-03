@@ -9,7 +9,8 @@ import { router } from "./router.tsx";
 
 applyAppearance(appearanceStore.value);
 connectionStore.start();
-registerSW({ immediate: true });
+// The desktop shell serves the app from its own app: scheme; an offline cache there only reloads the window.
+if (location.protocol === "https:" || location.protocol === "http:") registerSW({ immediate: true });
 if (import.meta.env.DEV) void import("./dev-tools.ts");
 
 const container = document.getElementById("root");
