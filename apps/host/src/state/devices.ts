@@ -13,9 +13,11 @@ export interface PairedDevice {
   readonly pairedAt: string;
 }
 
+const fullFingerprintOf = (device: PairedDevice): string =>
+  fingerprintOf(base64urlDecode(device.clientStaticPub)).replaceAll(" ", "");
+
 /** A short handle for a device: the first two groups of its key's fingerprint, e.g. `3FA94C0E`. */
-export const deviceIdOf = (device: PairedDevice): string =>
-  fingerprintOf(base64urlDecode(device.clientStaticPub)).replaceAll(" ", "").slice(0, 8);
+export const deviceIdOf = (device: PairedDevice): string => fullFingerprintOf(device).slice(0, 8);
 
 /**
  * The paired-devices file (0600 JSON). Every read goes to disk, so a `doriface-host devices revoke` run by another
@@ -63,12 +65,20 @@ export class DeviceStore {
     });
   }
 
-  /** Removes the devices whose id (or full base64url key) is `handle`; returns what was removed. */
+  /**
+   * Removes the device whose short id, full fingerprint or base64url key is `handle`; returns what was removed. A short
+   * id shared by several devices is refused rather than revoking all of them.
+   */
   revoke(handle: string): readonly PairedDevice[] {
     const id = handle.replaceAll(" ", "").toUpperCase();
     return this.#locked(() => {
       const devices = this.list();
-      const removed = devices.filter((device) => deviceIdOf(device) === id || device.clientStaticPub === handle);
+      const removed = devices.filter(
+        (device) => device.clientStaticPub === handle || fullFingerprintOf(device) === id || deviceIdOf(device) === id,
+      );
+      if (removed.length > 1) {
+        throw new Error(`${handle} matches ${removed.length} devices; revoke one by its full fingerprint`);
+      }
       if (removed.length > 0) this.#save(devices.filter((device) => !removed.includes(device)));
       return removed;
     });

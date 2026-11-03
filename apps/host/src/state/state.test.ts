@@ -1,11 +1,11 @@
-import { generateX25519, type SecureLink } from "@doriface/crypto";
+import { base64urlEncode, fingerprintOf, generateX25519, type SecureLink } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { admitPairing } from "../e2ee/accept.ts";
 import { LiveSessions } from "../e2ee/sessions.ts";
-import { DeviceStore } from "./devices.ts";
+import { deviceIdOf, DeviceStore } from "./devices.ts";
 import { PairingStore } from "./pairing.ts";
 
 let dir: string;
@@ -123,6 +123,34 @@ describe("pairing consumption", () => {
     const replacement = new PairingStore(dir).offer();
     expect(admitPairing(claim, new DeviceStore(dir), generateX25519().publicKey, "a")).toEqual({ ok: true });
     expect(pairing.read()?.code).toBe(replacement.code);
+  });
+});
+
+/** Two keys whose short ids collide: a birthday search over the 32-bit id space (about 2^16 draws). */
+function collidingKeys(): readonly [Uint8Array, Uint8Array] {
+  const seen = new Map<string, Uint8Array>();
+  for (let draw = 0; draw < 2_000_000; draw++) {
+    const key = crypto.getRandomValues(new Uint8Array(32));
+    const id = deviceIdOf({ clientStaticPub: base64urlEncode(key), name: "", pairedAt: "" });
+    const earlier = seen.get(id);
+    if (earlier !== undefined) return [earlier, key];
+    seen.set(id, key);
+  }
+  throw new Error("no short-id collision in 2,000,000 draws");
+}
+
+describe("devices revoke", () => {
+  test("a short id shared by two devices is refused; the full fingerprint revokes just one", () => {
+    const devices = new DeviceStore(dir);
+    const [a, b] = collidingKeys();
+    devices.add(a, "a");
+    devices.add(b, "b");
+    const [first] = devices.list();
+    if (first === undefined) throw new Error("no device");
+    expect(() => devices.revoke(deviceIdOf(first))).toThrow("matches 2 devices");
+    expect(devices.list()).toHaveLength(2);
+    expect(devices.revoke(fingerprintOf(a)).map((device) => device.name)).toEqual(["a"]);
+    expect(devices.list().map((device) => device.name)).toEqual(["b"]);
   });
 });
 
