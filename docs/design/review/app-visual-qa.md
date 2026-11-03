@@ -59,4 +59,4 @@ Cells that name a defect were FAIL before the fix and PASS on the recaptured ima
 
 ## Completion gate
 
-Reviewed by the implementing session on a complete fresh set (88/88 viewed, round 3 of captures). No independent reviewer subagent was dispatched in this pass.
+Round 1: implementing session, 88/88 viewed. Round 2: independent code review of #29 at d77d9b9 returned FIX_FIRST (D9 HIGH; hard-coded hints, untested binding, capture shots without content waits, a test that checked only id parsing); all fixed with tests that failed first. Capture shots now wait for each screen's content; all 88 recaptured, palette and workspace re-viewed.
