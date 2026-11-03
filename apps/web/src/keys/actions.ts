@@ -60,6 +60,43 @@ const SEND_LABEL: Readonly<Record<string, string>> = {
   "\u001bf": "Send Esc f (word right)",
 };
 
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true });
+const hex = (byte: number): string => `\\x${byte.toString(16).padStart(2, "0")}`;
+
+/** The length a UTF-8 lead byte announces, or 0 when it cannot start a sequence. */
+function sequenceLength(lead: number): number {
+  if (lead < 0x80) return 1;
+  if (lead >= 0xc2 && lead <= 0xdf) return 2;
+  if (lead >= 0xe0 && lead <= 0xef) return 3;
+  return lead >= 0xf0 && lead <= 0xf4 ? 4 : 0;
+}
+
+/** A byte payload for display: valid UTF-8 as text, every other byte and ASCII controls as \xNN. */
+export function displayBytes(bytes: Uint8Array): string {
+  let out = "";
+  let index = 0;
+  while (index < bytes.length) {
+    const lead = bytes[index] ?? 0;
+    const length = sequenceLength(lead);
+    let text: string | null = null;
+    if (length > 0 && index + length <= bytes.length) {
+      try {
+        text = strictUtf8.decode(bytes.subarray(index, index + length));
+      } catch {
+        text = null;
+      }
+    }
+    if (text === null || lead < 0x20 || lead === 0x7f) {
+      out += hex(lead);
+      index += 1;
+    } else {
+      out += text;
+      index += length;
+    }
+  }
+  return out;
+}
+
 /** The action for an id, including `send:<text>` which is any text written to the terminal. */
 export function actionFor(id: string): ActionDef | null {
   const known = ACTION_BY_ID.get(id);
@@ -69,7 +106,7 @@ export function actionFor(id: string): ActionDef | null {
   return {
     id,
     scope: "terminal",
-    label: SEND_LABEL[text] ?? `Send ${JSON.stringify(text)}`,
+    label: SEND_LABEL[text] ?? `Send "${displayBytes(sendBytes(id))}"`,
     ghostty: `text:${escapeGhostty(text)}`,
   };
 }
