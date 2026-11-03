@@ -19,23 +19,31 @@ const launchEnv = (): Record<string, string> =>
   Object.fromEntries(
     Object.entries({ ...process.env, ...hc.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
-let app: ElectronApplication;
-let page: Page;
+let launched: ElectronApplication | undefined;
 
 test.beforeAll(async () => {
-  app = await electron.launch({
+  launched = await electron.launch({
     ...(executablePath === undefined ? { args: [appDir] } : { executablePath, args: [] }),
     env: launchEnv(),
   });
-  page = await app.firstWindow();
 });
 
 test.afterAll(async () => {
-  await app.close();
-  await hc.dispose();
+  try {
+    await launched?.close();
+  } finally {
+    await hc.dispose();
+  }
 });
 
+const running = (): ElectronApplication => {
+  if (launched === undefined) throw new Error("the app did not launch");
+  return launched;
+};
+
 test("the window opens locked down and reaches a local host", async () => {
+  const app = running();
+  const page: Page = await app.firstWindow();
   await page.waitForSelector('#root[data-bridge="ready"]');
   expect(page.url()).toBe("app://doriface/");
 

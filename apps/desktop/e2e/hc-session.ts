@@ -18,12 +18,20 @@ export function scratchHcSession(): { readonly env: Record<string, string>; disp
   };
   const dispose = async (): Promise<void> => {
     const control = spawn(hc, ["connect", "--session", name], { env: { ...process.env, ...env } });
-    const replied = new Promise<void>((resolve) => control.stdout.once("data", () => resolve()));
-    control.stdin.write('{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n');
-    await replied;
-    control.stdin.end();
-    await new Promise<void>((resolve) => control.once("exit", () => resolve()));
-    rmSync(dir, { recursive: true, force: true });
+    const exited = new Promise<void>((resolve) => control.once("exit", () => resolve()));
+    const replied = new Promise<void>((resolve, reject) => {
+      control.stdout.once("data", () => resolve());
+      control.once("error", reject);
+      exited.then(() => reject(new Error("hc connect exited before answering server.stop")), reject);
+    });
+    try {
+      control.stdin.write('{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n');
+      await replied;
+      control.stdin.end();
+      await exited;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   };
   return { env, dispose };
 }
