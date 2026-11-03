@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { memoryStore } from "../storage/idb.ts";
+import { decodeZigString, sendBytes } from "./actions.ts";
 import { KEYMAP_VERSION, KeymapStore } from "./keymap-store.ts";
 import {
   checkBinding,
@@ -112,8 +113,19 @@ describe("keybind import and export", () => {
     expect(parsed.lines.map((line) => line.status)).toEqual(["applies", "applies", "applies", "invalid"]);
     expect(parsed.overrides.get("shift+enter")).toBe("send:\u001b\r");
     expect(parsed.overrides.get("super+j")).toBe("send:\n");
-    expect(parsed.overrides.get("super+k")).toBe("send:a\tb\\c\u{1F600}");
+    expect(sendBytes(parsed.overrides.get("super+k") ?? "")).toEqual(
+      new Uint8Array([0x61, 0x09, 0x62, 0x5c, 0x63, ...new TextEncoder().encode("\u{1F600}")]),
+    );
     expect(parsed.overrides.has("super+l")).toBe(false);
+  });
+
+  test("text: follows Zig for surrogates, leading zeros and raw bytes", () => {
+    expect(decodeZigString("\\u{D800}")).toBeNull();
+    expect(decodeZigString("\\u{DFFF}")).toBeNull();
+    expect(decodeZigString("\\u{0000041}")).toBe("A");
+    expect(decodeZigString("\\u{110000}")).toBeNull();
+    expect(sendBytes(`send:${decodeZigString("\\x80\\xffé") ?? ""}`)).toEqual(new Uint8Array([0x80, 0xff, 0xc3, 0xa9]));
+    expect(sendBytes("send:\u001bb")).toEqual(new Uint8Array([0x1b, 0x62]));
   });
 
   test("a parameter doriface does not have is unknown, not another action", () => {

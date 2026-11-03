@@ -1,12 +1,13 @@
 import type { TerminalStream } from "@doriface/client";
 import type { WTerm } from "@wterm/react";
 import type { RefObject } from "react";
+import { sendBytes } from "../keys/actions.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 
 export function useTerminalActions(wt: WTerm | null, stream: RefObject<TerminalStream | null>, focused: boolean): void {
   useActionHandler("terminal", (action) => {
     if (wt === null || !focused) return false;
-    if (action.startsWith("send:")) return (stream.current?.write(action.slice(5)), true);
+    if (action.startsWith("send:")) return (stream.current?.write(sendBytes(action)), true);
     const view = wt.element;
     switch (action) {
       case "terminal.copy": {
