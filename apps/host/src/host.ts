@@ -17,6 +17,9 @@ import { MeshStore } from "./state/mesh.ts";
 import { HostMesh } from "./mesh/host-mesh.ts";
 import { HostSync } from "./mesh/host-sync.ts";
 import { meshProgram } from "./mesh/program.ts";
+import { MeshCommands } from "./mesh/commands.ts";
+import { IDLE_MESH_HOOKS, type MeshHooks } from "./mesh/host-hooks.ts";
+import { storedMeshStatus } from "./mesh/status-store.ts";
 import { PairingStore, pendingToWire } from "./state/pairing.ts";
 
 export const HOST_VERSION = packageJson.version;
@@ -42,10 +45,12 @@ export interface HostOptions {
   readonly pairingSlots?: PairingSlotRegistrar | undefined;
   /** Keeps an authenticated uplink to this relay and answers E2EE sessions through it; needs `stateDir`. */
   readonly relay?: { readonly url: string; readonly createSocket?: CreateSocket | undefined } | undefined;
-  /** The mesh status `mesh status` asks for; undefined while this host is in no mesh. */
+  /** The mesh status `mesh status` asks for; undefined while this host is in no mesh. Defaults to mesh.json's. */
   readonly meshStatus?: (() => MeshStatus | undefined) | undefined;
   /** For tests: the program mesh lines' `via` names; defaults to this executable or a launcher of this entry point. */
   readonly meshProgram?: string | undefined;
+  /** The running mesh parts (sync, reconciler) the mesh commands and status reach; defaults to an idle set. */
+  readonly meshHooks?: MeshHooks | undefined;
   readonly log: (line: string) => void;
 }
 
@@ -157,7 +162,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     control =
       options.stateDir === undefined || e2ee === undefined
         ? undefined
-        : openControl(options.stateDir, e2ee, options.meshStatus);
+        : openControl(options.stateDir, e2ee, options.meshStatus ?? e2ee.meshStatus);
   } catch (error) {
     await Promise.all([server.stop(true), lanServer?.stop(true)]);
     throw new Error(`cannot open the control socket that devices revoke uses: ${String(error)}`, { cause: error });
@@ -218,6 +223,12 @@ function openControl(
         return e2ee.hostMesh.join(request);
       case "mesh-status":
         return meshStatus?.() ?? null;
+      case "mesh-revoke":
+        return e2ee.meshCommands.revoke(request);
+      case "mesh-rename":
+        return e2ee.meshCommands.rename(request);
+      case "mesh-leave":
+        return e2ee.meshCommands.leave();
     }
   });
 }
@@ -232,6 +243,7 @@ function e2eeDeps(
   const pairing = new PairingStore(stateDir, options.log);
   const mesh = new MeshStore(stateDir, { log: options.log });
   mesh.ensureIndex();
+  const hooks = options.meshHooks ?? IDLE_MESH_HOOKS;
   /** Filled in once the LAN listener has its port. */
   const lanUrls: string[] = [];
   const slots = new PairingSlots(pairing, identity.noise.publicKey, registrar, options.log);
@@ -265,6 +277,15 @@ function e2eeDeps(
     sync,
     meshStream: (secure: SecureLink) => hostMesh.serve(secure),
     meshPresence: (secure: SecureLink) => sync.presence(secure),
+    meshCommands: new MeshCommands({
+      store: mesh,
+      stateDir,
+      identity,
+      closeRevoked: () => sessions.closeRevoked(),
+      hooks,
+      log: options.log,
+    }),
+    meshStatus: () => storedMeshStatus(mesh, identity, hooks),
     rekeyInterval: options.rekeyInterval,
     log: options.log,
   };
