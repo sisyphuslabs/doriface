@@ -122,6 +122,7 @@ function PhoneTerminal(props: {
         connection={connection}
         address={terminal.address}
         pid={terminal.pid ?? null}
+        live={terminal.state === "live"}
         focused
         label={`${title} output`}
         transformInput={transform}

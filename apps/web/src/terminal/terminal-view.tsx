@@ -24,6 +24,8 @@ export interface TerminalViewProps {
   readonly address: string;
   /** The program this view was opened for; views are keyed by it, so a restarted program gets a new view. */
   readonly pid: number | null;
+  /** Whether the core lists the terminal as live; a view waiting for a restart ends when it stops being live. */
+  readonly live: boolean;
   readonly focused: boolean;
   readonly label: string;
   readonly className?: string;
@@ -41,7 +43,7 @@ const FULL_RESET = "\u001bc";
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
-  const { connection, address, pid, focused, label, className, transformInput, onSend, onEnd } = props;
+  const { connection, address, pid, live, focused, label, className, transformInput, onSend, onEnd } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const [core, setCore] = useState<GhosttyCore | null>(null);
@@ -54,16 +56,16 @@ export function TerminalView(props: TerminalViewProps) {
   const stream = useRef<TerminalStream | null>(null);
 
   useEffect(() => {
-    let live = true;
+    let mounted = true;
     // scrollback-limit applies to new terminals, so the core reads it once, after the stored config loads.
     terminalConfigStore.loaded
       .then(() => loadGhosttyCore({ scrollbackLimit: rendererOptions(terminalConfigStore.config).scrollbackBytes }))
       .then(
-        (loaded) => (live ? setCore(loaded) : loaded.dispose()),
+        (loaded) => (mounted ? setCore(loaded) : loaded.dispose()),
         (cause: unknown) => setError(`The terminal renderer failed to load: ${String(cause)}`),
       );
     return () => {
-      live = false;
+      mounted = false;
     };
   }, []);
 
@@ -156,6 +158,10 @@ export function TerminalView(props: TerminalViewProps) {
       return then[settled(answer, program.current, !attachedBefore.current, refusal !== null)]();
     });
   };
+  // Waiting for a restart that will not come: the program ended (killed during the grace, or the core gave up on it).
+  useEffect(() => {
+    if (restarting && !live) onEnd?.(address, "finished");
+  }, [restarting, live, address, onEnd]);
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
