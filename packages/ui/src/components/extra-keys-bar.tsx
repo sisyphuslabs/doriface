@@ -30,13 +30,19 @@ export interface ExtraKeysBarProps {
   readonly className?: string;
 }
 
-/** Keys a phone keyboard lacks, docked above it. Each key is a 44 pt target. */
+/**
+ * Keys a phone keyboard lacks, docked above it. Each key is a 44 pt target. A latched modifier
+ * inverts to solid ink and gains a bar under its label, so it reads as on in both themes.
+ */
 export function ExtraKeysBar({ keys = DEFAULT_EXTRA_KEYS, latched = [], onKey, className }: ExtraKeysBarProps) {
   return (
     <div
       role="toolbar"
       aria-label="Terminal keys"
-      className={cn("flex shrink-0 gap-1 border-t border-border bg-chrome px-1.5 py-1", className)}
+      className={cn(
+        "flex shrink-0 gap-1 border-t border-border bg-chrome px-1.5 pt-1 pb-[max(0.25rem,var(--safe-bottom))]",
+        className,
+      )}
     >
       {keys.map((key) => {
         const on = latched.includes(key.id);
@@ -48,9 +54,11 @@ export function ExtraKeysBar({ keys = DEFAULT_EXTRA_KEYS, latched = [], onKey, c
             aria-pressed={key.modifier === true ? on : undefined}
             onClick={() => onKey?.(key.id)}
             className={cn(
-              "flex h-11 min-w-0 flex-1 items-center justify-center rounded-md font-mono text-sm text-foreground outline-none [&_svg]:size-4",
+              "relative flex h-11 min-w-0 flex-1 items-center justify-center rounded-md font-mono text-sm outline-none [&_svg]:size-4",
               "active:bg-selected focus-visible:outline-2 focus-visible:outline-ring",
-              on ? "bg-selected font-semibold" : "bg-raised",
+              on
+                ? "bg-primary font-semibold text-primary-foreground after:absolute after:bottom-1.5 after:h-0.5 after:w-3 after:rounded-full after:bg-current"
+                : "bg-raised text-foreground",
             )}
           >
             {key.label}
