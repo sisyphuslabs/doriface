@@ -132,6 +132,13 @@ export function relayWebSocketUrl(relayUrl: string): string {
   return `${scheme}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
 }
 
+/** The origin of the web app that opens pairing links; only an HTTP(S) URL has one. */
+export function pairingWebOrigin(webOrigin: string): string {
+  const url = URL.canParse(webOrigin) ? new URL(webOrigin) : undefined;
+  if (url?.protocol !== "https:" && url?.protocol !== "http:") throw new Error("the web origin must be an HTTP(S) URL");
+  return url.origin;
+}
+
 export function buildPairingUrl(link: PairingLink): string {
   const fragment = new URLSearchParams({
     h: link.hostId,
@@ -140,16 +147,13 @@ export function buildPairingUrl(link: PairingLink): string {
     c: link.code,
     r: relayWebSocketUrl(link.relayUrl),
   });
-  const webOrigin = new URL(link.webOrigin);
-  if (webOrigin.protocol !== "https:" && webOrigin.protocol !== "http:") {
-    throw new Error("the web origin must be an HTTP(S) URL");
-  }
-  return `${webOrigin.origin}/pair#${fragment.toString()}`;
+  return `${pairingWebOrigin(link.webOrigin)}/pair#${fragment.toString()}`;
 }
 
 /** Parses and checks a pairing URL: key lengths, the code's shape, and that `h` is the hostId of `s`. */
 export function parsePairingUrl(url: string): PairingLink {
   const parsed = new URL(url);
+  pairingWebOrigin(url);
   const fragment = new URLSearchParams(parsed.hash.slice(1));
   const get = (key: string): string => {
     const value = fragment.get(key);
