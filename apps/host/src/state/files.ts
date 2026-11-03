@@ -1,6 +1,17 @@
-import { chmodSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  closeSync,
+  fsyncSync,
+  linkSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /** $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host, else ~/.local/state/doriface-host. */
 export function defaultStateDir(env: Readonly<Record<string, string | undefined>> = process.env): string {
@@ -33,17 +44,35 @@ export function readJson(path: string): unknown {
 
 const temporaryFor = (path: string): string => `${path}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp`;
 
-/** Writes a fresh temporary file; a failed write removes what it created, but never another writer's file. */
+/**
+ * Writes a fresh temporary file and flushes it to disk, so a rename after a crash never publishes an empty file; a
+ * failed write removes what it created, but never another writer's file.
+ */
 function writeTemporary(path: string, value: unknown): string {
   const temporary = temporaryFor(path);
   const text = `${JSON.stringify(value, null, 2)}\n`;
+  let fd: number | undefined;
   try {
-    writeFileSync(temporary, text, { mode: 0o600, flag: "wx" });
+    fd = openSync(temporary, "wx", 0o600);
+    writeFileSync(fd, text);
+    fsyncSync(fd);
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) rmSync(temporary, { force: true });
     throw error;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
   return temporary;
+}
+
+/** Flushes a directory entry change (a rename or a new link) to disk. */
+function syncDirectory(path: string): void {
+  const fd = openSync(dirname(path), "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /** Writes `value` as JSON readable by the owner only (0600), replacing the file atomically. */
@@ -55,6 +84,7 @@ export function writePrivateJson(path: string, value: unknown): void {
     rmSync(temporary, { force: true });
     throw error;
   }
+  syncDirectory(path);
 }
 
 /**
@@ -65,6 +95,7 @@ export function createPrivateJson(path: string, value: unknown): boolean {
   const temporary = writeTemporary(path, value);
   try {
     linkSync(temporary, path);
+    syncDirectory(path);
     return true;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;
