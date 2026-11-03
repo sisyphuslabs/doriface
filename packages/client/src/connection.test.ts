@@ -67,6 +67,19 @@ describe("HcConnection hello", () => {
     await linkClosed;
   });
 
+  test("surfaces an hc connect startup error instead of waiting for a reply", async () => {
+    const core = new FakeCore();
+    const opening = HcConnection.open(core.client);
+    await core.waitHello();
+    core.push(
+      '{"error":{"hint":"use a shorter HC_SESSION (or socket in the config)","kind":"usage",' +
+        '"message":"the socket path for session \\"s\\" is too long here"}}\n',
+    );
+    const error: unknown = await opening.catch((caught: unknown) => caught);
+    if (!(error instanceof HcRpcError)) throw new Error(`expected HcRpcError, got ${String(error)}`);
+    expect([error.kind, error.hint]).toEqual(["usage", "use a shorter HC_SESSION (or socket in the config)"]);
+  });
+
   test("rejects a core that stayed in plain mode", async () => {
     const core = new FakeCore();
     const opening = HcConnection.open(core.client);

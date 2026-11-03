@@ -4,8 +4,10 @@ import {
   isJsonObject,
   JsonRpcParseError,
   LineDecoder,
+  parseJson,
   parseJsonRpc,
   type HelloResult,
+  type JsonValue,
 } from "@doriface/protocol";
 import { HcHandshakeError } from "./errors.ts";
 
@@ -44,8 +46,10 @@ function helloFromLine(line: string): HelloResult | undefined {
   try {
     message = parseJsonRpc(line);
   } catch (error) {
-    if (error instanceof JsonRpcParseError) return undefined;
-    throw error;
+    if (!(error instanceof JsonRpcParseError)) throw error;
+    const startup = startupError(line);
+    if (startup !== undefined) throw startup;
+    return undefined;
   }
   if ((message.kind !== "success" && message.kind !== "failure") || message.id !== HELLO_ID) return undefined;
   if (message.kind === "failure") throw new HcRpcError(message.error);
@@ -56,6 +60,20 @@ function helloFromLine(line: string): HelloResult | undefined {
   }
   if (!result.framed) throw new HcHandshakeError("core did not switch to framed mode");
   return result;
+}
+
+/** `hc connect` reports its own failures (no core, socket path too long) as `{"error":{kind,message,hint}}`. */
+function startupError(line: string): HcRpcError | undefined {
+  let value: JsonValue;
+  try {
+    value = parseJson(line);
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+  const error = isJsonObject(value) ? value["error"] : undefined;
+  if (!isJsonObject(error) || typeof error["message"] !== "string") return undefined;
+  return new HcRpcError({ code: -32000, message: error["message"], data: error });
 }
 
 function isHelloResult(value: unknown): value is HelloResult {
