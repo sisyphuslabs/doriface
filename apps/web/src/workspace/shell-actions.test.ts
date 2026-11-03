@@ -35,7 +35,9 @@ const handlers = {
 
 describe("every palette row runs something", () => {
   test.each(["desktop", "phone"] as const)("%s: its handler takes every action its palette lists", (shell) => {
-    const unhandled = availableActions(shell, tabs).filter((id) => !handlers[shell](id));
+    const unhandled = availableActions(shell, tabs)
+      .map((action) => action.id)
+      .filter((id) => !handlers[shell](id));
     expect(unhandled).toEqual([]);
   });
 });

@@ -7,13 +7,14 @@ import { useOverrides } from "../keys/keymap-store.ts";
 import { runAction } from "../keys/dispatcher.ts";
 import { currentPlatform } from "../keys/trigger.ts";
 import { choiceOf, paletteCommands } from "./palette-commands.ts";
+import type { ShellAction } from "./shell-actions.ts";
 import { useOverlayFocus } from "./use-overlay-focus.ts";
 
 export interface PaletteProps {
   readonly terminals: readonly Terminal[];
   readonly host: string;
   readonly route: string;
-  readonly actions: readonly string[];
+  readonly actions: readonly ShellAction[];
   readonly onOpenTerminal: (address: string) => void;
   readonly onClose: () => void;
 }
