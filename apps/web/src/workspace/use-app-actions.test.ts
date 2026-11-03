@@ -20,4 +20,9 @@ describe("shouldSelect", () => {
     expect(shouldSelect("t2", "t1")).toBe(true);
     expect(shouldSelect("t1", null)).toBe(true);
   });
+
+  test("a false answer does not claim the address is null", () => {
+    const address: string | null = ["t1"][0] ?? null;
+    if (!shouldSelect(address, "t1")) expect(address?.length).toBe(2);
+  });
 });
