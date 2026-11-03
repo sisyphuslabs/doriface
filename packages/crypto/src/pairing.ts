@@ -116,13 +116,29 @@ export interface PairingLink {
 }
 
 /** `<web origin>/pair#h=…&k=…&s=…&c=…&r=…`; everything sits in the fragment, which never reaches a server. */
+const WEBSOCKET_SCHEME: Readonly<Record<string, string>> = {
+  "https:": "wss:",
+  "wss:": "wss:",
+  "http:": "ws:",
+  "ws:": "ws:",
+};
+
+/** The relay as the web dials it: `wss://` for an https relay (`ws://` for http), keeping any path prefix. */
+export function relayWebSocketUrl(relayUrl: string): string {
+  if (!URL.canParse(relayUrl)) throw new Error(`the relay is not a URL: ${relayUrl}`);
+  const url = new URL(relayUrl);
+  const scheme = WEBSOCKET_SCHEME[url.protocol];
+  if (scheme === undefined) throw new Error(`a relay URL is http(s) or ws(s), got ${url.protocol}`);
+  return `${scheme}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+}
+
 export function buildPairingUrl(link: PairingLink): string {
   const fragment = new URLSearchParams({
     h: link.hostId,
     k: base64urlEncode(link.noiseStaticPub),
     s: base64urlEncode(link.signPub),
     c: link.code,
-    r: link.relayUrl,
+    r: relayWebSocketUrl(link.relayUrl),
   });
   const webOrigin = new URL(link.webOrigin);
   if (webOrigin.protocol !== "https:" && webOrigin.protocol !== "http:") {
@@ -150,7 +166,6 @@ export function parsePairingUrl(url: string): PairingLink {
   const hostId = get("h");
   if (hostIdOf(signPub) !== hostId) throw new Error("the pairing URL's hostId does not match its signing key");
   const code = normalizePairingCode(get("c"));
-  const relayUrl = get("r");
-  if (!URL.canParse(relayUrl)) throw new Error("the pairing URL's relay is not a URL");
+  const relayUrl = relayWebSocketUrl(get("r"));
   return { webOrigin: parsed.origin, hostId, noiseStaticPub, signPub, code, relayUrl };
 }
