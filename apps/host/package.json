@@ -15,6 +15,7 @@
     "bench": "bun scripts/bench.ts"
   },
   "dependencies": {
+    "@doriface/crypto": "workspace:*",
     "hono": "4.13.16"
   },
   "devDependencies": {
