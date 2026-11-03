@@ -45,6 +45,8 @@ export interface MachineState {
   readonly listError: string | undefined;
   readonly views: readonly MachineView[];
   readonly retry: (machine: string) => Promise<void>;
+  /** How many machine.list reads have come back: a tab waits one read before taking a gone terminal as removed. */
+  readonly listed: number;
 }
 
 /** machine.list, read again when a machine's live terminals change, on a timer while visible, and on return. */
@@ -52,6 +54,7 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
   const [views, setViews] = useState<readonly MachineView[]>([]);
   const [reads, setReads] = useState(0);
   const [listError, setListError] = useState<string | undefined>(undefined);
+  const [listed, setListed] = useState(0);
   const refresh = useCallback(() => setReads((count) => count + 1), []);
   const key = machineKey(terminals);
   useEffect(() => {
@@ -61,6 +64,7 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
         if (!current) return list;
         setViews(list.machines);
         setListError(undefined);
+        setListed((count) => count + 1);
         return list;
       },
       (error: unknown) => {
@@ -90,5 +94,5 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
     (machine: string) => connection.call("machine.connect", { machine }).then(refresh, refresh),
     [connection, refresh],
   );
-  return { entries, terminals: reached, refresh, listError, views, retry };
+  return { entries, terminals: reached, refresh, listError, views, retry, listed };
 }

@@ -24,8 +24,8 @@ export interface WorkspaceProps {
 /** The live terminals of one core: the desktop shell from `md` up, the phone navigation below. */
 export function Workspace({ connection }: WorkspaceProps) {
   const fed = useTerminals(connection);
-  const { entries, terminals, refresh, listError, views, retry } = useMachines(connection, fed.terminals);
-  const tabs = useTabs(connection.hello.core.id, fed.loaded ? terminals : null);
+  const { entries, terminals, refresh, listError, views, retry, listed } = useMachines(connection, fed.terminals);
+  const tabs = useTabs(connection.hello.core.id, fed.loaded ? terminals : null, views, listed);
   const narrow = useNarrow();
   const [phoneOpen, setPhoneOpen] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
