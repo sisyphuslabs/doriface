@@ -1,4 +1,4 @@
-import { linkSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { linkSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const DEFAULT_LOCK_TIMEOUT_MS = 2000;
@@ -39,26 +39,6 @@ function isHeld(path: string, content: string): boolean {
   }
 }
 
-/**
- * Removes a stale lock whose content was `observed`. It is renamed aside first and only deleted if it is still that
- * lock; a fresh lock that replaced it in the meantime is put back instead of being deleted.
- */
-function breakStaleLock(path: string, observed: string): void {
-  const aside = `${path}.stale.${crypto.randomUUID()}`;
-  try {
-    renameSync(path, aside);
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return;
-    throw error;
-  }
-  if (readFileSync(aside, "utf8") === observed) return rmSync(aside, { force: true });
-  try {
-    linkSync(aside, path);
-  } finally {
-    rmSync(aside, { force: true });
-  }
-}
-
 function tryAcquire(path: string, content: string): boolean {
   const temporary = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
   writeFileSync(temporary, content, { mode: 0o600, flag: "wx" });
@@ -74,6 +54,31 @@ function tryAcquire(path: string, content: string): boolean {
 }
 
 /**
+ * Removes the stale lock whose content was `observed`, if it is still that lock; returns false while another breaker
+ * is at it. Breakers take `state.lock.break` first, so between this check and the unlink nobody can replace the lock:
+ * acquirers fail while it exists, its holder is dead, and other breakers wait. A lock is never moved, so a live one
+ * is never off its path, and a breaker never removes a lock that was published after it looked.
+ *
+ * A guard whose breaker died is removed the same way, unserialized: only a breaker crashing inside its few
+ * microseconds here, and three more processes racing that window, could let two breakers in at once.
+ */
+function breakStaleLock(path: string, observed: string): boolean {
+  const guard = `${path}.break`;
+  const token = `${process.pid} ${crypto.randomUUID()}`;
+  if (!tryAcquire(guard, token)) {
+    const breaker = readLock(guard);
+    if (breaker !== undefined && !isHeld(guard, breaker) && readLock(guard) === breaker) rmSync(guard, { force: true });
+    return false;
+  }
+  try {
+    if (readLock(path) === observed) rmSync(path, { force: true });
+    return true;
+  } finally {
+    if (readLock(guard) === token) rmSync(guard, { force: true });
+  }
+}
+
+/**
  * Runs `fn` holding `state.lock` in the state dir, so the host and the CLI never interleave a read-modify-write of
  * devices.json or pairing.json. The lock names its holder's pid and a token. A lock whose holder is gone is broken; a
  * live holder is waited for up to `timeoutMs`. The holds are a few milliseconds of synchronous file work.
@@ -85,9 +90,9 @@ export function withStateLock<T>(stateDir: string, fn: () => T, timeoutMs = DEFA
   while (!tryAcquire(path, content)) {
     const holder = readLock(path);
     if (holder === undefined) continue;
-    if (!isHeld(path, holder)) breakStaleLock(path, holder);
-    else if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${path})`);
-    else Bun.sleepSync(RETRY_MS);
+    if (!isHeld(path, holder) && breakStaleLock(path, holder)) continue;
+    if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${path})`);
+    Bun.sleepSync(RETRY_MS);
   }
   try {
     return fn();

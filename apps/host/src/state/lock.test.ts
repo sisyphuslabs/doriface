@@ -1,5 +1,6 @@
 import { base64urlEncode } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,6 +37,16 @@ function whenFoundDead(pid: number, replace: () => void): void {
   });
 }
 
+const rename = fs.renameSync;
+
+/** A third process takes the lock path the instant this one renames whatever holds it. */
+function whenLockMoved(path: string, take: () => void): void {
+  spyOn(fs, "renameSync").mockImplementation((from: fs.PathLike, to: fs.PathLike) => {
+    rename(from, to);
+    if (from === path) take();
+  });
+}
+
 const run = (...args: string[]) => Bun.spawn([process.execPath, WORKER, ...args], { stdout: "ignore", stderr: "pipe" });
 
 describe("state lock", () => {
@@ -57,6 +68,31 @@ describe("state lock", () => {
     expect(() => withStateLock(dir, () => (ran = true), 50)).toThrow("locked");
     expect(ran).toBe(false);
     expect(readFileSync(path, "utf8")).toBe(fresh);
+  });
+
+  test("a breaker that finds a newer live lock leaves it in place, so a third process cannot slip in beside it", () => {
+    const path = join(dir, "state.lock");
+    const dead = deadPid();
+    const fresh = `${process.pid} fresh-token`;
+    writeFileSync(path, `${dead} stale-token`);
+    whenFoundDead(dead, () => writeFileSync(path, fresh));
+    whenLockMoved(path, () => writeFileSync(path, `${process.pid} third-token`, { flag: "wx" }));
+    expect(() => withStateLock(dir, () => undefined, 50)).toThrow("locked");
+    expect(readFileSync(path, "utf8")).toBe(fresh);
+    expect(fs.readdirSync(dir)).toEqual(["state.lock"]);
+  });
+
+  test("a breaker that died holding the break guard does not keep a stale lock from being broken", () => {
+    writeFileSync(join(dir, "state.lock"), `${deadPid()} stale-token`);
+    writeFileSync(join(dir, "state.lock.break"), `${deadPid()} breaker-token`);
+    expect(withStateLock(dir, () => "ran", 200)).toBe("ran");
+    expect(fs.readdirSync(dir)).toEqual([]);
+  });
+
+  test("a live breaker's guard is waited for", () => {
+    writeFileSync(join(dir, "state.lock"), `${deadPid()} stale-token`);
+    writeFileSync(join(dir, "state.lock.break"), `${process.pid} breaker-token`);
+    expect(() => withStateLock(dir, () => undefined, 50)).toThrow("locked");
   });
 
   test("concurrent CLI-style adds and a revoke, starting from a dead holder's lock, lose no update", async () => {
