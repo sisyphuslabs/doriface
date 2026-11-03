@@ -127,6 +127,15 @@ describe("pairing consumption", () => {
     expect(existsSync(join(dir, "pairing.json"))).toBe(false);
   });
 
+  test("a pairing confirmed after the code expired is refused and the offer removed", () => {
+    const pairing = new PairingStore(dir);
+    const offer = pairing.offer(0);
+    const claim = pairing.claim(1);
+    if (claim === undefined) throw new Error("no claim");
+    expect(claim.complete(offer.expiresAt)).toBe(false);
+    expect(existsSync(join(dir, "pairing.json"))).toBe(false);
+  });
+
   test("settling an old claim leaves a newer offer alone", () => {
     const pairing = new PairingStore(dir);
     pairing.offer();

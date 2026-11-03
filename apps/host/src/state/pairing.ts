@@ -19,7 +19,7 @@ export interface PairingClaim {
    * stores the device, so a crash or a failed store can never leave the code usable. A failed handshake settles
    * nothing; a code ends only on success or expiry.
    */
-  complete(): boolean;
+  complete(now?: number): boolean;
 }
 
 /**
@@ -73,7 +73,12 @@ export class PairingStore {
     }
     return {
       psk,
-      complete: () => withStateLock(this.#dir, () => guard.use() && (this.#removeIfHeld(pending.code), true)),
+      complete: (at = Date.now()) =>
+        withStateLock(this.#dir, () => {
+          const first = guard.use(at);
+          if (first || guard.state === "expired") this.#removeIfHeld(pending.code);
+          return first;
+        }),
     };
   }
 
