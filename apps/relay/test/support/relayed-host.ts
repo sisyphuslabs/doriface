@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHcSession, type HcSession } from "../../../host/src/testing/hc-session.ts";
+import { RecordingLink, type Tap, taps, tappedHc } from "./byte-tap.ts";
 import { socketFrom, testIp } from "./probe.ts";
 import { startLocalRelay } from "./relay-dev.ts";
 
@@ -26,6 +27,10 @@ export interface RelayedHost {
   pair(device: KeyPair, name: string): Promise<void>;
   dial(device: KeyPair): Promise<SecureLink>;
   connect(device: KeyPair): Promise<HcConnection>;
+  /** A connection whose plaintext is kept, to compare with what the host's hc read and wrote. */
+  connectRecorded(device: KeyPair): Promise<{ readonly connection: HcConnection; readonly link: RecordingLink }>;
+  /** What every `hc connect` the host ran read and wrote, recorded before it was passed on. */
+  taps(): Tap[];
   stop(): Promise<void>;
 }
 
@@ -37,6 +42,7 @@ export async function startRelayedHost(prefix: string): Promise<RelayedHost> {
   const connected = Promise.withResolvers<void>();
   const relay = await startLocalRelay();
   const session = createHcSession(prefix);
+  const tappedHcPath = tappedHc(scratch, session.hc);
   let host: Host | undefined;
   const stop = async (): Promise<void> => {
     if (logs.length > 0) console.log(`host log:\n${logs.join("\n")}`);
@@ -49,7 +55,7 @@ export async function startRelayedHost(prefix: string): Promise<RelayedHost> {
     host = await startHost({
       listen: { hostname: "127.0.0.1", port: 0 },
       token: "relayed-host-token-relayed-host-token-relayed",
-      hc: session.hc,
+      hc: tappedHcPath,
       session: session.name,
       env: session.env,
       stateDir,
@@ -103,6 +109,11 @@ export async function startRelayedHost(prefix: string): Promise<RelayedHost> {
     },
     dial: (device) => open(device),
     connect: async (device) => HcConnection.open(await open(device)),
+    async connectRecorded(device) {
+      const link = new RecordingLink(await open(device));
+      return { connection: await HcConnection.open(link), link };
+    },
+    taps: () => taps(scratch),
     stop,
   };
 }
