@@ -73,7 +73,7 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
           <Button variant="ghost" onClick={onDone}>
             Cancel
           </Button>
-          <Button variant={ask.kind === "end" ? "destructive" : "secondary"} loading={busy} onClick={end}>
+          <Button variant="destructive" loading={busy} onClick={end}>
             End session
           </Button>
           {ask.kind === "close" ? (
