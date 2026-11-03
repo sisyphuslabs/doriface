@@ -1,4 +1,12 @@
-import { CloseCode, connectRelayClient, type SessionLink, type WebSocketLink } from "@doriface/relay-client";
+import {
+  CloseCode,
+  connectRelayClient,
+  ed25519Signer,
+  generateSigningKey,
+  hostIdOf,
+  type SessionLink,
+  type WebSocketLink,
+} from "@doriface/relay-client";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { closedWith, received } from "./support/links.ts";
@@ -10,6 +18,7 @@ import { startTestHost, type TestHost } from "./support/test-host.ts";
 // Short deadlines so the reaper runs within a test; production uses 10 s and 90 s.
 const PENDING_TIMEOUT_MS = 1_000;
 const IDLE_TIMEOUT_MS = 2_000;
+const AUTH_TIMEOUT_MS = 1_000;
 const FAST_PING_MS = 300;
 const NO_PING_MS = 600_000;
 
@@ -19,6 +28,7 @@ beforeAll(async () => {
   relay = await startLocalRelay({
     PENDING_TIMEOUT_MS: String(PENDING_TIMEOUT_MS),
     IDLE_TIMEOUT_MS: String(IDLE_TIMEOUT_MS),
+    AUTH_TIMEOUT_MS: String(AUTH_TIMEOUT_MS),
   });
 }, 120_000);
 
@@ -132,5 +142,33 @@ describe("keepalive and reaping (C1, C6)", () => {
     await activate(session);
     expect(await roundTrips(session)).toBe(true);
     pinging.uplink.stop();
+  });
+
+  test("a client to an offline host waits for the uplinks authenticating when it came, not for later ones", async () => {
+    const ip = testIp();
+    const hostId = await hostIdOf(ed25519Signer(generateSigningKey()).publicKey);
+    let strays = 0;
+    const openStray = async (): Promise<void> => {
+      const stray = new Probe(`${relay.url.replace("http", "ws")}/v1/host/${hostId}`, ip);
+      defer(() => stray.socket.close());
+      await stray.next();
+      strays += 1;
+    };
+    await openStray();
+    let settled = false;
+    const closed = connectRelayClient({ relayUrl: relay.url, hostId, createSocket: socketFrom(ip) }).then(closedWith);
+    void closed.finally(() => {
+      settled = true;
+    });
+    // Unanswered uplinks keep arriving; time is the behavior here, one every third of the auth timeout.
+    const keepComing = async (left: number): Promise<void> => {
+      if (settled || left === 0) return;
+      await Bun.sleep(AUTH_TIMEOUT_MS / 3);
+      await openStray();
+      return keepComing(left - 1);
+    };
+    await keepComing(9);
+    expect(await closed).toBe(CloseCode.HostOffline);
+    expect(strays).toBeLessThanOrEqual(5);
   });
 });

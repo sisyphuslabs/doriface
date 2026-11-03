@@ -1,5 +1,3 @@
-import { AUTH_TIMEOUT_MS } from "./limits.ts";
-
 interface PendingAuth {
   readonly settled: PromiseWithResolvers<void>;
   /** Cleared on settle; a pending timer keeps the object from hibernating. */
@@ -14,11 +12,11 @@ export class PendingAuths {
     return this.#pending.size;
   }
 
-  begin(ws: WebSocket, onTimeout: () => void): void {
+  begin(ws: WebSocket, timeoutMs: number, onTimeout: () => void): void {
     const timer = setTimeout(() => {
       onTimeout();
       this.settle(ws);
-    }, AUTH_TIMEOUT_MS);
+    }, timeoutMs);
     this.#pending.set(ws, { settled: Promise.withResolvers(), timer });
   }
 
@@ -30,8 +28,11 @@ export class PendingAuths {
     this.#pending.delete(ws);
   }
 
-  /** Resolves once any pending uplink has settled. */
-  next(): Promise<void> {
-    return Promise.race([...this.#pending.values()].map(({ settled }) => settled.promise));
+  /**
+   * Resolves once every uplink pending now has settled. Uplinks that arrive later are not waited for, so a stream of
+   * unanswered uplinks delays a caller by at most one auth timeout.
+   */
+  async allPendingNow(): Promise<void> {
+    await Promise.all([...this.#pending.values()].map(({ settled }) => settled.promise));
   }
 }

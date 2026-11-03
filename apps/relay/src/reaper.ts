@@ -1,5 +1,6 @@
 import { IDLE_TIMEOUT_MS } from "@doriface/relay-client/wire";
 import type { Attachment } from "./attachment.ts";
+import { AUTH_TIMEOUT_MS } from "./limits.ts";
 import { withAttachment } from "./sockets.ts";
 
 /** Time from a client's OPEN to the host's first DATA on it (contract v1.2 C1). */
@@ -8,12 +9,14 @@ export const PENDING_TIMEOUT_MS = 10_000;
 export interface Timeouts {
   readonly pendingMs: number;
   readonly idleMs: number;
+  readonly authMs: number;
 }
 
-/** Overrides for local tests; production leaves both unset. */
+/** Overrides for local tests; production leaves them unset. */
 export interface TimeoutVars {
   readonly PENDING_TIMEOUT_MS?: string;
   readonly IDLE_TIMEOUT_MS?: string;
+  readonly AUTH_TIMEOUT_MS?: string;
 }
 
 function positive(value: string | undefined, fallback: number): number {
@@ -25,6 +28,7 @@ export function timeoutsOf(vars: TimeoutVars): Timeouts {
   return {
     pendingMs: positive(vars.PENDING_TIMEOUT_MS, PENDING_TIMEOUT_MS),
     idleMs: positive(vars.IDLE_TIMEOUT_MS, IDLE_TIMEOUT_MS),
+    authMs: positive(vars.AUTH_TIMEOUT_MS, AUTH_TIMEOUT_MS),
   };
 }
 
