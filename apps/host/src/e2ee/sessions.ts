@@ -26,14 +26,17 @@ export class LiveSessions {
     this.closeRevoked();
   }
 
-  /** Closes every session whose device is no longer in the store. */
+  /**
+   * Closes every session whose device is no longer in the store. When the store cannot be read, no session can be
+   * shown to be authorized, so every one is closed.
+   */
   closeRevoked(): void {
     let paired: ReadonlySet<string>;
     try {
       paired = new Set(this.#devices.list().map((device) => device.clientStaticPub));
     } catch (error) {
-      this.#log(`cannot read the devices file: ${String(error)}`);
-      return;
+      this.#log(`cannot read the devices file, closing every session: ${String(error)}`);
+      paired = new Set();
     }
     for (const [key, sessions] of this.#byKey) {
       if (paired.has(key)) continue;

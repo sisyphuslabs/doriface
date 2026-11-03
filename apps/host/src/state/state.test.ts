@@ -54,6 +54,18 @@ describe("LiveSessions", () => {
     sessions.add(live);
     expect([revoked.closes, live.closes]).toEqual([[4401], []]);
   });
+
+  test("an unreadable devices file closes every session instead of keeping them", () => {
+    const devices = new DeviceStore(dir);
+    const key = generateX25519().publicKey;
+    devices.add(key, "phone");
+    const sessions = new LiveSessions(devices, () => {});
+    const live = fakeSession(key);
+    sessions.add(live);
+    writeFileSync(join(dir, "devices.json"), "{ not json");
+    sessions.closeRevoked();
+    expect(live.closes).toEqual([4401]);
+  });
 });
 
 /** A pid that is no longer running: a child that already exited. */
