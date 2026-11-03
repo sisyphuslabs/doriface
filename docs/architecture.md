@@ -2,7 +2,7 @@
 
 Decision-complete big picture for the plan and the implementation. Written 2026-11-03 from the research wave and the repository. Every claim is tagged **SOURCE** (the cited bytes or page were read in this session) or **INFERRED** (a design conclusion). Where the verification pass found a handoff's citations unopenable, the claim is carried as **UNPROVEN** and is never used as a load-bearing fact.
 
-Citation bases. `BASE:path:line` names a file in that tree. `REPO` is this repository. `CRYPTO`, `RELAY` and `GHOSTTY` are feature branches that were still in review when this was written, so those paths exist on their branches and land in `dev` when the branches merge. `CORE`, `APP` and `T3` are public upstream repositories pinned by commit. `apps/relay` has since moved, with its history, to the private repository `sisyphuslabs/doriface-relay`, where its files sit at the root; `RELAY:apps/relay/...` citations name those files. The relay's public contract is `docs/transport.md`, and `tests/relay` runs this repository's host and client against the private relay at the commit `relay-pin.json` pins.
+Citation bases. `BASE:path:line` names a file in that tree. `REPO` is this repository. `CRYPTO`, `RELAY` and `GHOSTTY` are feature branches that were still in review when this was written, so those paths exist on their branches and land in `dev` when the branches merge. `CORE`, `APP` and `T3` are public upstream repositories pinned by commit. `apps/relay` has since moved, with its history, to the relay server's own private repository (the relay server is deployed separately), where its files sit at the root; `RELAY:apps/relay/...` citations name those files. The relay's public contract is `docs/transport.md`, and `tests/relay` runs this repository's host and client against the private relay at the commit `relay-pin.json` pins.
 
 **What SOURCE means here.** A SOURCE tag says the cited bytes were read while writing this document. Citations into `REPO` can be checked in this repository. Citations into `CORE`, `APP` and `T3` can be checked at the pinned public commit. Citations of the form research note `<name>` point at working notes that are not published, so those claims are external references a reader cannot check independently; nothing load-bearing rests on them alone.
 
@@ -41,7 +41,7 @@ flowchart LR
     core --- hcconnect
     hcconnect -- "stdin/stdout" --- host
   end
-  relay["relay (private repo doriface-relay)<br/>Cloudflare Worker + Durable Objects<br/>Room per hostId, PairSlot per slot"]
+  relay["relay (deployed separately)<br/>Cloudflare Worker + Durable Objects<br/>Room per hostId, PairSlot per slot"]
   web["apps/web<br/>React 19 PWA, libghostty WASM"]
   desktop["apps/desktop<br/>Electron 45, spawns doriface-host"]
   native["future native apps<br/>same packages/client contract"]
