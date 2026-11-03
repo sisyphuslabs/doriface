@@ -30,13 +30,15 @@ export function SettingsScreen({ section = "connection" }: { readonly section?: 
           <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" />
           <h1 className="text-xl font-semibold text-foreground">Settings</h1>
         </header>
-        <TabList className="overflow-x-auto px-2">
-          {SECTIONS.map((entry) => (
-            <Tab key={entry.id} value={entry.id}>
-              {entry.label}
-            </Tab>
-          ))}
-        </TabList>
+        <div className="border-b border-border">
+          <TabList className="-mb-px overflow-x-auto border-b-0 px-2 pt-1">
+            {SECTIONS.map((entry) => (
+              <Tab key={entry.id} value={entry.id} className="mb-0 focus-visible:-outline-offset-2">
+                {entry.label}
+              </Tab>
+            ))}
+          </TabList>
+        </div>
       </Tabs>
       <nav
         aria-label="Settings"
