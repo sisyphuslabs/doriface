@@ -57,3 +57,23 @@ test("Tab and Shift+Tab leave the recorder without binding; a modified Tab is st
   await expect(close.getByText("Changed")).toBeVisible();
   await expect(record).toBeFocused();
 });
+
+test("the conflict prompt takes focus on Keep, and Escape keeps the old binding", async ({ page }) => {
+  await openKeybindings(page);
+  const close = row(page, "tab.close");
+  const record = recordButton(page, "Close tab");
+  const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
+
+  await record.click();
+  await page.keyboard.press(mac ? "Meta+T" : "Control+Shift+T");
+  const keep = close.getByRole("button", { name: "Keep", exact: true });
+  await expect(keep).toBeFocused();
+  expect(await keep.evaluate((button) => button.matches(":focus-visible"))).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await expect(keep).toHaveCount(0);
+  await expect(close.getByText("Changed")).toHaveCount(0);
+  await expect(row(page, "tab.new").getByText("Changed")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(record).toBeFocused();
+});
