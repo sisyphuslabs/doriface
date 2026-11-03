@@ -28,6 +28,7 @@ export class PairingSlots {
   #registered: string | undefined;
   #expiry: { readonly code: string; readonly timer: ReturnType<typeof setTimeout> } | undefined;
   #running: Promise<void> = Promise.resolve();
+  #opening: Promise<void> = Promise.resolve();
   #stopWatch: (() => void) | undefined;
   #stopped = false;
   #retry: ReturnType<typeof setTimeout> | undefined;
@@ -55,8 +56,20 @@ export class PairingSlots {
     this.sync();
   }
 
-  /** Opens a new offer (replacing any pending one) and resolves once its slot is settled with the relay. */
-  async open(): Promise<PendingPairing> {
+  /**
+   * Opens a new offer (replacing any pending one) and resolves once its slot is settled with the relay. Opens run one
+   * after another, so no caller is handed a code that a concurrent open is still drawing or registering.
+   */
+  open(): Promise<PendingPairing> {
+    const opened = this.#opening.then(() => this.#open());
+    this.#opening = opened.then(
+      () => undefined,
+      () => undefined,
+    );
+    return opened;
+  }
+
+  async #open(): Promise<PendingPairing> {
     const offer = this.#store.offer();
     this.sync();
     await this.#running;
