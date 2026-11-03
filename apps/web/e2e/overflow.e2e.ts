@@ -90,7 +90,11 @@ const PAGES: readonly { readonly name: string; readonly html: string; readonly f
 for (const { name, html, found } of PAGES) {
   test(`overflow on ${name}: ${found.length === 0 ? "none" : found.join(", ")}`, async ({ page }) => {
     await page.setContent(`<body style="margin:8px;font:16px/1.25 system-ui">${html}</body>`);
-    await page.evaluate(() => document.fonts.ready);
+    // A face loads only once a laid-out box asks for it, which can be after fonts.ready settles: load each one now.
+    const faces = await page.evaluate(() =>
+      Promise.all([...document.fonts].map(async (face) => (await face.load()).status)),
+    );
+    expect(faces.filter((status) => status !== "loaded")).toEqual([]);
     const rules = (await page.evaluate(findOverflows, [])).map((overflow) => overflow.rule);
     expect(rules).toEqual(found);
   });
