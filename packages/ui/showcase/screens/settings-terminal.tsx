@@ -63,7 +63,7 @@ export function TerminalSection() {
             title="Thicken glyphs"
             configKey="font-thicken"
             disabledReason="Only Ghostty's macOS renderer can thicken strokes; the web terminal uses the browser's text rendering."
-            control={<Toggle label="Thicken glyphs" on={false} disabled />}
+            control={(reason) => <Toggle label="Thicken glyphs" on={false} disabled reason={reason} />}
           />
         </Rows>
       </Group>
@@ -124,7 +124,7 @@ export function TerminalSection() {
           title="Background blur"
           configKey="background-blur"
           disabledReason="Panes are always opaque so terminal text stays readable over anything behind the window."
-          control={<Toggle label="Background blur" on={false} disabled />}
+          control={(reason) => <Toggle label="Background blur" on={false} disabled reason={reason} />}
         />
       </Group>
       <Group title="Spacing">

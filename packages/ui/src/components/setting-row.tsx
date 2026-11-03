@@ -1,11 +1,17 @@
 import { Ban } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
+
+/** Spread onto a disabled row's control so assistive tech reads the reason with it. */
+export interface SettingReason {
+  readonly "aria-describedby"?: string;
+}
 
 export interface SettingRowProps {
   readonly title: ReactNode;
   readonly description?: ReactNode;
-  readonly control: ReactNode;
+  /** The control, or a function that receives the reason's `aria-describedby` to spread onto it. */
+  readonly control: ReactNode | ((reason: SettingReason) => ReactNode);
   /** The config file key this row writes, e.g. a Ghostty key; shown as a monospace label. */
   readonly configKey?: string;
   /** Why this setting cannot apply here, in words. The row stays visible; pass `disabled` to the control as well. */
@@ -28,9 +34,10 @@ export function SettingRow({
   className,
 }: SettingRowProps) {
   const disabled = disabledReason !== undefined;
+  const reasonId = useId();
+  const reason: SettingReason = disabled ? { "aria-describedby": reasonId } : {};
   return (
     <div
-      aria-disabled={disabled || undefined}
       className={cn(
         "flex items-center gap-x-6 gap-y-2 border-b border-border py-3.5 last:border-b-0",
         inline ? "flex-nowrap" : "flex-wrap",
@@ -46,7 +53,7 @@ export function SettingRow({
           <p className="mt-0.5 text-sm text-pretty text-muted-foreground">{description}</p>
         )}
         {disabled ? (
-          <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
+          <p id={reasonId} className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
             <Ban aria-hidden className="mt-0.5 size-3.5 shrink-0" />
             <span className="text-pretty">{disabledReason}</span>
           </p>
@@ -58,7 +65,7 @@ export function SettingRow({
           !inline && "max-sm:w-full max-sm:[&>*]:flex-1 sm:[&>*]:flex-none",
         )}
       >
-        {control}
+        {typeof control === "function" ? control(reason) : control}
       </div>
     </div>
   );
