@@ -71,6 +71,9 @@ test("keys typed offline for a kept program that is lost and restarted meanwhile
   await expect.poll(() => pidOf(address), { timeout: 30_000 }).not.toBeNull();
   expect(pidOf(address)).not.toBe(shellPid);
   socket.restore();
+  await expect(page.getByText("Typed input was not sent because the program restarted")).toBeVisible({
+    timeout: 20_000,
+  });
 
   const restarted = page.locator(`[data-terminal="${address}"]:not([data-before-restart])`);
   await expect(restarted).toContainText("$", { timeout: 20_000 });
@@ -79,7 +82,6 @@ test("keys typed offline for a kept program that is lost and restarted meanwhile
   await page.keyboard.press("Enter");
   await expect(restarted).toContainText("fence-3", { timeout: 15_000 });
   expect(existsSync(misdelivered)).toBe(false);
-  await expect(page.getByText("Typed input was not sent because the program restarted")).toBeVisible();
 });
 
 test("a reconnect inside a kept program's restart shows it restarting, not an error, then attaches", async ({
