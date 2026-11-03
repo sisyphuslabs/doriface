@@ -54,7 +54,9 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
           {where}
         </span>
       </header>
+      {/* A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh. */}
       <TerminalView
+        key={terminal.pid ?? undefined}
         connection={connection}
         address={terminal.address}
         focused={focused}

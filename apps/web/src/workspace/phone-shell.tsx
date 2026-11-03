@@ -103,6 +103,7 @@ function PhoneTerminal(props: {
         </div>
       </header>
       <TerminalView
+        key={terminal.pid ?? undefined}
         connection={connection}
         address={terminal.address}
         focused
