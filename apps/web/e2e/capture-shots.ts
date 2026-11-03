@@ -50,8 +50,22 @@ const refusedWith = (closeCode: number) => async (page: Page) => {
 const SETTINGS = ["Appearance", "Terminal", "Keybindings"] as const;
 
 export const SHOTS: readonly Shot[] = [
-  { name: "first-run", start: "none", run: async (page) => void (await page.goto("/")) },
-  { name: "pair", start: "pairing", run: async (page) => void (await page.goto("/pair")) },
+  {
+    name: "first-run",
+    start: "none",
+    run: async (page) => {
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Connect to a host" })).toBeVisible();
+    },
+  },
+  {
+    name: "pair",
+    start: "pairing",
+    run: async (page) => {
+      await page.goto("/pair");
+      await expect(page.getByRole("heading", { name: "Pair this device" })).toBeVisible();
+    },
+  },
   { name: "pair-code", start: "pairing", run: typeCode },
   {
     name: "pair-code-verify",
@@ -61,8 +75,22 @@ export const SHOTS: readonly Shot[] = [
       await verifyTypedCode(page);
     },
   },
-  { name: "pair-verify", start: "pairing", run: async (page) => void (await page.goto(PAIR_LINK)) },
-  { name: "pair-link-invalid", start: "pairing", run: async (page) => void (await page.goto(BAD_LINK)) },
+  {
+    name: "pair-verify",
+    start: "pairing",
+    run: async (page) => {
+      await page.goto(PAIR_LINK);
+      await expect(page.getByRole("heading", { name: "Check the host's key" })).toBeVisible();
+    },
+  },
+  {
+    name: "pair-link-invalid",
+    start: "pairing",
+    run: async (page) => {
+      await page.goto(BAD_LINK);
+      await expect(page.getByText("This pairing link cannot be used")).toBeVisible();
+    },
+  },
   {
     name: "pair-mismatch",
     start: "pairing",
@@ -93,6 +121,8 @@ export const SHOTS: readonly Shot[] = [
       await openTerminal(page, /shell/, "$");
       await openTerminal(page, /deploy/, "Waiting for approval");
       await page.getByRole("button", { name: "Split" }).click();
+      await expect(page.locator("[data-terminal]")).toHaveCount(2);
+      await expect(page.locator("[data-terminal]").filter({ hasText: "$" })).toBeVisible();
     },
   },
   {
@@ -118,7 +148,14 @@ export const SHOTS: readonly Shot[] = [
       await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
     },
   },
-  { name: "settings", start: "connected", run: async (page) => void (await page.goto("/settings")) },
+  {
+    name: "settings",
+    start: "connected",
+    run: async (page) => {
+      await page.goto("/settings");
+      await expect(page.getByRole("heading", { name: "Connection", level: 2 })).toBeVisible();
+    },
+  },
   ...SETTINGS.map((label): Shot => ({
     name: `settings-${label.toLowerCase()}`,
     start: "connected",
