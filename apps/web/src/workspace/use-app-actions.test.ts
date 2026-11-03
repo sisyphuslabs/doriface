@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { neighbour } from "./use-app-actions.ts";
+import { neighbour, shouldSelect } from "./use-app-actions.ts";
 
 describe("neighbour", () => {
   test("steps through the list and wraps", () => {
@@ -10,5 +10,14 @@ describe("neighbour", () => {
   test("is null when the only target is the current one, so the key is not swallowed", () => {
     expect(neighbour(["t1"], "t1", 1)).toBeNull();
     expect(neighbour([], null, 1)).toBeNull();
+  });
+});
+
+describe("shouldSelect", () => {
+  test("selecting the tab already active is not an action, so the key reaches the terminal", () => {
+    expect(shouldSelect("t1", "t1")).toBe(false);
+    expect(shouldSelect(null, "t1")).toBe(false);
+    expect(shouldSelect("t2", "t1")).toBe(true);
+    expect(shouldSelect("t1", null)).toBe(true);
   });
 });
