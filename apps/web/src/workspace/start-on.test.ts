@@ -1,6 +1,6 @@
 import { HcRpcError, type TerminalRunParams } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { startTerminal } from "./start-on.ts";
+import { failureNotice, startTerminal } from "./start-on.ts";
 
 const refusing = (kind: string, message: string) => () =>
   Promise.reject(new HcRpcError({ code: -32000, message, data: { kind, hint: "" } }));
@@ -44,5 +44,17 @@ describe("startTerminal", () => {
     const started = await startTerminal(refusing("unavailable", "raw"), { on: "build-box", cwd: "/w" }, "studio");
     if (started.ok) throw new Error("expected a refusal");
     expect(started.failure.message).toContain("build-box");
+  });
+});
+
+describe("failureNotice", () => {
+  const failure = { machine: "build-box", kind: "unavailable", message: "build-box is not connected" };
+  test("names the machine's own reason while connected", () => {
+    expect(failureNotice(failure, false, "studio").description).toBe("build-box is not connected");
+  });
+  test("names the reconnect while the link is down", () => {
+    expect(failureNotice(failure, true, "studio").description).toBe(
+      "Reconnecting to studio; try again once it is back.",
+    );
   });
 });
