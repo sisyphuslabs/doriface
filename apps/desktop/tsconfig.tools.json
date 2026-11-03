@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "types/tools",
+    "rootDir": ".",
+    "lib": ["ESNext", "DOM"],
+    "types": ["bun"],
+    "resolveJsonModule": true,
+    "tsBuildInfoFile": "types/tools.tsbuildinfo"
+  },
+  "include": ["scripts", "test", "e2e", "playwright.config.ts", "package.json"],
+  "references": [{ "path": "." }, { "path": "../host" }]
+}

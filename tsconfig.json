@@ -5,6 +5,8 @@
     { "path": "packages/client" },
     { "path": "apps/host" },
     { "path": "packages/ui" },
-    { "path": "apps/web" }
+    { "path": "apps/web" },
+    { "path": "apps/desktop" },
+    { "path": "apps/desktop/tsconfig.tools.json" }
   ]
 }
