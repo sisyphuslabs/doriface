@@ -19,12 +19,10 @@ export interface ClientConnectOptions {
  * Opens a client session to a host through the relay. Resolves once the socket is open; refusals (4404 host
  * offline, 4429 rate limited) arrive afterwards as the link's close, with the code on the RelayCloseError.
  */
-export function connectRelayClient(options: ClientConnectOptions): Promise<WebSocketLink> {
+export async function connectRelayClient(options: ClientConnectOptions): Promise<WebSocketLink> {
   const { hostId, pairSlot } = options;
-  if (!HOST_ID_PATTERN.test(hostId)) return Promise.reject(new Error(`invalid hostId ${hostId}`));
-  if (pairSlot !== undefined && !PAIR_SLOT_PATTERN.test(pairSlot)) {
-    return Promise.reject(new Error(`invalid pairing slot ${pairSlot}`));
-  }
+  if (!HOST_ID_PATTERN.test(hostId)) throw new Error(`invalid hostId ${hostId}`);
+  if (pairSlot !== undefined && !PAIR_SLOT_PATTERN.test(pairSlot)) throw new Error(`invalid pairing slot ${pairSlot}`);
   const query = pairSlot === undefined ? "" : `?pair=${pairSlot}`;
   const url = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}${query}`);
   const ws = (options.createSocket ?? defaultCreateSocket)(url);
