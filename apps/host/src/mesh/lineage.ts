@@ -2,44 +2,30 @@ import { hashOf, parseRecord, type Signed, verifyCard, type View } from "@dorifa
 
 export const admittedKeys = (view: View): readonly string[] => [...view.members, ...view.overCap];
 
+/** The card name of each over-cap key, from its governing admission: `view.name` holds members only. */
+export function overCapNames(records: readonly Signed[], view: View): ReadonlyMap<string, string> {
+  const governing = new Set([...view.overCap].flatMap((key) => view.governing.get(key) ?? []));
+  return new Map(
+    records.flatMap((record) => {
+      if (!governing.has(hashOf(record))) return [];
+      const subject = parseRecord(record)?.subject;
+      const card = subject !== undefined && "card" in subject ? verifyCard(subject.card) : undefined;
+      return card === undefined ? [] : [[card.signPub, card.name] as const];
+    }),
+  );
+}
+
 /**
- * Who admitted each admitted key. `view.admitter` covers the 12 members only (PR 2's `membership()`), so an over-cap
- * key's admitters are the signers of its effective admissions: a key a compromised member admitted past the cap must
- * still be found, or `--compromised` would leave it out and the batch itself would promote it to member.
+ * Every key `root` admitted, transitively, in member order: the view's admitter map (design 6.1), which names one
+ * admitter per key, the signer of its governing admission, for over-cap keys as well as members.
  */
-function overCapAdmissions(records: readonly Signed[], view: View) {
-  return records.flatMap((record) => {
-    const body = parseRecord(record);
-    if (body?.type !== "admit" || !view.eff.has(hashOf(record))) return [];
-    const card = body.subject !== undefined && "card" in body.subject ? verifyCard(body.subject.card) : undefined;
-    return card !== undefined && view.overCap.has(card.signPub) ? [{ by: body.by, card }] : [];
-  });
-}
-
-/** The card name of each over-cap key, which `view.name` leaves out like `view.admitter`. */
-export const overCapNames = (records: readonly Signed[], view: View): ReadonlyMap<string, string> =>
-  new Map(overCapAdmissions(records, view).map(({ card }) => [card.signPub, card.name]));
-
-function admittersOf(records: readonly Signed[], view: View): ReadonlyMap<string, ReadonlySet<string>> {
-  const out = new Map<string, Set<string>>();
-  const add = (key: string, admitter: string): void => {
-    const set = out.get(key) ?? new Set<string>();
-    set.add(admitter);
-    out.set(key, set);
-  };
-  for (const [key, admitter] of view.admitter) add(key, admitter);
-  for (const { by, card } of overCapAdmissions(records, view)) add(card.signPub, by);
-  return out;
-}
-
-/** Every key `root` admitted, transitively, over-cap keys included, in member order. */
-export function subtreeOf(records: readonly Signed[], view: View, root: string): readonly string[] {
-  const admitters = admittersOf(records, view);
+export function subtreeOf(view: View, root: string): readonly string[] {
   const tree = new Set([root]);
   for (let grew = true; grew;) {
     grew = false;
     for (const key of admittedKeys(view)) {
-      if (tree.has(key) || ![...(admitters.get(key) ?? [])].some((by) => tree.has(by))) continue;
+      const admitter = view.admitter.get(key);
+      if (tree.has(key) || admitter === undefined || !tree.has(admitter)) continue;
       tree.add(key);
       grew = true;
     }

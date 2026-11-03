@@ -81,7 +81,7 @@ export function planRevoke(
   const key = findMember(view, ref, cardNames);
   if (key === undefined) throw new Error(`no member "${ref}" in this host's view of the mesh`);
   if (key === self) throw new Error("that is this host: to take it out of the mesh, run doriface-host mesh leave");
-  const subtree = subtreeOf(records, view, key);
+  const subtree = subtreeOf(view, key);
   const keys = compromised ? [key, ...subtree] : [key];
   if (keys.length > MAX_REVOKE_SUBJECTS) {
     throw new Error(`--compromised would name ${keys.length} keys; one revoke names at most ${MAX_REVOKE_SUBJECTS}`);
