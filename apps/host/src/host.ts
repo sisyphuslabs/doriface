@@ -18,7 +18,9 @@ import { HostMesh } from "./mesh/host-mesh.ts";
 import { HostSync } from "./mesh/host-sync.ts";
 import { meshProgram } from "./mesh/program.ts";
 import { MeshCommands } from "./mesh/commands.ts";
-import { IDLE_MESH_HOOKS, type MeshHooks } from "./mesh/host-hooks.ts";
+import type { MeshHooks } from "./mesh/host-hooks.ts";
+import { monotonicClock } from "./mesh/clock.ts";
+import { syncHooks } from "./mesh/sync-hooks.ts";
 import { storedMeshStatus } from "./mesh/status-store.ts";
 import { PairingStore, pendingToWire } from "./state/pairing.ts";
 
@@ -49,7 +51,7 @@ export interface HostOptions {
   readonly meshStatus?: (() => MeshStatus | undefined) | undefined;
   /** For tests: the program mesh lines' `via` names; defaults to this executable or a launcher of this entry point. */
   readonly meshProgram?: string | undefined;
-  /** The running mesh parts (sync, reconciler) the mesh commands and status reach; defaults to an idle set. */
+  /** The running mesh parts the mesh commands and status reach; defaults to this host's own sync (`syncHooks`). */
   readonly meshHooks?: MeshHooks | undefined;
   readonly log: (line: string) => void;
 }
@@ -243,7 +245,6 @@ function e2eeDeps(
   const pairing = new PairingStore(stateDir, options.log);
   const mesh = new MeshStore(stateDir, { log: options.log });
   mesh.ensureIndex();
-  const hooks = options.meshHooks ?? IDLE_MESH_HOOKS;
   /** Filled in once the LAN listener has its port. */
   const lanUrls: string[] = [];
   const slots = new PairingSlots(pairing, identity.noise.publicKey, registrar, options.log);
@@ -254,6 +255,7 @@ function e2eeDeps(
   const closeRevoked = (): void => sessions.closeRevoked();
   const sync = new HostSync({ identity, mesh, relay, hc, stateDir, program, closeRevoked, log: options.log });
   sync.changed();
+  const hooks = options.meshHooks ?? syncHooks(sync, monotonicClock);
   const hostMesh = new HostMesh({
     stateDir,
     identity,

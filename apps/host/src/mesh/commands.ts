@@ -119,13 +119,7 @@ export class MeshCommands {
       return { view: current, record: signed };
     });
     const others = [...view.members].filter((key) => key !== this.#self);
-    const confirmed =
-      record === undefined || others.length === 0
-        ? []
-        : await this.deps.hooks.push([record], PUSH_WITHIN_MS).catch((error: unknown) => {
-            this.deps.log(`mesh: pushing this host's leave failed, so no member confirmed it: ${String(error)}`);
-            return [];
-          });
+    const confirmed = record === undefined || others.length === 0 ? [] : await this.#pushLeave(record);
     withStateLock(this.deps.stateDir, () => rmSync(join(this.deps.stateDir, MESH_FILE), { force: true }));
     this.deps.closeRevoked();
     await this.deps.hooks.left().catch((error: unknown) => {
@@ -171,8 +165,21 @@ export class MeshCommands {
   /** Section 6.2 steps 2 and 3: close the sessions the record revoked, then push it. */
   #wrote(record: Signed): void {
     this.deps.closeRevoked();
-    this.deps.hooks.push([record], PUSH_WITHIN_MS).catch((error: unknown) => {
+    try {
+      this.deps.hooks.push([record]);
+    } catch (error) {
       this.deps.log(`mesh: pushing a record this host wrote failed: ${String(error)}`);
-    });
+    }
+  }
+
+  /** Section 6.5: the self-revoke goes to every member it can reach within the window; the confirmed are counted. */
+  async #pushLeave(record: Signed): Promise<readonly string[]> {
+    try {
+      this.deps.hooks.push([record]);
+      return await this.deps.hooks.confirmations(PUSH_WITHIN_MS);
+    } catch (error) {
+      this.deps.log(`mesh: pushing this host's leave failed, so no member confirmed it: ${String(error)}`);
+      return [];
+    }
   }
 }
