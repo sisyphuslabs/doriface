@@ -14,8 +14,11 @@ const app = (id: string, label: string, ghostty?: string): ActionDef =>
 const term = (id: string, label: string, ghostty?: string): ActionDef =>
   ghostty === undefined ? { id, scope: "terminal", label } : { id, scope: "terminal", label, ghostty };
 
+/** New tab, read directly where a surface shows its label (the phone header button). */
+export const NEW_TAB: ActionDef = app("tab.new", "New tab", "new_tab");
+
 export const ACTIONS: readonly ActionDef[] = [
-  app("tab.new", "New tab", "new_tab"),
+  NEW_TAB,
   app("tab.close", "Close tab", "close_surface"),
   app("tab.next", "Next tab", "next_tab"),
   app("tab.prev", "Previous tab", "previous_tab"),
