@@ -10,10 +10,13 @@ import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
+import { onlyThisMachine } from "./machines.ts";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
 import { usePhoneActions, type SessionVerb } from "./use-app-actions.ts";
+import { useMachinesContext } from "./use-machines.ts";
 
 export interface PhoneShellProps {
   readonly connection: HcConnection;
@@ -30,7 +33,9 @@ export interface PhoneShellProps {
 export function PhoneShell(props: PhoneShellProps) {
   const { connection, terminals, open, onOpen, onBack, onNew, onPalette, onSession } = props;
   usePhoneActions(onNew, onSession);
+  const machines = useMachinesContext();
   const terminal = terminals.find((entry) => entry.address === open);
+  const empty = !terminals.some((entry) => entry.state === "live");
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
     return (
@@ -45,9 +50,14 @@ export function PhoneShell(props: PhoneShellProps) {
           <IconButton label="Settings" icon={<Settings />} size="md" render={<Link to="/settings" />} />
         </header>
         <ScrollArea slot="agents-list" className="flex-1">
-          <RovingLists>
-            <AgentLists terminals={terminals} active={null} onOpen={onOpen} agentsFirst />
-          </RovingLists>
+          {empty ? (
+            <PhoneEmpty host={connection.hello.core.name} onNew={onNew} onAddMachine={machines.openAddMachine} />
+          ) : null}
+          {empty && onlyThisMachine(machines.entries) ? null : (
+            <RovingLists>
+              <AgentLists terminals={terminals} active={null} onOpen={onOpen} agentsFirst />
+            </RovingLists>
+          )}
         </ScrollArea>
         <StatusBar
           start={
