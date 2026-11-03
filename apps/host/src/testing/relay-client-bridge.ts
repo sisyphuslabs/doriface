@@ -29,7 +29,7 @@ export class RelayClientBridge {
         open: (ws) => {
           const session = relay.open(this.#nextSession++, ws.data.pairSlot);
           session.onData((bytes) => ws.send(bytes));
-          void session.closed.then((code) => ws.close(code === 1000 ? 1000 : code, ""));
+          void session.closed.then((code) => ws.close(code, ""));
           ws.data.send = (bytes) => session.send(bytes);
           ws.data.close = () => session.close();
         },
