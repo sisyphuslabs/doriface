@@ -58,6 +58,9 @@ export function CommandPalette({
       const step = event.key === "ArrowDown" ? 1 : -1;
       setActive((index) => (index + step + visible.length) % Math.max(visible.length, 1));
     } else if (event.key === "Enter" && current !== undefined) {
+      // The palette consumes its Enter: running a row can close it and move focus to a button,
+      // which would otherwise take the same key press and act on it (reopening the palette).
+      event.preventDefault();
       onRun?.(current.id);
     }
   };
