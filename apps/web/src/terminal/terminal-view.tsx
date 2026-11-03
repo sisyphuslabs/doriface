@@ -1,5 +1,5 @@
 import type { HcConnection, TerminalStream } from "@doriface/client";
-import { Button, EmptyState, cn, useToastManager } from "@doriface/ui";
+import { cn, useToastManager } from "@doriface/ui";
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
@@ -15,6 +15,7 @@ import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
+import { Unopened } from "./unopened.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
 /** Typed text, or the bytes a bound key sends. */
@@ -239,21 +240,7 @@ export function TerminalView(props: TerminalViewProps) {
       </p>
     );
   }
-  if (unopened !== null) {
-    return (
-      <div className={cn("flex min-h-0 flex-1 flex-col justify-center bg-card", className)}>
-        <EmptyState
-          title="This terminal didn't open"
-          description={unopened}
-          actions={
-            <Button variant="secondary" onClick={() => setUnopened(null)}>
-              Try again
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
+  if (unopened !== null) return <Unopened why={unopened} className={className} onRetry={() => setUnopened(null)} />;
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
     <>
