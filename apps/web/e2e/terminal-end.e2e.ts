@@ -123,6 +123,47 @@ test("a reconnect inside a kept program's restart shows it restarting, not an er
   expect(await page.evaluate(() => Reflect.get(window, "attachErrors"))).toEqual([]);
 });
 
+const NOT_SENT = "Typed input was not sent because the program restarted";
+
+test("when the restarted program's view arrives before the old view's reattach, the queued keys still never run", async ({
+  page,
+}) => {
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  hc(["keep", address]);
+  const shellPid = pidOf(address);
+  if (shellPid === null) throw new Error(`${address} has no program`);
+  await terminal.evaluate((element) => element.setAttribute("data-before-restart", ""));
+  await terminal.getByRole("textbox").focus();
+
+  await socket.drop(true);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
+  const misdelivered = test.info().outputPath("misdelivered.txt");
+  await page.keyboard.type(`echo misdeliv-$((5*5)) > '${misdelivered}'`);
+  await page.keyboard.press("Enter");
+  process.kill(shellPid, "SIGKILL");
+  await expect.poll(() => pidOf(address), { timeout: 30_000 }).not.toBeNull();
+
+  // Held attaches force the order: the terminal list (with the new pid) replaces the old view before any reply.
+  const release = socket.hold("terminal.attach");
+  socket.restore();
+  const restarted = page.locator(`[data-terminal="${address}"]:not([data-before-restart])`);
+  await expect(restarted).toHaveCount(1, { timeout: 20_000 });
+  await expect(page.locator(`[data-terminal="${address}"][data-before-restart]`)).toHaveCount(0);
+  await expect(page.getByText(NOT_SENT)).toBeVisible({ timeout: 15_000 });
+  release();
+
+  await expect(restarted).toContainText("$", { timeout: 15_000 });
+  await restarted.getByRole("textbox").focus();
+  await page.keyboard.type("echo fence-$((1+2))");
+  await page.keyboard.press("Enter");
+  await expect(restarted).toContainText("fence-3", { timeout: 15_000 });
+  expect(existsSync(misdelivered)).toBe(false);
+  await expect(page.getByText(NOT_SENT)).toHaveCount(1);
+});
+
 test("a kept program that ends while its view waits for the restart closes its tab", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
