@@ -16,6 +16,8 @@ export class MemoryEnd implements ByteLink {
   closeCode: number | undefined;
   peer: MemoryEnd | undefined;
   tap: ((bytes: Uint8Array) => readonly Uint8Array[]) | undefined;
+  /** Deliver and report closes inside the call instead of on a later microtask. */
+  synchronous = false;
   readonly #data = new Listeners<Uint8Array>();
   readonly #close = new Listeners<Error | undefined>();
   #closed = false;
@@ -25,7 +27,10 @@ export class MemoryEnd implements ByteLink {
     if (this.#closed || peer === undefined) throw new Error("memory link is closed");
     const copy = bytes.slice();
     this.sent.push(copy);
-    for (const message of this.tap?.(copy) ?? [copy]) queueMicrotask(() => peer.deliver(message));
+    for (const message of this.tap?.(copy) ?? [copy]) {
+      if (this.synchronous) peer.deliver(message);
+      else queueMicrotask(() => peer.deliver(message));
+    }
   }
 
   deliver(bytes: Uint8Array): void {
@@ -50,13 +55,16 @@ export class MemoryEnd implements ByteLink {
   end(error: Error | undefined): void {
     if (this.#closed) return;
     this.#closed = true;
-    queueMicrotask(() => this.#close.emit(error));
+    if (this.synchronous) this.#close.emit(error);
+    else queueMicrotask(() => this.#close.emit(error));
   }
 }
 
-export function memoryLinkPair(): readonly [MemoryEnd, MemoryEnd] {
+export function memoryLinkPair(synchronous = false): readonly [MemoryEnd, MemoryEnd] {
   const a = new MemoryEnd();
   const b = new MemoryEnd();
+  a.synchronous = synchronous;
+  b.synchronous = synchronous;
   a.peer = b;
   b.peer = a;
   return [a, b];
@@ -65,10 +73,14 @@ export function memoryLinkPair(): readonly [MemoryEnd, MemoryEnd] {
 /** Resolves with the next close error a link reports, or rejects after `ms`. */
 export function nextClose(link: ByteLink, ms = 2000): Promise<Error | undefined> {
   const { promise, resolve, reject } = Promise.withResolvers<Error | undefined>();
-  const timer = setTimeout(() => reject(new Error(`no close within ${ms} ms`)), ms);
-  link.onClose((error) => {
+  const unsubscribe = link.onClose((error) => {
     clearTimeout(timer);
+    unsubscribe();
     resolve(error);
   });
+  const timer = setTimeout(() => {
+    unsubscribe();
+    reject(new Error(`no close within ${ms} ms`));
+  }, ms);
   return promise;
 }

@@ -36,8 +36,8 @@ export function base32Decode(text: string): Uint8Array {
   let buffer = 0;
   let bits = 0;
   let index = 0;
-  for (const char of text.toLowerCase()) {
-    const value = BASE32.indexOf(char);
+  for (const char of text) {
+    const value = BASE32.indexOf(/^[A-Z]$/.test(char) ? char.toLowerCase() : char);
     if (value === -1) throw new Error(`invalid base32 character ${JSON.stringify(char)}`);
     buffer = ((buffer << 5) | value) & 0xffff;
     bits += 5;

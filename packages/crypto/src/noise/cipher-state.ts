@@ -27,6 +27,9 @@ export class CipherState {
   readonly #rekeyInterval: bigint | undefined;
 
   constructor(key?: Uint8Array, rekeyInterval?: number) {
+    if (rekeyInterval !== undefined && (!Number.isSafeInteger(rekeyInterval) || rekeyInterval <= 0)) {
+      throw new RangeError("rekeyInterval must be a positive integer");
+    }
     this.#key = key;
     this.#rekeyInterval = rekeyInterval === undefined ? undefined : BigInt(rekeyInterval);
   }
@@ -51,6 +54,7 @@ export class CipherState {
     const key = this.#key;
     if (key === undefined) return ciphertext;
     if (ciphertext.byteLength < TAG_LENGTH) throw new DecryptError("ciphertext shorter than its tag");
+    if (this.#nonce >= MAX_NONCE) throw new DecryptError("nonce space exhausted");
     let plaintext: Uint8Array;
     try {
       plaintext = chacha20poly1305(key, nonceBytes(this.#nonce), ad).decrypt(ciphertext);

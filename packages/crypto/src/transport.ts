@@ -29,7 +29,7 @@ export class Transport {
     return records;
   }
 
-  /** Decrypts the next record; throws a DecryptError on any tampered, replayed, reordered or oversized record. */
+  /** Decrypts the next record: RangeError when oversized, DecryptError when tampered, replayed or reordered. */
   open(record: Uint8Array): Uint8Array {
     if (record.byteLength > MAX_MESSAGE) throw new RangeError("record exceeds 65535 bytes");
     return this.#receive.decryptWithAd(EMPTY, record);

@@ -55,31 +55,30 @@ describe("pairing code", () => {
 });
 
 describe("PairingGuard", () => {
-  test("yields the psk once at a time; success uses it up", () => {
+  test("an attempt in flight does not lock others out; the first success uses the code up", () => {
     const guard = new PairingGuard(createPairingOffer(0));
     expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
-    expect(guard.claim(1)).toBeUndefined();
-    guard.use();
+    expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
+    expect(guard.use()).toBe(true);
+    expect(guard.use()).toBe(false);
     expect([guard.state, guard.claim(1)]).toEqual(["used", undefined]);
   });
 
   test(`burns the code on failure number ${MAX_PAIRING_FAILURES}`, () => {
     const guard = new PairingGuard(createPairingOffer(0));
     for (let i = 1; i < MAX_PAIRING_FAILURES; i++) {
-      expect(guard.claim(1)).toBeDefined();
       guard.fail();
       expect([guard.state, guard.failures]).toEqual(["open", i]);
     }
-    guard.claim(1);
     guard.fail();
     expect([guard.state, guard.claim(1)]).toEqual(["burned", undefined]);
     expect(new PairingGuard(guard.offer, MAX_PAIRING_FAILURES).state).toBe("burned");
   });
 
-  test("never yields after expiry", () => {
+  test("never yields after expiry, even if the clock later goes back", () => {
     const guard = new PairingGuard(createPairingOffer(0));
     expect(guard.claim(PAIRING_TTL_MS)).toBeUndefined();
-    expect(guard.state).toBe("open");
+    expect([guard.state, guard.claim(1)]).toEqual(["expired", undefined]);
   });
 });
 
@@ -105,8 +104,26 @@ describe("pairing URL", () => {
     ["a missing code", url.replace(/&c=[^&]+/, "")],
     ["a short key", url.replace(/k=[^&]+/, "k=AAAA")],
     ["a relay that is not a URL", url.replace(/r=[^&]+$/, "r=relay")],
+    ["an oversized key", url.replace(/k=[^&]+/, `k=${"A".repeat(100_000)}`)],
+    ["an oversized code", url.replace(/c=[^&]+/, `c=${"A".repeat(100_000)}`)],
   ])("rejects %s", (_, bad) => {
     expect(() => parsePairingUrl(bad)).toThrow();
+  });
+});
+
+describe("pairing URL origins", () => {
+  test.each(["file:///tmp/x", "data:text/plain,x", "javascript:alert(1)"])("refuses web origin %p", (webOrigin) => {
+    const identity2 = generateHostIdentity();
+    const build = () =>
+      buildPairingUrl({
+        webOrigin,
+        hostId: identity2.hostId,
+        noiseStaticPub: identity2.noise.publicKey,
+        signPub: identity2.sign.publicKey,
+        code: createPairingOffer().code,
+        relayUrl: DEFAULT_RELAY_URL,
+      });
+    expect(build).toThrow("HTTP(S)");
   });
 });
 
@@ -117,10 +134,16 @@ describe("pairing hello", () => {
     expect(decodePairingHello(payload)).toBe("Pixel 9");
   });
 
-  test.each(['{"nam":"x"}', '{"name":""}', '{"name":1}', "not json", `{"name":"${"x".repeat(65)}"}`])(
-    "rejects %p",
-    (bad) => {
-      expect(() => decodePairingHello(new TextEncoder().encode(bad))).toThrow();
-    },
-  );
+  test.each([
+    '{"name":"a\\u001b[2Jb"}',
+    '{"name":"line\\nbreak"}',
+    '{"name":"bidi\\u202e"}',
+    '{"nam":"x"}',
+    '{"name":""}',
+    '{"name":1}',
+    "not json",
+    `{"name":"${"x".repeat(65)}"}`,
+  ])("rejects %p", (bad) => {
+    expect(() => decodePairingHello(new TextEncoder().encode(bad))).toThrow();
+  });
 });
