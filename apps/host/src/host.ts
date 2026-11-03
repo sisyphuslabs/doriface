@@ -70,15 +70,21 @@ export async function startHost(options: HostOptions): Promise<Host> {
   });
   const server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });
   const lan = options.lanListen;
-  const lanServer =
-    lan === undefined || e2ee === undefined
-      ? undefined
-      : Bun.serve({
-          hostname: lan.hostname,
-          port: lan.port,
-          fetch: gateway.lanApp.fetch,
-          websocket: gateway.websocket,
-        });
+  let lanServer: ReturnType<typeof Bun.serve> | undefined;
+  try {
+    lanServer =
+      lan === undefined || e2ee === undefined
+        ? undefined
+        : Bun.serve({
+            hostname: lan.hostname,
+            port: lan.port,
+            fetch: gateway.lanApp.fetch,
+            websocket: gateway.websocket,
+          });
+  } catch (error) {
+    await server.stop(true);
+    throw error;
+  }
   e2ee?.slots.start();
   const control =
     options.stateDir === undefined || e2ee === undefined ? undefined : openControl(options.stateDir, e2ee, options.log);
@@ -101,7 +107,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
           },
     stop() {
       e2ee?.slots.stop();
-      control?.stop(true);
+      control?.stop();
       stopping ??= gateway
         .closeAll()
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))

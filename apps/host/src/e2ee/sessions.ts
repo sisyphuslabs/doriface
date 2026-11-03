@@ -13,6 +13,7 @@ export class LiveSessions {
     this.#log = log;
   }
 
+  /** Registers a session, then re-checks the store: a revoke that ran during its handshake still closes it. */
   add(session: SecureLink): void {
     const key = base64urlEncode(session.remoteStatic);
     const sessions = this.#byKey.get(key) ?? new Set();
@@ -22,6 +23,7 @@ export class LiveSessions {
       sessions.delete(session);
       if (sessions.size === 0 && this.#byKey.get(key) === sessions) this.#byKey.delete(key);
     });
+    this.closeRevoked();
   }
 
   /** Closes every session whose device is no longer in the store. */

@@ -1,6 +1,7 @@
 import { base64urlDecode, base64urlEncode, fingerprintOf } from "@doriface/crypto";
 import { join } from "node:path";
 import { ensureStateDir, isRecord, readJson, stringField, writePrivateJson } from "./files.ts";
+import { withStateLock } from "./lock.ts";
 
 const FILE = "devices.json";
 
@@ -21,16 +22,22 @@ export const deviceIdOf = (device: PairedDevice): string =>
  * process takes effect on the next handshake.
  */
 export class DeviceStore {
+  readonly #dir: string;
   readonly #path: string;
+  readonly #lockTimeoutMs: number | undefined;
 
-  constructor(stateDir: string) {
-    this.#path = join(ensureStateDir(stateDir), FILE);
+  constructor(stateDir: string, options: { readonly lockTimeoutMs?: number } = {}) {
+    this.#dir = ensureStateDir(stateDir);
+    this.#path = join(this.#dir, FILE);
+    this.#lockTimeoutMs = options.lockTimeoutMs;
   }
 
   list(): readonly PairedDevice[] {
     const value = readJson(this.#path);
     if (value === undefined) return [];
-    if (!isRecord(value) || !Array.isArray(value["devices"])) throw new Error(`${FILE}: unsupported format`);
+    if (!isRecord(value) || value["version"] !== 1 || !Array.isArray(value["devices"])) {
+      throw new Error(`${FILE}: unsupported format`);
+    }
     return value["devices"].map((entry: unknown) => {
       if (!isRecord(entry)) throw new Error(`${FILE}: a device entry is not an object`);
       return {
@@ -49,18 +56,26 @@ export class DeviceStore {
   /** Records a newly paired device, replacing an earlier entry for the same key. */
   add(clientStaticPub: Uint8Array, name: string, now = new Date()): PairedDevice {
     const device = { clientStaticPub: base64urlEncode(clientStaticPub), name, pairedAt: now.toISOString() };
-    const others = this.list().filter((entry) => entry.clientStaticPub !== device.clientStaticPub);
-    this.#save([...others, device]);
-    return device;
+    return this.#locked(() => {
+      const others = this.list().filter((entry) => entry.clientStaticPub !== device.clientStaticPub);
+      this.#save([...others, device]);
+      return device;
+    });
   }
 
   /** Removes the devices whose id (or full base64url key) is `handle`; returns what was removed. */
   revoke(handle: string): readonly PairedDevice[] {
-    const devices = this.list();
     const id = handle.replaceAll(" ", "").toUpperCase();
-    const removed = devices.filter((device) => deviceIdOf(device) === id || device.clientStaticPub === handle);
-    if (removed.length > 0) this.#save(devices.filter((device) => !removed.includes(device)));
-    return removed;
+    return this.#locked(() => {
+      const devices = this.list();
+      const removed = devices.filter((device) => deviceIdOf(device) === id || device.clientStaticPub === handle);
+      if (removed.length > 0) this.#save(devices.filter((device) => !removed.includes(device)));
+      return removed;
+    });
+  }
+
+  #locked<T>(fn: () => T): T {
+    return withStateLock(this.#dir, fn, this.#lockTimeoutMs);
   }
 
   #save(devices: readonly PairedDevice[]): void {
