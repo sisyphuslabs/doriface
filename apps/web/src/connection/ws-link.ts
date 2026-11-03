@@ -24,8 +24,6 @@ export interface LinkOptions {
   readonly pingEveryMs?: number;
 }
 
-/** The one keepalive interval the relay reaps against: it closes sockets quiet for more than 90 s. */
-export const RELAY_PING_MS = 30_000;
 
 /** Opens a binary WebSocket and resolves once it is open; one message carries one chunk of bytes. */
 export function openWebSocketLink(
