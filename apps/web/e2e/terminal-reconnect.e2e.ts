@@ -1,9 +1,14 @@
 import { writeFileSync } from "node:fs";
+import { FrameDecoder, FrameKind } from "@doriface/protocol";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
+
+/** A key press of "q" on a terminal's stream channel. */
+const isKeyQ = (frame: { channel: number; kind: number; payload: Uint8Array }) =>
+  frame.channel !== 0 && frame.kind === FrameKind.Data && Buffer.from(frame.payload).toString() === "q";
 
 const attaches = (frames: readonly string[]) => frames.filter((frame) => frame.includes('"terminal.attach"'));
 
@@ -115,4 +120,43 @@ test("the reconnect label counts down to the next attempt", async ({ page }) => 
   await expect(status).toHaveText("Reconnecting in 5 s", { timeout: 15_000 });
   await expect(status).toHaveText("Reconnecting in 4 s", { timeout: 3_000 });
   socket.restore();
+});
+
+test("a reattach while the window is in the background does not tell the core this viewer is in use", async ({
+  page,
+}) => {
+  // Headless Chromium cannot take focus from its window, so the page's view of it is switched instead.
+  await page.addInitScript(() => {
+    const own = Document.prototype.hasFocus;
+    Object.defineProperty(Document.prototype, "hasFocus", {
+      value(this: Document) {
+        return Reflect.get(window, "windowInBackground") === true ? false : own.call(this);
+      },
+    });
+  });
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  await terminal.getByRole("textbox").focus();
+  await page.evaluate(() => Object.assign(window, { windowInBackground: true }));
+  const opened = socket.opened();
+  await socket.drop(true);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
+  const from = socket.sent().length;
+  socket.restore();
+  await expect.poll(socket.opened, { timeout: 15_000 }).toBeGreaterThan(opened);
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeHidden({ timeout: 15_000 });
+
+  // A key typed now is sent after whatever the reattach sent, so once it is on the wire those frames are all there.
+  await page.keyboard.type("q");
+  // The plain-mode hello line opens each connection; every later message is whole frames.
+  const frames = () =>
+    socket
+      .sent()
+      .slice(from)
+      .filter((message) => !message.startsWith("{"))
+      .flatMap((message) => new FrameDecoder().push(Buffer.from(message, "latin1")));
+  await expect.poll(() => frames().some(isKeyQ), { timeout: 15_000 }).toBe(true);
+  const focusIn = frames().filter((frame) => frame.kind === FrameKind.Focus && frame.payload[0] === 1);
+  expect(focusIn).toHaveLength(0);
 });
