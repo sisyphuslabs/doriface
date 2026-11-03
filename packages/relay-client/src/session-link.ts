@@ -56,9 +56,12 @@ export class SessionLink implements ByteLink {
     return this.#closed.add(listener);
   }
 
-  /** Ends the session and tells the client, through the relay, with a normal close. */
-  close(): void {
-    this.#end(undefined, true);
+  /**
+   * Ends the session and tells the client, through the relay, with `code` (a normal close by default). The relay
+   * passes on the codes a WebSocket endpoint may send and reports any other as a normal close.
+   */
+  close(code: number = CloseCode.Normal, reason = ""): void {
+    this.#end(code === CloseCode.Normal ? undefined : new RelayCloseError(code, reason), true, code);
   }
 
   /** Called by the uplink with each DATA payload for this session. */
@@ -72,11 +75,11 @@ export class SessionLink implements ByteLink {
     this.#end(code === CloseCode.Normal ? undefined : new RelayCloseError(code, "session ended"), false);
   }
 
-  #end(error: Error | undefined, tellRelay: boolean): void {
+  #end(error: Error | undefined, tellRelay: boolean, code?: number): void {
     if (this.#closed.fired) return;
     if (tellRelay) {
-      const code = error === undefined ? CloseCode.Normal : CloseCode.InternalError;
-      this.#transport.sendFrame(encodeClose(this.sessionId, code));
+      const sent = code ?? (error === undefined ? CloseCode.Normal : CloseCode.InternalError);
+      this.#transport.sendFrame(encodeClose(this.sessionId, sent));
     }
     this.#transport.release(this.sessionId);
     this.#inbox.clear();
