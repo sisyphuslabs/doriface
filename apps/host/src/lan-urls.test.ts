@@ -12,7 +12,10 @@ describe("lanUrlsFor", () => {
     expect(lanUrlsFor(bind, 7766).some((url) => url.includes("[::]"))).toBe(false);
   });
 
-  test.each(["fe80::1", "fe80::1%en0", "doriface.local"])("%p advertises nothing", (bind) => {
-    expect(lanUrlsFor(bind, 7766)).toEqual([]);
-  });
+  test.each(["fe80::1", "fe80::1%en0", "doriface.local", "999.0.2.10", "192.0.2.256"])(
+    "%p advertises nothing",
+    (bind) => {
+      expect(lanUrlsFor(bind, 7766)).toEqual([]);
+    },
+  );
 });
