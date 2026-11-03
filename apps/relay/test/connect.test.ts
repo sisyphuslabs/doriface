@@ -115,6 +115,26 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     expect(lines.at(-1)).toContain("has not paired with host");
   }, 30_000);
 
+  test("after a revoke, a fresh pairing link pairs again and hello answers", async () => {
+    const again = join(scratch, "again");
+    const first = runConnect(again, host().relayUrl, await host().pairingLink(), "--name", "again");
+    first.end();
+    expect(await within(first.exited, "the first pairing")).toBe(0);
+    await host().revokeAll();
+    const repair = runConnect(again, host().relayUrl, await host().pairingLink(), "--name", "again");
+    await repair.write(HELLO);
+    expect(JSON.parse(decoder.decode(await within(repair.reader.line(), "hello after re-pairing"))).result.framed).toBe(
+      true,
+    );
+    repair.end();
+    expect(await within(repair.exited, "exit")).toBe(0);
+    const plain = runConnect(again, host().relayUrl, host().hostId);
+    await plain.write(HELLO);
+    expect(JSON.parse(decoder.decode(await within(plain.reader.line(), "hello by hostId"))).result.framed).toBe(true);
+    plain.end();
+    expect(await within(plain.exited, "exit")).toBe(0);
+  }, 60_000);
+
   test("a device the host revoked or never stored is told to pair again", async () => {
     const stranger = join(scratch, "forgotten");
     const pair = runConnect(stranger, host().relayUrl, await host().pairingLink(), "--name", "forgotten");
