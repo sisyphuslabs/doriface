@@ -46,7 +46,7 @@ describe.each(Object.entries(BUILTIN_PALETTES))("%s meets WCAG 2.2 AA", (_, pale
     expect(worstContrast(role(`status-${status}-text`), chips)).toBeGreaterThanOrEqual(AA_TEXT);
   });
 
-  test("terminal default text", () => {
-    expect(worstContrast(role("term-fg"), [flatten(role("term-bg"), base)])).toBeGreaterThanOrEqual(AA_TEXT);
+  test.each(["term-fg", "term-faint"])("--%s terminal text", (name) => {
+    expect(worstContrast(role(name), [flatten(role("term-bg"), base)])).toBeGreaterThanOrEqual(AA_TEXT);
   });
 });
