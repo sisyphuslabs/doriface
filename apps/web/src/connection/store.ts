@@ -3,11 +3,20 @@ import { useSyncExternalStore } from "react";
 import { connect, DeviceNotPairedError } from "./connect.ts";
 import { type ConnectionSettings, isConfigured, loadSettings, saveSettings } from "./settings.ts";
 
+/**
+ * `stale` is the connection that dropped while this one retries: its workspace stays on screen meanwhile.
+ * It is null on the first connect, after a settings change and when retrying cannot help.
+ */
 export type ConnectionState =
   | { readonly phase: "unconfigured" }
-  | { readonly phase: "connecting"; readonly attempt: number }
+  | { readonly phase: "connecting"; readonly attempt: number; readonly stale: HcConnection | null }
   | { readonly phase: "open"; readonly connection: HcConnection }
-  | { readonly phase: "failed"; readonly error: Error; readonly retryInMs: number | null };
+  | {
+      readonly phase: "failed";
+      readonly error: Error;
+      readonly retryInMs: number | null;
+      readonly stale: HcConnection | null;
+    };
 
 const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
 
@@ -18,6 +27,7 @@ export class ConnectionStore {
   #listeners = new Set<() => void>();
   #abort: AbortController | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  #stale: HcConnection | null = null;
 
   constructor(settings: ConnectionSettings) {
     this.#settings = settings;
@@ -45,7 +55,7 @@ export class ConnectionStore {
   /** Shows the connecting state while the desktop app restarts its local host before the first attempt. */
   restoring(): void {
     this.stop();
-    this.#set({ phase: "connecting", attempt: 0 });
+    this.#set({ phase: "connecting", attempt: 0, stale: null });
   }
 
   start(): void {
@@ -61,20 +71,23 @@ export class ConnectionStore {
     clearTimeout(this.#timer);
     this.#abort?.abort();
     this.#abort = null;
+    this.#stale = null;
     if (this.#state.phase === "open") this.#state.connection.close();
   }
 
   async #attempt(attempt: number): Promise<void> {
     const abort = new AbortController();
     this.#abort = abort;
-    this.#set({ phase: "connecting", attempt });
+    this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
       const connection = await connect(this.#settings, abort.signal);
       if (abort.signal.aborted) return connection.close();
       connection.onClose((error) => {
         if (this.#abort !== abort) return;
+        this.#stale = connection;
         this.#retry(error ?? new Error("the host closed the connection"), 0);
       });
+      this.#stale = null;
       this.#set({ phase: "open", connection });
     } catch (error) {
       if (abort.signal.aborted) return;
@@ -84,11 +97,12 @@ export class ConnectionStore {
 
   #retry(error: Error, attempt: number): void {
     if (error instanceof DeviceNotPairedError) {
-      this.#set({ phase: "failed", error, retryInMs: null });
+      this.#stale = null;
+      this.#set({ phase: "failed", error, retryInMs: null, stale: null });
       return;
     }
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
-    this.#set({ phase: "failed", error, retryInMs: delay });
+    this.#set({ phase: "failed", error, retryInMs: delay, stale: this.#stale });
     this.#timer = setTimeout(() => void this.#attempt(attempt), delay);
   }
 

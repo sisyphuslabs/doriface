@@ -7,6 +7,7 @@ import { useActionKeys } from "../keys/use-action-keys.ts";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
+import { ReconnectStatus } from "./reconnect-status.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { useAppActions } from "./use-app-actions.ts";
 import type { Tabs } from "./use-tabs.ts";
@@ -94,6 +95,7 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
                 {live.length} {live.length === 1 ? "terminal" : "terminals"}
                 {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
               </StatusBarItem>
+              <ReconnectStatus />
             </>
           }
           end={
