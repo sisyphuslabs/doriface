@@ -174,6 +174,16 @@ const variants: readonly Variant[] = [
     },
   },
   {
+    name: ".relay/.git/objects/pack symlinked to the parent's packs",
+    outcome: "refused",
+    arrange: async (p) => {
+      await emptyRepo(p);
+      rmSync(join(relay(p), ".git", "objects", "pack"), { recursive: true });
+      symlinkSync(join(p, ".git", "objects", "pack"), join(relay(p), ".git", "objects", "pack"));
+      return {};
+    },
+  },
+  {
     name: "core.worktree in .relay/.git/config naming the parent",
     outcome: "fetched",
     arrange: async (p) => {
