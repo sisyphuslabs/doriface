@@ -57,22 +57,26 @@ const confinedTo = (dir: string): Record<string, string | undefined> => ({
   GIT_TERMINAL_PROMPT: "0",
 });
 
+const CREDENTIALS = new Set(["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]);
+
+/** The environment for the relay's `bun install`: its lifecycle scripts get none of the credentials the fetch used. */
+const withoutCredentials = (env: Record<string, string | undefined>): Record<string, string | undefined> =>
+  Object.fromEntries(Object.entries(env).filter(([name]) => !CREDENTIALS.has(name) && !name.startsWith("GIT_CONFIG_")));
+
 /** Runs `argv` in `cwd` with stdout passed through; stderr is returned as well as printed. */
-async function run(argv: readonly string[], cwd: string): Promise<{ code: number; stderr: string }> {
-  const proc = Bun.spawn([...argv], {
-    cwd,
-    stdin: "ignore",
-    stdout: "inherit",
-    stderr: "pipe",
-    env: confinedTo(cwd),
-  });
+async function run(
+  argv: readonly string[],
+  cwd: string,
+  env: Record<string, string | undefined> = confinedTo(cwd),
+): Promise<{ code: number; stderr: string }> {
+  const proc = Bun.spawn([...argv], { cwd, stdin: "ignore", stdout: "inherit", stderr: "pipe", env });
   const stderr = await new Response(proc.stderr).text();
   process.stderr.write(stderr);
   return { code: await proc.exited, stderr };
 }
 
-async function must(argv: readonly string[], cwd: string): Promise<void> {
-  const { code } = await run(argv, cwd);
+async function must(argv: readonly string[], cwd: string, env?: Record<string, string | undefined>): Promise<void> {
+  const { code } = await run(argv, cwd, env);
   if (code !== 0) throw new Error(`${argv.join(" ")} exited ${code} in ${cwd}`);
 }
 
@@ -111,7 +115,7 @@ export async function fetchRelay(): Promise<string> {
   // The checkout is this module's own: discard what `bun install` changes inside the submodule (it marks the vendored
   // host CLI executable), or moving to a new pin would refuse to switch the submodule.
   await must(["git", "submodule", "update", "--init", "--depth", "1", "--force"], dir);
-  await must([process.execPath, "install", "--frozen-lockfile"], dir);
+  await must([process.execPath, "install", "--frozen-lockfile"], dir, withoutCredentials(process.env));
   console.log(`relay: ${pin.repository} at ${pin.rev} in ${dir}`);
   return dir;
 }
