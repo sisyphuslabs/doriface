@@ -105,43 +105,47 @@ export function TerminalView(props: TerminalViewProps) {
     ready.fit();
     const { cols, rows } = ready;
     const display = readDisplay(ready.element);
-    connection.attach({ terminal: address, cols, rows, history: HISTORY_LINES, display }, { autoCredit: false }).then(
-      (attached) => {
-        stream.current = attached;
-        // A fit while the attach was in flight had no stream to resize.
-        if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
-        // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
-        if (attachedBefore.current) handle.current?.write(FULL_RESET);
-        attachedBefore.current = true;
-        const resets = new CursorResets();
-        attached.onData((bytes) => {
-          handle.current?.write(bytes);
-          attached.consumed(bytes.byteLength);
-          // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
-          if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
-        });
-        // Only the program ending closes the tab; a detach (unmount) or a lost connection leaves it open.
-        attached.onClose((close) => {
-          if (stream.current === attached) stream.current = null;
-          if (close.by === "core") onClosed?.(address);
-        });
-        for (const data of pending.current.splice(0)) attached.write(data);
-        // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
-        if (focused) ready.focus();
-        return attached;
-      },
-      (cause: unknown) => {
-        // The connection dropped mid-attach: the next one attaches again (below).
-        if (connection.closed) return;
-        const message = `Could not open ${address}: ${String(cause)}`;
-        if (!attachedBefore.current) return setError(message);
-        // A program that ended while the connection was down sent no CLOSE; its tab closes as that CLOSE would have.
-        void connection.call("terminal.get", { terminal: address }).then(
-          (terminal) => (terminal.state === "live" ? setError(message) : onClosed?.(address)),
-          () => (connection.closed ? undefined : onClosed?.(address)),
-        );
-      },
-    );
+    // A reattach after a reconnect says so: the core applies its size only once this viewer is active again.
+    const resumed = attachedBefore.current ? { resumed: true } : {};
+    connection
+      .attach({ terminal: address, cols, rows, history: HISTORY_LINES, display, ...resumed }, { autoCredit: false })
+      .then(
+        (attached) => {
+          stream.current = attached;
+          // A fit while the attach was in flight had no stream to resize.
+          if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
+          // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
+          if (attachedBefore.current) handle.current?.write(FULL_RESET);
+          attachedBefore.current = true;
+          const resets = new CursorResets();
+          attached.onData((bytes) => {
+            handle.current?.write(bytes);
+            attached.consumed(bytes.byteLength);
+            // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
+            if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
+          });
+          // Only the program ending closes the tab; a detach (unmount) or a lost connection leaves it open.
+          attached.onClose((close) => {
+            if (stream.current === attached) stream.current = null;
+            if (close.by === "core") onClosed?.(address);
+          });
+          for (const data of pending.current.splice(0)) attached.write(data);
+          // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
+          if (focused) ready.focus();
+          return attached;
+        },
+        (cause: unknown) => {
+          // The connection dropped mid-attach: the next one attaches again (below).
+          if (connection.closed) return;
+          const message = `Could not open ${address}: ${String(cause)}`;
+          if (!attachedBefore.current) return setError(message);
+          // A program that ended while the connection was down sent no CLOSE; its tab closes as that CLOSE would have.
+          void connection.call("terminal.get", { terminal: address }).then(
+            (terminal) => (terminal.state === "live" ? setError(message) : onClosed?.(address)),
+            () => (connection.closed ? undefined : onClosed?.(address)),
+          );
+        },
+      );
   };
 
   useEffect(() => {
