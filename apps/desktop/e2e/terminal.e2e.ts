@@ -81,7 +81,8 @@ test("Use this computer attaches a live terminal that echoes", async () => {
   expect(host).not.toBe("");
   expect(shown.toLowerCase()).not.toContain(host.toLowerCase());
   expect(shown).not.toContain(userInfo().username);
-  expect(shown).not.toContain(scratch?.shellHome ?? "no scratch home");
+  if (scratch === undefined) throw new Error("the scratch shell home was not created");
+  expect(shown).not.toContain(scratch.shellHome);
   const screenshot = test.info().outputPath("terminal.png");
   await page.screenshot({ path: screenshot });
   console.log(`screenshot ${screenshot}`);
