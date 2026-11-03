@@ -56,7 +56,7 @@ async function roundTrips({ client, session }: Session): Promise<boolean> {
 
 describe("keepalive and reaping (C1, C6)", () => {
   test("ping is answered with pong", async () => {
-    const ws = socketFrom(testIp())(`${relay.url.replace("http", "ws")}/v1/host/${"d".repeat(26)}`);
+    const ws = socketFrom(testIp())(`${relay.url.replace("http", "ws")}/v1/host/${"d".repeat(25)}a`);
     const pong = new Promise<unknown>((resolve) => {
       ws.addEventListener("message", (event: MessageEvent<unknown>) => {
         if (typeof event.data === "string") resolve(event.data);

@@ -71,7 +71,7 @@ describe("pairing slots", () => {
 
   test("an unauthenticated uplink cannot register a slot", async () => {
     const slot = randomSlot();
-    const probe = new Probe(`${relay.url.replace("http", "ws")}/v1/host/${"c".repeat(26)}`, testIp());
+    const probe = new Probe(`${relay.url.replace("http", "ws")}/v1/host/${"c".repeat(25)}a`, testIp());
     await probe.next();
     probe.socket.send(encodePairSlotRequest(slot, crypto.getRandomValues(new Uint8Array(32))));
     expect((await probe.closed).code).toBe(CloseCode.RelayAuthFailed);
