@@ -2,6 +2,7 @@ import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import { resolveKeymap } from "../keys/keymap.ts";
 import { choiceOf, paletteCommands } from "./palette-commands.ts";
+import { availableActions, type Shell } from "./shell-actions.ts";
 
 const terminal = (fields: Partial<Terminal>): Terminal => ({
   address: "t1",
@@ -16,7 +17,8 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
   ...fields,
 });
 
-const source = (terminals: readonly Terminal[]) => ({
+const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
+  actions: availableActions(shell, { open: ["t1", "t2"] }),
   terminals,
   host: "studio",
   route: "relay",
@@ -51,6 +53,16 @@ describe("paletteCommands", () => {
       "deploy",
       "shell",
     ]);
+  });
+
+  test("a phone's palette lists only what the phone shell handles", () => {
+    const labels = paletteCommands(source([], "phone")).map((command) => command.label);
+    expect(labels).toEqual(["New tab", "Larger terminal text", "Smaller terminal text", "studio", "Open settings"]);
+  });
+
+  test("split is listed only once there are two tabs to split", () => {
+    expect(availableActions("desktop", { open: ["t1"] })).not.toContain("pane.split");
+    expect(availableActions("desktop", { open: ["t1", "t2"] })).toContain("pane.split");
   });
 
   test("every row runs something", () => {
