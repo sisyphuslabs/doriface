@@ -1,4 +1,6 @@
 import { backoffDelay } from "./backoff.ts";
+import { LinkClosedError } from "./link.ts";
+import { type PairSlotResult, PairSlotRequests } from "./pair-requests.ts";
 import { SessionLink } from "./session-link.ts";
 import type { HostSigner } from "./signer.ts";
 import { type CreateSocket, defaultCreateSocket, isOpen, relaySocketUrl } from "./socket.ts";
@@ -8,6 +10,7 @@ import {
   CloseCode,
   decodeMux,
   encodeAuthAnswer,
+  encodePairSlotRequest,
   hostIdOf,
   MuxError,
   MuxType,
@@ -45,6 +48,7 @@ export class Uplink {
   readonly #url: string;
   readonly #sessions = new Map<number, SessionLink>();
   readonly #stop = Promise.withResolvers<number>();
+  readonly #pairSlots = new PairSlotRequests();
   #socket: WebSocket | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #attempt = 0;
@@ -62,6 +66,21 @@ export class Uplink {
     const uplink = new Uplink(await hostIdOf(options.signer.publicKey), options);
     uplink.#connect();
     return uplink;
+  }
+
+  /**
+   * Registers a pairing slot (the typed code's first 3 characters) so a client with only the code can find this
+   * host. "taken" means another host holds the slot: draw a new code. Rejects if the uplink is not connected.
+   */
+  registerPairSlot(slot: string, noiseStaticPub: Uint8Array): Promise<PairSlotResult> {
+    const ws = this.#socket;
+    if (ws === undefined || !isOpen(ws) || this.#answeredAt === undefined) {
+      return Promise.reject(new LinkClosedError("the uplink is not connected"));
+    }
+    const frame = encodePairSlotRequest(slot, noiseStaticPub);
+    const result = this.#pairSlots.wait(slot);
+    ws.send(frame);
+    return result;
   }
 
   /** Closes the uplink and every session on it, and stops reconnecting. */
@@ -105,6 +124,10 @@ export class Uplink {
       if (error instanceof MuxError) return ws.close(CloseCode.ProtocolError, error.message);
       throw error;
     }
+    if (frame.type === MuxType.PairSlot) {
+      if (!this.#pairSlots.settle(frame.payload)) ws.close(CloseCode.ProtocolError, "bad PAIR_SLOT reply");
+      return;
+    }
     const session = this.#sessions.get(frame.sessionId);
     if (frame.type === MuxType.Data) return session?.deliver(frame.payload);
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
@@ -123,6 +146,7 @@ export class Uplink {
     if (ws !== this.#socket) return;
     this.#socket = undefined;
     this.#endSessions(code);
+    this.#pairSlots.failAll(`the uplink closed with ${code} before the relay answered`);
     if (this.#done) return;
     if (FINAL_CODES.has(code)) return this.#finish(code);
     const stable = this.#answeredAt !== undefined && Date.now() - this.#answeredAt >= STABLE_MS;
@@ -146,6 +170,7 @@ export class Uplink {
     const ws = this.#socket;
     this.#socket = undefined;
     this.#endSessions(code);
+    this.#pairSlots.failAll("the uplink stopped");
     if (ws !== undefined && isOpen(ws)) ws.close(CloseCode.Normal, "host stopping");
     this.#options.onState?.({ state: "stopped", code });
     this.#stop.resolve(code);

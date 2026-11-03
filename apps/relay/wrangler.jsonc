@@ -7,9 +7,16 @@
   // from workers.dev.
   "routes": [{ "pattern": "relay-doriface.omo.dev", "custom_domain": true }],
   "durable_objects": {
-    "bindings": [{ "name": "ROOM", "class_name": "Room" }],
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "PAIR_SLOTS", "class_name": "PairSlot" },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
-  // WebSocket upgrades per connecting IP. The namespace id only has to be unique within the deploying account.
-  "ratelimits": [{ "name": "CONNECT_LIMIT", "namespace_id": "4429", "simple": { "limit": 60, "period": 60 } }],
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room", "PairSlot"] }],
+  // Per connecting IP: WebSocket upgrades, and pairing slot lookups. Namespace ids only have to be unique within the
+  // deploying account.
+  "ratelimits": [
+    { "name": "CONNECT_LIMIT", "namespace_id": "4429", "simple": { "limit": 60, "period": 60 } },
+    { "name": "PAIR_LIMIT", "namespace_id": "4430", "simple": { "limit": 20, "period": 60 } },
+  ],
 }

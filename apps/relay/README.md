@@ -8,13 +8,15 @@ directly. It implements the relay part of the transport contract:
   `signPub || Ed25519 signature` over `"doriface-relay-v1" || hostId || challenge`. A wrong key or signature closes
   with 4403, and a newer authenticated uplink replaces the old one (closed with 4409, its sessions with 4404).
 - `GET /v1/client/<hostId>` (WebSocket) opens a client session. Each session is multiplexed onto the uplink as
-  `[type u8][sessionId u32 LE][payload]` frames (1 OPEN, 2 DATA, 3 CLOSE). An offline host closes the
+  `[type u8][sessionId u32 LE][payload]` frames (1 OPEN, 2 DATA, 3 CLOSE, 4 PAIR_SLOT). An offline host closes the
   client with 4404; the 33rd concurrent session to one host and connections over the per-IP rate close with 4429.
+- `GET /v1/pair/<slot>` answers `{hostId, noiseStaticPub, signPub}` for a host whose uplink registered the
+  3-character pairing slot in the last 10 minutes (404 otherwise, 429 over the per-IP rate).
 - Messages over 1 MiB close the socket with 1009. Payloads are forwarded as they arrive and are never decrypted or
   logged.
 
 One `Room` Durable Object per hostId holds the uplink and its sessions with the WebSocket Hibernation API, so an idle
-host costs nothing.
+host costs nothing; one `PairSlot` object per pairing slot holds a slot until its TTL alarm.
 
 ## Self-hosting
 
@@ -32,11 +34,12 @@ available on the free plan.
    bunx wrangler deploy
    ```
 
-   The first deploy applies the `v1` migration that creates the `Room` class.
+   The first deploy applies the `v1` migration that creates the `Room` and `PairSlot` classes.
 
 3. Point hosts and clients at `https://<your hostname>`.
 
-The per-IP limit (60 WebSocket upgrades per minute) is the `ratelimits` entry in `wrangler.jsonc`.
+The per-IP limits (60 WebSocket upgrades and 20 pairing lookups per minute) are the `ratelimits` entries in
+`wrangler.jsonc`.
 
 ## Development
 

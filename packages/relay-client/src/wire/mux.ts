@@ -1,9 +1,10 @@
 /**
  * Relay <-> host multiplexing frame: `[type u8][sessionId u32 LE][payload]`.
- * OPEN has no payload, DATA carries opaque bytes, CLOSE carries a u16 LE close code.
+ * OPEN has no payload, DATA carries opaque bytes, CLOSE carries a u16 LE close code. PAIR_SLOT (contract v1.1) is a
+ * control frame with sessionId 0; its payload is defined in pair-slot.ts.
  */
 
-export const MuxType = { Open: 1, Data: 2, Close: 3 } as const;
+export const MuxType = { Open: 1, Data: 2, Close: 3, PairSlot: 4 } as const;
 export type MuxType = (typeof MuxType)[keyof typeof MuxType];
 
 export const MUX_HEADER_BYTES = 5;
@@ -11,7 +12,8 @@ export const MUX_HEADER_BYTES = 5;
 export type MuxFrame =
   | { readonly type: typeof MuxType.Open; readonly sessionId: number }
   | { readonly type: typeof MuxType.Data; readonly sessionId: number; readonly payload: Uint8Array }
-  | { readonly type: typeof MuxType.Close; readonly sessionId: number; readonly code: number };
+  | { readonly type: typeof MuxType.Close; readonly sessionId: number; readonly code: number }
+  | { readonly type: typeof MuxType.PairSlot; readonly sessionId: number; readonly payload: Uint8Array };
 
 export class MuxError extends Error {
   override readonly name = "MuxError";
@@ -57,6 +59,7 @@ export function decodeMux(bytes: Uint8Array): MuxFrame {
       if (rest !== 0) throw new MuxError(`OPEN carries ${rest} payload bytes`);
       return { type, sessionId };
     case MuxType.Data:
+    case MuxType.PairSlot:
       return { type, sessionId, payload: bytes.subarray(MUX_HEADER_BYTES) };
     case MuxType.Close:
       if (rest !== 2) throw new MuxError(`CLOSE payload must be 2 bytes, got ${rest}`);
