@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type ConnectionSettings } from "../connection/settings.ts";
-import { desktopBridge, onDesktopOpenSettings } from "./bridge.ts";
+import { closeDesktopWindow, desktopBridge, onDesktopNavigate, setDesktopBackground } from "./bridge.ts";
+import { bootConnection, startThisComputer } from "./local-host.ts";
 
 const noop = (): void => undefined;
-import { bootConnection, startThisComputer } from "./local-host.ts";
 
 function target(settings: ConnectionSettings) {
   const calls: string[] = [];
@@ -76,16 +76,33 @@ describe("desktop local host", () => {
     await expect(bad?.startLocalHost() ?? Promise.resolve()).rejects.toThrow("no local host address");
   });
 
-  test("the app menu's Settings item opens Settings only through a bridge that offers it", () => {
-    const opened: string[] = [];
-    let fire = noop;
-    onDesktopOpenSettings(() => opened.push("menu"), {
-      doriface: { onOpenSettings: (listener: () => void) => (fire = listener) },
+  test("the shell's navigations reach the app only as app paths, and only through a bridge that offers them", () => {
+    const shown: string[] = [];
+    let send: (path: unknown) => void = noop;
+    onDesktopNavigate((path) => shown.push(path), {
+      doriface: { onNavigate: (listener: (path: unknown) => void) => (send = listener) },
     });
-    fire();
-    fire();
-    onDesktopOpenSettings(() => opened.push("web"), {});
-    onDesktopOpenSettings(() => opened.push("old"), { doriface: { version: "0.1.0" } });
-    expect(opened).toEqual(["menu", "menu"]);
+    for (const path of ["/settings", "//evil.example/x", "https://evil.example/", 42, "/pair#h=1"]) send(path);
+    onDesktopNavigate((path) => shown.push(`web ${path}`), {});
+    onDesktopNavigate((path) => shown.push(`old ${path}`), { doriface: { version: "0.1.0" } });
+    expect(shown).toEqual(["/settings", "/pair#h=1"]);
+  });
+
+  test("the page background goes to a bridge that can paint the window, and nowhere else", () => {
+    const painted: unknown[] = [];
+    setDesktopBackground("#131518", {
+      doriface: { setWindowBackground: async (color: unknown) => painted.push(color) },
+    });
+    setDesktopBackground("#131518", {});
+    setDesktopBackground("#131518", { doriface: { version: "0.1.0" } });
+    expect(painted).toEqual(["#131518"]);
+  });
+
+  test("closing the window goes through a bridge that can close it, and says when there is none", () => {
+    let closes = 0;
+    expect(closeDesktopWindow({ doriface: { closeWindow: async () => void (closes += 1) } })).toBe(true);
+    expect(closeDesktopWindow({})).toBe(false);
+    expect(closeDesktopWindow({ doriface: { version: "0.1.0" } })).toBe(false);
+    expect(closes).toBe(1);
   });
 });

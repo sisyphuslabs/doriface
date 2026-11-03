@@ -12,7 +12,9 @@ const foreign: readonly IpcSender[] = [
 
 const setup = () => {
   const opened: string[] = [];
+  const painted: string[] = [];
   let starts = 0;
+  let closes = 0;
   const handlers = ipcHandlers({
     origin: APP_ORIGIN,
     startLocalHost: async () => {
@@ -22,8 +24,14 @@ const setup = () => {
     openExternal: async (url) => {
       opened.push(url);
     },
+    setWindowBackground: (color) => {
+      painted.push(color);
+    },
+    closeWindow: () => {
+      closes += 1;
+    },
   });
-  return { handlers, opened, starts: () => starts };
+  return { handlers, opened, painted, starts: () => starts, closes: () => closes };
 };
 
 describe("IPC sender gate", () => {
@@ -33,6 +41,8 @@ describe("IPC sender gate", () => {
       foreign.flatMap((event) => [
         expect(handlers.openExternal(event, "https://github.com/")).rejects.toThrow("refused IPC"),
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
+        expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
       ]),
     );
     expect(opened).toEqual([]);
@@ -55,5 +65,23 @@ describe("IPC sender gate", () => {
     const { handlers, starts } = setup();
     expect(await handlers.startLocalHost(app)).toBe(endpoint);
     expect(starts()).toBe(1);
+  });
+
+  test("the app origin can set the window background to a hex colour and nothing else", async () => {
+    const { handlers, painted } = setup();
+    expect(await handlers.setWindowBackground(app, "#131518")).toBe(true);
+    const refused = await Promise.all(
+      ["red", "#13151", "#1315189", "url(x)", 42, undefined].map((candidate) =>
+        handlers.setWindowBackground(app, candidate),
+      ),
+    );
+    expect(refused).toEqual([false, false, false, false, false, false]);
+    expect(painted).toEqual(["#131518"]);
+  });
+
+  test("the app origin can ask its window to close", async () => {
+    const { handlers, closes } = setup();
+    await handlers.closeWindow(app);
+    expect(closes()).toBe(1);
   });
 });

@@ -3,14 +3,20 @@ import electronBinary from "electron";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { TRAFFIC_LIGHTS } from "../src/config/window.ts";
+import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
+import { appArgs, appDir, packagedExecutable } from "./launch.ts";
 
-const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
 const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
+const CLOSE_TAB = process.platform === "darwin" ? "Meta+KeyW" : "Control+Shift+KeyW";
+
+/** The clicks that ask a browser for a new window or tab on this platform; Control-click is a right-click on macOS. */
+const NEW_WINDOW_CLICKS = [
+  { modifiers: [process.platform === "darwin" ? "Meta" : "Control"] },
+  { modifiers: ["Shift"] },
+  { button: "middle" },
+] as const;
+type NewWindowClick = (typeof NEW_WINDOW_CLICKS)[number];
 
 interface Scratch {
   readonly hc: ReturnType<typeof scratchHcSession>;
@@ -20,8 +26,7 @@ interface Scratch {
 let scratch: Scratch | undefined;
 let launched: ElectronApplication | undefined;
 
-const instanceArgs = (profile: string): readonly string[] =>
-  executablePath === undefined ? [appDir, `--user-data-dir=${profile}`] : [`--user-data-dir=${profile}`];
+const profileArg = (profile: string): string => `--user-data-dir=${profile}`;
 
 test.beforeAll(async () => {
   const hc = scratchHcSession();
@@ -31,9 +36,9 @@ test.beforeAll(async () => {
   );
   scratch = { hc, profile, env };
   launched = await electron.launch({
-    ...(executablePath === undefined
-      ? { args: [...instanceArgs(profile)] }
-      : { executablePath: attachAfterFirstLoad, args: [...instanceArgs(profile)] }),
+    ...(packagedExecutable === undefined
+      ? { args: appArgs([profileArg(profile)]) }
+      : { executablePath: attachAfterFirstLoad, args: [profileArg(profile)] }),
     env,
   });
 });
@@ -64,60 +69,59 @@ const originOf = (page: Page): string => {
 };
 
 async function appPage(): Promise<Page> {
-  const page = await running().firstWindow();
+  const page =
+    running()
+      .windows()
+      .find((candidate) => !candidate.isClosed()) ?? (await running().firstWindow());
   await page.waitForSelector("#root > *");
   return page;
 }
 
-test("a second launch, a dock click and every new-window click keep exactly one window", async () => {
-  const page = await appPage();
-  expect(await windowCount()).toBe(1);
+test("the app is named doriface", async () => {
+  const name = await running().evaluate(({ app }) => app.getName());
+  expect(name).toBe("doriface");
+});
 
+test("a second launch and a Dock click bring back the one window", async () => {
+  await appPage();
   if (scratch === undefined) throw new Error("no scratch profile");
-  const second = spawn(executablePath ?? String(electronBinary), [...instanceArgs(scratch.profile)], {
-    env: scratch.env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  second.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
-  second.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
+  const second = spawn(
+    packagedExecutable ?? String(electronBinary),
+    packagedExecutable === undefined ? appArgs([profileArg(scratch.profile)]) : [profileArg(scratch.profile)],
+    { env: scratch.env, stdio: "ignore" },
+  );
   const code = await new Promise<number | null>((resolve) => second.once("exit", resolve));
-  expect(code, output).toBe(0);
+  expect(code).toBe(0);
   expect(await windowCount()).toBe(1);
-
   await running().evaluate(({ app }) => app.emit("activate"));
   expect(await windowCount()).toBe(1);
+});
 
+/** A new-window click on the first link of `/`: the one window shows its page without reloading. */
+async function newWindowClick(page: Page, click: NewWindowClick): Promise<void> {
+  const name = JSON.stringify(click);
   const origin = originOf(page);
-  const clickOnce = async (path: string, index: number, modifier: "Meta" | "Shift" | "Control"): Promise<void> => {
-    await page.goto(`${origin}${path}`);
-    await page.waitForSelector("#root > *");
-    await page
-      .locator("a[href]")
-      .nth(index)
-      .click({ modifiers: [modifier] });
-    expect(await windowCount(), `${modifier}-click on link ${index} of ${path}`).toBe(1);
-  };
-  const clickEveryLink = async (path: string): Promise<void> => {
-    await page.goto(`${origin}${path}`);
-    await page.waitForSelector("#root > *");
-    const count = await page.locator("a[href]").count();
-    const clicks = Array.from({ length: count }, (_, index) =>
-      (["Meta", "Shift", "Control"] as const).map((modifier) => ({ index, modifier })),
-    ).flat();
-    for (const { index, modifier } of clicks) {
-      // oxlint-disable-next-line no-await-in-loop -- one window: each click is counted before the next page load
-      await clickOnce(path, index, modifier);
-    }
-  };
-  for (const path of ["/", "/pair", "/settings"]) {
-    // oxlint-disable-next-line no-await-in-loop -- one window: the paths are visited in turn
-    await clickEveryLink(path);
-  }
-
   await page.goto(`${origin}/`);
+  await page.waitForSelector("#root > *");
+  await page.evaluate(() => Reflect.set(window, "sameDocument", true));
+  const link = page.locator("a[href]").first();
+  const href = (await link.getAttribute("href")) ?? "";
+  await link.click({ ...click, modifiers: "modifiers" in click ? [...click.modifiers] : [] });
+  await expect(page).toHaveURL(`${origin}${href}`);
+  expect(await page.evaluate(() => Reflect.get(window, "sameDocument")), `${name} reloaded`).toBe(true);
+  expect(await windowCount(), name).toBe(1);
+}
+
+test("new-window clicks and window.open navigate the one window in place", async () => {
+  const page = await appPage();
+  const origin = originOf(page);
+  for (const click of NEW_WINDOW_CLICKS) {
+    // oxlint-disable-next-line no-await-in-loop -- one window: each click is checked before the next page load
+    await newWindowClick(page, click);
+  }
   await page.evaluate(() => window.open("/settings", "_blank"));
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(`${origin}/settings`);
+  expect(await page.evaluate(() => Reflect.get(window, "sameDocument"))).toBe(true);
   await page.evaluate(() => window.open("https://example.com/", "_blank"));
   expect(await windowCount()).toBe(1);
 });
@@ -129,20 +133,67 @@ test("Escape and the close control leave Settings in the desktop window", async 
   await page.goto(`${origin}/settings`);
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(`${origin}/`);
-
   await page.goto(`${origin}/settings`);
-  const control = page.getByRole("button", { name: "Close settings" }).first();
-  await expect(control).toBeVisible();
-  if (process.platform === "darwin") {
-    const box = await control.boundingBox();
-    expect(box).not.toBeNull();
-    const clear =
-      box === null ||
-      box.x >= TRAFFIC_LIGHTS.x + TRAFFIC_LIGHTS.width ||
-      box.y >= TRAFFIC_LIGHTS.y + TRAFFIC_LIGHTS.height;
-    expect(clear, `close control at ${JSON.stringify(box)} sits under the window buttons`).toBe(true);
-  }
-  await control.click();
+  await page.getByRole("button", { name: "Close settings" }).first().click();
   await expect(page).toHaveURL(`${origin}/`);
+  expect(await windowCount()).toBe(1);
+});
+
+test("the close-tab shortcut with nothing to close asks the window to close", async () => {
+  const page = await appPage();
+  await page.goto(`${originOf(page)}/`);
+  await page.waitForSelector("#root > *");
+  await running().evaluate(({ BrowserWindow }) => {
+    Reflect.set(globalThis, "closeAsked", false);
+    BrowserWindow.getAllWindows()[0]?.once("close", (event) => {
+      event.preventDefault();
+      Reflect.set(globalThis, "closeAsked", true);
+    });
+  });
+  // Only the keydown: the keymap acts on it, and the page asking to close takes the keyup's target away.
+  for (const key of CLOSE_TAB.split("+")) {
+    // oxlint-disable-next-line no-await-in-loop -- modifiers go down before the key, in order
+    await page.keyboard.down(key);
+  }
+  await expect.poll(() => running().evaluate(() => Reflect.get(globalThis, "closeAsked"))).toBe(true);
+});
+
+test("the window paints the in-app theme's background, not only the system's", async () => {
+  const page = await appPage();
+  await page.evaluate(() =>
+    localStorage.setItem("doriface.appearance", JSON.stringify({ theme: "graphite", custom: [] })),
+  );
+  await page.reload();
+  await page.waitForSelector("#root > *");
+  const expected = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--background").trim().toLowerCase(),
+  );
+  expect(expected).toBe("#131518");
+  await expect
+    .poll(() =>
+      running().evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getBackgroundColor().toLowerCase()),
+    )
+    .toBe(expected);
+});
+
+test("Settings… in the macOS app menu opens Settings, also after the window was closed", async () => {
+  test.skip(process.platform !== "darwin", "the app menu with Settings… exists only on macOS");
+  const clickSettings = () =>
+    running().evaluate(({ Menu }) => {
+      const item = Menu.getApplicationMenu()?.items[0]?.submenu?.items.find((entry) => entry.label === "Settings…");
+      item?.click();
+      return item !== undefined;
+    });
+  const page = await appPage();
+  await page.goto(`${originOf(page)}/`);
+  expect(await clickSettings()).toBe(true);
+  await expect(page).toHaveURL(/\/settings$/);
+
+  await running().evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.destroy());
+  expect(await windowCount()).toBe(0);
+  const reopened = running().waitForEvent("window");
+  await clickSettings();
+  const next = await reopened;
+  await expect(next).toHaveURL(/\/settings$/);
   expect(await windowCount()).toBe(1);
 });

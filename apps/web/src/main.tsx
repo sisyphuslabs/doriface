@@ -5,11 +5,11 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { appearanceStore, applyAppearance } from "./appearance/appearance.ts";
 import { connectionStore } from "./connection/store.ts";
-import { desktopBridge, onDesktopOpenSettings } from "./desktop/bridge.ts";
+import { closeDesktopWindow, desktopBridge, onDesktopNavigate, setDesktopBackground } from "./desktop/bridge.ts";
 import { bootConnection } from "./desktop/local-host.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
-import { useKeymapDispatcher } from "./keys/dispatcher.ts";
+import { setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { router } from "./router.tsx";
 
 applyAppearance(appearanceStore.value);
@@ -18,7 +18,19 @@ applyAppearance(appearanceStore.value);
 if (location.protocol === "https:" || location.protocol === "http:") registerSW({ immediate: true });
 else void removeServiceWorkers();
 void bootConnection(desktopBridge(), connectionStore);
-onDesktopOpenSettings(() => void router.navigate({ to: "/settings" }));
+/** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
+function paintWindow(): void {
+  setDesktopBackground(getComputedStyle(document.documentElement).getPropertyValue("--background").trim());
+}
+
+onDesktopNavigate((path) => router.history.push(path));
+if (desktopBridge() !== null) {
+  // The desktop app's Close Window leaves Cmd+W to the keymap; with no tab or Settings to close, it closes the window.
+  setActionFallback("tab.close", () => closeDesktopWindow());
+  paintWindow();
+  appearanceStore.subscribe(paintWindow);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintWindow);
+}
 if (import.meta.env.DEV) void import("./dev-tools.ts");
 
 const container = document.getElementById("root");
