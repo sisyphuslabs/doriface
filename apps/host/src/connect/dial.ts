@@ -28,6 +28,8 @@ export interface DialOptions {
   readonly defaultRelayUrl: string;
   readonly deviceName: string;
   readonly log: (line: string) => void;
+  /** For a typed code: the fingerprint (at least its first 4 groups) the person read off the host. */
+  readonly fingerprint?: string | undefined;
   /** For tests: the sockets the relay links open. */
   readonly createSocket?: CreateSocket | undefined;
 }
@@ -99,9 +101,35 @@ async function resolveHost(target: ConnectTarget, options: DialOptions): Promise
   }
   const record = await lookupPairSlot({ relayUrl, code: target.code });
   if (record === undefined) throw new Error("no host is pairing with this code on the relay: it may have expired");
+  confirmFingerprint(options.fingerprint, record.noiseStaticPub);
   const host = { hostId: record.hostId, hostKey: record.noiseStaticPub, relayUrl };
   const pairing = { mode: "code", code: target.code, name: options.deviceName } as const;
   return pair(known, host, pairing, options, pairSlotOf(target.code));
+}
+
+const FINGERPRINT_GROUPS = 4;
+
+/**
+ * The relay's slot answer is untrusted; as in the web flow, the person confirms the host's fingerprint before the
+ * code is used (pairing design D10). The bridge cannot ask, so the fingerprint comes in as an option.
+ */
+function confirmFingerprint(given: string | undefined, hostKey: Uint8Array): void {
+  const printed = "the fingerprint doriface-host pair printed on the host";
+  if (given === undefined) {
+    throw new Error(
+      `a typed code needs --fingerprint: give at least the first ${FINGERPRINT_GROUPS} groups of ${printed}`,
+    );
+  }
+  const typed = given.toUpperCase().replaceAll(/[\s-]/g, "");
+  if (!/^[0-9A-F]+$/.test(typed) || typed.length < FINGERPRINT_GROUPS * 4) {
+    throw new Error(`--fingerprint wants at least the first ${FINGERPRINT_GROUPS} groups of ${printed}`);
+  }
+  const actual = fingerprintOf(hostKey);
+  if (!actual.replaceAll(" ", "").startsWith(typed)) {
+    throw new Error(
+      `the host on this code has fingerprint ${actual}, which does not match the one given: do not pair with it`,
+    );
+  }
 }
 
 /**
