@@ -4,7 +4,6 @@ import {
   BUILTIN_PALETTES,
   Button,
   Input,
-  NumberStepper,
   SegmentedControl,
   SettingRow,
   ThemePicker,
@@ -110,10 +109,6 @@ export function AppearanceSection() {
         title="Import a herdr-app theme"
         description="Any themes/<name>.json from herdr-app works unchanged."
         control={<Button size="sm">Choose file…</Button>}
-      />
-      <SettingRow
-        title="Terminal font size"
-        control={<NumberStepper label="Terminal font size" defaultValue={14} min={9} max={28} />}
       />
     </Group>
   );

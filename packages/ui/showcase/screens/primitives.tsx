@@ -49,6 +49,7 @@ import {
   sampleQrModules,
 } from "../data.ts";
 import { Cell, FORCED, Row, Section } from "./specimen.tsx";
+import { TerminalSettingsParts } from "./terminal-primitives.tsx";
 
 const STATUSES: readonly AgentStatus[] = ["working", "blocked", "done", "idle", "unknown"];
 const VARIANTS = ["primary", "secondary", "ghost", "destructive"] as const;
@@ -353,6 +354,8 @@ export function PrimitivesScreen() {
           <ExtraKeysBar latched={["ctrl"]} />
         </div>
       </Section>
+
+      <TerminalSettingsParts />
     </main>
   );
 }
