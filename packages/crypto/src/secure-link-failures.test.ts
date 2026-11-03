@@ -144,6 +144,14 @@ describe("secureLink failures", () => {
     expect(forwarded).toBe(2);
   });
 
+  test("a flood queued behind message 1 while the handshake computes closes with 4408", async () => {
+    const junk = new Uint8Array(1024 * 1024);
+    const pair = connect();
+    pair.clientEnd.tap = (bytes) => [bytes, junk, junk, junk, junk, junk];
+    expect((await settledError(pair.responder)).code).toBe(CloseCode.IdleTimeout);
+    await pair.initiator.catch(() => undefined);
+  });
+
   test("a silent peer times out with 4408", async () => {
     const [, hostEnd] = memoryLinkPair();
     const responder = secureLink(hostEnd, {
