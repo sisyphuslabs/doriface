@@ -1,0 +1,62 @@
+import { base64urlEncode } from "@doriface/crypto";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DeviceStore } from "./devices.ts";
+import { breakStaleLock } from "./lock.ts";
+
+const WORKER = join(import.meta.dir, "..", "testing", "devices-worker.ts");
+let dir: string;
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), "dh-lock-"));
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+/** A pid that is no longer running: a child that already exited. */
+function deadPid(): number {
+  const child = Bun.spawnSync(["sh", "-c", "echo $$"], { stdout: "pipe" });
+  return Number(child.stdout.toString().trim());
+}
+
+const run = (...args: string[]) => Bun.spawn([process.execPath, WORKER, ...args], { stdout: "ignore", stderr: "pipe" });
+
+describe("state lock", () => {
+  test("a lock whose holder has not written its pid yet is held, not broken", () => {
+    const devices = new DeviceStore(dir, { lockTimeoutMs: 50 });
+    devices.add(crypto.getRandomValues(new Uint8Array(32)), "phone");
+    writeFileSync(join(dir, "state.lock"), "");
+    expect(() => devices.revoke(devices.list()[0]?.clientStaticPub ?? "")).toThrow("locked");
+    expect(devices.list()).toHaveLength(1);
+  });
+
+  test("breaking a stale lock puts back a fresh lock that replaced it in the meantime", () => {
+    const path = join(dir, "state.lock");
+    const stale = `${deadPid()} stale-token`;
+    const fresh = `${process.pid} fresh-token`;
+    writeFileSync(path, fresh);
+    breakStaleLock(path, stale);
+    expect(readFileSync(path, "utf8")).toBe(fresh);
+  });
+
+  test("concurrent CLI-style adds and a revoke, starting from a dead holder's lock, lose no update", async () => {
+    const seeded = new DeviceStore(dir);
+    const revokeKeys = Array.from({ length: 15 }, (_, i) => {
+      const key = crypto.getRandomValues(new Uint8Array(32));
+      seeded.add(key, `seed-${i}`);
+      return base64urlEncode(key);
+    });
+    writeFileSync(join(dir, "state.lock"), `${deadPid()} stale-token`);
+    const workers = [
+      ...["a", "b", "c", "d"].map((prefix) => run("add", dir, prefix, "15")),
+      run("revoke", dir, ...revokeKeys),
+    ];
+    const codes = await Promise.all(workers.map((worker) => worker.exited));
+    expect(codes).toEqual([0, 0, 0, 0, 0]);
+    const names = seeded.list().map((device) => device.name);
+    expect(names.filter((name) => name.startsWith("seed-"))).toEqual([]);
+    expect(names.toSorted()).toEqual(
+      ["a", "b", "c", "d"].flatMap((prefix) => Array.from({ length: 15 }, (_, i) => `${prefix}-${i}`)).toSorted(),
+    );
+  }, 30_000);
+});
