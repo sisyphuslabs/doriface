@@ -30,13 +30,18 @@ export class PairingSlots {
   #running: Promise<void> = Promise.resolve();
   #stopWatch: (() => void) | undefined;
   #stopped = false;
+  #retry: ReturnType<typeof setTimeout> | undefined;
+  readonly #retryMs: number;
 
   constructor(
     store: PairingStore,
     noiseStaticPub: Uint8Array,
     registrar: PairingSlotRegistrar | undefined,
     log: (line: string) => void,
+    /** How long to wait before trying again after the relay failed a registration. */
+    retryMs = 5000,
   ) {
+    this.#retryMs = retryMs;
     this.#store = store;
     this.#noiseStaticPub = noiseStaticPub;
     this.#registrar = registrar;
@@ -63,6 +68,7 @@ export class PairingSlots {
     this.#stopped = true;
     this.#stopWatch?.();
     this.#stopWatch = undefined;
+    clearTimeout(this.#retry);
     this.#disarm();
     this.#release();
   }
@@ -71,7 +77,10 @@ export class PairingSlots {
   sync(): void {
     this.#running = this.#running
       .then(() => this.#sync())
-      .catch((error: unknown) => this.#log(`pairing slot: ${String(error)}`));
+      .catch((error: unknown) => {
+        this.#log(`pairing slot: ${String(error)}; retrying`);
+        this.#scheduleRetry();
+      });
   }
 
   async #sync(): Promise<void> {
@@ -104,6 +113,13 @@ export class PairingSlots {
     const next = this.#store.redraw(pending.code);
     if (next === undefined || next.slot !== "pending") return;
     return this.#register(registrar, next, redraws + 1);
+  }
+
+  /** A failed registration is tried again while the offer lives; `#sync` drops an expired one. */
+  #scheduleRetry(): void {
+    if (this.#stopped) return;
+    clearTimeout(this.#retry);
+    this.#retry = setTimeout(() => this.sync(), this.#retryMs);
   }
 
   /** Re-syncs when the live offer expires, whether or not its slot is registered. */
