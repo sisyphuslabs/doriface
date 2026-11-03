@@ -71,10 +71,14 @@ describe("content security policy", () => {
   });
 
   test("dev mode admits Vite's inline preamble and nothing else extra", () => {
-    const csp = directives(contentSecurityPolicy({ devServer: "http://localhost:5173" }));
-    expect(csp.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'", "'unsafe-inline'"]);
-    expect(csp.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
-    expect(csp.get("object-src")).toEqual(["'none'"]);
+    const prod = directives(contentSecurityPolicy());
+    const dev = directives(contentSecurityPolicy({ devServer: "http://localhost:5173" }));
+    expect(dev.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'", "'unsafe-inline'"]);
+    expect(dev.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+    expect([...dev.keys()]).toEqual([...prod.keys()]);
+    for (const [name, sources] of prod) {
+      if (name !== "script-src" && name !== "style-src") expect(dev.get(name)).toEqual(sources);
+    }
   });
 });
 
