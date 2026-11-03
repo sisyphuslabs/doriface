@@ -124,6 +124,7 @@ describe("pairing URL", () => {
     ["a relay that is not a URL", url.replace(/r=[^&]+$/, "r=relay")],
     ["an oversized key", url.replace(/k=[^&]+/, `k=${"A".repeat(100_000)}`)],
     ["an oversized code", url.replace(/c=[^&]+/, `c=${"A".repeat(100_000)}`)],
+    ["a non-HTTP(S) page", url.replace("https://doriface.omo.dev", "file://")],
   ])("rejects %s", (_, bad) => {
     expect(() => parsePairingUrl(bad)).toThrow();
   });
