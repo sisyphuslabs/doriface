@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 15
     env:
       # Pull requests from forks get no secrets; only they may skip the relay suites (see the last steps).
-      RELAY_KEY_SET: ${{ secrets.DORIFACE_RELAY_DEPLOY_KEY != '' }}
+      RELAY_TOKEN_SET: ${{ secrets.DORIFACE_RELAY_READ_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -54,34 +54,29 @@ jobs:
       - run: bun run fmt:check
       - run: bun run test
       # The relay is a separate private service (sisyphuslabs/doriface-relay). tests/relay runs this repository's
-      # host and client against it at the commit relay-pin.json names, cloned with a read-only deploy key.
+      # host and client against it at the commit relay-pin.json names, cloned over HTTPS with a fine-grained token that
+      # can only read that repository. git asks a step-scoped credential helper for it, so it never appears in a URL,
+      # an argument or the log (Actions masks secrets as well).
       - name: Fetch the private relay
-        if: env.RELAY_KEY_SET == 'true'
+        if: env.RELAY_TOKEN_SET == 'true'
         env:
-          RELAY_DEPLOY_KEY: ${{ secrets.DORIFACE_RELAY_DEPLOY_KEY }}
-          GITHUB_HOST_KEY: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
-        run: |
-          ssh_dir="$RUNNER_TEMP/relay-ssh"
-          install -d -m 700 "$ssh_dir"
-          (umask 077 && printf '%s\n' "$RELAY_DEPLOY_KEY" > "$ssh_dir/key")
-          printf '%s\n' "$GITHUB_HOST_KEY" > "$ssh_dir/known_hosts"
-          export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts"
-          export DORIFACE_RELAY_REPO=git@github.com:sisyphuslabs/doriface-relay.git
-          echo "GIT_SSH_COMMAND=$GIT_SSH_COMMAND" >> "$GITHUB_ENV"
-          echo "DORIFACE_RELAY_REPO=$DORIFACE_RELAY_REPO" >> "$GITHUB_ENV"
-          bun run relay:fetch
+          RELAY_READ_TOKEN: ${{ secrets.DORIFACE_RELAY_READ_TOKEN }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: '!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "$RELAY_READ_TOKEN"; }; f'
+        run: bun run relay:fetch
       - name: Relay suites against the private relay
-        if: env.RELAY_KEY_SET == 'true'
+        if: env.RELAY_TOKEN_SET == 'true'
         run: bun run relay:test
-      - name: Relay suites without the key
-        if: env.RELAY_KEY_SET != 'true'
+      - name: Relay suites without the token
+        if: env.RELAY_TOKEN_SET != 'true'
         env:
           FROM_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           if [ "$FROM_FORK" = true ]; then
             echo "::notice::Pull requests from forks get no secrets; the relay suites in tests/relay did not run."
           else
-            echo "::error::DORIFACE_RELAY_DEPLOY_KEY is not set, so the relay suites in tests/relay cannot run."
+            echo "::error::DORIFACE_RELAY_READ_TOKEN is not set, so the relay suites in tests/relay cannot run."
             exit 1
           fi
       - name: Build apps/web
