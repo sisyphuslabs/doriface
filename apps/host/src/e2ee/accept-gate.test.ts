@@ -37,10 +37,14 @@ async function guessOneAfterAnother(host: PairingHost, guesses: readonly string[
 const otherSlot = (host: PairingHost): string => (pairingSlotOf(host.offer.code) === "ZZZ" ? "YYY" : "ZZZ");
 
 describe("typed-code attempts on the host", () => {
-  test("ten wrong codes are answered and counted; the code is retired, the 11th gets 4429 unanswered, the link still pairs", async () => {
+  test("wrong codes are answered and counted up to the 10th, which retires the code; the 11th gets 4429 unanswered, the link still pairs", async () => {
     const host = newHost();
-    const answered = await guessOneAfterAnother(host, sameSlotDecoys(host.offer.code, PAIRING_CODE_ATTEMPTS));
-    expect(answered).toEqual(Array.from({ length: PAIRING_CODE_ATTEMPTS }, () => 1));
+    // Each session is a full CPace + Noise exchange; the store's own suite counts all ten, so two sessions suffice here.
+    const sessions = 2;
+    const slot = pairingSlotOf(host.offer.code);
+    for (let i = 0; i < PAIRING_CODE_ATTEMPTS - sessions; i++) host.pairing.claimCode(slot);
+    const answered = await guessOneAfterAnother(host, sameSlotDecoys(host.offer.code, sessions));
+    expect(answered).toEqual([1, 1]);
     expect(host.pairing.read()?.codeAttempts).toBe(PAIRING_CODE_ATTEMPTS);
     expect(host.logs.some((line) => line.startsWith("pairing code retired after 10 failed attempts"))).toBe(true);
     expect(await refusal(runSession(host, host.relay, codeOf(host)))).toEqual({ code: CloseCode.RateLimited, sent: 0 });
