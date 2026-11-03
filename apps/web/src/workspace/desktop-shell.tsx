@@ -7,6 +7,7 @@ import { agentStatus, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { Sidebar } from "./sidebar.tsx";
+import { useAppActions } from "./use-app-actions.ts";
 import type { Tabs } from "./use-tabs.ts";
 
 export interface DesktopShellProps {
@@ -18,6 +19,7 @@ export interface DesktopShellProps {
 
 export function DesktopShell({ connection, terminals, tabs, onNew }: DesktopShellProps) {
   const [sidebar, setSidebar] = useState(true);
+  useAppActions({ terminals, tabs, onNew, onToggleSidebar: () => setSidebar((shown) => !shown) });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
     const terminal = byAddress.get(address);
