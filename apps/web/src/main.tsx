@@ -7,6 +7,7 @@ import { appearanceStore, applyAppearance } from "./appearance/appearance.ts";
 import { connectionStore } from "./connection/store.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
+import { useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { router } from "./router.tsx";
 
 applyAppearance(appearanceStore.value);
@@ -19,10 +20,16 @@ if (import.meta.env.DEV) void import("./dev-tools.ts");
 
 const container = document.getElementById("root");
 if (container === null) throw new Error("index.html has no #root");
+function Keys() {
+  useKeymapDispatcher();
+  return null;
+}
+
 createRoot(container).render(
   <StrictMode>
     <TooltipProvider>
       <TerminalStyle />
+      <Keys />
       <RouterProvider router={router} />
     </TooltipProvider>
   </StrictMode>,

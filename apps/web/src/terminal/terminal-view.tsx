@@ -10,6 +10,7 @@ import { readDisplay } from "./display.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
+import { useTerminalActions } from "./use-terminal-actions.ts";
 
 export interface TerminalViewProps {
   readonly connection: HcConnection;
@@ -79,6 +80,7 @@ export function TerminalView(props: TerminalViewProps) {
 
   const onUnsafePaste = useCallback((pending: PendingPaste) => setPaste(pending), []);
   useBehaviors(wt, stream, options, onUnsafePaste);
+  useTerminalActions(wt, stream, focused);
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
