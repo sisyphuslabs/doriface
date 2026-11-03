@@ -12,6 +12,7 @@ export function FirstRun() {
       <Steps current={0} />
       <EmptyState
         icon={<Server />}
+        size="screen"
         title="Connect to a host"
         description="doriface shows the terminals and agents running on a computer with herdr-core. Start the host there, then pair this device."
         actions={
