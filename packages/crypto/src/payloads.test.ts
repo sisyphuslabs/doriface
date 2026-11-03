@@ -18,6 +18,10 @@ describe("handshake payloads: one JSON line, then raw stream bytes", () => {
     expect(decodeHello("IKpsk2", encodePairingHello("Pixel 9"))).toEqual({ kind: "pairing", name: "Pixel 9" });
   });
 
+  test("a name made of lone surrogates is refused when encoding, not by the line limit later", () => {
+    expect(() => encodePairingHello("\ud800".repeat(64))).toThrow("lone surrogate");
+  });
+
   test("a session hello carries early stream bytes after its line", () => {
     const early = bytes('{"jsonrpc":"2.0","id":0,"method":"hello"}\n');
     const payload = encodeSessionHello(early);
