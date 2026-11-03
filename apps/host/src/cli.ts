@@ -18,7 +18,7 @@ const USAGE = `usage: doriface-host [options]
        doriface-host fingerprint
        doriface-host connect <hostId | pairing link | code>
        doriface-host mesh pair | mesh join <mesh link | code>
-       doriface-host mesh status [--json]
+       doriface-host mesh status [--json] | mesh revoke [--compromised] <member> | mesh rename <member> <name> | mesh leave
 
   --listen <host:port>  where to listen (default 127.0.0.1:7766; loopback only)
   --hc <path>           the herdr-core binary (default hc)
@@ -45,7 +45,7 @@ async function main(args: readonly string[]): Promise<void> {
   if (command === "pair") return pairCommand(rest, out);
   if (command === "fingerprint") return fingerprintCommand(rest, out);
   if (command === "connect") return connect(rest);
-  if (command === "mesh" && rest[0] !== "status") {
+  if (command === "mesh" && (rest[0] === "pair" || rest[0] === "join")) {
     // Exits itself, as connect does: the relay socket a join opened would keep the process alive.
     await meshJoinCommand(rest, out, log);
     process.exit(0);
