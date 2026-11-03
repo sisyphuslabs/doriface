@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import packageJson from "../package.json" with { type: "json" };
 import { generateToken, SUBPROTOCOL } from "./auth.ts";
 import { type Host, startHost } from "./host.ts";
 import { createHcSession, HELLO, type HcSession, rpcFrame } from "./testing/hc-session.ts";
@@ -38,7 +39,11 @@ describe("doriface-host against a real hc", () => {
   test("healthz reports both versions", async () => {
     const res = await fetch(`http://127.0.0.1:${host.port}/healthz`);
     const version = Bun.spawnSync([session.hc, "--version"]).stdout.toString().trim();
-    expect(await res.json()).toEqual({ ok: true, hostVersion: "0.0.0", hcVersion: version.replace(/^hc /, "") });
+    expect(await res.json()).toEqual({
+      ok: true,
+      hostVersion: packageJson.version,
+      hcVersion: version.replace(/^hc /, ""),
+    });
   });
 
   test("a wrong token is refused before the upgrade", async () => {
