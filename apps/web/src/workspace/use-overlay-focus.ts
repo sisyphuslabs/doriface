@@ -2,7 +2,7 @@ import { useEffect, type RefObject } from "react";
 
 const TAB_STOPS = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-function isUsable(element: Element | null): element is HTMLElement {
+export function isUsable(element: Element | null): element is HTMLElement {
   return (
     element instanceof HTMLElement &&
     element.isConnected &&
