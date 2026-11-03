@@ -10,7 +10,7 @@ const fragment = (overrides: Readonly<Record<string, string>> = {}): string =>
     h: hostIdOf(signPub),
     k: b64url(noisePub),
     s: b64url(signPub),
-    c: "7KQ3 9D2M",
+    p: b64url(new Uint8Array(32).fill(3)),
     r: "wss://relay.example",
     ...overrides,
   }).toString();
@@ -30,15 +30,31 @@ describe("pairing fragment", () => {
     expect(fingerprintOf(noisePub).replaceAll(" ", "")).toBe(digest);
   });
 
-  test("a well-formed link parses", () => {
+  test("a well-formed link parses, carrying its 32-byte link secret", () => {
     const parsed = parsePairingFragment(fragment());
     expect(parsed.ok && parsed.offer.relayUrl).toBe("wss://relay.example");
+    expect(parsed.ok && parsed.offer.secret).toEqual({ mode: "link", linkSecret: new Uint8Array(32).fill(3) });
+  });
+
+  test("a link with a code and no link secret comes from an older host", () => {
+    const old =
+      "#" +
+      new URLSearchParams({
+        h: hostIdOf(signPub),
+        k: b64url(noisePub),
+        s: b64url(signPub),
+        c: "7KQ39D2M",
+        r: "wss://relay.example",
+      });
+    const parsed = parsePairingFragment(old);
+    expect(parsed.ok ? "" : parsed.reason).toContain("older doriface-host");
   });
 
   test.each([
     ["a hostId of another key", { h: hostIdOf(noisePub) }],
     ["a short noise key", { k: b64url(new Uint8Array(31)) }],
-    ["a malformed code", { c: "short" }],
+    ["a 42-character link secret", { p: "A".repeat(42) }],
+    ["a 44-character link secret", { p: "A".repeat(44) }],
     ["a non-WebSocket relay", { r: "https://relay.example" }],
   ])("rejects %s", (_name, overrides) => {
     expect(parsePairingFragment(fragment(overrides)).ok).toBe(false);
