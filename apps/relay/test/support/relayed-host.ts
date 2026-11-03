@@ -7,11 +7,12 @@ import {
   type SecureLink,
   secureLink,
 } from "@doriface/crypto";
-import { type Host, startHost } from "@doriface/host";
+import { deviceIdOf, DeviceStore, type Host, startHost } from "@doriface/host";
 import { connectRelayClient, type CreateSocket, pairSlotOf } from "@doriface/relay-client";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { requestControl } from "../../../host/src/control.ts";
 import { createHcSession, type HcSession } from "../../../host/src/testing/hc-session.ts";
 import { RecordingLink, type Tap, taps, tappedHc } from "./byte-tap.ts";
 import { socketFrom, testIp } from "./probe.ts";
@@ -36,6 +37,9 @@ export interface RelayedHost {
   pairingLink(): Promise<string>;
   /** A fresh offer as `doriface-host pair` prints it: the link and the typed code. */
   pairingOffer(): Promise<{ readonly url: string; readonly code: string }>;
+  pairingCode(): Promise<string>;
+  /** Revokes every paired device, as `doriface-host devices revoke` does: the running host closes their sessions. */
+  revokeAll(): Promise<void>;
   /** Runs typed-code pairing (CPace on a `?pair=<slot>` session) and returns the confirmed session. */
   dialPairCode(device: KeyPair, code: string, name: string): Promise<SecureLink>;
   pair(device: KeyPair, name: string): Promise<void>;
@@ -161,6 +165,12 @@ async function relayedHost(started: Started): Promise<RelayedHost> {
     hostKey,
     pairingLink,
     pairingOffer,
+    pairingCode: async () => (await pairingOffer()).code,
+    async revokeAll() {
+      const devices = new DeviceStore(stateDir);
+      for (const device of devices.list()) devices.revoke(deviceIdOf(device));
+      await requestControl(stateDir, { op: "devices-changed" });
+    },
     dialPairCode: (device, code, name) => open(device, { mode: "code", code, name }),
     async pair(device, name) {
       const { linkSecret } = parsePairingUrl(await pairingLink());
