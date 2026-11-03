@@ -162,7 +162,7 @@ export interface ListResult {
    * Machines added here and their lines: one that is not connected is
    * listed here, not waited on.
    */
-  readonly machines: readonly MachineView[];
+  readonly machines?: readonly MachineView[];
   /** This machine's terminals, then each connected machine's (`machine/t7`). */
   readonly terminals: readonly Terminal[];
 }

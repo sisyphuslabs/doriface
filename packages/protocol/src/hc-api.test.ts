@@ -6,6 +6,13 @@ const schemaWith = (schemas: object, methods: readonly object[] = []) =>
   JSON.stringify({ info: { version: "9.9.9" }, components: { schemas }, methods });
 
 describe("hc-api codegen", () => {
+  test("ListResult.machines is optional, because hc 0.1.17 omits it from terminal.list answers", async () => {
+    const source = await generateApi(await Bun.file(SCHEMA_PATH).text());
+    const list = /export interface ListResult \{[\s\S]*?\n\}/.exec(source)?.[0] ?? "";
+    expect(list).toContain("readonly machines?: readonly MachineView[];");
+    expect(list).toContain("readonly terminals: readonly Terminal[];");
+  });
+
   test("the committed hc-api.ts matches the vendored schema", async () => {
     const generated = await generateApi(await Bun.file(SCHEMA_PATH).text());
     expect(await Bun.file(OUTPUT_PATH).text()).toBe(generated);
