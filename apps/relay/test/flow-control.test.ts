@@ -166,6 +166,27 @@ describe("backpressure (C3)", () => {
     uplink.stop();
   });
 
+  test("relay control frames count against the window too: an uplink that never acks is closed with 4408", async () => {
+    const ip = testIp();
+    const host = await startRawHost(relay.url, ip);
+    const client = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
+    // Challenge and OPEN, then DATA frames that leave the uplink 2 bytes short of the 4 MiB window.
+    const sentSoFar = CHALLENGE_BYTES + MUX_HEADER_BYTES;
+    const full = times(3).map(() => MAX_SESSION_SEND_BYTES);
+    const last = MAX_UNACKED_BYTES - 2 - sentSoFar - 3 * RELAY_MESSAGE_CAP - MUX_HEADER_BYTES;
+    for (const size of [...full, last]) client.send(new Uint8Array(size));
+    const delivered = async (count: number): Promise<void> => {
+      if (count === 0) return;
+      if ((await host.frame()).type === MuxType.Data) return delivered(count - 1);
+      return delivered(count);
+    };
+    await delivered(4);
+    const second = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
+    expect((await host.probe.closed).code).toBe(CloseCode.IdleTimeout);
+    client.close();
+    second.close();
+  });
+
   test("an ack for bytes the relay never sent closes the socket with 1003", async () => {
     const ip = testIp();
     const host = await startTestHost(relay.url, ip);
