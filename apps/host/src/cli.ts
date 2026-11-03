@@ -71,7 +71,7 @@ async function serve(args: readonly string[]): Promise<void> {
     hc: values.hc,
     session: values.session,
     unsafeListen: values["unsafe-listen"],
-    lanListen: values["lan-listen"] === undefined ? undefined : parseListen(values["lan-listen"]),
+    lanListen: values["lan-listen"] === undefined ? undefined : parseListen(values["lan-listen"], "--lan-listen"),
     stateDir: values["state-dir"] ?? defaultStateDir(),
     log,
   });
