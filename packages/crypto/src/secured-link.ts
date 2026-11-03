@@ -55,7 +55,10 @@ export class SecuredLink implements SecureLink {
 
   send(bytes: Uint8Array): void {
     if (this.#closed) throw new SecureLinkError(undefined, "secure link is closed");
-    for (const record of this.#transport.seal(bytes)) this.#link.send(record);
+    for (const record of this.#transport.seal(bytes)) {
+      if (this.#closed) return;
+      this.#link.send(record);
+    }
   }
 
   onData(listener: (bytes: Uint8Array) => void): Unsubscribe {
