@@ -1,0 +1,13 @@
+hc.openrpc.json in this directory is the herdr-core API schema.
+
+Source:   https://github.com/herdrdev/herdr-core (schema/hc.openrpc.json)
+Commit:   b63ecbd (2026-11-02), herdr-core 0.1.17, protocol generation 1
+License:  Apache License 2.0, copied verbatim in LICENSE beside this file
+Copyright herdr-core contributors
+
+Changes: none to the content. The file was re-printed with oxfmt (printWidth 120)
+so the repository-wide format check passes; JSON.parse of the vendored file and
+of the upstream file yield identical values.
+
+To update: copy the upstream file here, run `bunx oxfmt packages/protocol/schema`,
+then `bun run --cwd packages/protocol gen:api` and update the commit above.
