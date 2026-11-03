@@ -10,9 +10,9 @@ const hideWindows = join(appDir, "e2e", "hide-windows.cjs");
 
 /**
  * Linux e2e runs draw on xvfb, which has no GPU. Without --disable-gpu the GPU process first brings up Mesa's GL
- * (ANGLE over GLX, loading libLLVM and libgallium) only to end up compositing in software anyway, and the window is not
- * shown until that is done. On a cold CI runner that took from seconds to over 30 s, and no frame of a window that is
- * not shown can be captured (#80).
+ * (ANGLE over GLX, loading libLLVM and libgallium) only to end up compositing in software anyway. No frame can be
+ * composited until that is done, so neither ready-to-show nor a page.screenshot capture can happen; on a cold CI runner
+ * that took from seconds to over 30 s (#80).
  */
 const platformArgs: readonly string[] = process.platform === "linux" ? ["--disable-gpu"] : [];
 

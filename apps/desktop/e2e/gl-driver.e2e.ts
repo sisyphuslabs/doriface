@@ -8,12 +8,24 @@ import { appArgs, appDir, packagedExecutable } from "./launch.ts";
 
 test.skip(process.platform !== "linux", "Mesa's GL driver is the Linux GPU process's");
 
-test("the window is shown and captured while the system GL driver is slow to load", async () => {
+/** Builds the shim; a host without a C compiler fails here with a message that says so, never a skip. */
+function buildShim(shim: string): void {
+  try {
+    execFileSync("cc", ["-shared", "-fPIC", "-O2", "-o", shim, join(appDir, "e2e", "slow-gl-driver.c"), "-ldl"]);
+  } catch (error) {
+    if (Reflect.get(Object(error), "code") !== "ENOENT") throw error;
+    throw new Error("gl-driver.e2e.ts needs a C compiler named cc on PATH to build e2e/slow-gl-driver.c", {
+      cause: error,
+    });
+  }
+}
+
+test("the window is captured while the system GL driver is slow to load", async () => {
   const dir = mkdtempSync(join(tmpdir(), "dd-gl-driver-"));
   const hc = scratchHcSession();
   try {
     const shim = join(dir, "slow-gl-driver.so");
-    execFileSync("cc", ["-shared", "-fPIC", "-O2", "-o", shim, join(appDir, "e2e", "slow-gl-driver.c"), "-ldl"]);
+    buildShim(shim);
     const env = Object.fromEntries(
       Object.entries({
         ...process.env,
@@ -33,7 +45,7 @@ test("the window is shown and captured while the system GL driver is slow to loa
     try {
       const page = await app.firstWindow();
       await page.waitForSelector("#root > *");
-      // A capture needs a presented frame of the shown window, which the app shows once its first frame is ready.
+      // A capture waits for a composited frame, and none exists until the GPU process has finished GL init.
       await page.screenshot({ path: test.info().outputPath("gl-driver.png") });
     } finally {
       await app.close();
