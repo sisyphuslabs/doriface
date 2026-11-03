@@ -61,9 +61,34 @@ function checkCard(
   return card;
 }
 
-function sendWelcome(lines: MeshLines, deps: InviteDeps, meshId: string): void {
-  for (const line of recordLines(deps.mesh.read()?.records ?? [])) lines.send(line);
+function sendWelcome(lines: MeshLines, records: readonly Signed[], meshId: string): void {
+  for (const line of recordLines(records)) lines.send(line);
   lines.send({ t: "done", mesh: meshId });
+}
+
+/**
+ * Section 4.4 step 4, in one mesh.json transaction: admits the card unless its key became a member while the join
+ * waited (then the welcome only, step 3), refuses a mesh that filled up meanwhile, and returns the records to welcome.
+ */
+function admit(deps: InviteDeps, meshId: string, inviter: string, card: CardBody, signed: Signed): readonly Signed[] {
+  return deps.mesh.transact((tx) => {
+    const view = tx.view();
+    if (view.members.has(card.signPub)) return tx.records;
+    if (view.members.size >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
+    tx.sign(deps.identity, (n, prev) => ({
+      v: 2,
+      mesh: meshId,
+      type: "admit",
+      by: inviter,
+      n,
+      prev,
+      subject: { card: signed },
+    }));
+    deps.log(
+      `mesh: admitted "${card.name}" ${card.hostId}, fingerprint ${fingerprintOf(base64urlDecode(card.noisePub))}`,
+    );
+    return tx.records;
+  });
 }
 
 /** Section 4.3: the inviting member's decision, or the session's end, which drops the pending join. */
@@ -93,7 +118,7 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
     const card = checkCard(reply, offer, peerStatic);
     const index = deps.mesh.authorizeIndex();
     if (index?.isMember(card.signPub) === true) {
-      sendWelcome(lines, deps, meshId);
+      sendWelcome(lines, deps.mesh.read()?.records ?? [], meshId);
       lines.detach();
       return card;
     }
@@ -101,17 +126,7 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
     const fingerprint = fingerprintOf(base64urlDecode(card.noisePub));
     const join = { nonce: offer.nonce, name: card.name, hostId: card.hostId, fingerprint, expiresAt: deps.expiresAt };
     await decision(lines, deps, join);
-    deps.mesh.sign(deps.identity, (n, prev) => ({
-      v: 2,
-      mesh: meshId,
-      type: "admit",
-      by: offer.inviter,
-      n,
-      prev,
-      subject: { card: reply },
-    }));
-    deps.log(`mesh: admitted "${card.name}" ${card.hostId}, fingerprint ${fingerprint}`);
-    sendWelcome(lines, deps, meshId);
+    sendWelcome(lines, admit(deps, meshId, offer.inviter, card, { body: reply.body, sig: reply.sig }), meshId);
     lines.detach();
     return card;
   } catch (error) {

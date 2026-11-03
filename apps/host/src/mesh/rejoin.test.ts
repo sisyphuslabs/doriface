@@ -1,6 +1,17 @@
-import { parseRecord, type Signed } from "@doriface/mesh";
+import { parseRecord, type Signed, signCard } from "@doriface/mesh";
 import { afterEach, describe, expect, test } from "bun:test";
-import { failure, inviteDeps, joinerContext, removeSides, runJoin, side, type Side } from "../testing/join-harness.ts";
+import { cardBody } from "../state/mesh.ts";
+import {
+  failure,
+  inviteDeps,
+  joinerContext,
+  ownOf,
+  removeSides,
+  runJoin,
+  side,
+  type Side,
+} from "../testing/join-harness.ts";
+import { signPubOf } from "../testing/mesh-history.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 afterEach(removeSides);
@@ -30,5 +41,28 @@ describe("section 4.4 step 3: a member whose welcome was lost joins again", () =
     expect(types(a)).toEqual(["found", "admit"]);
     expect(records(b)).toEqual(records(a));
     expect([retry.inviterEnd.closeCode, retry.joinerEnd.closeCode]).toEqual([undefined, undefined]);
+  });
+
+  test("a joiner admitted another way while its join waited for approval gets the welcome, not a second admit", async () => {
+    const [a, b] = [side("alpha"), side("beta")];
+    a.mesh.found(a.m.identity, ownOf(a));
+    const meshId = a.mesh.read()?.meshId ?? "";
+    const pending = new PendingJoins();
+    const run = runJoin(inviteDeps(a, pending), joinerContext(b, a), b.m.identity.noise.publicKey);
+    const asked = await pending.next();
+    const earlier = signCard(cardBody(b.m.identity, ownOf(b), meshId, signPubOf(a.m)), b.m.identity.sign.secretKey);
+    a.mesh.sign(a.m.identity, (n, prev) => ({
+      v: 2,
+      mesh: meshId,
+      type: "admit",
+      by: signPubOf(a.m),
+      n,
+      prev,
+      subject: { card: earlier },
+    }));
+    pending.decide(asked.nonce, true);
+    expect(await run.joined).toBe(meshId);
+    expect(types(a)).toEqual(["found", "admit"]);
+    expect(records(b)).toEqual(records(a));
   });
 });
