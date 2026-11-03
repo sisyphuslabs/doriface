@@ -100,10 +100,11 @@ export function ConnectionSection() {
 }
 
 export function AppearanceSection() {
+  const [theme, setTheme] = useState("system");
   return (
     <Group title="Appearance">
       <div className="py-3">
-        <ThemePicker options={THEMES} value="system" />
+        <ThemePicker options={THEMES} value={theme} onValueChange={setTheme} />
       </div>
       <SettingRow
         title="Import a herdr-app theme"
