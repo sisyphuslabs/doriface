@@ -1,16 +1,18 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Link2, Palette, SquareTerminal } from "lucide-react";
+import { ArrowLeft, Keyboard, Link2, Palette, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AppearanceSection } from "../settings/appearance-section.tsx";
 import { ConnectionSection } from "../settings/connection-section.tsx";
 import { DevicesSection } from "../settings/devices-section.tsx";
+import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 
 const SECTIONS = [
   { id: "connections", label: "Connections", icon: <Link2 /> },
   { id: "appearance", label: "Appearance", icon: <Palette /> },
   { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
+  { id: "keybindings", label: "Keybindings", icon: <Keyboard /> },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -81,9 +83,13 @@ export function SettingsRoute() {
             <Group title="Appearance">
               <AppearanceSection />
             </Group>
-          ) : (
+          ) : section === "terminal" ? (
             <Group title="Terminal">
               <TerminalSection />
+            </Group>
+          ) : (
+            <Group title="Keybindings">
+              <KeybindingsSection />
             </Group>
           )}
         </div>
