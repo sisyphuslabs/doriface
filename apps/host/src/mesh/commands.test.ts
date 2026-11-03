@@ -163,6 +163,9 @@ describe("mesh-rename (design 7.4, 7.5)", () => {
       ),
     );
     await expect(it.commands.rename({ member: "a", name: "f" })).rejects.toThrow(`"f" is ${f.identity.hostId}`);
+    await expect(it.commands.rename({ member: "a", name: f.identity.hostId })).rejects.toThrow(
+      `"${f.identity.hostId}" is the hostId of`,
+    );
     expect(await it.commands.rename({ member: "a", name: "a" })).toMatchObject({ written: false });
     expect(records(it)).toHaveLength(before);
   });

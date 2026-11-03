@@ -7,6 +7,7 @@ import { withStateLock } from "../state/lock.ts";
 import { MESH_FILE } from "../state/mesh-file.ts";
 import type { MeshStore, MeshTx } from "../state/mesh.ts";
 import type { LeaveReply, RenameReply, RevokeReply } from "./command-replies.ts";
+import { admittedKeys } from "./lineage.ts";
 import { findMember, memberRef, planRevoke } from "./revoke-plan.ts";
 import type { MeshHooks } from "./host-hooks.ts";
 import { hostIdOfKey } from "./status.ts";
@@ -81,6 +82,10 @@ export class MeshCommands {
       }
       const renamed = { member: memberRef(view, key), name: request.name };
       if (view.name.get(key) === request.name) return { reply: { written: false, ...renamed }, record: undefined };
+      const named = [...admittedKeys(view), ...view.revoked].find((other) => hostIdOfKey(other) === request.name);
+      if (named !== undefined) {
+        throw new Error(`"${request.name}" is the hostId of ${memberRef(view, named).name}; choose another`);
+      }
       const holder = [...view.members].find((other) => other !== key && view.name.get(other) === request.name);
       if (holder !== undefined) throw new Error(`"${request.name}" is ${hostIdOfKey(holder)}; choose another`);
       const signed = this.#sign(tx, meshId, "name", { signPub: key, name: request.name });
