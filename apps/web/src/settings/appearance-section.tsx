@@ -1,6 +1,6 @@
-import { Button, NumberStepper, Notice, SettingRow, Switch, ThemePicker, type ThemeOption } from "@doriface/ui";
+import { Button, Notice, SettingRow, Switch, ThemePicker, type ThemeOption } from "@doriface/ui";
 import { useRef, useState } from "react";
-import { appearanceStore, FONT_SIZE, themeChoices, useAppearance } from "../appearance/appearance.ts";
+import { appearanceStore, themeChoices, useAppearance } from "../appearance/appearance.ts";
 import { importThemeFile } from "./import-theme.ts";
 
 /** Theme (system, builtins, imported herdr-app themes) and terminal font size. */
@@ -67,20 +67,6 @@ export function AppearanceSection() {
           {importError}
         </Notice>
       )}
-      <SettingRow
-        title="Terminal font size"
-        control={
-          <NumberStepper
-            label="Terminal font size"
-            min={FONT_SIZE.min}
-            max={FONT_SIZE.max}
-            value={appearance.fontSize}
-            onValueChange={(fontSize) => {
-              if (fontSize !== null) appearanceStore.update({ fontSize });
-            }}
-          />
-        }
-      />
     </div>
   );
 }

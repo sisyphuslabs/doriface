@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { appearanceStore, applyAppearance } from "./appearance/appearance.ts";
 import { connectionStore } from "./connection/store.ts";
+import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
 import { router } from "./router.tsx";
 
@@ -21,6 +22,7 @@ if (container === null) throw new Error("index.html has no #root");
 createRoot(container).render(
   <StrictMode>
     <TooltipProvider>
+      <TerminalStyle />
       <RouterProvider router={router} />
     </TooltipProvider>
   </StrictMode>,

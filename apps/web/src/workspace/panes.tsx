@@ -35,6 +35,7 @@ export function Panes({ connection, terminals, open, active, split, onFocus, onC
               terminal={terminal}
               focused={address === active}
               index={address === split ? 2 : 1}
+              split={split !== null}
               onFocus={onFocus}
               onClosed={onClosed}
             />

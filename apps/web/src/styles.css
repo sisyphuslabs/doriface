@@ -6,7 +6,10 @@
 
 :root {
   --term-font-family: var(--font-term);
-  --term-font-size: 14px;
+}
+
+.wterm.cursor-none {
+  cursor: none;
 }
 
 /* wterm declares its own palette on .wterm; take the design tokens from the page instead. */
@@ -14,7 +17,6 @@
   --term-fg: inherit;
   --term-bg: inherit;
   --term-cursor: inherit;
-  --term-font-size: inherit;
   --term-color-0: inherit;
   --term-color-1: inherit;
   --term-color-2: inherit;
