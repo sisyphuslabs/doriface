@@ -64,9 +64,9 @@ export function useAppActions({ terminals, tabs, onNew, onToggleSidebar }: AppAc
         return tabs.split === null ? false : (tabs.toggleSplit(), true);
       case "pane.go":
         if (tabs.split === null) return false;
-        tabs.focus(
-          argument === "left" ? (tabs.open.find((address) => address !== tabs.active) ?? tabs.split) : tabs.split,
-        );
+        // The split shows the active tab on the left and the split tab on the right.
+        if (argument === "left" && tabs.active !== null) tabs.focus(tabs.active);
+        else tabs.focus(tabs.split);
         return true;
       case "agent.next":
         return select(neighbour(live, tabs.active, 1));
