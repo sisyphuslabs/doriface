@@ -33,9 +33,16 @@ export function readJson(path: string): unknown {
 
 const temporaryFor = (path: string): string => `${path}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp`;
 
+/** Writes a fresh temporary file; a failed write removes what it created, but never another writer's file. */
 function writeTemporary(path: string, value: unknown): string {
   const temporary = temporaryFor(path);
-  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+  const text = `${JSON.stringify(value, null, 2)}\n`;
+  try {
+    writeFileSync(temporary, text, { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) rmSync(temporary, { force: true });
+    throw error;
+  }
   return temporary;
 }
 
