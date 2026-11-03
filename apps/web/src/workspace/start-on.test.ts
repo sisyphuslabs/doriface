@@ -1,6 +1,6 @@
 import { HcRpcError } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { startOn } from "./start-on.ts";
+import { startOn, startTerminal } from "./start-on.ts";
 
 const refusing = (kind: string, message: string) => () =>
   Promise.reject(new HcRpcError({ code: -32000, message, data: { kind, hint: "" } }));
@@ -30,5 +30,21 @@ describe("startOn", () => {
       failure: { machine: "build-box", kind: "spawn_failed", message: "no shell" },
     });
     await expect(startOn(broken, "build-box")).rejects.toThrow("connection is closed");
+  });
+});
+
+describe("startTerminal", () => {
+  test("a run on this machine that fails comes back as a failure naming it, never as a rejection", async () => {
+    const started = await startTerminal(() => Promise.reject(new Error("connection is closed")), {}, "studio");
+    expect(started).toEqual({
+      ok: false,
+      failure: { machine: "studio", kind: "connection", message: "connection is closed" },
+    });
+  });
+
+  test("a run on an added machine keeps startOn's advice", async () => {
+    const started = await startTerminal(refusing("unavailable", "raw"), { on: "build-box", cwd: "/w" }, "studio");
+    if (started.ok) throw new Error("expected a refusal");
+    expect(started.failure.message).toContain("build-box");
   });
 });
