@@ -1,0 +1,152 @@
+import { Badge, Button, Dialog, Input } from "@doriface/ui";
+import { useMemo, useState } from "react";
+import { ACTIONS, actionFor, type ActionDef, type Scope } from "../keys/actions.ts";
+import { defaultKeymap } from "../keys/defaults.ts";
+import { keymapStore, useOverrides } from "../keys/keymap-store.ts";
+import {
+  NO_OVERRIDES,
+  parseKeybinds,
+  resetAction,
+  resolveKeymap,
+  serializeKeybinds,
+  withBinding,
+  withoutTrigger,
+  type ParsedKeybinds,
+} from "../keys/keymap.ts";
+import { currentPlatform } from "../keys/trigger.ts";
+import { download } from "./download.ts";
+import { KeybindingRow } from "./keybinding-row.tsx";
+
+const SCOPE_LABEL: Readonly<Record<Scope, string>> = { app: "App", terminal: "Terminal" };
+
+function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedKeybinds; readonly onClose: () => void }) {
+  const applied = parsed.lines.filter((line) => line.status === "applies").length;
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title="Import these keybindings?"
+      description={`${applied} of ${parsed.lines.length} keybind lines apply; the rest are listed with the reason.`}
+      className="w-[min(36rem,calc(100%-2rem))]"
+      actions={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={applied === 0}
+            onClick={() => {
+              void keymapStore.update(new Map([...keymapStore.overrides, ...parsed.overrides]));
+              onClose();
+            }}
+          >
+            Import
+          </Button>
+        </>
+      }
+    >
+      <ul className="flex max-h-72 flex-col overflow-auto rounded-md border border-border font-mono text-sm">
+        {parsed.lines.map((line) => (
+          <li
+            key={line.line}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-2.5 py-1.5 last:border-b-0"
+          >
+            <span className="w-6 shrink-0 text-right text-2xs text-dim tabular-nums">{line.line}</span>
+            <span className="min-w-0 flex-1 truncate text-foreground">{line.text}</span>
+            <Badge tone={line.status === "applies" ? "done" : line.status === "invalid" ? "blocked" : "working"}>
+              {line.status === "applies" ? "Applies" : line.status === "invalid" ? "Invalid" : "Unknown"}
+            </Badge>
+            {line.reason === undefined ? null : (
+              <span className="basis-full pl-9 font-sans text-sm text-muted-foreground">{line.reason}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Dialog>
+  );
+}
+
+function matches(action: ActionDef, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return needle === "" || action.label.toLowerCase().includes(needle) || action.id.includes(needle);
+}
+
+/** Every action with its shortcuts; record a new one, remove one, reset, and Ghostty keybind import/export. */
+export function KeybindingsSection() {
+  const platform = currentPlatform();
+  const overrides = useOverrides();
+  const keymap = useMemo(() => resolveKeymap(platform, overrides), [platform, overrides]);
+  const [query, setQuery] = useState("");
+  const [parsed, setParsed] = useState<ParsedKeybinds | null>(null);
+  const defaults = defaultKeymap(platform);
+  const sends = [...keymap.values()].filter((id) => id.startsWith("send:")).map(actionFor);
+  const actions = [...ACTIONS, ...sends.filter((action): action is ActionDef => action !== null)];
+  const shown = actions.filter((action) => matches(action, query));
+  const changed = (action: string): boolean =>
+    [...overrides].some(([trigger, bound]) => bound === action || (bound === null && defaults.get(trigger) === action));
+  const pick = (): void => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file !== undefined) void file.text().then((text) => setParsed(parseKeybinds(text)));
+    });
+    input.click();
+  };
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          aria-label="Search keybindings"
+          type="search"
+          placeholder="Search actions, e.g. tab"
+          value={query}
+          className="sm:w-64"
+          onValueChange={(next: string) => setQuery(next)}
+        />
+        <Button size="sm" onClick={pick}>
+          Import keybinds…
+        </Button>
+        <Button size="sm" onClick={() => download("ghostty-keybinds", serializeKeybinds(overrides))}>
+          Export
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={overrides.size === 0}
+          onClick={() => void keymapStore.update(NO_OVERRIDES)}
+        >
+          Reset all
+        </Button>
+      </div>
+      {(["app", "terminal"] as const).map((scope) => {
+        const defs = shown.filter((action) => action.scope === scope);
+        if (defs.length === 0) return null;
+        return (
+          <section key={scope} aria-labelledby={`keybindings-${scope}`} className="flex flex-col">
+            <h3 id={`keybindings-${scope}`} className="pb-1 text-base font-semibold text-foreground">
+              {SCOPE_LABEL[scope]}
+            </h3>
+            {defs.map((action) => (
+              <KeybindingRow
+                key={action.id}
+                action={action}
+                keymap={keymap}
+                platform={platform}
+                changed={changed(action.id)}
+                onBind={(trigger) => void keymapStore.update(withBinding(platform, overrides, trigger, action.id))}
+                onUnbind={(trigger) => void keymapStore.update(withoutTrigger(platform, overrides, trigger))}
+                onReset={() => void keymapStore.update(resetAction(platform, overrides, action.id))}
+              />
+            ))}
+          </section>
+        );
+      })}
+      {shown.length === 0 ? <p className="text-sm text-muted-foreground">No action matches “{query}”.</p> : null}
+      {parsed === null ? null : <ImportPreview parsed={parsed} onClose={() => setParsed(null)} />}
+    </div>
+  );
+}
