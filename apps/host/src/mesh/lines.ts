@@ -150,7 +150,10 @@ export class MeshLines {
   expect(...types: LineType[]): void {
     this.#expected = new Set(types);
     const stray = this.#queue.find(({ line }) => !this.#expected.has(line.t));
-    if (stray !== undefined) this.#unexpected(stray.line.t);
+    if (stray === undefined) return;
+    this.#queue.length = 0;
+    this.#queuedBytes = 0;
+    this.#unexpected(stray.line.t);
   }
 
   send(line: MeshLine): void {

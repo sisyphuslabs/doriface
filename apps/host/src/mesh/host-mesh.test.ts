@@ -144,6 +144,8 @@ describe("the running host's mesh offers", () => {
   });
 
   test("a session that closes as it is registered is not handed to the sync hook", async () => {
+    // Production returns false only when a revoke lands between the admit and the hand-off; no test can schedule
+    // that, so this fake stands in for it. LiveSessions.add's own result is pinned in e2ee/sessions.test.ts.
     class ClosingSessions extends LiveSessions {
       override add(session: SecureLink): boolean {
         session.close(CloseCode.UnknownDevice, "device revoked");
