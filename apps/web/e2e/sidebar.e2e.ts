@@ -94,12 +94,14 @@ test("a space named like one on another machine is selected, and opened, on its 
   const focused = page.locator('[data-focused="true"] [data-terminal]');
 
   await here.click();
-  await expect(focused).toHaveAttribute("data-terminal", /^t\d+$/, { timeout: 15_000 });
+  await expect(focused).toHaveAttribute("data-terminal", /^t[0-9a-z]+$/, { timeout: 15_000 });
   await expect(here).toHaveAttribute("aria-current", "true");
   await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
 
   await there.click();
-  await expect(focused).toHaveAttribute("data-terminal", new RegExp(`^${LONG_MACHINE}/t\\d+$`), { timeout: 15_000 });
+  await expect(focused).toHaveAttribute("data-terminal", new RegExp(`^${LONG_MACHINE}/t[0-9a-z]+$`), {
+    timeout: 15_000,
+  });
   await expect(there).toHaveAttribute("aria-current", "true");
   await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
 });
