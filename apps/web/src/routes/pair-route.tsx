@@ -1,4 +1,4 @@
-import { EmptyState } from "@doriface/ui";
+import { Button, EmptyState } from "@doriface/ui";
 import { Link2Off } from "lucide-react";
 import { useEffect, useState } from "react";
 import { parsePairingFragment, type PairingOffer } from "../pair/fragment.ts";
@@ -29,6 +29,11 @@ export function PairRoute() {
         icon={<Link2Off />}
         title="This pairing link cannot be used"
         description={`${parsed.reason} Run doriface-host pair again and open the new link.`}
+        actions={
+          <Button variant="primary" size="lg" render={<a href="/pair" />}>
+            Type a pairing code
+          </Button>
+        }
       />
     </main>
   );
