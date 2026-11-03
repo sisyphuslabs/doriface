@@ -3,12 +3,16 @@ import { isSameOrigin } from "./origin.ts";
 
 /** What a window.open, target=_blank link or modifier-click becomes: the app has exactly one window. */
 export type WindowOpenRoute =
-  | { readonly kind: "same-window"; readonly url: string }
+  | { readonly kind: "navigate"; readonly path: string }
   | { readonly kind: "browser"; readonly url: string }
   | { readonly kind: "none" };
 
+/** An app page becomes an in-app navigation of the one window, so nothing reloads. */
 export function routeWindowOpen(candidate: string, origin: string): WindowOpenRoute {
-  if (isSameOrigin(candidate, origin)) return { kind: "same-window", url: candidate };
+  if (isSameOrigin(candidate, origin)) {
+    const url = new URL(candidate);
+    return { kind: "navigate", path: `${url.pathname}${url.search}${url.hash}` };
+  }
   const external = allowedExternal(candidate);
   return external === undefined ? { kind: "none" } : { kind: "browser", url: external };
 }

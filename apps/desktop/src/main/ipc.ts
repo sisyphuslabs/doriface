@@ -6,4 +6,8 @@ export function registerIpc(deps: IpcDeps): void {
   const handlers = ipcHandlers(deps);
   ipcMain.handle(Channel.openExternal, (event, candidate: unknown) => handlers.openExternal(event, candidate));
   ipcMain.handle(Channel.startLocalHost, (event) => handlers.startLocalHost(event));
+  ipcMain.handle(Channel.setWindowBackground, (event, candidate: unknown) =>
+    handlers.setWindowBackground(event, candidate),
+  );
+  ipcMain.handle(Channel.closeWindow, (event) => handlers.closeWindow(event));
 }

@@ -73,8 +73,21 @@ export interface WindowPlacement {
 }
 
 export interface WindowLook {
-  readonly dark: boolean;
+  /** The page background the window paints before the page does. */
+  readonly background: string;
   readonly placement: WindowPlacement;
+}
+
+const HEX_COLOUR = /^#[0-9a-f]{6}$/i;
+
+export const isHexColour = (value: unknown): value is string => typeof value === "string" && HEX_COLOUR.test(value);
+
+/** The background the in-app theme last reported (saved as `{ background }`), else the system appearance's. */
+export function launchBackground(saved: unknown, dark: boolean): string {
+  const background: unknown =
+    typeof saved === "object" && saved !== null ? Reflect.get(saved, "background") : undefined;
+  if (isHexColour(background)) return background;
+  return dark ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light;
 }
 
 export function windowOptions(
@@ -88,7 +101,7 @@ export function windowOptions(
     minWidth: MIN_WINDOW_SIZE.width,
     minHeight: MIN_WINDOW_SIZE.height,
     show: false,
-    backgroundColor: look.dark ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light,
+    backgroundColor: look.background,
     webPreferences,
   };
   if (platform !== "darwin") return base;
