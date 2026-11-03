@@ -10,9 +10,9 @@
  * `DORIFACE_RELAY_REPO` overrides the clone URL (default HTTPS with your git credentials; CI passes an SSH URL).
  * `DORIFACE_RELAY_DIR` points at a relay checkout of your own instead, which is used as it is and never moved.
  */
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const MANAGED_DIR = join(REPO_ROOT, ".relay");
@@ -26,6 +26,9 @@ interface RelayPin {
 export const relayDir = (): string => process.env["DORIFACE_RELAY_DIR"] ?? MANAGED_DIR;
 
 class RelayUnreachable extends Error {}
+
+/** `.relay` holds something that is not a repository of its own; it is left exactly as found. */
+class RelayCheckoutInvalid extends Error {}
 
 async function readPin(): Promise<RelayPin> {
   const pin: unknown = await Bun.file(join(REPO_ROOT, "relay-pin.json")).json();
@@ -43,6 +46,17 @@ async function readPin(): Promise<RelayPin> {
   return { repository: pin.repository, rev: pin.rev };
 }
 
+/**
+ * The environment for git inside `dir`. Repository discovery stops at `dir`: when `dir/.git` is not a valid repository,
+ * git would otherwise climb into the public checkout around `.relay` and every forced step would act on it.
+ */
+const confinedTo = (dir: string): Record<string, string | undefined> => ({
+  ...process.env,
+  GIT_CEILING_DIRECTORIES: dirname(realpathSync(dir)),
+  // A credential prompt would hang CI and confuse a developer without access; fail instead.
+  GIT_TERMINAL_PROMPT: "0",
+});
+
 /** Runs `argv` in `cwd` with stdout passed through; stderr is returned as well as printed. */
 async function run(argv: readonly string[], cwd: string): Promise<{ code: number; stderr: string }> {
   const proc = Bun.spawn([...argv], {
@@ -50,8 +64,7 @@ async function run(argv: readonly string[], cwd: string): Promise<{ code: number
     stdin: "ignore",
     stdout: "inherit",
     stderr: "pipe",
-    // A credential prompt would hang CI and confuse a developer without access; fail instead.
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    env: confinedTo(cwd),
   });
   const stderr = await new Response(proc.stderr).text();
   process.stderr.write(stderr);
@@ -63,15 +76,18 @@ async function must(argv: readonly string[], cwd: string): Promise<void> {
   if (code !== 0) throw new Error(`${argv.join(" ")} exited ${code} in ${cwd}`);
 }
 
-async function headOf(dir: string): Promise<string | undefined> {
-  const proc = Bun.spawn(["git", "rev-parse", "--verify", "--quiet", "HEAD"], {
-    cwd: dir,
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const head = (await new Response(proc.stdout).text()).trim();
-  return (await proc.exited) === 0 ? head : undefined;
+async function gitOutput(dir: string, args: readonly string[]): Promise<string | undefined> {
+  const proc = Bun.spawn(["git", ...args], { cwd: dir, env: confinedTo(dir), stdout: "pipe", stderr: "ignore" });
+  const out = (await new Response(proc.stdout).text()).trim();
+  return (await proc.exited) === 0 ? out : undefined;
 }
+
+const headOf = (dir: string): Promise<string | undefined> =>
+  gitOutput(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+
+/** True only when `dir` is the top of its own repository, never a directory inside another one. */
+const ownsRepository = async (dir: string): Promise<boolean> =>
+  (await gitOutput(dir, ["rev-parse", "--show-toplevel"])) === realpathSync(dir);
 
 /** Brings the managed checkout to the pinned commit and installs it; returns the relay directory to use. */
 export async function fetchRelay(): Promise<string> {
@@ -86,6 +102,7 @@ export async function fetchRelay(): Promise<string> {
     await mkdir(dir, { recursive: true });
     await must(["git", "init", "--quiet"], dir);
   }
+  if (!(await ownsRepository(dir))) throw new RelayCheckoutInvalid(dir);
   if ((await headOf(dir)) !== pin.rev) {
     const fetched = await run(["git", "fetch", "--quiet", "--depth", "1", url, pin.rev], dir);
     if (fetched.code !== 0) throw new RelayUnreachable(`${pin.repository} at ${pin.rev} from ${url}`);
@@ -123,14 +140,21 @@ if (import.meta.main) {
   try {
     process.exitCode = await main(process.argv[2], process.argv.slice(3));
   } catch (error) {
-    if (!(error instanceof RelayUnreachable)) throw error;
-    console.error(`
+    if (error instanceof RelayCheckoutInvalid) {
+      console.error(`
+relay: ${error.message} is not a git checkout of its own, so relay:fetch leaves it alone. Move it aside or delete
+it (rm -rf .relay), then run \`bun run relay:fetch\` again to clone the relay afresh.`);
+    } else if (error instanceof RelayUnreachable) {
+      console.error(`
 Could not fetch the relay (${error.message}).
 
 The relay is a separate private service, github.com/sisyphuslabs/doriface-relay. Its public contract is
 docs/transport.md. Without access, \`bun run check\` still runs every other suite; only the relay suites in tests/relay
 need this checkout. With access, let git reach the repository (\`gh auth setup-git\`, or
 DORIFACE_RELAY_REPO=git@github.com:sisyphuslabs/doriface-relay.git for SSH) and run \`bun run relay:fetch\` again.`);
+    } else {
+      throw error;
+    }
     process.exitCode = 1;
   }
 }
