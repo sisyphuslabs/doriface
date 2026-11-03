@@ -67,10 +67,12 @@ export function TerminalView(props: TerminalViewProps) {
   }, []);
 
   const unmounted = useRef(false);
+  const unsent = useRef<() => void>(() => undefined);
   useEffect(
     () => () => {
       unmounted.current = true;
       void stream.current?.close();
+      unsent.current();
     },
     [],
   );
@@ -111,6 +113,23 @@ export function TerminalView(props: TerminalViewProps) {
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
   const program = useRef(pid);
+  const reportUnsent = (why: "restarted" | "ended"): void => {
+    toasts.add({ type: "warning", title: `Typed input was not sent because the program ${why}` });
+  };
+  // Input still queued when this view goes away (its program restarted or ended while the line was down) was never
+  // sent; say so once the core says which, unless the reattach below already did.
+  useEffect(() => {
+    unsent.current = () => {
+      const queued = pending.current.splice(0).length;
+      const latest = attachedTo.current;
+      if (queued === 0 || latest.closed) return;
+      void latest.call("terminal.get", { terminal: address }).then(
+        (terminal) =>
+          reportUnsent(terminal.state === "live" && terminal.pid !== program.current ? "restarted" : "ended"),
+        () => reportUnsent("ended"),
+      );
+    };
+  });
   const isFocused = useRef(focused);
   useEffect(() => {
     isFocused.current = focused;
@@ -149,9 +168,7 @@ export function TerminalView(props: TerminalViewProps) {
           // The program restarted while the line was down: what was typed for it must not reach the new one.
           if (attachedBefore.current && attached.terminal.pid !== program.current) {
             void attached.close();
-            if (pending.current.splice(0).length > 0) {
-              toasts.add({ type: "warning", title: "Typed input was not sent because the program restarted" });
-            }
+            if (pending.current.splice(0).length > 0) reportUnsent("restarted");
             return undefined;
           }
           stream.current = attached;
