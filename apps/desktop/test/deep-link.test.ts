@@ -72,6 +72,9 @@ describe("parseInAppLink", () => {
 
   test.each([
     ["another origin", LINK.replace("doriface.omo.dev", "evil.omo.dev")],
+    ["a host ending in the web app's host", LINK.replace("doriface.omo.dev", "evil-doriface.omo.dev")],
+    ["a subdomain of the web app's host", LINK.replace("doriface.omo.dev", "x.doriface.omo.dev")],
+    ["a host starting with the web app's host", LINK.replace("doriface.omo.dev", "doriface.omo.dev.evil.com")],
     ["plain http", LINK.replace("https:", "http:")],
     ["a port", LINK.replace("doriface.omo.dev", "doriface.omo.dev:8443")],
     ["credentials", LINK.replace("https://", "https://user@")],
