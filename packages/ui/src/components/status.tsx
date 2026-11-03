@@ -41,7 +41,7 @@ export function StatusIndicator({ status, className, decorative = false }: Statu
     >
       {status === "working" ? <Spinner /> : null}
       {status === "blocked" ? (
-        <span className="flex size-3.5 items-center justify-center rounded-xs bg-status-blocked/15 text-2xs leading-none font-bold text-status-blocked-text">
+        <span className="flex size-full items-center justify-center rounded-xs bg-status-blocked/15 text-2xs leading-none font-bold text-status-blocked-text">
           !
         </span>
       ) : null}
