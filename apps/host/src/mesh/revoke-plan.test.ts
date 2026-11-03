@@ -109,6 +109,16 @@ describe("design 6.1: what mesh revoke writes and what it says first", () => {
     });
   });
 
+  test("an exact hostId wins over a member renamed to that hostId", () => {
+    const f = machine("f"), a = machine("a"), b = machine("b");
+    withMesh(f, (mesh) => {
+      mesh.admit(f, a);
+      mesh.admit(f, b);
+      mesh.record(f, "name", { signPub: signPubOf(a), name: b.identity.hostId });
+      expect(plan(mesh, f, b.identity.hostId).target.hostId).toBe(b.identity.hostId);
+    });
+  });
+
   test("it refuses this host and a key that is no member", () => {
     const f = machine("f"),
       a = machine("a");
