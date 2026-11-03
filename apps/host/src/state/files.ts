@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -31,10 +31,17 @@ export function readJson(path: string): unknown {
   return JSON.parse(text);
 }
 
+const temporaryFor = (path: string): string => `${path}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp`;
+
+function writeTemporary(path: string, value: unknown): string {
+  const temporary = temporaryFor(path);
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+  return temporary;
+}
+
 /** Writes `value` as JSON readable by the owner only (0600), replacing the file atomically. */
 export function writePrivateJson(path: string, value: unknown): void {
-  const temporary = `${path}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+  const temporary = writeTemporary(path, value);
   try {
     renameSync(temporary, path);
   } catch (error) {
@@ -43,14 +50,20 @@ export function writePrivateJson(path: string, value: unknown): void {
   }
 }
 
-/** Creates `path` with `value` only if it does not exist yet; returns false when another writer got there first. */
+/**
+ * Creates `path` with `value` only if it does not exist yet, publishing the fully written file with a hard link (which
+ * never replaces), so a concurrent reader sees no file or the whole file. Returns false when another writer won.
+ */
 export function createPrivateJson(path: string, value: unknown): boolean {
+  const temporary = writeTemporary(path, value);
   try {
-    writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    linkSync(temporary, path);
     return true;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;
     throw error;
+  } finally {
+    rmSync(temporary, { force: true });
   }
 }
 

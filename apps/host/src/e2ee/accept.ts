@@ -54,18 +54,40 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
     return undefined;
   }
   if (secure.pattern === "IKpsk2") {
-    try {
-      deps.devices.add(secure.remoteStatic, deviceName);
-      claim?.settle(true);
-    } catch (error) {
-      claim?.settle(false);
-      deps.log(`cannot store the paired device: ${String(error)}`);
-      secure.close(1011, "cannot store the device");
+    const admitted =
+      claim === undefined ? REFUSED_CLAIM : admitPairing(claim, deps.devices, secure.remoteStatic, deviceName);
+    if (!admitted.ok) {
+      deps.log(`pairing refused: ${admitted.reason}`);
+      secure.close(admitted.code, admitted.reason);
       return undefined;
     }
     deps.log(`paired device "${deviceName}"`);
   }
   return secure;
+}
+
+export type Admission = { readonly ok: true } | { readonly ok: false; readonly code: number; readonly reason: string };
+
+const REFUSED_CLAIM: Admission = { ok: false, code: CloseCode.UnknownDevice, reason: "no pairing claim" };
+
+/**
+ * Finishes a confirmed IKpsk2 pairing: burns the code first, then stores the device. A second handshake that confirmed
+ * with an already used code is refused, and a store failure leaves the code burned rather than reusable.
+ */
+export function admitPairing(
+  claim: PairingClaim,
+  devices: DeviceStore,
+  clientStatic: Uint8Array,
+  name: string,
+): Admission {
+  if (!claim.settle(true))
+    return { ok: false, code: CloseCode.UnknownDevice, reason: "the pairing code was already used" };
+  try {
+    devices.add(clientStatic, name);
+  } catch (error) {
+    return { ok: false, code: 1011, reason: `cannot store the paired device: ${String(error)}` };
+  }
+  return { ok: true };
 }
 
 export const REVOKED = { code: CloseCode.UnknownDevice, reason: "device revoked" } as const;

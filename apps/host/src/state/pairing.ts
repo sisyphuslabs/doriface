@@ -1,6 +1,7 @@
 import { createPairingOffer, type PairingOffer, PairingGuard } from "@doriface/crypto";
 import { join } from "node:path";
 import { ensureStateDir, isRecord, readJson, removeFile, stringField, writePrivateJson } from "./files.ts";
+import { withStateLock } from "./lock.ts";
 
 const FILE = "pairing.json";
 
@@ -14,8 +15,12 @@ export interface PendingPairing extends PairingOffer {
 
 export interface PairingClaim {
   readonly psk: Uint8Array;
-  /** Uses the code up after a completed pairing, or counts a failed attempt (the third burns the code). */
-  settle(paired: boolean): void;
+  /**
+   * `true`: the handshake completed; burns the code and returns whether this was its first success, before the caller
+   * stores the device, so a crash or a failed store can never leave the code usable. `false`: counts a failed
+   * attempt (the third burns the code). Returns false for a failure.
+   */
+  settle(paired: boolean): boolean;
 }
 
 /**
@@ -23,32 +28,38 @@ export interface PairingClaim {
  * running host claims it per IKpsk2 handshake, registers its relay slot, and deletes it once used or burned.
  */
 export class PairingStore {
+  readonly #dir: string;
   readonly #path: string;
   #guard: PairingGuard | undefined;
   readonly #listeners = new Set<() => void>();
 
   constructor(stateDir: string) {
-    this.#path = join(ensureStateDir(stateDir), FILE);
+    this.#dir = ensureStateDir(stateDir);
+    this.#path = join(this.#dir, FILE);
   }
 
   offer(now = Date.now()): PendingPairing {
     const pending = { ...createPairingOffer(now), failures: 0, slot: "pending" as const };
-    this.#write(pending);
+    withStateLock(this.#dir, () => this.#write(pending));
     return pending;
   }
 
   /** Replaces the code of the pending offer after a relay slot collision; keeps its expiry. */
   redraw(code: string): PendingPairing | undefined {
-    const current = this.read();
-    if (current === undefined || current.code !== code) return current;
-    const next = { ...current, code: createPairingOffer().code, slot: "pending" as const };
-    this.#write(next);
-    return next;
+    return withStateLock(this.#dir, () => {
+      const current = this.read();
+      if (current === undefined || current.code !== code) return current;
+      const next = { ...current, code: createPairingOffer().code, slot: "pending" as const };
+      this.#write(next);
+      return next;
+    });
   }
 
   setSlot(code: string, slot: SlotStatus): void {
-    const current = this.read();
-    if (current?.code === code && current.slot !== slot) this.#write({ ...current, slot });
+    withStateLock(this.#dir, () => {
+      const current = this.read();
+      if (current?.code === code && current.slot !== slot) this.#write({ ...current, slot });
+    });
   }
 
   claim(now = Date.now()): PairingClaim | undefined {
@@ -60,14 +71,15 @@ export class PairingStore {
     if (psk === undefined) return undefined;
     return {
       psk,
-      settle: (paired) => {
-        if (paired) guard.use();
-        else guard.fail();
-        const current = this.read();
-        if (current?.code !== pending.code) return;
-        if (guard.state === "open") this.#write({ ...current, failures: guard.failures });
-        else this.#remove();
-      },
+      settle: (paired) =>
+        withStateLock(this.#dir, () => {
+          const first = paired ? guard.use() : (guard.fail(), false);
+          const current = this.read();
+          if (current?.code !== pending.code) return first;
+          if (guard.state === "open") this.#write({ ...current, failures: guard.failures });
+          else this.#remove();
+          return first;
+        }),
     };
   }
 

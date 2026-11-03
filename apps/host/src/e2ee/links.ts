@@ -24,8 +24,13 @@ export class WsByteLink<T> implements ByteLink {
   }
 
   onData(listener: (bytes: Uint8Array) => void): Unsubscribe {
-    this.#ws.onData(listener);
-    return () => this.#ws.onData(() => {});
+    let active = true;
+    this.#ws.onData((bytes) => {
+      if (active) listener(bytes);
+    });
+    return () => {
+      active = false;
+    };
   }
 
   onClose(listener: (error: Error | undefined) => void): Unsubscribe {

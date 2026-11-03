@@ -25,13 +25,18 @@ interface ConnectionState {
   buffer: string;
 }
 
-export function listenControl(stateDir: string, handle: ControlHandler): UnixSocketListener<ConnectionState> {
+export interface ControlListener {
+  /** Stops listening and removes the socket file. */
+  stop(): void;
+}
+
+export function listenControl(stateDir: string, handle: ControlHandler): ControlListener {
   const unix = controlSocketPath(stateDir);
   rmSync(unix, { force: true });
   const reply = (socket: Socket<ConnectionState>, value: unknown): void => {
     socket.end(`${JSON.stringify(value)}\n`);
   };
-  return Bun.listen<ConnectionState>({
+  const listener: UnixSocketListener<ConnectionState> = Bun.listen<ConnectionState>({
     unix,
     socket: {
       open(socket) {
@@ -52,6 +57,12 @@ export function listenControl(stateDir: string, handle: ControlHandler): UnixSoc
       },
     },
   });
+  return {
+    stop() {
+      listener.stop(true);
+      rmSync(unix, { force: true });
+    },
+  };
 }
 
 /** Sends one request to the running host; resolves undefined when no host listens on this state dir. */
