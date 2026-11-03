@@ -3,7 +3,7 @@ import { AgentRow, SidebarSection, SpaceRow, cn, type Agent } from "@doriface/ui
 import { useMemo } from "react";
 import { useNow } from "./use-now.ts";
 import { MachineList } from "./machine-list.tsx";
-import { activeMachineId } from "./machines.ts";
+import { activeMachineId, showMachines } from "./machines.ts";
 import { firstInSpace, groupAgents, spaceName, toSpaces } from "./model.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -48,13 +48,14 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
 
   return (
     <div className="flex flex-col gap-4 px-2 pb-3">
-      {machines.entries.length > 1 ? (
+      {showMachines(machines.entries, machines.listError) ? (
         <MachineList
           entries={machines.entries}
           activeMachine={activeMachine}
           onOpen={onOpen}
           onNewOn={machines.newTerminalOn}
           failure={machines.failure}
+          listError={machines.listError}
           onDismiss={machines.dismissFailure}
           {...(agentsFirst ? { className: "order-last" } : {})}
         />
