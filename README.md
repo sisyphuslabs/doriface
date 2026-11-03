@@ -2,7 +2,7 @@
 
 An end-to-end encrypted web, PWA and desktop face for [herdr-core](https://github.com/herdrdev/herdr-core).
 
-doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted with Noise, and by default it travels through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
+doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is designed to be end-to-end encrypted with Noise and, by default, carried through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. That path is still landing; today a client reaches a host on the same machine (see Status). Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
 
 | Workspace (night, 1440)                                             | Workspace (day, 1440)                                           |
 | ------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -10,14 +10,14 @@ doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON
 
 ## Status
 
-| Piece                                         | State                                                                                                                              |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Host gateway, byte-for-byte `hc` passthrough  | works                                                                                                                              |
-| Web client and installable PWA                | works on the same machine as the host                                                                                              |
-| Desktop app ("Use this computer")             | works: starts the host and `hc` locally and attaches terminals                                                                     |
-| Terminal rendering with libghostty            | works (Ghostty v1.4.0)                                                                                                             |
-| Public relay `relay-doriface.omo.dev`         | deployed                                                                                                                           |
-| Pairing a device and reaching a host remotely | in progress: end-to-end encryption and CPace-based pairing are landing ([#17](https://github.com/sisyphuslabs/doriface/issues/17)) |
+| Piece                                         | State                                                                                                                                                                                                                                   |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host gateway, byte-for-byte `hc` passthrough  | works                                                                                                                                                                                                                                   |
+| Web client and installable PWA                | works on the same machine as the host: in Settings, set "Connect through" to "Loopback dev" and paste the token from `doriface-host --print-token`                                                                                      |
+| Desktop app ("Use this computer")             | works: starts the host and `hc` locally and attaches terminals                                                                                                                                                                          |
+| Terminal rendering with libghostty            | works (Ghostty v1.4.0)                                                                                                                                                                                                                  |
+| Public relay `relay-doriface.omo.dev`         | deployed                                                                                                                                                                                                                                |
+| Pairing a device and reaching a host remotely | in progress: Noise encryption with CPace-based code pairing, transport contract v1.3 ([#7](https://github.com/sisyphuslabs/doriface/pull/7)), and the relay path end to end ([#17](https://github.com/sisyphuslabs/doriface/issues/17)) |
 
 ## How it fits together
 
@@ -26,6 +26,8 @@ browser / PWA / desktop ──┐                         ┌── doriface-hos
                           ├─ Noise (end-to-end) ────┤
      relay-doriface.omo.dev (sees ciphertext only) ─┘   or directly on your LAN
 ```
+
+That is the target design. Today the web client and the desktop app reach the host over a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc` on the same machine.
 
 The host never parses what `hc` says; it pipes the stream. The client SDK speaks herdr-core's protocol itself, so a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire format every package is built against is the [transport contract](docs/transport.md).
 
@@ -45,12 +47,12 @@ The host never parses what `hc` says; it pipes the stream. The client SDK speaks
 
 ## Development
 
-Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on `PATH` for the integration and end-to-end tests.
+Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on `PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests.
 
 ```sh
 bun install
 bun run check                         # typecheck, lint, format check, API codegen check, tests
-bun run --cwd apps/host start         # the host gateway on 127.0.0.1:7766
+bun run --cwd apps/host start --print-token   # the host gateway on 127.0.0.1:7766; prints the client token
 bun run --cwd apps/web dev            # the web client
 bun run --cwd apps/desktop start      # the desktop app
 bun run --cwd packages/ui showcase    # every component and screen mockup
