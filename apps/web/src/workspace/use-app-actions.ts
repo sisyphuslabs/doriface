@@ -1,7 +1,8 @@
 import type { Terminal } from "@doriface/protocol";
 import { useNavigate } from "@tanstack/react-router";
 import { terminalConfigStore } from "../ghostty/config-store.ts";
-import { single, withValues } from "../ghostty/config.ts";
+import { single, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
+import { KEY_BY_NAME } from "../ghostty/keys.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 import type { Tabs } from "./use-tabs.ts";
 
@@ -14,10 +15,17 @@ export interface AppActionTargets {
 
 const FONT_STEP = 1;
 
+/** Steps font-size within the schema's bounds; null resets it to the default. */
+export function zoomedConfig(config: TerminalConfig, delta: number | null): TerminalConfig {
+  if (delta === null) return withoutKey(config, "font-size");
+  const kind = KEY_BY_NAME.get("font-size")?.kind;
+  const [min, max] = kind?.type === "number" ? [kind.min, kind.max] : [1, 1000];
+  const size = Math.min(max, Math.max(min, Number(single(config, "font-size")) + delta));
+  return withValues(config, "font-size", [String(size)]);
+}
+
 function zoom(delta: number | null): void {
-  const config = terminalConfigStore.config;
-  const next = delta === null ? [] : [String(Number(single(config, "font-size")) + delta)];
-  void terminalConfigStore.update(withValues(config, "font-size", next));
+  void terminalConfigStore.update(zoomedConfig(terminalConfigStore.config, delta));
 }
 
 function neighbour(list: readonly string[], current: string | null, step: 1 | -1): string | null {

@@ -21,8 +21,11 @@ export function isDefault(config: TerminalConfig, key: string): boolean {
 
 export function withValues(config: TerminalConfig, key: string, values: readonly string[]): TerminalConfig {
   const next = new Map(config);
-  const defaults = KEY_BY_NAME.get(key)?.defaults ?? [];
-  const same = values.length === defaults.length && values.every((value, index) => value === defaults[index]);
+  const def = KEY_BY_NAME.get(key);
+  const defaults = def?.defaults ?? [];
+  // A cleared single-value field is [] from the control and [""] in the schema; both mean "unset".
+  const normalized = def?.repeatable === false && values.length === 0 ? [""] : values;
+  const same = normalized.length === defaults.length && normalized.every((value, index) => value === defaults[index]);
   if (same) next.delete(key);
   else next.set(key, values);
   return next;
