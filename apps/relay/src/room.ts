@@ -27,7 +27,7 @@ import {
 } from "./attachment.ts";
 import { verifyAuthAnswer } from "./auth.ts";
 import { applyAck, forward, sendControl } from "./flow.ts";
-import { AUTH_TIMEOUT_MS } from "./limits.ts";
+import { AUTH_TIMEOUT_MS, sourceOf } from "./limits.ts";
 import type { PairSlotsEnv } from "./pair-slot.ts";
 import { handlePairSlot } from "./pairing.ts";
 import { alarmBy, overdue, type TimeoutVars, timeoutsOf } from "./reaper.ts";
@@ -76,7 +76,7 @@ export class Room extends DurableObject<RoomEnv> {
       if (verdict === "not-held") return closedSocket(CloseCode.HostOffline, "no host is pairing on this slot");
       if (verdict === "limited") return closedSocket(CloseCode.RateLimited, "pairing budget spent for this slot");
     }
-    return this.#acceptClient(request.headers.get("cf-connecting-ip") ?? "unknown");
+    return this.#acceptClient(sourceOf(request));
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
