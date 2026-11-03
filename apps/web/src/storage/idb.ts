@@ -18,6 +18,16 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
+/** A write is stored only once its transaction commits; a request's success can still be rolled back. */
+function committed(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.addEventListener("complete", () => resolve());
+    const fail = () => reject(transaction.error ?? new Error("IndexedDB transaction did not commit"));
+    transaction.addEventListener("abort", fail);
+    transaction.addEventListener("error", fail);
+  });
+}
+
 let opened: Promise<IDBDatabase> | null = null;
 
 function open(): Promise<IDBDatabase> {
@@ -42,7 +52,9 @@ export const deviceStore: KeyValueStore = {
   },
   async put(key, value) {
     const db = await open();
-    await request(db.transaction(STORE, "readwrite").objectStore(STORE).put(value, key));
+    const transaction = db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).put(value, key);
+    await committed(transaction);
   },
 };
 
