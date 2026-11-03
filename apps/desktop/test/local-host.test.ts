@@ -77,4 +77,32 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
     await expect(broken.start()).rejects.toThrow(/exited before listening \(code 3\):\nboom/);
     await expect(broken.start()).rejects.toThrow("exited before listening");
   });
+
+  test("stderr that arrives after the exit event is still in the rejection", async () => {
+    let exited = false;
+    let writer: Bun.Socket | undefined;
+    const release = (): void => void (exited && writer?.write("go"));
+    const gate = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: { open: (socket) => ((writer = socket), release()), data: () => {} },
+    });
+    const lateWriter = `const s = await Bun.connect({ hostname: "127.0.0.1", port: ${gate.port}, socket: { data: () => { console.error("boom"); process.exit(0); } } });`;
+    const child = `Bun.spawn([process.execPath, "-e", ${JSON.stringify(lateWriter)}], { stdio: ["ignore", "ignore", "inherit"] }); process.exit(3);`;
+    const dying = new LocalHost({
+      command: { file: process.execPath, args: ["-e", child] },
+      hc: undefined,
+      env: process.env,
+      log: (line) => {
+        if (!line.startsWith("doriface-host exited")) return;
+        exited = true;
+        release();
+      },
+    });
+    try {
+      await expect(dying.start()).rejects.toThrow(/exited before listening \(code 3\):\nboom/);
+    } finally {
+      gate.stop(true);
+    }
+  });
 });
