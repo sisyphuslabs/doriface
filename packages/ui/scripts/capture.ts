@@ -18,6 +18,8 @@ const SCREENS = [
   "palette",
   "settings",
   "settings-appearance",
+  "settings-terminal",
+  "settings-keyboard",
   "mobile",
   "mobile-agents",
   "states",
@@ -26,6 +28,8 @@ const SCREENS = [
 const SCROLLERS: Readonly<Record<string, string>> = {
   settings: "settings-body",
   "settings-appearance": "settings-body",
+  "settings-terminal": "settings-body",
+  "settings-keyboard": "settings-body",
 };
 const THEMES = [
   { name: "dark", palette: "night" },
