@@ -20,6 +20,11 @@ export interface HostMeshOptions {
   readonly sessions: LiveSessions;
   readonly hc: HcCoreOptions;
   readonly relay: { readonly url: string | undefined; readonly createSocket?: CreateSocket | undefined };
+  /**
+   * The sync layer (section 5, PR 5): receives every authorized mesh session that is not a join, and the session a
+   * join ran on once the join is over. It owns the session from then on. Without one, the session stays open and idle.
+   */
+  readonly sync?: ((session: SecureLink) => void) | undefined;
   readonly log: (line: string) => void;
 }
 
@@ -61,9 +66,9 @@ export class HostMesh {
     return offer;
   }
 
-  /** Serves a session on the mesh stream: a join on a mesh offer. Sync sessions are not served yet (1000). */
+  /** Serves a session on the mesh stream: a join on a mesh offer, or a member's sync session for the sync hook. */
   serve(secure: SecureLink): void {
-    if (secure.kind === SessionKind.Session) return secure.close(1000, "this host serves no mesh sync session yet");
+    if (secure.kind === SessionKind.Session) return this.#options.sync?.(secure);
     const { identity, mesh, log } = this.#options;
     const expiresAt = this.#offerExpiresAt > 0 ? this.#offerExpiresAt : Date.now() + PAIRING_TTL_MS;
     const deps = { identity, mesh, pending: this.pending, own: () => this.#own(undefined), expiresAt, log };
@@ -99,6 +104,7 @@ export class HostMesh {
   #keep(secure: SecureLink): void {
     this.#options.sessions.add(secure);
     this.#options.log("mesh: keeping the join's session for sync");
+    this.#options.sync?.(secure);
   }
 
   async #own(name: string | undefined): Promise<OwnCard> {
