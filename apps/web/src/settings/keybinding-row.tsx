@@ -1,7 +1,7 @@
 import { Badge, Button, IconButton, Kbd, SettingRow } from "@doriface/ui";
 import { Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { actionFor, type ActionDef } from "../keys/actions.ts";
+import { actionFor, displayActionId, type ActionDef } from "../keys/actions.ts";
 import type { Keymap } from "../keys/defaults.ts";
 import { triggerFromEvent, triggerKeys, type Platform } from "../keys/trigger.ts";
 
@@ -79,7 +79,7 @@ export function KeybindingRow({
       }
       description={
         pending === null ? (
-          <span className="font-mono text-xs">{action.id}</span>
+          <span className="font-mono text-xs">{displayActionId(action.id)}</span>
         ) : (
           <span className="flex flex-wrap items-center gap-2 text-foreground">
             <Kbd keys={triggerKeys(pending, platform)} persistent /> is {conflictLabel}.

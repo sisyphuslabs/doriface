@@ -98,6 +98,11 @@ export function displayBytes(bytes: Uint8Array): string {
   return out;
 }
 
+/** An action id as text a person can read: a send: payload shows its control bytes as \xNN. */
+export function displayActionId(id: string): string {
+  return id.startsWith("send:") ? `send:${displayBytes(sendBytes(id))}` : id;
+}
+
 /** The action for an id, including `send:<text>` which is any text written to the terminal. */
 export function actionFor(id: string): ActionDef | null {
   const known = ACTION_BY_ID.get(id);
