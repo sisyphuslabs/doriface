@@ -1,0 +1,144 @@
+import { Badge, Button, IconButton, Input, SettingRow, TerminalPreview, type TerminalLine } from "@doriface/ui";
+import { RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { EMPTY_CONFIG, effective, isDefault, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
+import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
+import { KEYS } from "../ghostty/keys.ts";
+import { GROUP_LABEL, type Group, type KeyDef } from "../ghostty/schema.ts";
+import { KeyControl } from "./terminal-control.tsx";
+import { ImportExport } from "./terminal-import.tsx";
+
+const GROUPS: readonly Group[] = ["font", "cursor", "colors", "spacing", "behavior"];
+
+const PREVIEW: readonly TerminalLine[] = [
+  [
+    { text: "$ ", color: 2 },
+    { text: "bun test", bold: true },
+    { text: "  # fi ff ligatures", dim: true },
+  ],
+  [{ text: "✓ ", color: 2 }, { text: "parse.test.ts" }, { text: "  12 pass", dim: true }],
+  [{ text: "✗ ", color: 1 }, { text: "trigger.test.ts" }, { text: "  1 fail", color: 3 }],
+  [
+    { text: "0 ", color: 0 },
+    { text: "1 ", color: 1 },
+    { text: "2 ", color: 2 },
+    { text: "3 ", color: 3 },
+    { text: "4 ", color: 4 },
+    { text: "5 ", color: 5 },
+    { text: "6 ", color: 6 },
+    { text: "7 ", color: 7 },
+    { text: "8 ", color: 8 },
+    { text: "9 ", color: 9 },
+    { text: "10 ", color: 10 },
+    { text: "11 ", color: 11 },
+    { text: "12 ", color: 12 },
+    { text: "13 ", color: 13 },
+    { text: "14 ", color: 14 },
+    { text: "15", color: 15 },
+  ],
+  [{ text: "$ ", color: 2 }],
+];
+
+function matches(def: KeyDef, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return needle === "" || def.key.includes(needle) || def.description.toLowerCase().includes(needle);
+}
+
+function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: TerminalConfig }) {
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const unsupported = def.support.level === "unsupported";
+  const changed = !isDefault(config, def.key);
+  return (
+    <SettingRow
+      id={`terminal-${def.key}`}
+      className="items-start"
+      title={
+        <span className="flex flex-wrap items-center gap-2 font-mono text-sm">
+          {def.key}
+          {unsupported ? <Badge>Not applied</Badge> : null}
+          {def.support.level === "new-terminals" ? <Badge>New terminals</Badge> : null}
+        </span>
+      }
+      description={
+        <>
+          {def.description}
+          {unsupported ? ` ${def.support.reason}` : null}
+          {invalid === null ? null : <span className="block text-destructive">{invalid}</span>}
+        </>
+      }
+      control={
+        <>
+          <KeyControl
+            def={def}
+            values={effective(config, def.key)}
+            disabled={unsupported}
+            onCommit={(values) => {
+              setInvalid(null);
+              void terminalConfigStore.update(withValues(config, def.key, values));
+            }}
+            onInvalid={setInvalid}
+          />
+          <IconButton
+            label={`Reset ${def.key}`}
+            icon={<RotateCcw />}
+            className={changed ? "" : "invisible"}
+            onClick={() => void terminalConfigStore.update(withoutKey(config, def.key))}
+          />
+        </>
+      }
+    />
+  );
+}
+
+/** Every Ghostty key the renderer knows, grouped, searchable, with a live preview above. */
+export function TerminalSection() {
+  const config = useTerminalConfig();
+  const [query, setQuery] = useState("");
+  const shown = KEYS.filter((def) => matches(def, query));
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="wterm overflow-hidden rounded-lg border border-border" data-terminal-preview>
+        <TerminalPreview
+          label="Preview of the terminal with these settings"
+          cursor
+          lines={PREVIEW}
+          className="font-(family-name:--term-font-family) text-(length:--term-font-size) leading-(--term-row-height)"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          aria-label="Search terminal settings"
+          type="search"
+          placeholder="Search keys, e.g. cursor"
+          value={query}
+          className="sm:w-64"
+          onValueChange={(next: string) => setQuery(next)}
+        />
+        <ImportExport />
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={config.size === 0}
+          onClick={() => void terminalConfigStore.update(EMPTY_CONFIG)}
+        >
+          Reset all
+        </Button>
+      </div>
+      {GROUPS.map((group) => {
+        const defs = shown.filter((def) => def.group === group);
+        if (defs.length === 0) return null;
+        return (
+          <section key={group} aria-labelledby={`terminal-group-${group}`} className="flex flex-col">
+            <h3 id={`terminal-group-${group}`} className="pb-1 text-base font-semibold text-foreground">
+              {GROUP_LABEL[group]}
+            </h3>
+            {defs.map((def) => (
+              <KeyRow key={def.key} def={def} config={config} />
+            ))}
+          </section>
+        );
+      })}
+      {shown.length === 0 ? <p className="text-sm text-muted-foreground">No setting matches “{query}”.</p> : null}
+    </div>
+  );
+}
