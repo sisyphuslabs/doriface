@@ -75,8 +75,9 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
     code: offer.code,
     relayUrl: values.relay,
   });
+  const ways = values["no-qr"] ? "or type the code" : "scan the QR code, or type the code";
   const lines = [
-    `Open this link on the device you want to pair, scan the QR code, or type the code. It works once, for ${PAIRING_TTL_MS / 60_000} minutes.`,
+    `Open this link on the device you want to pair, ${ways}. It works once, for ${PAIRING_TTL_MS / 60_000} minutes.`,
     "",
     ...(values["no-qr"] ? [] : [renderUnicodeCompact(url, { ecc: "L", border: 2 }), ""]),
     url,
