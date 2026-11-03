@@ -11,4 +11,10 @@
  */
 @custom-variant hover (&:hover, &[data-force~="hover"]);
 @custom-variant active (&:active, &[data-force~="active"]);
+/* An iPhone 14's portrait safe areas, for 390-wide captures (?insets=phone). */
+:root[data-insets="phone"] {
+  --safe-top: 47px;
+  --safe-bottom: 34px;
+}
+
 @custom-variant focus-visible (&:focus-visible, &[data-force~="focus"]);

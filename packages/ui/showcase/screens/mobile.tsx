@@ -7,7 +7,7 @@ import { CompactHome } from "./shell.tsx";
 export function MobileTerminal() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome px-1.5 pt-[env(safe-area-inset-top)]">
+      <header className="box-content flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome px-1.5 pt-(--safe-top)">
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" />
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <h1 className="truncate text-base font-semibold text-foreground">Claude Code</h1>
@@ -16,7 +16,7 @@ export function MobileTerminal() {
         <IconButton label="Terminal actions" icon={<Ellipsis />} size="md" />
       </header>
       <TerminalPreview lines={CLAUDE_LINES} cursor label="Claude Code output" className="flex-1 text-[0.75rem]" />
-      <ExtraKeysBar latched={["ctrl"]} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
+      <ExtraKeysBar latched={["ctrl"]} />
     </div>
   );
 }
@@ -40,10 +40,18 @@ export function MobileScreen() {
   );
 }
 
+/** At 390 the agents list is the screen; wider, it is shown in a phone frame instead of stretching. */
 export function MobileAgentsScreen() {
   return (
-    <div className="h-dvh">
-      <CompactHome />
-    </div>
+    <>
+      <div className="h-dvh md:hidden">
+        <CompactHome />
+      </div>
+      <main className="hidden min-h-dvh items-center justify-center bg-background p-10 md:flex">
+        <PhoneFrame label="Agents">
+          <CompactHome />
+        </PhoneFrame>
+      </main>
+    </>
   );
 }

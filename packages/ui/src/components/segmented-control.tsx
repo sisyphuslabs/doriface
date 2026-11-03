@@ -39,7 +39,7 @@ export function SegmentedControl<T extends string>({
           key={option.value}
           value={option.value}
           className={cn(
-            "inline-flex h-[calc(var(--control)-6px)] flex-1 items-center justify-center gap-1.5 rounded-sm px-3 text-sm whitespace-nowrap text-muted-foreground",
+            "inline-flex h-[calc(var(--control)-6px)] flex-1 coarse:h-(--control) items-center justify-center gap-1.5 rounded-sm px-3 text-sm whitespace-nowrap text-muted-foreground",
             "outline-none transition-colors duration-(--duration-micro) hover:text-foreground",
             "focus-visible:outline-2 focus-visible:outline-ring data-pressed:bg-popover data-pressed:text-foreground data-pressed:shadow-[0_0_0_1px_var(--border)]",
           )}
