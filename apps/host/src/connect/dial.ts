@@ -56,7 +56,8 @@ export async function dial(target: ConnectTarget, options: DialOptions): Promise
   }
 }
 
-const REFUSALS: Readonly<Record<number, (hostId: string) => string>> = {
+/** What `doriface-host connect` prints per relay close code; the web app maps the same words back (machine-cause.ts). */
+export const REFUSALS: Readonly<Record<number, (hostId: string) => string>> = {
   4400: (hostId) => `the handshake with host ${hostId} failed: its key may not match the one this machine paired with`,
   4401: (hostId) => `host ${hostId} does not know this machine anymore: pair it again`,
   4403: (hostId) => `the relay refused host ${hostId}'s key`,
