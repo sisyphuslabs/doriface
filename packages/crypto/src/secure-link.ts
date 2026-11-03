@@ -79,6 +79,7 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
     const info = { pattern: handshake.pattern, remoteStatic, handshakeHash, helloPayload };
     return new SecuredLink(link, new Transport(send, receive), info);
   };
+  /** Installs the session before anything else is sent, so a peer that answers synchronously reaches it. */
   const resolve = (secured: SecuredLink): void => {
     done = true;
     clearTimeout(timer);
@@ -112,8 +113,8 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
       guard(CloseCode.CryptoFailure, () => {
         handshake.readMessage(bytes);
         const secured = establish(handshake, options.payload ?? EMPTY);
-        secured.send(EMPTY);
         resolve(secured);
+        secured.send(EMPTY);
       });
     guard(CloseCode.CryptoFailure, () => link.send(handshake.writeMessage(options.payload ?? EMPTY)));
   } else {
@@ -130,9 +131,10 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
           if (verdict.psk === undefined) throw new SecureLinkError(CloseCode.UnknownDevice, "no pairing is pending");
           handshake.setPsk(verdict.psk);
         }
-        link.send(handshake.writeMessage(EMPTY));
+        const reply = handshake.writeMessage(EMPTY);
         pending = establish(handshake, payload);
         onMessage = (record) => confirm(record);
+        link.send(reply);
       });
     const confirm = (record: Uint8Array): void =>
       guard(CloseCode.CryptoFailure, () => {

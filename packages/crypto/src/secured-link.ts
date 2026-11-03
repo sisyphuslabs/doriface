@@ -57,14 +57,19 @@ export class SecuredLink implements SecureLink {
   onClose(listener: (error: Error | undefined) => void): Unsubscribe {
     if (!this.#closed) return this.#close.add(listener);
     const error = this.#closeError;
-    queueMicrotask(() => listener(error));
-    return () => {};
+    let active = true;
+    queueMicrotask(() => {
+      if (active) listener(error);
+    });
+    return () => {
+      active = false;
+    };
   }
 
   close(code?: number, reason?: string): void {
     if (this.#closed) return;
-    this.#link.close(code, reason);
     this.linkClosed(undefined);
+    this.#link.close(code, reason);
   }
 
   /** Feeds one record from the underlying link; any failure closes the link with 4400. */
@@ -82,10 +87,11 @@ export class SecuredLink implements SecureLink {
     else this.#data.emit(plaintext);
   }
 
+  /** Records the failure first, so a link that reports its close synchronously cannot replace it. */
   fail(error: SecureLinkError): void {
     if (this.#closed) return;
-    this.#link.close(error.code, error.message);
     this.linkClosed(error);
+    this.#link.close(error.code, error.message);
   }
 
   linkClosed(error: Error | undefined): void {

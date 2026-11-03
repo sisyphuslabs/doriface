@@ -7,7 +7,8 @@ interface Vector {
   readonly source: string;
   readonly pattern: Pattern;
   readonly fields: ReadonlyMap<string, string>;
-  readonly psk: string | undefined;
+  readonly initPsk: string | undefined;
+  readonly respPsk: string | undefined;
   readonly messages: readonly { readonly payload: string; readonly ciphertext: string }[];
 }
 
@@ -28,13 +29,17 @@ async function loadVectors(file: string): Promise<Vector[]> {
     const pattern = PATTERNS.find((p) => PROTOCOL_NAMES[p] === name);
     if (pattern === undefined) throw new Error(`unexpected protocol ${name}`);
     const fields = new Map(Object.entries(entry).flatMap(([k, v]) => (typeof v === "string" ? [[k, v] as const] : [])));
-    const psks = entry["init_psks"];
+    const firstPsk = (key: string): string | undefined => {
+      const psks = entry[key];
+      return Array.isArray(psks) ? text(psks[0]) : undefined;
+    };
     const messages = Array.isArray(entry["messages"]) ? entry["messages"].filter(isRecord) : [];
     return {
       source: file,
       pattern,
       fields,
-      psk: Array.isArray(psks) ? text(psks[0]) : undefined,
+      initPsk: firstPsk("init_psks"),
+      respPsk: firstPsk("resp_psks"),
       messages: messages.map((m) => ({ payload: text(m["payload"]), ciphertext: text(m["ciphertext"]) })),
     };
   });
@@ -53,7 +58,8 @@ describe("Noise test vectors", () => {
   });
 
   test.each(vectors.map((v) => [`${v.source} ${PROTOCOL_NAMES[v.pattern]}`, v] as const))("%s", (_, vector) => {
-    const psk = vector.psk === undefined ? undefined : hex(vector.psk);
+    const psk = (value: string | undefined) => (value === undefined ? undefined : hex(value));
+    expect(vector.initPsk === undefined).toBe(vector.pattern === "IK");
     const initiator = new Handshake({
       pattern: vector.pattern,
       role: "initiator",
@@ -61,7 +67,7 @@ describe("Noise test vectors", () => {
       staticKey: x25519FromSecret(field(vector, "init_static")),
       remoteStatic: field(vector, "init_remote_static"),
       ephemeralSecret: field(vector, "init_ephemeral"),
-      psk,
+      psk: psk(vector.initPsk),
     });
     const responder = new Handshake({
       pattern: vector.pattern,
@@ -69,7 +75,7 @@ describe("Noise test vectors", () => {
       prologue: field(vector, "resp_prologue"),
       staticKey: x25519FromSecret(field(vector, "resp_static")),
       ephemeralSecret: field(vector, "resp_ephemeral"),
-      psk,
+      psk: psk(vector.respPsk),
     });
     const [m1, m2, ...transport] = vector.messages;
     if (m1 === undefined || m2 === undefined) throw new Error("vector lacks handshake messages");

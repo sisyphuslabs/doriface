@@ -31,7 +31,9 @@ for (let round = 0; round < ROUNDS; round++) {
   const [sender, receiver] = session();
   const records: Uint8Array[] = [];
   let start = performance.now();
-  for (let sent = 0; sent < TOTAL; sent += MAX_PLAINTEXT) records.push(...sender.seal(chunk));
+  for (let sent = 0; sent < TOTAL; sent += MAX_PLAINTEXT) {
+    records.push(...sender.seal(chunk.subarray(0, Math.min(MAX_PLAINTEXT, TOTAL - sent))));
+  }
   const seal = performance.now() - start;
   start = performance.now();
   for (const record of records) receiver.open(record);
