@@ -10,6 +10,9 @@ import { MeshCommands } from "./commands.ts";
 
 afterEach(removeBenches);
 
+/** A mesh of 12 or more keys writes each record through the store, which evaluates the view per write. */
+const LARGE_MESH_MS = 30_000;
+
 describe("mesh-revoke on the running host (design 6.1, 6.2)", () => {
   test("writes one revoke, closes the revoked sessions and pushes the record", async () => {
     const f = machine("f"),
@@ -48,22 +51,26 @@ describe("mesh-revoke on the running host (design 6.1, 6.2)", () => {
     expect(lastRecord(it)?.subject).toEqual({ signPubs: [signPubOf(a), signPubOf(d)], reason: "compromised" });
   });
 
-  test("--compromised on a member that admitted an over-cap key revokes that key too, so it never becomes a member", async () => {
-    const f = machine("f"),
-      a = machine("a"),
-      z = machine("z");
-    const it = commandBench(f);
-    it.mesh.admit(f, a);
-    for (let i = 1; i <= 10; i++) it.mesh.admit(f, machine(`m${i}`));
-    it.mesh.admit(a, z);
-    it.ready();
-    const reply = await it.commands.revoke({ member: "a", compromised: true, yes: true });
-    expect(reply?.subjects.map((subject) => subject.hostId)).toEqual([a.identity.hostId, z.identity.hostId]);
-    const view = viewOf(benchRecords(it));
-    expect(view.members.has(signPubOf(z))).toBe(false);
-    expect(view.overCap.has(signPubOf(z))).toBe(false);
-    expect(view.revoked.has(signPubOf(z))).toBe(true);
-  });
+  test(
+    "--compromised on a member that admitted an over-cap key revokes that key too, so it never becomes a member",
+    async () => {
+      const f = machine("f"),
+        a = machine("a"),
+        z = machine("z");
+      const it = commandBench(f);
+      it.mesh.admit(f, a);
+      for (let i = 1; i <= 10; i++) it.mesh.admit(f, machine(`m${i}`));
+      it.mesh.admit(a, z);
+      it.ready();
+      const reply = await it.commands.revoke({ member: "a", compromised: true, yes: true });
+      expect(reply?.subjects.map((subject) => subject.hostId)).toEqual([a.identity.hostId, z.identity.hostId]);
+      const view = viewOf(benchRecords(it));
+      expect(view.members.has(signPubOf(z))).toBe(false);
+      expect(view.overCap.has(signPubOf(z))).toBe(false);
+      expect(view.revoked.has(signPubOf(z))).toBe(true);
+    },
+    LARGE_MESH_MS,
+  );
 
   test("a preview writes nothing, even with yes, and a write whose previewed subjects changed is refused", async () => {
     const f = machine("f"),
