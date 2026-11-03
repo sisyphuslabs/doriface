@@ -6,7 +6,17 @@ import { sha256Hex } from "./artifacts.ts";
 import { GHOSTTY, OPTIMIZE, WTERM, ZIG_VERSION } from "./pins.ts";
 
 const PACKAGE_ROOT = join(import.meta.dir, "..");
-const REQUIRED_EXPORTS = ["memory", "init", "write", "get_viewport_v2", "read_response", "get_program_status_state"];
+const REQUIRED_EXPORTS = [
+  "memory",
+  "init",
+  "write",
+  "get_viewport_v2",
+  "read_response",
+  "get_program_status_state",
+  "get_program_status_progress",
+  "get_program_status_app_ptr",
+  "get_program_status_app_len",
+];
 
 async function patchesOnDisk(): Promise<readonly string[]> {
   const groups = ["ghostty", "wterm"];
