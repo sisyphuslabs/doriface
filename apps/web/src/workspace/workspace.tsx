@@ -23,8 +23,9 @@ export interface WorkspaceProps {
 
 /** The live terminals of one core: the desktop shell from `md` up, the phone navigation below. */
 export function Workspace({ connection }: WorkspaceProps) {
-  const { terminals, loaded } = useTerminals(connection);
-  const tabs = useTabs(connection.hello.core.id, loaded ? terminals : null);
+  const fed = useTerminals(connection);
+  const { entries, terminals, refresh, listError } = useMachines(connection, fed.terminals);
+  const tabs = useTabs(connection.hello.core.id, fed.loaded ? terminals : null);
   const narrow = useNarrow();
   const [phoneOpen, setPhoneOpen] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
@@ -35,7 +36,6 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPalette((shown) => !shown);
     return true;
   });
-  const { entries, refresh, listError } = useMachines(connection, terminals);
   const { select } = tabs;
   const opened = useCallback(
     (address: string): void => {
@@ -87,7 +87,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           <DesktopShell
             connection={connection}
             terminals={terminals}
-            loaded={loaded}
+            loaded={fed.loaded}
             tabs={desktopTabs}
             onNew={() => newTerminal()}
             onPalette={onPalette}

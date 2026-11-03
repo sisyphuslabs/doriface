@@ -20,6 +20,7 @@ const SECTIONS = [
   { key: "done", title: "Done", tone: "text-status-done-text" },
   { key: "working", title: "Working", tone: "text-status-working-text" },
   { key: "idle", title: "Idle", tone: undefined },
+  { key: "offline", title: "Offline", tone: undefined },
 ] as const;
 
 /** Spaces and the agent sections, shared by the desktop sidebar and the phone's first screen. */
