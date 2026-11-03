@@ -8,15 +8,13 @@ import {
   type Unsubscribe,
 } from "./link.ts";
 import { MAX_SESSION_SEND_BYTES } from "./limits.ts";
-import { CloseCode, encodeClose, encodeData, MUX_HEADER_BYTES } from "./wire/index.ts";
+import { CloseCode, encodeClose, encodeData, MAX_UNACKED_BYTES } from "./wire/index.ts";
 
 /** What a session needs from the uplink socket it is multiplexed over. */
 export interface SessionTransport {
   /** False when the uplink socket can no longer carry the frame. */
   sendFrame(frame: Uint8Array<ArrayBuffer>): boolean;
   release(sessionId: number): void;
-  /** A DATA frame of this many bytes was consumed or dropped, so the uplink may ack it. */
-  consumed(frameBytes: number): void;
 }
 
 /** One client session as the host sees it: DATA frames on the uplink, demultiplexed by sessionId. */
@@ -27,6 +25,7 @@ export class SessionLink implements ByteLink {
   readonly #transport: SessionTransport;
   readonly #inbox: Inbox;
   readonly #closed = new CloseSignal();
+  #backlog = 0;
 
   constructor(sessionId: number, pairSlot: string | undefined, transport: SessionTransport) {
     this.sessionId = sessionId;
@@ -34,7 +33,9 @@ export class SessionLink implements ByteLink {
     this.#transport = transport;
     this.#inbox = new Inbox(
       (error) => this.#end(error instanceof Error ? error : new Error(String(error)), true),
-      (chunk) => transport.consumed(MUX_HEADER_BYTES + chunk.byteLength),
+      (chunk) => {
+        this.#backlog -= chunk.byteLength;
+      },
     );
   }
 
@@ -66,8 +67,10 @@ export class SessionLink implements ByteLink {
 
   /** Called by the uplink with each DATA payload for this session. */
   deliver(payload: Uint8Array): void {
-    if (this.#closed.fired) this.#transport.consumed(MUX_HEADER_BYTES + payload.byteLength);
-    else this.#inbox.push(payload);
+    if (this.#closed.fired) return;
+    this.#backlog += payload.byteLength;
+    if (this.#backlog > MAX_UNACKED_BYTES) return this.close(CloseCode.IdleTimeout, "session too far behind");
+    this.#inbox.push(payload);
   }
 
   /** The client left (CLOSE from the relay) or the uplink dropped; nothing is sent back. */
