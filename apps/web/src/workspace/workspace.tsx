@@ -13,7 +13,7 @@ import { PhoneShell } from "./phone-shell.tsx";
 import type { SessionVerb } from "./use-app-actions.ts";
 import { useMachineRuns } from "./use-machine-runs.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
-import { currentTerminal, runParamsFor } from "./new-terminal.ts";
+import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
@@ -50,23 +50,21 @@ export function Workspace({ connection }: WorkspaceProps) {
   const inView = narrow ? phoneOpen : tabs.active;
   const newTerminal = (): void => {
     const active = terminals.find((terminal) => terminal.address === inView);
-    void currentTerminal((terminal) => connection.call("terminal.get", { terminal }), active)
-      .then((current) => connection.call("terminal.run", runParamsFor(current)))
-      .then(
-        (started) => {
-          opened(started.address);
-          return started;
-        },
-        (cause: unknown) => {
-          toasts.add({
-            type: "error",
-            title: "Could not open a new tab",
-            description: connection.closed
-              ? `Reconnecting to ${connection.hello.core.name}; try again once it is back.`
-              : String(cause),
-          });
-        },
-      );
+    void connection.call("terminal.run", runParamsFor(active)).then(
+      (started) => {
+        opened(started.address);
+        return started;
+      },
+      (cause: unknown) => {
+        toasts.add({
+          type: "error",
+          title: "Could not open a new tab",
+          description: connection.closed
+            ? `Reconnecting to ${connection.hello.core.name}; try again once it is back.`
+            : String(cause),
+        });
+      },
+    );
   };
   const openTerminal = (address: string): void => {
     tabs.select(address);
