@@ -1,5 +1,5 @@
 import { base64urlEncode, CloseCode, hostIdOf, base64urlDecode, type HostIdentity } from "@doriface/crypto";
-import { cardOf, door, hashOf, meshIdOf, parseRecord, type Signed, signCard, viewOf } from "@doriface/mesh";
+import { door, hashOf, meshIdOf, parseRecord, type Signed, signCard, viewOf } from "@doriface/mesh";
 import { cardBody, type MeshStore, type OwnCard } from "../state/mesh.ts";
 import { JoinRefused } from "./invite.ts";
 import type { MeshLine, MeshLines } from "./lines.ts";
@@ -30,15 +30,11 @@ async function welcome(
 /**
  * Section 4.4 step 5: every record passes the door in order; exactly one found, whose id is the offered mesh; the
  * dialed member is in the view with the hostId and Noise key this host authenticated; and this host is a member,
- * admitted by that member with exactly the card it sent. Trusts nothing else in the welcome.
+ * governed by an admit of that member, with this host's current Noise key. The door already proved that the admit's
+ * card is signed by this host's own key, so it is this host's own card: the one just sent, or the one an earlier
+ * attempt sent when that attempt's welcome was lost (step 3's idempotent re-join). Trusts nothing else in the welcome.
  */
-export function checkWelcome(
-  records: readonly Signed[],
-  doneMesh: string,
-  offer: Offer,
-  sent: Signed,
-  ctx: JoinerContext,
-): void {
+export function checkWelcome(records: readonly Signed[], doneMesh: string, offer: Offer, ctx: JoinerContext): void {
   const stored: Signed[] = [];
   for (const record of records) {
     const verdict = door(record, stored);
@@ -60,14 +56,11 @@ export function checkWelcome(
     throw new JoinRefused("the inviting member's key in the mesh is not the key this host dialed");
   }
   const self = base64urlEncode(ctx.identity.sign.publicKey);
-  const admitted = stored.some((record) => {
-    const body = parseRecord(record);
-    return (
-      body?.type === "admit" && body.by === inviter && view.eff.has(hashOf(record)) && cardOf(body)?.body === sent.body
-    );
-  });
-  if (!view.members.has(self) || view.admitter.get(self) !== inviter || !admitted) {
+  if (!view.members.has(self) || view.admitter.get(self) !== inviter) {
     throw new JoinRefused("the welcome does not admit this host with its own card");
+  }
+  if (view.noise.get(self) !== base64urlEncode(ctx.identity.noise.publicKey)) {
+    throw new JoinRefused("the welcome admits this host with another Noise key");
   }
 }
 
@@ -85,7 +78,7 @@ export async function runJoiner(lines: MeshLines, ctx: JoinerContext): Promise<s
     const sent = signCard(body, ctx.identity.sign.secretKey);
     lines.send({ t: "card", ...sent });
     const { records, mesh } = await welcome(lines);
-    checkWelcome(records, mesh, offer, sent, ctx);
+    checkWelcome(records, mesh, offer, ctx);
     if (!ctx.mesh.adopt(records, ctx.identity)) throw new JoinRefused("a mesh.json appeared on this host meanwhile");
     ctx.log(`mesh: joined mesh ${offer.mesh} via ${ctx.dialed.hostId}`);
     return offer.mesh;
