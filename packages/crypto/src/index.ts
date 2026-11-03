@@ -24,9 +24,7 @@ export { PROTOCOL_NAMES, type Pattern } from "./noise/handshake.ts";
 export {
   buildPairingUrl,
   createPairingOffer,
-  decodePairingHello,
   DEFAULT_RELAY_URL,
-  encodePairingHello,
   encodePairSlot,
   formatPairingCode,
   generatePairingCode,
@@ -44,6 +42,16 @@ export {
   type PairingLink,
   type PairingOffer,
 } from "./pairing.ts";
+export {
+  decodeHello,
+  decodeReply,
+  encodePairingHello,
+  encodeReply,
+  encodeSessionHello,
+  MAX_EARLY_BYTES,
+  PayloadError,
+  type Hello,
+} from "./payloads.ts";
 export { relayChallengeMessage, relayOriginOf, signRelayChallenge, verifyRelayAnswer } from "./relay-auth.ts";
 export {
   HANDSHAKE_TIMEOUT_MS,

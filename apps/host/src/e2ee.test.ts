@@ -1,6 +1,5 @@
 import {
   CloseCode,
-  encodePairingHello,
   generateX25519,
   type KeyPair,
   formatPairingCode,
@@ -75,6 +74,12 @@ function endpoint() {
   return e2ee;
 }
 
+function lanEndpoint(): string {
+  const lanUrl = endpoint().lanUrl;
+  if (lanUrl === undefined) throw new Error("no LAN listener");
+  return lanUrl;
+}
+
 let pairing: ReturnType<typeof parsePairingUrl>;
 let pairOutput = "";
 
@@ -86,12 +91,12 @@ async function pair(): Promise<ReturnType<typeof parsePairingUrl>> {
   return parsePairingUrl(url);
 }
 
-const dial = (staticKey: KeyPair, extra: { readonly psk?: Uint8Array; readonly payload?: Uint8Array } = {}) =>
+const dial = (staticKey: KeyPair, pairingWith?: { readonly psk: Uint8Array; readonly name: string }) =>
   openE2eeClient(endpoint().url, {
     hostId: pairing.hostId,
     staticKey: rawStaticKey(staticKey),
     remoteStatic: pairing.noiseStaticPub,
-    ...extra,
+    pairing: pairingWith,
   });
 
 async function refusal(attempt: Promise<E2eeClient>): Promise<number | undefined> {
@@ -154,15 +159,16 @@ describe("/v1/e2ee against a real hc", () => {
     const psk = pairingPsk(pairing.code);
     const used = released(pairingSlotOf(pairing.code));
     const stored = nextLog(/^paired device "test phone"$/);
-    const first = await dial(device, { psk, payload: encodePairingHello("test phone") });
+    const first = await dial(device, { psk, name: "test phone" });
     expect(first.link.pattern).toBe("IKpsk2");
+    expect(first.link.lanUrls).toEqual([lanEndpoint()]);
     first.link.close();
     await stored;
     const listed = await cli("devices", "list");
     expect(listed.stdout).toMatch(/^[0-9A-F]{8} {2}\S+ {2}test phone\n$/);
     await used;
     expect(slots.released).toEqual([pairingSlotOf(pairing.code)]);
-    const second = dial(generateX25519(), { psk, payload: encodePairingHello("intruder") });
+    const second = dial(generateX25519(), { psk, name: "intruder" });
     expect(await refusal(second)).toBe(CloseCode.UnknownDevice);
     expect(statSync(join(stateDir, "devices.json")).mode & 0o777).toBe(0o600);
   });
@@ -198,10 +204,10 @@ describe("/v1/e2ee against a real hc", () => {
     const stored = nextLog(/^paired device "second phone"$/);
     const wrong = pairingPsk(`${offer.code.slice(0, 7)}${offer.code.endsWith("0") ? "1" : "0"}`);
     const guesses = [1, 2, 3, 4].map((attempt) =>
-      refusal(dial(generateX25519(), { psk: wrong, payload: encodePairingHello(`guesser ${attempt}`) })),
+      refusal(dial(generateX25519(), { psk: wrong, name: `guesser ${attempt}` })),
     );
     expect(await Promise.all(guesses)).toEqual([4, 4, 4, 4].map(() => CloseCode.CryptoFailure));
-    const right = await dial(generateX25519(), { psk: pairingPsk(offer.code), payload: encodePairingHello("second phone") });
+    const right = await dial(generateX25519(), { psk: pairingPsk(offer.code), name: "second phone" });
     expect(right.link.pattern).toBe("IKpsk2");
     right.link.close();
     await Promise.all([used, stored]);
@@ -213,8 +219,7 @@ describe("/v1/e2ee against a real hc", () => {
   });
 
   test("the LAN listener serves /v1/e2ee but never the plaintext /v1/hc", async () => {
-    const lanUrl = endpoint().lanUrl;
-    if (lanUrl === undefined) throw new Error("no LAN listener");
+    const lanUrl = lanEndpoint();
     const plaintext = await fetch(lanUrl.replace("ws://", "http://").replace("/v1/e2ee", "/v1/hc"));
     expect(plaintext.status).toBe(404);
     const client = await openE2eeClient(lanUrl, {

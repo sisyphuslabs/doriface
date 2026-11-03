@@ -23,7 +23,8 @@ function fakeSession(remoteStatic: Uint8Array): SecureLink & { readonly closes: 
     pattern: "IK",
     remoteStatic,
     handshakeHash: new Uint8Array(32),
-    helloPayload: new Uint8Array(0),
+    peerName: undefined,
+    lanUrls: [],
     send() {},
     onData: () => () => {},
     onClose(listener) {

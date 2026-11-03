@@ -1,7 +1,15 @@
 import { prologueFor } from "./identity.ts";
 import { type ByteLink, CloseCode, closeCodeOf, SecureLinkError } from "./link.ts";
 import { Handshake, type Pattern } from "./noise/handshake.ts";
-import { type SecureLink, SecuredLink } from "./secured-link.ts";
+import {
+  decodeHello,
+  decodeReply,
+  encodePairingHello,
+  encodeReply,
+  encodeSessionHello,
+  PayloadError,
+} from "./payloads.ts";
+import { type SecureLink, SecuredLink, type SessionInfo } from "./secured-link.ts";
 import type { StaticKey } from "./static-key.ts";
 import { REKEY_INTERVAL, Transport } from "./transport.ts";
 
@@ -22,16 +30,17 @@ export interface InitiatorOptions extends CommonOptions {
   readonly role: "initiator";
   /** The host's Noise static public key. */
   readonly remoteStatic: Uint8Array;
-  /** Present for the pairing session (IKpsk2); absent for every later IK session. */
-  readonly psk?: Uint8Array | undefined;
-  /** The message-1 payload, e.g. the pairing `{"name"}` JSON. */
-  readonly payload?: Uint8Array | undefined;
+  /** Present for the pairing session (IKpsk2, message 1 carries only the name); absent for every later IK session. */
+  readonly pairing?: { readonly psk: Uint8Array; readonly name: string } | undefined;
+  /** IK only: the first stream bytes (at most 4096), sent inside message 1. */
+  readonly early?: Uint8Array | undefined;
 }
 
 export interface ClientHello {
   readonly pattern: Pattern;
   readonly remoteStatic: Uint8Array;
-  readonly payload: Uint8Array;
+  /** The device name of a pairing hello. */
+  readonly name: string | undefined;
 }
 
 /** IK sessions accept or refuse the client key; IKpsk2 sessions accept by naming the psk to finish with. */
@@ -43,6 +52,8 @@ export interface ResponderOptions extends CommonOptions {
   readonly role: "responder";
   /** Decides on the client after message 1; a refusal closes with 4401. */
   readonly authorize: (hello: ClientHello) => Authorization;
+  /** IP-literal `ws://…/v1/e2ee` URLs for message 2 (at most 8). */
+  readonly lanUrls?: readonly string[] | undefined;
 }
 
 export type SecureLinkOptions = InitiatorOptions | ResponderOptions;
@@ -53,7 +64,7 @@ const failure = (code: number, message: string, cause?: unknown): SecureLinkErro
 /**
  * Runs the Noise handshake over `link` and resolves with the encrypted link. Messages are processed strictly in order
  * even though the static DH is async. The initiator's first transport record (empty) confirms the keys, so the
- * responder resolves only once the peer provably holds them: a replayed message 1
+ * responder resolves, and releases IK early bytes, only once the peer provably holds them: a replayed message 1
  * never gets that far. Any failure closes `link` with its code (4400 crypto, 4401 refused, 4408 timeout) and rejects
  * with a {@link SecureLinkError}.
  */
@@ -80,13 +91,18 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
       await fn(bytes);
     } catch (error) {
       if (error instanceof SecureLinkError) fail(error);
+      else if (error instanceof PayloadError) fail(failure(CloseCode.CryptoFailure, error.message, error));
       else fail(failure(CloseCode.CryptoFailure, "handshake failed", error));
     }
   };
-  const establish = (handshake: Handshake, helloPayload: Uint8Array): SecuredLink => {
+  const establish = (handshake: Handshake, info: Pick<SessionInfo, "peerName" | "lanUrls">): SecuredLink => {
     const { send, receive, handshakeHash, remoteStatic } = handshake.finish(rekeyInterval);
-    const info = { pattern: handshake.pattern, remoteStatic, handshakeHash, helloPayload };
-    return new SecuredLink(link, new Transport(send, receive), info);
+    return new SecuredLink(link, new Transport(send, receive), {
+      pattern: handshake.pattern,
+      remoteStatic,
+      handshakeHash,
+      ...info,
+    });
   };
   /** Installs the session before anything else is sent, so a peer that answers synchronously reaches it. */
   const resolve = (secured: SecuredLink): void => {
@@ -129,20 +145,21 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
 
   function runInitiator(opts: InitiatorOptions): void {
     const handshake = new Handshake({
-      pattern: opts.psk === undefined ? "IK" : "IKpsk2",
+      pattern: opts.pairing === undefined ? "IK" : "IKpsk2",
       role: "initiator",
       prologue,
       staticKey: opts.staticKey,
       remoteStatic: opts.remoteStatic,
-      psk: opts.psk,
+      psk: opts.pairing?.psk,
     });
     step = guarded(async (bytes) => {
-      await handshake.readMessage(bytes);
-      const secured = establish(handshake, opts.payload ?? EMPTY);
+      const lanUrls = decodeReply(await handshake.readMessage(bytes));
+      const secured = establish(handshake, { peerName: undefined, lanUrls });
       resolve(secured);
       secured.send(EMPTY);
     });
-    void guarded(async () => link.send(await handshake.writeMessage(opts.payload ?? EMPTY)))(EMPTY);
+    const hello = opts.pairing === undefined ? encodeSessionHello(opts.early) : encodePairingHello(opts.pairing.name);
+    void guarded(async () => link.send(await handshake.writeMessage(hello)))(EMPTY);
   }
 
   function runResponder(opts: ResponderOptions): void {
@@ -156,16 +173,19 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
     });
     step = guarded(async (bytes) => {
       const { handshake, payload } = await readHello(opts, prologue, bytes);
+      const hello = decodeHello(handshake.pattern, payload);
       const remoteStatic = handshake.remoteStatic;
       if (remoteStatic === undefined) throw failure(CloseCode.CryptoFailure, "message 1 carried no static key");
-      const verdict = opts.authorize({ pattern: handshake.pattern, remoteStatic, payload });
+      const name = hello.kind === "pairing" ? hello.name : undefined;
+      const verdict = opts.authorize({ pattern: handshake.pattern, remoteStatic, name });
       if (!verdict.accept) throw failure(CloseCode.UnknownDevice, verdict.reason ?? "unknown device");
       if (handshake.pattern === "IKpsk2") {
         if (verdict.psk === undefined) throw failure(CloseCode.UnknownDevice, "no pairing is pending");
         handshake.setPsk(verdict.psk);
       }
-      const reply = await handshake.writeMessage(EMPTY);
-      pending = establish(handshake, payload);
+      const reply = await handshake.writeMessage(encodeReply(opts.lanUrls ?? []));
+      pending = establish(handshake, { peerName: name, lanUrls: [] });
+      if (hello.kind === "session") pending.hold(hello.early);
       step = confirm;
       link.send(reply);
     });

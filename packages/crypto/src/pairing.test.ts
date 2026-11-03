@@ -4,9 +4,7 @@ import { generateHostIdentity } from "./identity.ts";
 import {
   buildPairingUrl,
   createPairingOffer,
-  decodePairingHello,
   DEFAULT_RELAY_URL,
-  encodePairingHello,
   encodePairSlot,
   formatPairingCode,
   normalizePairingCode,
@@ -120,27 +118,6 @@ describe("pairing URL origins", () => {
         relayUrl: DEFAULT_RELAY_URL,
       });
     expect(build).toThrow("HTTP(S)");
-  });
-});
-
-describe("pairing hello", () => {
-  test("round-trips the device name as {name} JSON", () => {
-    const payload = encodePairingHello("  Pixel 9 ");
-    expect(new TextDecoder().decode(payload)).toBe('{"name":"Pixel 9"}');
-    expect(decodePairingHello(payload)).toBe("Pixel 9");
-  });
-
-  test.each([
-    '{"name":"a\\u001b[2Jb"}',
-    '{"name":"line\\nbreak"}',
-    '{"name":"bidi\\u202e"}',
-    '{"nam":"x"}',
-    '{"name":""}',
-    '{"name":1}',
-    "not json",
-    `{"name":"${"x".repeat(65)}"}`,
-  ])("rejects %p", (bad) => {
-    expect(() => decodePairingHello(new TextEncoder().encode(bad))).toThrow();
   });
 });
 
