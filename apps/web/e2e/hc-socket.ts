@@ -15,6 +15,13 @@ export interface HcSocket {
   readonly restore: () => void;
   /** Holds the page's requests for these methods (others pass) until the returned release sends them, in order. */
   readonly hold: (...methods: string[]) => () => void;
+  /** Every frame the host has delivered to the page, in order, as text. */
+  readonly received: () => readonly string[];
+  /**
+   * Holds frames from the host that contain any of these texts (others pass) until the returned release delivers them,
+   * in order. Hold a channel's whole stream, not one event in it: the feed drops an event older than one it has seen.
+   */
+  readonly holdFromHost: (...needles: string[]) => () => void;
 }
 
 /** Call before page.goto: every connection to the e2e host passes through the returned handle. */
@@ -28,6 +35,9 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   let lastDue = 0;
   let held: readonly string[] = [];
   const parked: (() => void)[] = [];
+  const received: string[] = [];
+  let heldFromHost: readonly string[] = [];
+  const parkedFromHost: (() => void)[] = [];
   await page.routeWebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, (socket) => {
     if (down) {
       refused += 1;
@@ -42,8 +52,14 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       else host.send(frame);
     });
     host.onMessage((frame) => {
+      const text = typeof frame === "string" ? frame : frame.toString("latin1");
+      const deliver = (): void => {
+        received.push(text);
+        socket.send(frame);
+      };
+      if (heldFromHost.some((needle) => text.includes(needle))) return void parkedFromHost.push(deliver);
       lastDue = Math.max(Date.now() + delay, lastDue);
-      setTimeout(() => socket.send(frame), Math.max(0, lastDue - Date.now()));
+      setTimeout(deliver, Math.max(0, lastDue - Date.now()));
     });
     live.add(socket);
     opened += 1;
@@ -61,6 +77,14 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
     },
     restore: () => {
       down = false;
+    },
+    received: () => received,
+    holdFromHost: (...needles) => {
+      heldFromHost = needles;
+      return () => {
+        heldFromHost = [];
+        for (const deliver of parkedFromHost.splice(0)) deliver();
+      };
     },
     hold: (...methods) => {
       held = methods;
