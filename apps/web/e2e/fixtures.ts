@@ -19,7 +19,8 @@ export const test = base.extend({
 
 export { expect } from "@playwright/test";
 
-const TERMINAL_COUNT = /^\d+ terminals?$/;
+/** "4 terminals", optionally followed by " · 1 needs you". */
+const TERMINAL_COUNT = /^\d+ terminals?\b/;
 
 /** The status bar's terminal count, once the workspace has loaded. */
 export async function terminalCount(
@@ -28,7 +29,7 @@ export async function terminalCount(
   const count = page.getByRole("contentinfo").getByText(TERMINAL_COUNT);
   await expect(count).toBeVisible({ timeout: 20_000 });
   const before = Number.parseInt((await count.textContent()) ?? "0", 10);
-  const next = new RegExp(`^${before + 1} terminals?$`);
+  const next = new RegExp(`^${before + 1} terminals?\\b`);
   return { before, grown: () => expect(count).toHaveText(next, { timeout: 15_000 }) };
 }
 
