@@ -43,6 +43,8 @@ export class ProcessLink implements ByteLink {
       failure = error instanceof Error ? error : new LinkClosedError(String(error));
     }
     this.#inputOpen = false;
+    const status = await this.#process.exited;
+    if (failure === undefined && status !== 0) failure = new LinkClosedError(`process exited with status ${status}`);
     this.#close.emit(failure);
   }
 }

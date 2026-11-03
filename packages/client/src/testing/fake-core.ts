@@ -73,12 +73,20 @@ export class FakeCore {
 
   #waitFor<T>(probe: () => T | undefined): Promise<T> {
     return new Promise((resolve, reject) => {
-      const check = () => {
-        const found = probe();
-        if (found === undefined) return;
+      const settle = (finish: () => void) => {
         this.#waiters.delete(check);
         clearTimeout(timer);
-        resolve(found);
+        finish();
+      };
+      const check = () => {
+        let found: T | undefined;
+        try {
+          found = probe();
+        } catch (error) {
+          settle(() => reject(error));
+          return;
+        }
+        if (found !== undefined) settle(() => resolve(found));
       };
       const timer = setTimeout(() => {
         this.#waiters.delete(check);

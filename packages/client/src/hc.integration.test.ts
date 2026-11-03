@@ -85,6 +85,7 @@ describe("real herdr-core over hc connect", () => {
 
       expect(await connection.call("server.stop", {}, { timeoutMs: STEP_TIMEOUT_MS })).toEqual({ stopped: true });
       expect(await within(child.exited, "hc connect exit")).toBe(0);
+      if (!connection.closed) await within(new Promise((resolve) => connection.onClose(resolve)), "connection close");
       expect(connection.closed).toBe(true);
     } finally {
       if (child.exitCode === null) child.kill();
