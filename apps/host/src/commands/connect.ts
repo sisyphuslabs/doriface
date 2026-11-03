@@ -21,7 +21,8 @@ export const CONNECT_USAGE = `usage: doriface-host connect <hostId | pairing lin
   --state-dir <dir>  this machine's device key and paired hosts (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --name <name>      what the host lists this machine as when it pairs (default this machine's hostname)
   --fingerprint <fp> with a typed code: the host's fingerprint as \`doriface-host pair\` printed it there (at least
-                     its first 4 groups), checked before pairing`;
+                     its first 4 groups), checked before pairing
+  --replace          let a link or code replace a saved host whose key or relay changed (refused otherwise)`;
 
 /** hc gives a dial 20 s for the hello reply; failing earlier leaves it a clear reason on stderr. */
 const DIAL_TIMEOUT_MS = 15_000;
@@ -52,6 +53,7 @@ export async function connectCommand(args: readonly string[], log: (line: string
       "state-dir": { type: "string" },
       name: { type: "string" },
       fingerprint: { type: "string" },
+      replace: { type: "boolean" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -70,6 +72,7 @@ export async function connectCommand(args: readonly string[], log: (line: string
     defaultRelayUrl: DEFAULT_RELAY_URL,
     deviceName: values.name ?? hostname(),
     fingerprint: values.fingerprint,
+    replace: values.replace === true,
     log,
   };
   const dialed: Dialed = await within(dial(target, options), DIAL_TIMEOUT_MS, "reaching the host through the relay");
