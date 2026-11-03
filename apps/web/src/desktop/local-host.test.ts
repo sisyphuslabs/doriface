@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, type ConnectionSettings } from "../connection/settings.ts";
 import { desktopBridge } from "./bridge.ts";
-import { bootConnection, useThisComputer } from "./local-host.ts";
+import { bootConnection, startThisComputer } from "./local-host.ts";
 
 function target(settings: ConnectionSettings) {
   const calls: string[] = [];
@@ -26,7 +26,7 @@ const bridge = (url: string) => ({ startLocalHost: async () => ({ url, token: "t
 describe("desktop local host", () => {
   test("Use this computer saves loopback settings from the started host", async () => {
     const { state } = target(DEFAULT_SETTINGS);
-    await useThisComputer(bridge("ws://127.0.0.1:52011/v1/hc"), state);
+    await startThisComputer(bridge("ws://127.0.0.1:52011/v1/hc"), state);
     expect(state.settings).toMatchObject({ mode: "loopback", loopbackUrl: "ws://127.0.0.1:52011/v1/hc", token: "t0k" });
   });
 
