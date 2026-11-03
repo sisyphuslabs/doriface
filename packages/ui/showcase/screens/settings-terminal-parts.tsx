@@ -40,7 +40,7 @@ export function Toggle({
   label,
   on,
   disabled = false,
-  reason = {},
+  reason,
 }: {
   readonly label: string;
   readonly on: boolean;
