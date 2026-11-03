@@ -6,16 +6,23 @@ test.use({ serviceWorkers: "block" });
 test("font-size and cursor-style apply to an open terminal", async ({ page }) => {
   await page.goto("/");
   const terminal = await openNewTerminal(page);
-  const fontSize = () => terminal.evaluate((el) => getComputedStyle(el).getPropertyValue("--term-font-size").trim());
+  const mounted = await terminal.elementHandle();
+  if (mounted === null) throw new Error("no terminal element");
+  const fontSize = () => mounted.evaluate((el) => getComputedStyle(el).getPropertyValue("--term-font-size").trim());
   expect(await fontSize()).toBe("13pt");
 
-  await page.goto("/settings");
+  // Live: the zoom shortcut changes font-size on this same, still mounted terminal element.
+  await terminal.getByRole("textbox").focus();
+  await page.keyboard.press("ControlOrMeta+Equal");
+  await expect.poll(fontSize).toBe("14pt");
+  expect(await mounted.evaluate((el) => el.isConnected)).toBe(true);
+
+  await page.getByRole("link", { name: "Settings" }).first().click();
   await page
     .getByRole("tab", { name: "Terminal" })
     .or(page.getByRole("button", { name: "Terminal" }))
     .first()
     .click();
-  await page.getByRole("button", { name: "Increase font-size" }).click();
   await page.getByRole("button", { name: "Increase font-size" }).click();
   await page
     .getByRole("radio", { name: "bar" })
@@ -24,13 +31,10 @@ test("font-size and cursor-style apply to an open terminal", async ({ page }) =>
     .click();
 
   await page.getByRole("link", { name: "Back to workspace" }).first().click();
-  await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 20_000 });
-  expect(await fontSize()).toBe("14pt");
-  await expect(page.locator('[data-focused="true"] [data-terminal] [data-cursor-shape]')).toHaveAttribute(
-    "data-cursor-shape",
-    "bar",
-    {
-      timeout: 10_000,
-    },
-  );
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  await expect(focused).toContainText("$", { timeout: 20_000 });
+  await expect
+    .poll(() => focused.evaluate((el) => getComputedStyle(el).getPropertyValue("--term-font-size").trim()))
+    .toBe("14.5pt");
+  await expect(focused.locator("[data-cursor-shape]")).toHaveAttribute("data-cursor-shape", "bar", { timeout: 10_000 });
 });
