@@ -9,7 +9,14 @@ import {
   secureLink,
   SecureLinkError,
 } from "@doriface/crypto";
-import { connectRelayClient, lookupPairSlot, pairSlotOf, type WebSocketLink } from "@doriface/relay-client";
+import {
+  connectRelayClient,
+  type CreateSocket,
+  lookupPairSlot,
+  pairSlotOf,
+  type WebSocketLink,
+} from "@doriface/relay-client";
+import { HeldLink } from "./pipe.ts";
 import { type KnownHost, KnownHosts } from "../state/known-hosts.ts";
 import type { ConnectTarget } from "./target.ts";
 
@@ -21,20 +28,25 @@ export interface DialOptions {
   readonly defaultRelayUrl: string;
   readonly deviceName: string;
   readonly log: (line: string) => void;
+  /** For tests: the sockets the relay links open. */
+  readonly createSocket?: CreateSocket | undefined;
 }
 
 export interface Dialed {
   readonly secure: SecureLink;
   readonly link: WebSocketLink;
+  readonly held: HeldLink;
 }
 
 /** Pairs first when the target is a link or code (again, if this machine paired before), then opens an IK session. */
 export async function dial(target: ConnectTarget, options: DialOptions): Promise<Dialed> {
   const host = await resolveHost(target, options);
-  const link = await connectRelayClient({ relayUrl: options.relayUrl ?? host.relayUrl, hostId: host.hostId });
+  const relayUrl = options.relayUrl ?? host.relayUrl;
+  const link = await connectRelayClient({ relayUrl, hostId: host.hostId, ...socketOf(options) });
   try {
-    const secure = await secureLink(link, initiator(host, options.device));
-    return { secure, link };
+    const held = new HeldLink(link);
+    const secure = await secureLink(held, initiator(host, options.device));
+    return { secure, link, held };
   } catch (error) {
     throw refusal(host.hostId, error);
   }
@@ -57,6 +69,9 @@ function refusal(hostId: string, error: unknown): Error {
   if (message === undefined) return error instanceof Error ? error : new Error(String(error));
   return new SecureLinkError(code, `${message} (${code})`, { cause: error });
 }
+
+const socketOf = (options: DialOptions): { readonly createSocket?: CreateSocket } =>
+  options.createSocket === undefined ? {} : { createSocket: options.createSocket };
 
 const initiator = (host: KnownHost, device: KeyPair, pairing?: PairingSecret) =>
   ({
@@ -103,6 +118,7 @@ async function pair(
   const link = await connectRelayClient({
     relayUrl: host.relayUrl,
     hostId: host.hostId,
+    ...socketOf(options),
     ...(pairSlot === undefined ? {} : { pairSlot }),
   });
   const secure = await secureLink(link, initiator(host, options.device, pairing)).catch((error: unknown) => {
