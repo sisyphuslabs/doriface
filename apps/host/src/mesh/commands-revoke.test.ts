@@ -4,14 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { viewOf } from "@doriface/mesh";
 import { MeshStore } from "../state/mesh.ts";
-import { benchRecords, commandBench, lastRecord, removeBenches } from "../testing/mesh-commands-bench.ts";
+import {
+  benchRecords,
+  commandBench,
+  LARGE_MESH_MS,
+  lastRecord,
+  removeBenches,
+} from "../testing/mesh-commands-bench.ts";
 import { machine, signPubOf } from "../testing/mesh-history.ts";
 import { MeshCommands } from "./commands.ts";
 
 afterEach(removeBenches);
-
-/** A mesh of 12 or more keys writes each record through the store, which evaluates the view per write. */
-const LARGE_MESH_MS = 30_000;
 
 describe("mesh-revoke on the running host (design 6.1, 6.2)", () => {
   test("writes one revoke, closes the revoked sessions and pushes the record", async () => {
