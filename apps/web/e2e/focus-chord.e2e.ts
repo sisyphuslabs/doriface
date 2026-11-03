@@ -50,3 +50,21 @@ test("the focus chord does nothing while a dialog is open", async ({ page }) => 
   await expect(dialog).toBeVisible();
   expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
 });
+
+test("the focus chord does nothing while the command palette is open, not even show a hidden sidebar", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await page.getByRole("button", { name: "Hide sidebar" }).click();
+  await expect(page.getByRole("complementary", { name: "Workspace" })).toBeHidden();
+  await page.keyboard.press("ControlOrMeta+Shift+P");
+  const palette = page.getByRole("dialog", { name: /command/i });
+  await expect(palette.getByRole("combobox")).toBeFocused();
+  await page.keyboard.press(FOCUS_CHORD);
+  await expect(palette).toBeVisible();
+  await expect.poll(() => palette.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(palette).toBeHidden();
+  await expect(page.getByRole("complementary", { name: "Workspace" })).toBeHidden();
+});

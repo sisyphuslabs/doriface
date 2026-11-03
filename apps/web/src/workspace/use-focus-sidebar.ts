@@ -2,8 +2,12 @@ import { useEffect, useRef } from "react";
 import { sidebarElement, sidebarStop, terminalInput } from "./focus-targets.ts";
 import { isUsable } from "./use-overlay-focus.ts";
 
-/** A modal dialog has hidden the workspace (the guard overlays use, #33): the chord must not move focus behind it. */
+/**
+ * A modal dialog is open: either it has hidden the workspace (the guard overlays use, #33), or it is a modal that
+ * leaves the workspace in place, as the command palette does. The chord must not act behind either.
+ */
 function behindModal(): boolean {
+  if (document.querySelector('[aria-modal="true"]') !== null) return true;
   const anchor = sidebarElement() ?? terminalInput();
   return anchor !== null && !isUsable(anchor);
 }
