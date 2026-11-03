@@ -83,24 +83,20 @@ async function snapshot(parent: string): Promise<string> {
   });
 }
 
-async function fetchFrom(
-  parent: string,
-  extra: Readonly<Record<string, string>> = {},
-): Promise<{ readonly code: number; readonly stderr: string }> {
+async function fetchFrom(parent: string, extra: Readonly<Record<string, string>> = {}): Promise<number> {
   const env: Record<string, string | undefined> = { ...gitEnv, ...extra, DORIFACE_RELAY_REPO: `file://${standIn}` };
   delete env["DORIFACE_RELAY_DIR"];
   const proc = Bun.spawn([process.execPath, join(parent, "tests", "relay", "private-relay.ts"), "fetch"], {
     cwd: parent,
     env,
     stdout: "ignore",
-    stderr: "pipe",
+    stderr: "ignore",
   });
-  const [stderr, code] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
-  return { code, stderr };
+  return proc.exited;
 }
 
-// The script's own refusal, as opposed to a crash or a git error that also exits non-zero.
-const REFUSAL = "is not a git checkout of its own";
+// The script's own refusal exit code, distinct from a crash or a git error, which exit 1.
+const REFUSED_EXIT = 3;
 
 const variants = checkoutVariants(git);
 
@@ -112,11 +108,11 @@ describe("relay:fetch never acts on the repository around .relay", () => {
       const caller = await variant.arrange(parent);
       const before = await snapshot(parent);
 
-      const { code, stderr } = await fetchFrom(parent, caller);
+      const code = await fetchFrom(parent, caller);
 
       expect(await snapshot(parent)).toBe(before);
       if (variant.outcome === "refused") {
-        expect({ code, refused: stderr.includes(REFUSAL) }).toEqual({ code: 1, refused: true });
+        expect(code).toBe(REFUSED_EXIT);
       } else {
         expect(code).toBe(0);
         expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
@@ -140,7 +136,7 @@ test(
       GIT_CONFIG_VALUE_0: "false",
     };
 
-    expect((await fetchFrom(parent, credentials)).code).toBe(0);
+    expect(await fetchFrom(parent, credentials)).toBe(0);
 
     expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
     expect(readFileSync(join(relay(parent), "install-saw.txt"), "utf8")).toBe("0");
