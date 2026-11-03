@@ -1,13 +1,10 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { TRAFFIC_LIGHTS } from "../src/config/window.ts";
 import { scratchHcSession } from "./hc-session.ts";
-
-const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
+import { appArgs, packagedExecutable as executablePath } from "./launch.ts";
 
 test.skip(process.platform !== "darwin", "the hidden-inset titlebar and its window buttons exist only on macOS");
 
@@ -36,7 +33,7 @@ test.beforeAll(async () => {
   );
   const args = [`--user-data-dir=${profile}`];
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: [appDir, ...args] } : { executablePath, args }),
+    ...(executablePath === undefined ? { args: appArgs(args) } : { executablePath, args }),
     env,
   });
 });
@@ -116,6 +113,18 @@ test("nothing sits under the window buttons, in every state and size, and full s
   await page.getByRole("button", { name: "Use this computer" }).click();
   await expect(page.getByRole("complementary", { name: "Workspace" })).toBeVisible({ timeout: 30_000 });
   await check("workspace with the sidebar");
+  const header = await page.locator("aside [data-titlebar]").first().boundingBox();
+  const buttons = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]?.getWindowButtonPosition(),
+  );
+  expect(header).not.toBeNull();
+  expect(buttons).toBeDefined();
+  const headerCentre = (header?.y ?? 0) + (header?.height ?? 0) / 2;
+  const buttonsCentre = (buttons?.y ?? 0) + TRAFFIC_LIGHTS.height / 2;
+  expect(
+    Math.abs(buttonsCentre - headerCentre),
+    `buttons centred at ${buttonsCentre}, header at ${headerCentre}`,
+  ).toBeLessThanOrEqual(1);
   await page.getByRole("button", { name: "Hide sidebar" }).click();
   await expect(page.getByRole("complementary", { name: "Workspace" })).toBeHidden();
   await check("workspace with the sidebar hidden");

@@ -4,14 +4,21 @@ import { isSameOrigin } from "../config/origin.ts";
 import { isGrantable } from "../config/permissions.ts";
 import { routeWindowOpen } from "../config/window-open.ts";
 
-const openAllowed = (candidate: string): void => {
-  const url = allowedExternal(candidate);
-  if (url === undefined) return;
+/** Opens a URL that already passed the allowlist in the system browser. */
+const openExternal = (url: string): void => {
   shell.openExternal(url).catch((error: unknown) => console.error(`openExternal failed: ${String(error)}`));
 };
 
-/** Keeps every web contents on the app origin: no foreign navigation, popups, second windows or webviews. */
-export function hardenContents(contents: WebContents, origin: string): void {
+const openAllowed = (candidate: string): void => {
+  const url = allowedExternal(candidate);
+  if (url !== undefined) openExternal(url);
+};
+
+/**
+ * Keeps every web contents on the app origin: no foreign navigation, popups, second windows or webviews. An app page
+ * asked for in a new window is handed to `navigate`, which shows it in this one.
+ */
+export function hardenContents(contents: WebContents, origin: string, navigate: (path: string) => void): void {
   const lock = (event: { preventDefault(): void }, url: string): void => {
     if (isSameOrigin(url, origin)) return;
     event.preventDefault();
@@ -22,13 +29,8 @@ export function hardenContents(contents: WebContents, origin: string): void {
   contents.on("will-attach-webview", (event) => event.preventDefault());
   contents.setWindowOpenHandler(({ url }) => {
     const route = routeWindowOpen(url, origin);
-    if (route.kind === "same-window") {
-      contents
-        .loadURL(route.url)
-        .catch((error: unknown) => console.error(`could not open ${route.url}: ${String(error)}`));
-    } else if (route.kind === "browser") {
-      openAllowed(route.url);
-    }
+    if (route.kind === "navigate") navigate(route.path);
+    else if (route.kind === "browser") openExternal(route.url);
     return { action: "deny" };
   });
 }

@@ -2,8 +2,10 @@
 export const Channel = {
   openExternal: "doriface:open-external",
   startLocalHost: "doriface:start-local-host",
-  /** Main to renderer: the app menu's Settings… item. */
-  openSettings: "doriface:open-settings",
+  setWindowBackground: "doriface:set-window-background",
+  closeWindow: "doriface:close-window",
+  /** Main to renderer: show an app path in the one window (the app menu, a new-window click). */
+  navigate: "doriface:navigate",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -26,8 +28,12 @@ export interface DorifaceBridge {
   openExternal(url: string): Promise<boolean>;
   /** Starts (or reuses) doriface-host + hc on this machine. */
   startLocalHost(): Promise<LocalHostEndpoint>;
-  /** Calls `listener` each time the app menu's Settings… item is chosen. */
-  onOpenSettings(listener: () => void): void;
+  /** Calls `listener` with an app path to show, e.g. `/settings` from the app menu. */
+  onNavigate(listener: (path: string) => void): void;
+  /** Paints the window, now and at the next launch, with the in-app theme's background (`#rrggbb`). */
+  setWindowBackground(color: string): Promise<boolean>;
+  /** Closes the window as File > Close Window does; the page's own window.close() would skip the close events. */
+  closeWindow(): Promise<void>;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {

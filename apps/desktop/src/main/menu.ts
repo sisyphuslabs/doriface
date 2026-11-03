@@ -32,10 +32,27 @@ function appMenu(openSettings: () => void): MenuItemConstructorOptions {
   };
 }
 
+/**
+ * macOS File menu: Close Window shows Cmd+W without registering it, so the key reaches the page first; the page closes
+ * the current tab or Settings with it and closes the window only when there is nothing else to close.
+ */
+const MAC_FILE_MENU: MenuItemConstructorOptions = {
+  label: "File",
+  submenu: [
+    {
+      label: "Close Window",
+      accelerator: "CommandOrControl+W",
+      registerAccelerator: false,
+      click: (_item, window) => window?.close(),
+    },
+  ],
+};
+
 /** Standard roles carry the platform's own labels and keyboard shortcuts. */
 export function menuTemplate(options: MenuOptions): MenuItemConstructorOptions[] {
+  const mac = options.platform === "darwin";
   const common: MenuItemConstructorOptions[] = [
-    { role: "fileMenu" },
+    mac ? MAC_FILE_MENU : { role: "fileMenu" },
     { role: "editMenu" },
     { role: "viewMenu" },
     { role: "windowMenu" },
@@ -44,5 +61,5 @@ export function menuTemplate(options: MenuOptions): MenuItemConstructorOptions[]
       submenu: [{ label: "doriface on GitHub", click: () => options.openExternal(REPOSITORY_URL) }],
     },
   ];
-  return options.platform === "darwin" ? [appMenu(options.openSettings), ...common] : common;
+  return mac ? [appMenu(options.openSettings), ...common] : common;
 }

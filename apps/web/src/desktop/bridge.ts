@@ -20,12 +20,41 @@ function isEndpoint(value: unknown): value is LocalHostEndpoint {
   );
 }
 
-/** Runs `open` whenever the desktop app menu's Settings… item is chosen; does nothing outside the desktop app. */
-export function onDesktopOpenSettings(open: () => void, scope: object = globalThis): void {
+/** The desktop shell's method `name`, or null outside the desktop app or in a build without it. */
+function bridgeMethod(name: string, scope: object): ((...args: unknown[]) => unknown) | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
-  if (typeof bridge !== "object" || bridge === null) return;
-  const subscribe: unknown = Reflect.get(bridge, "onOpenSettings");
-  if (typeof subscribe === "function") Reflect.apply(subscribe, bridge, [() => open()]);
+  if (typeof bridge !== "object" || bridge === null) return null;
+  const method: unknown = Reflect.get(bridge, name);
+  return typeof method === "function" ? (...args) => Reflect.apply(method, bridge, args) : null;
+}
+
+const isAppPath = (value: unknown): value is string =>
+  typeof value === "string" && value.startsWith("/") && !value.startsWith("//");
+
+/** Shows each app path the desktop shell asks for (its app menu, a new-window click) with `show`. */
+export function onDesktopNavigate(show: (path: string) => void, scope: object = globalThis): void {
+  bridgeMethod(
+    "onNavigate",
+    scope,
+  )?.((path: unknown) => {
+    if (isAppPath(path)) show(path);
+  });
+}
+
+/** Asks the desktop shell to close the window; false outside the desktop app. */
+export function closeDesktopWindow(scope: object = globalThis): boolean {
+  const close = bridgeMethod("closeWindow", scope);
+  if (close === null) return false;
+  const closed = close();
+  if (closed instanceof Promise) closed.catch((error: unknown) => console.error(`close window: ${String(error)}`));
+  return true;
+}
+
+/** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
+export function setDesktopBackground(color: string, scope: object = globalThis): void {
+  const painted = bridgeMethod("setWindowBackground", scope)?.(color);
+  if (painted instanceof Promise)
+    painted.catch((error: unknown) => console.error(`window background: ${String(error)}`));
 }
 
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {

@@ -9,9 +9,16 @@ export type ActionHandler = (action: string) => boolean;
 
 const handlers: Record<Scope, Set<ActionHandler>> = { app: new Set(), terminal: new Set() };
 
+/** Runs when no handler takes an action, e.g. the desktop app closing its window on close-tab with nothing to close. */
+const fallbacks = new Map<string, () => boolean>();
+
+export function setActionFallback(id: string, fallback: () => boolean): void {
+  fallbacks.set(id, fallback);
+}
+
 function dispatch(scope: Scope, action: string): boolean {
   for (const handler of handlers[scope]) if (handler(action)) return true;
-  return false;
+  return fallbacks.get(action)?.() ?? false;
 }
 
 /** Runs a bound action as if its key was pressed; false when no handler took it. */

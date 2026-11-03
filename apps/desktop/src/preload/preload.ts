@@ -15,8 +15,17 @@ const bridge: DorifaceBridge = {
     if (!isLocalHostEndpoint(endpoint)) throw new Error("the main process returned no local host endpoint");
     return { url: endpoint.url, token: endpoint.token };
   },
-  onOpenSettings(listener) {
-    ipcRenderer.on(Channel.openSettings, () => listener());
+  onNavigate(listener) {
+    ipcRenderer.on(Channel.navigate, (_event, path: unknown) => {
+      if (typeof path === "string") listener(path);
+    });
+  },
+  async setWindowBackground(color) {
+    const painted: unknown = await ipcRenderer.invoke(Channel.setWindowBackground, color);
+    return painted === true;
+  },
+  async closeWindow() {
+    await ipcRenderer.invoke(Channel.closeWindow);
   },
 };
 
