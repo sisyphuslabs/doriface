@@ -1,6 +1,7 @@
 import { isJsonObject, type JsonObject, type JsonValue } from "../src/json.ts";
 
 const COMPONENT_REF = "#/components/schemas/";
+const OPENRPC_META_REF = "https://meta.open-rpc.org/";
 
 export type JsonImport = "JsonObject" | "JsonValue";
 
@@ -32,6 +33,7 @@ export function renderType(node: JsonValue | undefined, ctx: RenderContext): str
   const ref = node["$ref"];
   if (typeof ref === "string") {
     if (ref.startsWith(COMPONENT_REF)) return ref.slice(COMPONENT_REF.length);
+    if (ref !== OPENRPC_META_REF) throw new SchemaShapeError(`unsupported $ref ${ref}`);
     ctx.imports.add("JsonObject");
     return "JsonObject";
   }

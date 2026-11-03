@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../src/json.ts";
 import {
@@ -11,10 +13,10 @@ import {
   type RenderContext,
 } from "./schema-to-ts.ts";
 
-const PACKAGE_DIR = new URL("..", import.meta.url).pathname;
-export const SCHEMA_PATH = `${PACKAGE_DIR}schema/hc.openrpc.json`;
-export const OUTPUT_PATH = `${PACKAGE_DIR}src/__generated__/hc-api.ts`;
-const FORMAT_CONFIG_PATH = `${PACKAGE_DIR}../../.oxfmtrc.json`;
+const PACKAGE_DIR = fileURLToPath(new URL("..", import.meta.url));
+export const SCHEMA_PATH = join(PACKAGE_DIR, "schema", "hc.openrpc.json");
+export const OUTPUT_PATH = join(PACKAGE_DIR, "src", "__generated__", "hc-api.ts");
+const FORMAT_CONFIG_PATH = join(PACKAGE_DIR, "..", "..", ".oxfmtrc.json");
 
 interface MethodShape {
   readonly name: string;

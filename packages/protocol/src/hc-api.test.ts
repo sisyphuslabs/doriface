@@ -45,5 +45,8 @@ describe("hc-api codegen", () => {
 
   test("refuses schema types it cannot express", async () => {
     await expect(generateApi(schemaWith({ Odd: { type: "tuple" } }))).rejects.toThrow(SchemaShapeError);
+    await expect(generateApi(schemaWith({ Remote: { $ref: "https://example.com/x.json" } }))).rejects.toThrow(
+      SchemaShapeError,
+    );
   });
 });
