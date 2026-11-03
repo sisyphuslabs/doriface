@@ -8,7 +8,6 @@ import {
   DEFAULT_RELAY_URL,
   encodePairingHello,
   formatPairingCode,
-  MAX_PAIRING_FAILURES,
   normalizePairingCode,
   PAIRING_ALPHABET,
   PAIRING_TTL_MS,
@@ -64,15 +63,10 @@ describe("PairingGuard", () => {
     expect([guard.state, guard.claim(1)]).toEqual(["used", undefined]);
   });
 
-  test(`burns the code on failure number ${MAX_PAIRING_FAILURES}`, () => {
+  test("failed attempts never end the code: only a success or expiry does", () => {
     const guard = new PairingGuard(createPairingOffer(0));
-    for (let i = 1; i < MAX_PAIRING_FAILURES; i++) {
-      guard.fail();
-      expect([guard.state, guard.failures]).toEqual(["open", i]);
-    }
-    guard.fail();
-    expect([guard.state, guard.claim(1)]).toEqual(["burned", undefined]);
-    expect(new PairingGuard(guard.offer, MAX_PAIRING_FAILURES).state).toBe("burned");
+    for (let attempt = 0; attempt < 20; attempt++) expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
+    expect(guard.state).toBe("open");
   });
 
   test("never yields after expiry, even if the clock later goes back", () => {

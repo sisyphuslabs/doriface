@@ -9,23 +9,22 @@ const FILE = "pairing.json";
 export type SlotStatus = "pending" | "registered" | "unavailable";
 
 export interface PendingPairing extends PairingOffer {
-  readonly failures: number;
   readonly slot: SlotStatus;
 }
 
 export interface PairingClaim {
   readonly psk: Uint8Array;
   /**
-   * `true`: the handshake completed; burns the code and returns whether this was its first success, before the caller
-   * stores the device, so a crash or a failed store can never leave the code usable. `false`: counts a failed
-   * attempt (the third burns the code). Returns false for a failure.
+   * The handshake completed: burns the code and returns whether this was its first success. It runs before the caller
+   * stores the device, so a crash or a failed store can never leave the code usable. A failed handshake settles
+   * nothing; a code ends only on success or expiry.
    */
-  settle(paired: boolean): boolean;
+  complete(): boolean;
 }
 
 /**
  * The one pending pairing offer (pairing.json, 0600). `doriface-host pair` writes it, replacing any earlier one; the
- * running host claims it per IKpsk2 handshake, registers its relay slot, and deletes it once used or burned.
+ * running host claims it per IKpsk2 handshake, registers its relay slot, and deletes it once used or expired.
  */
 export class PairingStore {
   readonly #dir: string;
@@ -39,7 +38,7 @@ export class PairingStore {
   }
 
   offer(now = Date.now()): PendingPairing {
-    const pending = { ...createPairingOffer(now), failures: 0, slot: "pending" as const };
+    const pending = { ...createPairingOffer(now), slot: "pending" as const };
     withStateLock(this.#dir, () => this.#write(pending));
     return pending;
   }
@@ -65,22 +64,23 @@ export class PairingStore {
   claim(now = Date.now()): PairingClaim | undefined {
     const pending = this.read();
     if (pending === undefined) return undefined;
-    if (this.#guard?.offer.code !== pending.code) this.#guard = new PairingGuard(pending, pending.failures);
+    if (this.#guard?.offer.code !== pending.code) this.#guard = new PairingGuard(pending);
     const guard = this.#guard;
     const psk = guard.claim(now);
-    if (psk === undefined) return undefined;
+    if (psk === undefined) {
+      if (guard.state === "expired") this.#removeIf(pending.code);
+      return undefined;
+    }
     return {
       psk,
-      settle: (paired) =>
-        withStateLock(this.#dir, () => {
-          const first = paired ? guard.use() : (guard.fail(), false);
-          const current = this.read();
-          if (current?.code !== pending.code) return first;
-          if (guard.state === "open") this.#write({ ...current, failures: guard.failures });
-          else this.#remove();
-          return first;
-        }),
+      complete: () => withStateLock(this.#dir, () => guard.use() && (this.#removeIfHeld(pending.code), true)),
     };
+  }
+
+  /** Deletes the offer once it expired, so its relay slot is released. */
+  expire(now = Date.now()): void {
+    const pending = this.read();
+    if (pending !== undefined && now >= pending.expiresAt) this.#removeIf(pending.code);
   }
 
   read(): PendingPairing | undefined {
@@ -88,11 +88,10 @@ export class PairingStore {
     if (value === undefined) return undefined;
     if (!isRecord(value) || value["version"] !== 2) throw new Error(`${FILE}: unsupported format`);
     const expiresAt = Date.parse(stringField(value, "expiresAt", FILE));
-    const failures = value["failures"];
     const slot = value["slot"];
-    if (Number.isNaN(expiresAt) || typeof failures !== "number") throw new Error(`${FILE}: malformed`);
+    if (Number.isNaN(expiresAt)) throw new Error(`${FILE}: malformed`);
     if (slot !== "pending" && slot !== "registered" && slot !== "unavailable") throw new Error(`${FILE}: bad slot`);
-    return { code: stringField(value, "code", FILE), expiresAt, failures, slot };
+    return { code: stringField(value, "code", FILE), expiresAt, slot };
   }
 
   /** Reports every change this store makes (a pairing used up or burned, a code redrawn). */
@@ -106,7 +105,13 @@ export class PairingStore {
     this.#changed();
   }
 
-  #remove(): void {
+  #removeIf(code: string): void {
+    withStateLock(this.#dir, () => this.#removeIfHeld(code));
+  }
+
+  /** Removes the offer if it still holds `code` (a newer `pair` may have replaced it); the caller holds the lock. */
+  #removeIfHeld(code: string): void {
+    if (this.read()?.code !== code) return;
     removeFile(this.#path);
     this.#changed();
   }

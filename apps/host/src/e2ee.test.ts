@@ -189,19 +189,20 @@ describe("/v1/e2ee against a real hc", () => {
     client.link.close();
   });
 
-  test("three failed handshakes burn the code and release its relay slot", async () => {
+  test("wrong guesses leave the code usable; the right one pairs and releases the relay slot", async () => {
     const offer = await pair();
-    const burned = released(pairingSlotOf(offer.code));
+    const used = released(pairingSlotOf(offer.code));
+    const stored = nextLog(/^paired device "second phone"$/);
     const wrong = pairingPsk(`${offer.code.slice(0, 7)}${offer.code.endsWith("0") ? "1" : "0"}`);
-    const guess = (): Promise<number | undefined> =>
-      refusal(dial(generateX25519(), { psk: wrong, payload: encodePairingHello("guesser") }));
-    expect(await guess()).toBe(CloseCode.CryptoFailure);
-    expect(await guess()).toBe(CloseCode.CryptoFailure);
-    expect(await guess()).toBe(CloseCode.CryptoFailure);
-    await burned;
+    const guesses = [1, 2, 3, 4].map((attempt) =>
+      refusal(dial(generateX25519(), { psk: wrong, payload: encodePairingHello(`guesser ${attempt}`) })),
+    );
+    expect(await Promise.all(guesses)).toEqual([4, 4, 4, 4].map(() => CloseCode.CryptoFailure));
+    const right = await dial(generateX25519(), { psk: pairingPsk(offer.code), payload: encodePairingHello("second phone") });
+    expect(right.link.pattern).toBe("IKpsk2");
+    right.link.close();
+    await Promise.all([used, stored]);
     expect(existsSync(join(stateDir, "pairing.json"))).toBe(false);
-    const late = dial(generateX25519(), { psk: pairingPsk(offer.code), payload: encodePairingHello("late") });
-    expect(await refusal(late)).toBe(CloseCode.UnknownDevice);
   });
 
   test("an unpaired key is refused with 4401", async () => {
