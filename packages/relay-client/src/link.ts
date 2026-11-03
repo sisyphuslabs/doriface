@@ -6,7 +6,7 @@ export type { ByteLink, Unsubscribe };
 /**
  * A data listener on a relay link. Relay links implement `@doriface/client`'s ByteLink and also accept a listener
  * that returns a promise: the next chunk waits for it, which is how backpressure reaches the sender when a listener
- * forwards into a slower link. Over the relay, one `send` is one WebSocket message and one chunk on the far side,
+ * forwards into a slower link. A listener that throws or rejects closes the link with 1011. Over the relay, one `send` is one WebSocket message and one chunk on the far side,
  * so message boundaries survive for the record layer.
  */
 export type DataListener = (bytes: Uint8Array) => void | Promise<void>;
