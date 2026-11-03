@@ -7,6 +7,7 @@ import { admitPairing } from "../e2ee/accept.ts";
 import { DeviceStore } from "./devices.ts";
 import { type ClaimRefusal, type PairingClaim, PairingStore } from "./pairing.ts";
 
+const RESERVATION_WORKER = join(import.meta.dir, "..", "testing", "reservation-worker.ts");
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "dh-pairing-"));
@@ -71,6 +72,21 @@ describe("typed-code attempt reservations", () => {
     expect(pairing.claimCode(slot)).toMatchObject({ refused: 4429 });
     expect("secret" in pairing.claimLink()).toBe(true);
   });
+
+  test("a claim while another process holds the lock mid-reservation waits for it instead of reserving beside it", async () => {
+    const pairing = new PairingStore(dir);
+    const slot = pairingSlotOf(pairing.offer().code);
+    for (let i = 0; i < PAIRING_CODE_ATTEMPTS - 1; i++) claimed(pairing.claimCode(slot));
+    const other = Bun.spawn([process.execPath, RESERVATION_WORKER, dir], { stdin: "pipe", stdout: "pipe" });
+    const reader = other.stdout.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("held\n");
+    expect(() => pairing.claimCode(slot)).toThrow("locked");
+    other.stdin.write("go");
+    await other.stdin.end();
+    expect(await other.exited).toBe(0);
+    expect(attempts(pairing)).toBe(PAIRING_CODE_ATTEMPTS);
+    expect(pairing.claimCode(slot)).toMatchObject({ refused: 4429 });
+  }, 10_000);
 
   test("the count survives a host restart", () => {
     const slot = pairingSlotOf(new PairingStore(dir).offer().code);
