@@ -9,6 +9,8 @@ export interface WorkspaceTab {
   readonly title: string;
   readonly icon?: ReactNode;
   readonly status?: AgentStatus;
+  /** The machine it runs on, for a tab that is not on this one: shown after the title and in its tooltip. */
+  readonly machine?: string;
 }
 
 export interface TabBarProps {
@@ -63,13 +65,22 @@ export function TabBar({
                 type="button"
                 role="tab"
                 aria-selected={active}
+                title={tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`}
                 onClick={() => onSelect?.(tab.id)}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
-                <span title={tab.title} className="truncate">
+                <span
+                  title={tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`}
+                  className="truncate"
+                >
                   {tab.title}
                 </span>
+                {tab.machine === undefined ? null : (
+                  <span title={tab.machine} className="max-w-24 shrink-0 truncate text-2xs text-muted-foreground">
+                    {tab.machine}
+                  </span>
+                )}
                 {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
               </button>
               <IconButton

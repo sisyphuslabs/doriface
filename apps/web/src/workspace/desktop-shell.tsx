@@ -4,7 +4,7 @@ import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type Workspa
 import { Columns2, Monitor, PanelLeft } from "lucide-react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
-import { agentStatus, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
@@ -45,10 +45,12 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
     const terminal = byAddress.get(address);
-    return terminal === undefined
-      ? []
-      : [{ id: address, title: terminalTitle(terminal), status: agentStatus(terminal) }];
+    if (terminal === undefined) return [];
+    const tab: WorkspaceTab = { id: address, title: terminalTitle(terminal), status: agentStatus(terminal) };
+    const machine = machineOf(address);
+    return [machine === undefined ? tab : { ...tab, machine }];
   });
+  const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
   const live = terminals.filter((terminal) => terminal.state === "live");
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   const toggle = (
@@ -112,7 +114,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
         <StatusBar
           start={
             <>
-              <StatusBarItem icon={<Monitor aria-hidden />}>{connection.hello.core.name}</StatusBarItem>
+              <StatusBarItem icon={<Monitor aria-hidden />}>{focusedMachine}</StatusBarItem>
               {loaded ? (
                 <StatusBarItem>
                   {live.length} {live.length === 1 ? "terminal" : "terminals"}
