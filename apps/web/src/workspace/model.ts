@@ -1,5 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import type { Agent, AgentStatus, Space } from "@doriface/ui";
+import { TITLE_LABEL } from "./session-actions.ts";
 
 const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
   working: "working",
@@ -20,6 +21,8 @@ export function agentStatus(terminal: Terminal): AgentStatus {
 }
 
 export function terminalTitle(terminal: Terminal): string {
+  const renamed = terminal.labels[TITLE_LABEL];
+  if (renamed !== undefined && renamed !== "") return renamed;
   const named = terminal.name ?? terminal.title;
   if (named !== undefined && named !== null && named !== "") return named;
   return terminal.foreground?.name ?? terminal.argv[0] ?? terminal.address;

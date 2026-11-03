@@ -10,7 +10,10 @@ export interface TabsState {
 
 export interface Tabs extends TabsState {
   select(address: string): void;
+  /** Closing a tab as the person asked: the workspace asks first whether to keep the session running. */
   close(address: string): void;
+  /** Removes the tab at once; the session keeps running. */
+  drop(address: string): void;
   toggleSplit(): void;
   /** Marks a shown pane as the focused one. */
   focus(address: string): void;
@@ -78,5 +81,5 @@ export function useTabs(core: string, terminals: readonly Terminal[] | null): Ta
     });
   }, []);
 
-  return { ...state, select, close, toggleSplit, focus };
+  return { ...state, select, close, drop: close, toggleSplit, focus };
 }
