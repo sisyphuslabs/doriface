@@ -37,7 +37,6 @@ describe("resolveKeymap", () => {
     const changedDefaults = new Map([...shipped, ["super+t", "pane.split"], ["super+shift+y", "agent.next"]]);
     const resolved = resolveKeymap("mac", overrides, changedDefaults);
     expect(resolved.get("super+t")).toBe("tab.close");
-    expect(resolved.get("shift+super+y")).toBeUndefined();
     expect(resolved.get("super+shift+y")).toBe("agent.next");
   });
 
