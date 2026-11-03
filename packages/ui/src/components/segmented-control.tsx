@@ -13,6 +13,7 @@ export interface SegmentedControlProps<T extends string> {
   readonly value: T;
   readonly onValueChange?: (value: T) => void;
   readonly label: string;
+  readonly disabled?: boolean;
   readonly className?: string;
 }
 
@@ -22,11 +23,13 @@ export function SegmentedControl<T extends string>({
   value,
   onValueChange,
   label,
+  disabled = false,
   className,
 }: SegmentedControlProps<T>) {
   return (
     <ToggleGroup
       aria-label={label}
+      disabled={disabled}
       value={[value]}
       onValueChange={(next) => {
         const picked = options.find((option) => next.includes(option.value));

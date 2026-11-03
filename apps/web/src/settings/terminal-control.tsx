@@ -150,6 +150,7 @@ export function KeyControl(props: KeyControlProps) {
       return (
         <SegmentedControl
           label={def.key}
+          disabled={disabled}
           options={OPTIONAL_BOOL}
           value={value}
           onValueChange={(next) => onCommit([next])}
@@ -159,6 +160,7 @@ export function KeyControl(props: KeyControlProps) {
       return (
         <SegmentedControl
           label={def.key}
+          disabled={disabled}
           options={kind.values.map((entry) => ({ value: entry, label: entry.replace("_", " ") }))}
           value={value}
           onValueChange={(next) => onCommit([next])}
@@ -168,6 +170,7 @@ export function KeyControl(props: KeyControlProps) {
       return (
         <NumberStepper
           label={def.key}
+          disabled={disabled}
           min={kind.min}
           max={kind.max}
           step={kind.step}
