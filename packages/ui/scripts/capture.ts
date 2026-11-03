@@ -3,7 +3,7 @@
  *   bun run --filter @doriface/ui capture [-- --only shell,pair]
  * Needs Playwright's Chromium (bunx playwright install chromium).
  */
-import { chromium, devices, type Browser } from "@playwright/test";
+import { chromium, devices, type Browser, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { build } from "vite";
@@ -12,7 +12,21 @@ const SHOWCASE = join(import.meta.dirname, "../showcase");
 const DIST = join(SHOWCASE, "dist");
 const OUT = join(import.meta.dirname, "../../../docs/design");
 
-const SCREENS = ["shell", "pair", "palette", "settings", "mobile", "mobile-agents", "states"] as const;
+const SCREENS = [
+  "shell",
+  "pair",
+  "palette",
+  "settings",
+  "settings-appearance",
+  "mobile",
+  "mobile-agents",
+  "states",
+] as const;
+/** Screens whose own scroll owner hides content: captured whole, plus a viewport scrolled to the end. */
+const SCROLLERS: Readonly<Record<string, string>> = {
+  settings: "settings-body",
+  "settings-appearance": "settings-body",
+};
 const THEMES = [
   { name: "dark", palette: "night" },
   { name: "light", palette: "day" },
@@ -20,8 +34,23 @@ const THEMES = [
 const WIDTHS = [1440, 390] as const;
 
 function contextFor(width: (typeof WIDTHS)[number]) {
-  if (width === 390) return { ...devices["iPhone 14"], deviceScaleFactor: 2 };
+  if (width === 390) return devices["iPhone 14"];
   return { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 };
+}
+
+/**
+ * When the scroller overflows, writes <file>-end.png (the viewport scrolled to the end, proving the bottom is reachable), then grows
+ * the viewport to the scroller's full height so the main capture shows every row.
+ */
+async function captureScroller(page: Page, slot: string, file: string) {
+  const scroller = page.locator(`[data-slot="${slot}"]`);
+  const extra = await scroller.evaluate((element) => element.scrollHeight - element.clientHeight);
+  const viewport = page.viewportSize();
+  if (viewport === null || extra <= 0) return;
+  await scroller.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  await page.screenshot({ path: file.replace(/\.png$/, "-end.png"), animations: "disabled" });
+  await scroller.evaluate((element) => element.scrollTo(0, 0));
+  await page.setViewportSize({ ...viewport, height: viewport.height + extra });
 }
 
 async function capture(
@@ -38,11 +67,14 @@ async function capture(
     reducedMotion: "reduce",
   });
   const page = await context.newPage();
-  await page.goto(`${origin}/?theme=${palette}#/${route}`);
+  const insets = width === 390 ? "&insets=phone" : "";
+  await page.goto(`${origin}/?theme=${palette}${insets}#/${route}`);
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
   await page.waitForLoadState("networkidle");
+  const slot = SCROLLERS[route];
+  if (slot !== undefined) await captureScroller(page, slot, file);
   await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
   await context.close();
 }
