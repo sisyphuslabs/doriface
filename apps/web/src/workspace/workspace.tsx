@@ -1,12 +1,12 @@
 import type { HcConnection } from "@doriface/client";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
 import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
-import { startOn, type RunFailure } from "./start-on.ts";
+import { useMachineRuns } from "./use-machine-runs.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { useTabs } from "./use-tabs.ts";
@@ -29,31 +29,20 @@ export function Workspace({ connection }: WorkspaceProps) {
     return true;
   });
   const { entries, refresh, listError } = useMachines(connection, terminals);
-  const [failure, setFailure] = useState<RunFailure | undefined>(undefined);
-  const opened = (address: string): void => {
-    tabs.select(address);
-    setPhoneOpen(address);
-  };
+  const { select } = tabs;
+  const opened = useCallback(
+    (address: string): void => {
+      select(address);
+      setPhoneOpen(address);
+    },
+    [select],
+  );
+  const runs = useMachineRuns(connection, opened, refresh);
   const newTerminal = (): void => {
     void connection.call("terminal.run", {}).then((started) => {
       opened(started.address);
       return started;
     });
-  };
-  const newTerminalOn = (machine: string): void => {
-    setFailure(undefined);
-    startOn((params) => connection.call("terminal.run", params), machine).then(
-      (started) => {
-        if (started.ok) {
-          opened(started.address);
-          return started;
-        }
-        setFailure(started.failure);
-        refresh();
-        return started;
-      },
-      (error: unknown) => setFailure({ machine, kind: "connection", message: String(error) }),
-    );
   };
   const openTerminal = (address: string): void => {
     tabs.select(address);
@@ -61,7 +50,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   };
   const onPalette = (): void => setPalette(true);
 
-  const machines = { entries, newTerminalOn, failure, dismissFailure: () => setFailure(undefined), listError };
+  const machines = useMemo(() => ({ entries, listError, ...runs }), [entries, listError, runs]);
   return (
     <MachinesContext value={machines}>
       {narrow ? (
