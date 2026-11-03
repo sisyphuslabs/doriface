@@ -89,6 +89,21 @@ describe("mesh-revoke on the running host (design 6.1, 6.2)", () => {
     expect(last(it)?.subject).toEqual({ signPubs: [signPubOf(a), signPubOf(d)], reason: "compromised" });
   });
 
+  test("--compromised on a member that admitted an over-cap key revokes that key too, so it never becomes a member", async () => {
+    const f = machine("f"), a = machine("a"), z = machine("z");
+    const it = bench(f);
+    it.mesh.admit(f, a);
+    for (let i = 1; i <= 10; i++) it.mesh.admit(f, machine(`m${i}`));
+    it.mesh.admit(a, z);
+    it.ready();
+    const reply = await it.commands.revoke({ member: "a", compromised: true, yes: true });
+    expect(reply?.subjects.map((subject) => subject.hostId)).toEqual([a.identity.hostId, z.identity.hostId]);
+    const view = viewOf(records(it));
+    expect(view.members.has(signPubOf(z))).toBe(false);
+    expect(view.overCap.has(signPubOf(z))).toBe(false);
+    expect(view.revoked.has(signPubOf(z))).toBe(true);
+  });
+
   test("an undecidable revoke waits for --yes", async () => {
     const f = machine("f"),
       a = machine("a");
