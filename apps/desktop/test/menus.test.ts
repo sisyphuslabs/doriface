@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildPairingUrl, hostIdOf } from "@doriface/crypto";
 import type { MenuItemConstructorOptions } from "electron";
 import { contextMenuTemplate } from "../src/config/context-menu.ts";
 import { APP_ORIGIN } from "../src/config/origin.ts";
@@ -88,5 +89,21 @@ describe("window.open and new-window link clicks", () => {
     for (const url of ["https://example.com/", "app://evil/", "file:///etc/passwd", "javascript:alert(1)", "x"]) {
       expect(routeWindowOpen(url, APP_ORIGIN)).toEqual({ kind: "none" });
     }
+  });
+
+  test("the web app's pairing link pairs in the app, and a lookalike of it does not", () => {
+    const signPub = new Uint8Array(32).map((_, index) => (index * 37 + 11) % 256);
+    const link = buildPairingUrl({
+      webOrigin: "https://doriface.omo.dev",
+      hostId: hostIdOf(signPub),
+      noiseStaticPub: new Uint8Array(32).map((_, index) => (index * 53 + 7) % 256),
+      signPub,
+      linkSecret: new Uint8Array(32).fill(7),
+      relayUrl: "wss://relay.invalid",
+    });
+    expect(routeWindowOpen(link, APP_ORIGIN)).toEqual({ kind: "pair", fragment: link.slice(link.indexOf("#")) });
+    expect(routeWindowOpen(link.replace("doriface.omo.dev", "x.doriface.omo.dev"), APP_ORIGIN)).toEqual({
+      kind: "none",
+    });
   });
 });

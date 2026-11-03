@@ -34,6 +34,11 @@ export function openDeepLink(candidate: string): void {
   else open(link);
 }
 
+/** A pairing link the app already read, from a new-window click on the web app's pairing link. */
+export function openPairingLink(fragment: string): void {
+  open({ kind: "pair", fragment });
+}
+
 /** A link clicked inside the app; true when it was a pairing link and stays in the app. */
 export function openInAppLink(candidate: string): boolean {
   const link = parseInAppLink(candidate);
