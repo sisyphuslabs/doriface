@@ -48,6 +48,13 @@ describe("frame codec", () => {
     }
   });
 
+  test("kind bytes match herdr-core wire.rs", () => {
+    expect(Object.values(FrameKind)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    const bytes = encodeFrame(2, FrameKind.AutomaticInput, text("\x1b[1;1R"));
+    expect(bytes[4]).toBe(6);
+    expect(nth(new FrameDecoder().push(bytes), 0).kind).toBe(FrameKind.AutomaticInput);
+  });
+
   test("whole frames inside one chunk are zero-copy views", () => {
     const chunk = encodeFrame(3, FrameKind.Data, text("abc"));
     const frame = nth(new FrameDecoder().push(chunk), 0);

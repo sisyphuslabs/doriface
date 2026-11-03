@@ -21,6 +21,8 @@ export const FrameKind = {
   Resize: 3,
   Focus: 4,
   Facts: 5,
+  /** Bytes the viewer's terminal generated itself (query answers), never human typing. */
+  AutomaticInput: 6,
 } as const;
 export type KnownFrameKind = (typeof FrameKind)[keyof typeof FrameKind];
 
