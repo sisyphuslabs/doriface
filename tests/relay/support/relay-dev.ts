@@ -1,8 +1,9 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { relayDir } from "../private-relay.ts";
 
-const RELAY_DIR = join(import.meta.dir, "..", "..");
 const READY = /Ready on (http:\/\/\S+)/;
 const START_TIMEOUT_MS = 90_000;
 
@@ -37,8 +38,14 @@ async function removingOnFailure<T>(scratch: string, spawn: () => T): Promise<T>
  * short timeouts.
  */
 export async function startLocalRelay(vars: Readonly<Record<string, string>> = {}): Promise<LocalRelay> {
+  const dir = relayDir();
+  const wrangler = join(dir, "node_modules", ".bin", "wrangler");
+  if (!existsSync(wrangler)) {
+    throw new Error(
+      `no installed relay checkout at ${dir}: run \`bun run relay:test\`, which fetches the private relay first`,
+    );
+  }
   const scratch = await mkdtemp(join(tmpdir(), "relay-"));
-  const wrangler = join(RELAY_DIR, "node_modules", ".bin", "wrangler");
   const port = String(freePort());
   const inspector = String(freePort());
   const proc = await removingOnFailure(scratch, () =>
@@ -61,7 +68,7 @@ export async function startLocalRelay(vars: Readonly<Record<string, string>> = {
         ...Object.entries(vars).flatMap(([name, value]) => ["--var", `${name}:${value}`]),
       ],
       {
-        cwd: RELAY_DIR,
+        cwd: dir,
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

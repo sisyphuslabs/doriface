@@ -12,14 +12,14 @@ import { connectRelayClient, type CreateSocket, pairSlotOf } from "@doriface/rel
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { requestControl } from "../../../host/src/control.ts";
-import { createHcSession, type HcSession } from "../../../host/src/testing/hc-session.ts";
+import { requestControl } from "../../../apps/host/src/control.ts";
+import { createHcSession, type HcSession } from "../../../apps/host/src/testing/hc-session.ts";
 import { RecordingLink, type Tap, taps, tappedHc } from "./byte-tap.ts";
 import { socketFrom, testIp } from "./probe.ts";
 import { type LocalRelay, startLocalRelay } from "./relay-dev.ts";
 import { within } from "./watch.ts";
 
-const CLI = join(import.meta.dir, "..", "..", "..", "host", "src", "cli.ts");
+const CLI = join(import.meta.dir, "..", "..", "..", "apps", "host", "src", "cli.ts");
 
 /** A real doriface-host with its own hc core, keeping an uplink to a local relay (wrangler dev). */
 export interface RelayedHost {

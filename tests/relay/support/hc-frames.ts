@@ -1,5 +1,5 @@
 import { encodeFrame, FrameKind, RPC_CHANNEL } from "@doriface/protocol";
-import type { ByteReader } from "../../../host/src/testing/byte-reader.ts";
+import type { ByteReader } from "../../../apps/host/src/testing/byte-reader.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

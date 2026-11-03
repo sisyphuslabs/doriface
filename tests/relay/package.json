@@ -1,0 +1,14 @@
+{
+  "name": "@doriface/relay-tests",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "devDependencies": {
+    "@doriface/client": "workspace:*",
+    "@doriface/crypto": "workspace:*",
+    "@doriface/host": "workspace:*",
+    "@doriface/protocol": "workspace:*",
+    "@doriface/relay-client": "workspace:*"
+  }
+}

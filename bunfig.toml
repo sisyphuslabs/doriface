@@ -1,0 +1,3 @@
+[test]
+# The relay suites need the private relay checkout; `bun run relay:test` fetches it and runs them.
+pathIgnorePatterns = ["tests/relay/**"]

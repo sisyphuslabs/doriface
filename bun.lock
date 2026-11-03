@@ -154,6 +154,17 @@
         "react-dom": "^19.3.1",
       },
     },
+    "tests/relay": {
+      "name": "@doriface/relay-tests",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@doriface/client": "workspace:*",
+        "@doriface/crypto": "workspace:*",
+        "@doriface/host": "workspace:*",
+        "@doriface/protocol": "workspace:*",
+        "@doriface/relay-client": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@apideck/better-ajv-errors": ["@apideck/better-ajv-errors@0.3.7", "", { "dependencies": { "jsonpointer": "^5.0.1", "leven": "^3.1.0" }, "peerDependencies": { "ajv": ">=8" } }, "sha512-TajUJwGWbDwkCx/CZi7tRE8PVB7simCvKJfHUsSdvps+aTM/PDPP4gkLmKnc+x3CE//y9i/nj74GqdL/hwk7Iw=="],
@@ -383,6 +394,8 @@
     "@doriface/relay": ["@doriface/relay@workspace:apps/relay"],
 
     "@doriface/relay-client": ["@doriface/relay-client@workspace:packages/relay-client"],
+
+    "@doriface/relay-tests": ["@doriface/relay-tests@workspace:tests/relay"],
 
     "@doriface/ui": ["@doriface/ui@workspace:packages/ui"],
 
