@@ -88,14 +88,15 @@ test("keys typed offline for a kept program that is lost and restarted meanwhile
 test("a reconnect inside a kept program's restart shows it restarting, not an error, then attaches", async ({
   page,
 }) => {
-  // Every attach error the page ever renders, however briefly.
+  // Every attach error the page ever renders, however briefly: the "didn't open" screen, or the older inline wording.
   await page.addInitScript(() => {
     const seen: string[] = [];
     Object.assign(window, { attachErrors: seen });
     new MutationObserver(() => {
-      for (const node of document.querySelectorAll("p")) {
+      for (const node of document.querySelectorAll("p, h1, h2, h3, [role='heading']")) {
         const text = node.textContent ?? "";
-        if (text.startsWith("Could not open") && !seen.includes(text)) seen.push(text);
+        const error = text.startsWith("Could not open") || text === "This terminal didn't open";
+        if (error && !seen.includes(text)) seen.push(text);
       }
     }).observe(document, { subtree: true, childList: true, characterData: true });
   });
