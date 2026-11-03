@@ -16,6 +16,7 @@ const row = (page: Page, id: string) => page.locator(`[id="keybinding-${id}"]`).
 const recordButton = (page: Page, label: string) =>
   page.getByRole("button", { name: `Record a shortcut for ${label}`, exact: true });
 const recorder = (page: Page) => page.getByRole("status").filter({ hasText: "Press keys…" });
+const focusOnBody = (page: Page) => page.evaluate(() => document.activeElement === document.body);
 
 test("the recorder holds focus while it listens and hands it back to its row", async ({ page }) => {
   await openKeybindings(page);
@@ -31,5 +32,28 @@ test("the recorder holds focus while it listens and hands it back to its row", a
   await expect(recorder(page)).toBeFocused();
   await page.keyboard.press("Control+Alt+N");
   await expect(row(page, "tab.new").getByText("Changed")).toBeVisible();
+  await expect(record).toBeFocused();
+});
+
+test("Tab and Shift+Tab leave the recorder without binding; a modified Tab is still recorded", async ({ page }) => {
+  await openKeybindings(page);
+  const close = row(page, "tab.close");
+  const record = recordButton(page, "Close tab");
+
+  await record.click();
+  await page.keyboard.press("Tab");
+  await expect(recorder(page)).toHaveCount(0);
+  expect(await focusOnBody(page)).toBe(false);
+  await expect(close.getByText("Changed")).toHaveCount(0);
+
+  await record.click();
+  await page.keyboard.press("Shift+Tab");
+  await expect(recorder(page)).toHaveCount(0);
+  await expect(close.getByRole("button", { name: /^Remove .* from Close tab$/ }).last()).toBeFocused();
+  await expect(close.getByText("Changed")).toHaveCount(0);
+
+  await record.click();
+  await page.keyboard.press("Alt+Tab");
+  await expect(close.getByText("Changed")).toBeVisible();
   await expect(record).toBeFocused();
 });
