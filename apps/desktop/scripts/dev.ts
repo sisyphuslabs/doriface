@@ -9,4 +9,5 @@ const electron = Bun.spawn([process.execPath, "x", "electron", "."], {
   stdout: "inherit",
   stderr: "inherit",
 });
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => electron.kill(signal));
 process.exit(await electron.exited);
