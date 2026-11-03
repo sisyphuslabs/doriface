@@ -1,6 +1,6 @@
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { scratchHcSession } from "./hc-session.ts";
@@ -10,14 +10,28 @@ const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
 const hc = scratchHcSession();
 /** A scratch profile, so the app always starts on first run with nothing saved. */
 const profile = mkdtempSync(join(tmpdir(), "dd-profile-"));
+/**
+ * A shell that starts clean: bash without profile or rc files (macOS's /etc/bashrc sets a prompt with
+ * the host and user), a fixed prompt, and a scratch HOME, so the screenshot shows nothing of this machine.
+ */
+const shellHome = mkdtempSync(join(tmpdir(), "dd-shell-"));
+const cleanShell = join(shellHome, "clean-shell");
+writeFileSync(cleanShell, "#!/bin/sh\nexec /bin/bash --noprofile --norc -i\n", { mode: 0o755 });
 let launched: ElectronApplication | undefined;
 
 test.beforeAll(async () => {
   const env = Object.fromEntries(
-    // A plain shell and prompt keep the screenshot free of this machine's user, paths and shell theme.
-    Object.entries({ ...process.env, ...hc.env, SHELL: "/bin/sh", PS1: "$ ", ENV: "" }).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
-    ),
+    Object.entries({
+      ...process.env,
+      ...hc.env,
+      // A bare name found on PATH, so the terminal title is "clean-shell" rather than a scratch path.
+      SHELL: "clean-shell",
+      PATH: `${shellHome}:${process.env["PATH"] ?? ""}`,
+      HOME: shellHome,
+      PS1: "$ ",
+      ENV: "",
+      BASH_SILENCE_DEPRECATION_WARNING: "1",
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
   const args = [`--user-data-dir=${profile}`];
   launched = await electron.launch({
@@ -32,6 +46,7 @@ test.afterAll(async () => {
   } finally {
     await hc.dispose();
     rmSync(profile, { recursive: true, force: true });
+    rmSync(shellHome, { recursive: true, force: true });
   }
 });
 
@@ -50,6 +65,16 @@ test("Use this computer attaches a live terminal that echoes", async () => {
   await page.keyboard.type("echo doriface-ok");
   await page.keyboard.press("Enter");
   await expect(terminal).toContainText(/doriface-ok[\s\S]*doriface-ok/, { timeout: 15_000 });
+  // The pane title comes from the running program's argv (clean-shell, then bash once it execs);
+  // wait until it is set and names no path before reading what the window shows.
+  await expect(page.getByRole("heading", { level: 2 }).first()).toHaveText(/^[^/]+$/, { timeout: 10_000 });
+  // The whole window, so the status bar's machine name counts as well as the prompt.
+  const shown = (await page.locator("body").textContent()) ?? "";
+  const host = hostname().split(".")[0] ?? "";
+  expect(host).not.toBe("");
+  expect(shown.toLowerCase()).not.toContain(host.toLowerCase());
+  expect(shown).not.toContain(userInfo().username);
+  expect(shown).not.toContain(shellHome);
   const screenshot = test.info().outputPath("terminal.png");
   await page.screenshot({ path: screenshot });
   console.log(`screenshot ${screenshot}`);
