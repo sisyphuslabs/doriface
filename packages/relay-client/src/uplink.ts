@@ -127,15 +127,18 @@ export class Uplink {
     this.#socket = ws;
     let challenged = false;
     const acks = new AckCounter();
+    const consumed = (bytes: number): void => {
+      const ack = acks.ackFor(bytes);
+      if (ack !== undefined && isOpen(ws)) ws.send(ack);
+    };
     this.#stopPings = keepAlive(ws, this.#options.pingIntervalMs ?? PING_INTERVAL_MS);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
       if (!(event.data instanceof ArrayBuffer))
         return closeSocket(ws, CloseCode.UnsupportedData, "binary messages only");
-      const ack = acks.ackFor(event.data.byteLength);
-      if (ack !== undefined && isOpen(ws)) ws.send(ack);
       const bytes = new Uint8Array(event.data);
-      if (challenged) return this.#frame(ws, bytes);
+      if (challenged) return this.#frame(ws, bytes, consumed);
+      consumed(bytes.byteLength);
       challenged = true;
       this.#answer(ws, bytes).catch(() => closeSocket(ws, CloseCode.InternalError, "signing failed"));
     });
@@ -152,7 +155,8 @@ export class Uplink {
     this.#options.onState?.({ state: "answered" });
   }
 
-  #frame(ws: WebSocket, bytes: Uint8Array): void {
+  /** Handles one relay frame; a session's DATA is acked when that session consumes it, everything else now. */
+  #frame(ws: WebSocket, bytes: Uint8Array, consumed: (bytes: number) => void): void {
     let frame;
     try {
       frame = decodeMux(bytes);
@@ -160,12 +164,14 @@ export class Uplink {
       if (error instanceof MuxError) return closeSocket(ws, CloseCode.ProtocolError, error.message);
       throw error;
     }
+    const session = this.#sessions.get(frame.sessionId);
+    if (frame.type === MuxType.Data && session !== undefined) return session.deliver(frame.payload);
+    consumed(bytes.byteLength);
     if (frame.type === MuxType.PairSlot) {
       if (!this.#pairSlots.settle(frame.payload)) closeSocket(ws, CloseCode.ProtocolError, "bad PAIR_SLOT reply");
       return;
     }
-    const session = this.#sessions.get(frame.sessionId);
-    if (frame.type === MuxType.Data) return session?.deliver(frame.payload);
+    if (frame.type === MuxType.Data) return;
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
     if (session !== undefined)
       return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
@@ -174,6 +180,7 @@ export class Uplink {
         if (isOpen(ws)) ws.send(out);
       },
       release: (sessionId) => this.#sessions.delete(sessionId),
+      consumed,
     });
     this.#sessions.set(frame.sessionId, link);
     this.#options.onSession(link);
