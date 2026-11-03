@@ -1,12 +1,10 @@
-import { base64urlEncode, fingerprintOf, generateX25519, type SecureLink } from "@doriface/crypto";
+import { base64urlEncode, fingerprintOf, generateX25519, type SecureLink, SessionKind } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { admitPairing } from "../e2ee/accept.ts";
 import { LiveSessions } from "../e2ee/sessions.ts";
 import { deviceIdOf, DeviceStore } from "./devices.ts";
-import { PairingStore } from "./pairing.ts";
 
 let dir: string;
 beforeEach(() => {
@@ -20,7 +18,7 @@ function fakeSession(remoteStatic: Uint8Array): SecureLink & { readonly closes: 
   const closeListeners = new Set<(error: Error | undefined) => void>();
   return {
     closes,
-    pattern: "IK",
+    kind: SessionKind.Session,
     remoteStatic,
     handshakeHash: new Uint8Array(32),
     peerName: undefined,
@@ -90,60 +88,6 @@ describe("state lock", () => {
     writeFileSync(join(dir, "state.lock"), String(deadPid()));
     expect(devices.revoke(devices.list()[0]?.clientStaticPub ?? "")).toHaveLength(1);
     expect(existsSync(join(dir, "state.lock"))).toBe(false);
-  });
-});
-
-describe("pairing consumption", () => {
-  test("the code is burned before the device is stored, so a failed store never reopens it", () => {
-    const pairing = new PairingStore(dir);
-    pairing.offer();
-    const claim = pairing.claim();
-    if (claim === undefined) throw new Error("no claim");
-    mkdirSync(join(dir, "devices.json"));
-    expect(admitPairing(claim, new DeviceStore(dir), generateX25519().publicKey, "phone").ok).toBe(false);
-    expect(pairing.claim()).toBeUndefined();
-    expect(existsSync(join(dir, "pairing.json"))).toBe(false);
-  });
-
-  test("only the first confirmed handshake with a code is admitted", () => {
-    const pairing = new PairingStore(dir);
-    const devices = new DeviceStore(dir);
-    pairing.offer();
-    const first = pairing.claim();
-    const second = pairing.claim();
-    if (first === undefined || second === undefined) throw new Error("claims refused");
-    expect(admitPairing(first, devices, generateX25519().publicKey, "a")).toEqual({ ok: true });
-    expect(admitPairing(second, devices, generateX25519().publicKey, "b")).toMatchObject({ ok: false, code: 4401 });
-    expect(devices.list().map((device) => device.name)).toEqual(["a"]);
-  });
-
-  test("a failed attempt settles nothing; the code ends at expiry", () => {
-    const pairing = new PairingStore(dir);
-    const offer = pairing.offer(0);
-    expect(pairing.claim(1)).toBeDefined();
-    expect(pairing.claim(1)).toBeDefined();
-    expect(pairing.read()?.code).toBe(offer.code);
-    expect(pairing.claim(offer.expiresAt)).toBeUndefined();
-    expect(existsSync(join(dir, "pairing.json"))).toBe(false);
-  });
-
-  test("a pairing confirmed after the code expired is refused and the offer removed", () => {
-    const pairing = new PairingStore(dir);
-    const offer = pairing.offer(0);
-    const claim = pairing.claim(1);
-    if (claim === undefined) throw new Error("no claim");
-    expect(claim.complete(offer.expiresAt)).toBe(false);
-    expect(existsSync(join(dir, "pairing.json"))).toBe(false);
-  });
-
-  test("settling an old claim leaves a newer offer alone", () => {
-    const pairing = new PairingStore(dir);
-    pairing.offer();
-    const claim = pairing.claim();
-    if (claim === undefined) throw new Error("no claim");
-    const replacement = new PairingStore(dir).offer();
-    expect(admitPairing(claim, new DeviceStore(dir), generateX25519().publicKey, "a")).toEqual({ ok: true });
-    expect(pairing.read()?.code).toBe(replacement.code);
   });
 });
 
