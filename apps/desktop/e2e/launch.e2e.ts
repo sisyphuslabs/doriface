@@ -1,8 +1,8 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { DorifaceBridge } from "../src/shared/bridge.ts";
 import { scratchHcSession } from "./hc-session.ts";
+import { appArgs, appDir, packagedExecutable as executablePath } from "./launch.ts";
 
 declare global {
   interface Window {
@@ -10,9 +10,6 @@ declare global {
   }
 }
 
-const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-/** CI points this at the electron-builder --dir output so the packaged app is what launches. */
-const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
 const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
 /** Playwright wants a string-only environment. */
 const launchEnv = (session: ReturnType<typeof scratchHcSession>): Record<string, string> =>
@@ -29,7 +26,7 @@ test.beforeAll(async () => {
   const session = scratchHcSession();
   hc = session;
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: [appDir] } : { executablePath: attachAfterFirstLoad, args: [] }),
+    ...(executablePath === undefined ? { args: appArgs() } : { executablePath: attachAfterFirstLoad, args: [] }),
     env: launchEnv(session),
   });
 });

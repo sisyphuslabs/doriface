@@ -1,12 +1,10 @@
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir, userInfo } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
+import { appArgs, packagedExecutable as executablePath } from "./launch.ts";
 
-const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
 /** A scratch hc session and a scratch profile, made only when the tests run (not on --list). */
 interface Scratch {
   readonly hc: ReturnType<typeof scratchHcSession>;
@@ -40,7 +38,7 @@ test.beforeAll(async () => {
   );
   const args = [`--user-data-dir=${profile}`];
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: [appDir, ...args] } : { executablePath, args }),
+    ...(executablePath === undefined ? { args: appArgs(args) } : { executablePath, args }),
     env,
   });
 });
