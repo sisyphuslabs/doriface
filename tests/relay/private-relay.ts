@@ -11,12 +11,12 @@
  * git a read-only token through a credential helper).
  * `DORIFACE_RELAY_DIR` points at a relay checkout of your own instead, which is used as it is and never moved.
  */
-import { existsSync, realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
-const MANAGED_DIR = join(REPO_ROOT, ".relay");
+const MANAGED_DIR = resolve(REPO_ROOT, ".relay");
 
 interface RelayPin {
   readonly repository: string;
@@ -48,15 +48,34 @@ async function readPin(): Promise<RelayPin> {
 }
 
 /**
- * The environment for git inside `dir`. Repository discovery stops at `dir`: when `dir/.git` is not a valid repository,
- * git would otherwise climb into the public checkout around `.relay` and every forced step would act on it.
+ * Variables that point git at a repository, index or object store (`git rev-parse --local-env-vars`). A hook or
+ * `git rebase -x` in a linked worktree exports an absolute GIT_DIR, and a pre-commit hook a GIT_INDEX_FILE; passed on,
+ * they would send every forced step below into the public checkout that runs this script.
  */
-const confinedTo = (dir: string): Record<string, string | undefined> => ({
-  ...process.env,
-  GIT_CEILING_DIRECTORIES: dirname(realpathSync(dir)),
-  // A credential prompt would hang CI and confuse a developer without access; fail instead.
-  GIT_TERMINAL_PROMPT: "0",
-});
+async function repositoryVariables(): Promise<ReadonlySet<string>> {
+  const proc = Bun.spawn(["git", "rev-parse", "--local-env-vars"], { stdout: "pipe", stderr: "ignore" });
+  const listed = (await new Response(proc.stdout).text()).split("\n").filter(Boolean);
+  if ((await proc.exited) !== 0 || !listed.includes("GIT_DIR"))
+    throw new Error("git rev-parse --local-env-vars failed");
+  return new Set(listed);
+}
+
+/**
+ * The environment for git in the managed checkout, and nowhere else: the caller's repository variables are dropped
+ * (GIT_CONFIG_* stays, since CI's credential helper lives there), GIT_DIR and GIT_WORK_TREE name `.relay` explicitly,
+ * and discovery may not climb out of it.
+ */
+function confinedTo(dir: string, repository: ReadonlySet<string>): Record<string, string | undefined> {
+  const kept = Object.entries(process.env).filter(([name]) => !repository.has(name) || name.startsWith("GIT_CONFIG"));
+  return {
+    ...Object.fromEntries(kept),
+    GIT_DIR: join(dir, ".git"),
+    GIT_WORK_TREE: dir,
+    GIT_CEILING_DIRECTORIES: dirname(dir),
+    // A credential prompt would hang CI and confuse a developer without access; fail instead.
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
 
 const CREDENTIALS = new Set(["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]);
 
@@ -64,35 +83,52 @@ const CREDENTIALS = new Set(["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]);
 const withoutCredentials = (env: Record<string, string | undefined>): Record<string, string | undefined> =>
   Object.fromEntries(Object.entries(env).filter(([name]) => !CREDENTIALS.has(name) && !name.startsWith("GIT_CONFIG_")));
 
+type Env = Record<string, string | undefined>;
+
 /** Runs `argv` in `cwd` with stdout passed through; stderr is returned as well as printed. */
-async function run(
-  argv: readonly string[],
-  cwd: string,
-  env: Record<string, string | undefined> = confinedTo(cwd),
-): Promise<{ code: number; stderr: string }> {
+async function run(argv: readonly string[], cwd: string, env: Env): Promise<{ code: number; stderr: string }> {
   const proc = Bun.spawn([...argv], { cwd, stdin: "ignore", stdout: "inherit", stderr: "pipe", env });
   const stderr = await new Response(proc.stderr).text();
   process.stderr.write(stderr);
   return { code: await proc.exited, stderr };
 }
 
-async function must(argv: readonly string[], cwd: string, env?: Record<string, string | undefined>): Promise<void> {
+async function must(argv: readonly string[], cwd: string, env: Env): Promise<void> {
   const { code } = await run(argv, cwd, env);
   if (code !== 0) throw new Error(`${argv.join(" ")} exited ${code} in ${cwd}`);
 }
 
-async function gitOutput(dir: string, args: readonly string[]): Promise<string | undefined> {
-  const proc = Bun.spawn(["git", ...args], { cwd: dir, env: confinedTo(dir), stdout: "pipe", stderr: "ignore" });
+async function gitOutput(dir: string, env: Env, args: readonly string[]): Promise<string | undefined> {
+  const proc = Bun.spawn(["git", ...args], { cwd: dir, env, stdout: "pipe", stderr: "ignore" });
   const out = (await new Response(proc.stdout).text()).trim();
   return (await proc.exited) === 0 ? out : undefined;
 }
 
-const headOf = (dir: string): Promise<string | undefined> =>
-  gitOutput(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+/** What is at `path` itself, without following a symlink. */
+function kindOf(path: string): "missing" | "directory" | "other" {
+  try {
+    const stat = lstatSync(path);
+    return stat.isDirectory() && !stat.isSymbolicLink() ? "directory" : "other";
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return "missing";
+    throw error;
+  }
+}
 
-/** True only when `dir` is the top of its own repository, never a directory inside another one. */
-const ownsRepository = async (dir: string): Promise<boolean> =>
-  (await gitOutput(dir, ["rev-parse", "--show-toplevel"])) === realpathSync(dir);
+/**
+ * True only when `dir/.git` is a real directory that git resolves to itself, with its own store: a symlinked `.relay`
+ * or `.git`, a `gitdir:` file and a `commondir` into another repository all point git at someone else's.
+ */
+async function ownsRepository(dir: string, env: Env): Promise<boolean> {
+  const gitDir = join(dir, ".git");
+  if (kindOf(dir) !== "directory" || kindOf(gitDir) !== "directory") return false;
+  const [absolute, common] = await Promise.all([
+    gitOutput(dir, env, ["rev-parse", "--absolute-git-dir"]),
+    gitOutput(dir, env, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+  ]);
+  const expected = realpathSync(gitDir);
+  return absolute === expected && common === expected;
+}
 
 /** Brings the managed checkout to the pinned commit and installs it; returns the relay directory to use. */
 export async function fetchRelay(): Promise<string> {
@@ -103,20 +139,23 @@ export async function fetchRelay(): Promise<string> {
   }
   const pin = await readPin();
   const url = process.env["DORIFACE_RELAY_REPO"] ?? `https://github.com/${pin.repository}.git`;
-  if (!existsSync(join(dir, ".git"))) {
-    await mkdir(dir, { recursive: true });
-    await must(["git", "init", "--quiet"], dir);
-  }
-  if (!(await ownsRepository(dir))) throw new RelayCheckoutInvalid(dir);
-  if ((await headOf(dir)) !== pin.rev) {
-    const fetched = await run(["git", "fetch", "--quiet", "--depth", "1", url, pin.rev], dir);
+  const env = confinedTo(dir, await repositoryVariables());
+  if (kindOf(dir) === "missing") await mkdir(dir);
+  if (kindOf(dir) !== "directory") throw new RelayCheckoutInvalid(dir);
+  if (kindOf(join(dir, ".git")) === "missing") await must(["git", "init", "--quiet"], dir, env);
+  if (!(await ownsRepository(dir, env))) throw new RelayCheckoutInvalid(dir);
+  if ((await gitOutput(dir, env, ["rev-parse", "--verify", "--quiet", "HEAD"])) !== pin.rev) {
+    const fetched = await run(["git", "fetch", "--quiet", "--depth", "1", url, pin.rev], dir, env);
     if (fetched.code !== 0) throw new RelayUnreachable(`${pin.repository} at ${pin.rev} from ${url}`);
-    await must(["git", "checkout", "--quiet", "--detach", "--force", "FETCH_HEAD"], dir);
+    await must(["git", "checkout", "--quiet", "--detach", "--force", "FETCH_HEAD"], dir, env);
   }
   // The checkout is this module's own: discard what `bun install` changes inside the submodule (it marks the vendored
   // host CLI executable), or moving to a new pin would refuse to switch the submodule.
-  await must(["git", "submodule", "update", "--init", "--depth", "1", "--force"], dir);
-  await must([process.execPath, "install", "--frozen-lockfile"], dir, withoutCredentials(process.env));
+  await must(["git", "submodule", "update", "--init", "--depth", "1", "--force"], dir, env);
+  const installEnv = withoutCredentials(confinedTo(dir, await repositoryVariables()));
+  delete installEnv["GIT_DIR"];
+  delete installEnv["GIT_WORK_TREE"];
+  await must([process.execPath, "install", "--frozen-lockfile"], dir, installEnv);
   console.log(`relay: ${pin.repository} at ${pin.rev} in ${dir}`);
   return dir;
 }
