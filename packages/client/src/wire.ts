@@ -61,8 +61,13 @@ export class Wire {
   }
 
   send(channel: number, kind: number, payload?: Uint8Array): void {
+    this.sendBytes(encodeFrame(channel, kind, payload));
+  }
+
+  /** Sends bytes that already form whole frames. */
+  sendBytes(bytes: Uint8Array): void {
     if (this.#closeState !== undefined) throw new HcConnectionClosedError("connection is closed");
-    this.#link.send(encodeFrame(channel, kind, payload));
+    this.#link.send(bytes);
   }
 
   sendRpc(text: string): void {

@@ -9,11 +9,13 @@ import {
   type HcResult,
   type HelloResult,
   type JsonRpcNotification,
+  type TerminalAttachParams,
 } from "@doriface/protocol";
 import { raceDeadline } from "./deadline.ts";
 import { HcConnectionClosedError, HcHandshakeError, HcProtocolError, HcTimeoutError } from "./errors.ts";
 import type { ByteLink } from "./link.ts";
 import type { Unsubscribe } from "./listeners.ts";
+import { TerminalStream } from "./terminal-stream.ts";
 import { Wire } from "./wire.ts";
 
 export interface HcConnectionOptions {
@@ -27,6 +29,11 @@ export interface HcConnectionOptions {
 export interface CallOptions {
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
+}
+
+export interface AttachOptions extends CallOptions {
+  /** Return credit as soon as output is delivered (default true). False: call `consumed(n)` after rendering. */
+  readonly autoCredit?: boolean;
 }
 
 /** Params may be omitted only for methods whose params are all optional. */
@@ -84,6 +91,16 @@ export class HcConnection {
   call<M extends HcMethod>(method: M, ...args: CallArgs<M>): Promise<HcResult<M>> {
     const [params, options] = args;
     return this.#request(method, params ?? {}, options ?? {}, (result) => result);
+  }
+
+  /** Attaches as a viewer. Kind 6 is used only when both the core and this attach path offer it. */
+  attach(params: TerminalAttachParams, options: AttachOptions = {}): Promise<TerminalStream> {
+    return this.#request("terminal.attach", params, options, (result) => {
+      const automaticInput = this.features.has("automatic_input") && result.automatic_input === true;
+      const stream = new TerminalStream(this.#wire, result, automaticInput, options.autoCredit ?? true);
+      this.#wire.register(result.channel, stream);
+      return stream;
+    });
   }
 
   /** `adopt` runs synchronously on the reply, before any later frame is dispatched. */
