@@ -156,6 +156,14 @@ describe("keybind import and export", () => {
     expect(resolveKeymap("mac", resetAction("mac", moved, "tab.new")).get("super+t")).toBe("tab.new");
   });
 
+  test("export writes bytes from 0x7f up as \\xNN, so the bytes survive a round trip", () => {
+    const parsed = parseKeybinds("keybind = super+j=text:\\x80é\\x7f");
+    const text = serializeKeybinds(parsed.overrides);
+    expect(text).toContain("text:\\x80\\xc3\\xa9\\x7f");
+    const again = parseKeybinds(text).overrides.get("super+j") ?? "";
+    expect(sendBytes(again)).toEqual(new Uint8Array([0x80, 0xc3, 0xa9, 0x7f]));
+  });
+
   test("export then import round-trips", () => {
     const overrides = new Map<string, string | null>([
       ["shift+super+n", "tab.new"],
