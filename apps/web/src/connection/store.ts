@@ -1,6 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
-import { connect } from "./connect.ts";
+import { connect, DeviceNotPairedError } from "./connect.ts";
 import { type ConnectionSettings, isConfigured, loadSettings, saveSettings } from "./settings.ts";
 
 export type ConnectionState =
@@ -83,7 +83,7 @@ export class ConnectionStore {
   }
 
   #retry(error: Error, attempt: number): void {
-    if (error.name === "EncryptionUnavailableError") {
+    if (error instanceof DeviceNotPairedError) {
       this.#set({ phase: "failed", error, retryInMs: null });
       return;
     }

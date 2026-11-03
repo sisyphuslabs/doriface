@@ -1,35 +1,44 @@
-import { HcConnection, type ByteLink } from "@doriface/client";
-import { type ConnectionSettings, relayClientUrl } from "./settings.ts";
+import { HcConnection } from "@doriface/client";
+import { base64urlDecode, CloseCode, type SecureLink, secureLink, SecureLinkError } from "@doriface/crypto";
+import { connectRelayClient } from "@doriface/relay-client";
 import { loadDeviceKey } from "./device-key.ts";
-import { openWebSocketLink, RELAY_PING_MS } from "./ws-link.ts";
+import type { ConnectionSettings } from "./settings.ts";
+import { openWebSocketLink } from "./ws-link.ts";
 
 const SUBPROTOCOL = "doriface.v1";
 const TOKEN_PREFIX = "doriface.token.";
 
-/** The relay and direct paths need the Noise record layer, which this build does not ship yet. */
-export class EncryptionUnavailableError extends Error {
-  override readonly name = "EncryptionUnavailableError";
-  readonly target: string;
-  constructor(target: string) {
-    super(`end-to-end encryption is not available in this build, so ${target} cannot be reached`);
-    this.target = target;
+/** The host no longer knows this device (revoked, or its state was reset): retrying cannot help, pairing again can. */
+export class DeviceNotPairedError extends Error {
+  override readonly name = "DeviceNotPairedError";
+  constructor() {
+    super("The host does not know this device anymore. Pair it again.");
   }
 }
 
 /** Opens a framed herdr-core connection with the given settings. */
 export async function connect(settings: ConnectionSettings, signal?: AbortSignal): Promise<HcConnection> {
-  if (settings.mode === "relay") throw new EncryptionUnavailableError(relayClientUrl(settings));
-  const link = await openWebSocketLink(settings.loopbackUrl, [SUBPROTOCOL, TOKEN_PREFIX + settings.token]);
+  const link =
+    settings.mode === "relay"
+      ? await openRelaySession(settings)
+      : await openWebSocketLink(settings.loopbackUrl, [SUBPROTOCOL, TOKEN_PREFIX + settings.token]);
   return HcConnection.open(link, signal === undefined ? {} : { signal });
 }
 
-/**
- * A relay client socket: binary only, plus the `ping` text the relay's 90 s reaper expects (contract
- * v1.2 C6). The device key is loaded for the Noise handshake. The record layer that wraps this link owns
- * the `a:<total bytes received>` text acks every 64 KiB (docs/transport.md); without them the relay
- * closes the socket once 4 MiB is unacknowledged.
- */
-export async function openRelayLink(url: string): Promise<ByteLink> {
-  await loadDeviceKey();
-  return openWebSocketLink(url, [], { pingEveryMs: RELAY_PING_MS });
+async function openRelaySession(settings: ConnectionSettings): Promise<SecureLink> {
+  const [staticKey, link] = await Promise.all([
+    loadDeviceKey(),
+    connectRelayClient({ relayUrl: settings.relayUrl, hostId: settings.hostId }),
+  ]);
+  try {
+    return await secureLink(link, {
+      role: "initiator",
+      hostId: settings.hostId,
+      staticKey,
+      remoteStatic: base64urlDecode(settings.hostKey),
+    });
+  } catch (error) {
+    if (error instanceof SecureLinkError && error.code === CloseCode.UnknownDevice) throw new DeviceNotPairedError();
+    throw error;
+  }
 }
