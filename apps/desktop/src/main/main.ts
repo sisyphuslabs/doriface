@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, session, shell } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { contentSecurityPolicy } from "../config/csp.ts";
-import { APP_ORIGIN } from "../config/origin.ts";
+import { APP_ORIGIN, loopbackDevUrl } from "../config/origin.ts";
 import { secureWebPreferences, windowOptions } from "../config/window.ts";
 import { parsePlatform } from "../shared/bridge.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
@@ -13,7 +13,8 @@ import { menuTemplate } from "./menu.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 
 const platform = parsePlatform(process.platform);
-const devUrl = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
+const devSetting = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
+const devUrl = devSetting === undefined || devSetting === "" ? undefined : loopbackDevUrl(devSetting);
 const origin = devUrl === undefined ? APP_ORIGIN : new URL(devUrl).origin;
 const csp = contentSecurityPolicy({ devServer: devUrl });
 const webPreferences = secureWebPreferences(join(import.meta.dirname, "preload.cjs"), app.getVersion());

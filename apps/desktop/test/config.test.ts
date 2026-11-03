@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { contentSecurityPolicy } from "../src/config/csp.ts";
 import { isAllowedExternal } from "../src/config/external.ts";
-import { APP_ORIGIN, isSameOrigin } from "../src/config/origin.ts";
+import { APP_ORIGIN, isSameOrigin, loopbackDevUrl } from "../src/config/origin.ts";
 import { isGrantable } from "../src/config/permissions.ts";
 import { secureWebPreferences, TRAFFIC_LIGHT_POSITION, windowOptions } from "../src/config/window.ts";
 import { VERSION_ARG } from "../src/shared/bridge.ts";
@@ -84,6 +84,15 @@ describe("origin, external links and permissions", () => {
     expect(isSameOrigin("app://evil/index.html", APP_ORIGIN)).toBe(false);
     expect(isSameOrigin("https://doriface/", APP_ORIGIN)).toBe(false);
     expect(isSameOrigin("not a url", APP_ORIGIN)).toBe(false);
+  });
+
+  test("only a loopback http dev server may become the app origin", () => {
+    expect(loopbackDevUrl("http://localhost:5173")).toBe("http://localhost:5173/");
+    expect(loopbackDevUrl("http://127.0.0.1:5173/")).toBe("http://127.0.0.1:5173/");
+    expect(loopbackDevUrl("http://[::1]:5173")).toBe("http://[::1]:5173/");
+    for (const url of ["https://localhost:5173", "http://example.com:5173", "http://10.0.0.2:5173", "file:///x", "x"]) {
+      expect(() => loopbackDevUrl(url)).toThrow("refusing dev server");
+    }
   });
 
   test("only https links to allowlisted hosts open externally", () => {
