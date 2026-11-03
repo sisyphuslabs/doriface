@@ -65,7 +65,7 @@ describe("paletteCommands", () => {
     expect(availableActions("desktop", { open: ["t1", "t2"] })).toContain("pane.split");
   });
 
-  test("every row runs something", () => {
+  test("each row kind parses to its choice", () => {
     expect(choiceOf("agent:box/t1")).toEqual({ kind: "agent", address: "box/t1" });
     expect(choiceOf("host:studio")).toEqual({ kind: "settings" });
     expect(choiceOf("app.settings")).toEqual({ kind: "action", id: "app.settings" });
