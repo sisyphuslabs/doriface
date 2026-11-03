@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { fingerprintOf, generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -123,6 +123,45 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     const run = runConnect(join(scratch, "nocode"), host().relayUrl, "ZZZZ-ZZZZ");
     expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
     expect((await run.stderr()).trim().split("\n").at(-1)).toContain("no host is pairing with this code");
+  }, 30_000);
+
+  test.each([
+    ["key", true],
+    ["relay", false],
+  ])(
+    "a fresh link whose %s differs from the saved one is refused without --replace, and writes nothing",
+    async (what, newKey) => {
+      const changed = join(scratch, `changed-${what}`);
+      const oldKey = newKey ? generateX25519().publicKey : host().hostKey;
+      const oldRelay = newKey ? host().relayUrl : "https://old-relay.example";
+      new KnownHosts(changed).add({ hostId: host().hostId, hostKey: oldKey, relayUrl: oldRelay });
+      const saved = readFileSync(join(changed, "known-hosts.json"));
+      const paired = host().logs.filter((line) => line.startsWith("paired device")).length;
+      const run = runConnect(changed, host().relayUrl, await host().pairingLink(), "--name", "changed");
+      expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
+      const stderr = await run.stderr();
+      const notice = newKey
+        ? `host key changed for ${host().hostId}: old fingerprint ${fingerprintOf(oldKey)} -> new ${fingerprintOf(host().hostKey)}`
+        : `relay changed for ${host().hostId}: ${oldRelay} -> ${host().relayUrl}`;
+      expect(stderr).toContain(notice);
+      expect(stderr.trim().split("\n").at(-1)).toContain("--replace");
+      expect(readFileSync(join(changed, "known-hosts.json"))).toEqual(saved);
+      expect(host().logs.filter((line) => line.startsWith("paired device")).length).toBe(paired);
+    },
+    30_000,
+  );
+
+  test("with --replace, a changed host key is replaced after the notice, and hello answers", async () => {
+    const replaced = join(scratch, "replaced");
+    const oldKey = generateX25519().publicKey;
+    new KnownHosts(replaced).add({ hostId: host().hostId, hostKey: oldKey, relayUrl: host().relayUrl });
+    const run = runConnect(replaced, host().relayUrl, await host().pairingLink(), "--name", "replaced", "--replace");
+    await run.write(HELLO);
+    expect(JSON.parse(decoder.decode(await within(run.reader.line(), "hello"))).result.framed).toBe(true);
+    run.end();
+    expect(await within(run.exited, "exit")).toBe(0);
+    expect(await run.stderr()).toContain(`host key changed for ${host().hostId}`);
+    expect(new KnownHosts(replaced).get(host().hostId)?.hostKey).toEqual(host().hostKey);
   }, 30_000);
 
   test("a pinned key that is not the live host's is refused with 4400 before any byte reaches hc", async () => {
