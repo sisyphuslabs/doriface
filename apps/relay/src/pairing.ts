@@ -12,8 +12,9 @@ import type { PairSlotsEnv } from "./pair-slot.ts";
 
 /**
  * Handles a PAIR_SLOT frame from an authenticated uplink and answers it with a PAIR_SLOT_ACK: registered or taken for
- * a claim; registered for an empty payload, which releases the slot the uplink registered last; malformed for a
- * request whose slot is readable but whose payload is not. A payload with no readable slot closes the uplink (4402).
+ * a claim; registered for an empty payload, which releases the slot the uplink registered last (with no slot
+ * registered there is nothing to name, so no ack); malformed for a request whose slot is readable but whose payload is
+ * not. A payload with no readable slot closes the uplink (4402).
  */
 export async function handlePairSlot(
   env: PairSlotsEnv,

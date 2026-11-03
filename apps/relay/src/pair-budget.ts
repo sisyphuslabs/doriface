@@ -1,8 +1,8 @@
 /** Pairing budgets (contract v1.2), kept free of Workers APIs so they are testable on their own. */
 
-/** Lookups and pairing sessions a slot allows per window, from all sources together. */
+/** The cap a slot applies per window to lookups, and separately to answered pairing sessions, from all sources. */
 export const PAIR_BUDGET = 10;
-/** Lookups and pairing sessions one source may make per slot per window. */
+/** The cap one source has per slot per window on lookups, and separately on pairing sessions. */
 export const PER_SOURCE_PAIR_QUOTA = 3;
 export const PAIR_BUDGET_WINDOW_MS = 10 * 60 * 1000;
 
