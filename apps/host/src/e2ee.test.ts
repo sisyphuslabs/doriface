@@ -3,12 +3,14 @@ import {
   encodePairingHello,
   generateX25519,
   type KeyPair,
+  formatPairingCode,
   pairingPsk,
+  pairingSlotOf,
   parsePairingUrl,
   SecureLinkError,
 } from "@doriface/crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -21,6 +23,43 @@ const device = generateX25519();
 const stateDir = mkdtempSync(join(tmpdir(), "dh-e2ee-"));
 let session: HcSession;
 let host: Host;
+const logWaiters = new Set<(line: string) => void>();
+/** Resolves with the first host log line matching `pattern` from now on; subscribe before the action. */
+function nextLog(pattern: RegExp): Promise<string> {
+  const { promise, resolve, reject } = Promise.withResolvers<string>();
+  const timer = setTimeout(() => reject(new Error(`no log line matching ${pattern}`)), 5000);
+  const waiter = (line: string): void => {
+    if (!pattern.test(line)) return;
+    clearTimeout(timer);
+    logWaiters.delete(waiter);
+    resolve(line);
+  };
+  logWaiters.add(waiter);
+  return promise;
+}
+/** A relay stand-in: the first slot collides (409), later ones register. */
+const slots = { asked: [] as string[], released: [] as string[] };
+const releaseWaiters = new Map<string, () => void>();
+/** Resolves when the host releases `slot`; subscribe before the action that should release it. */
+function released(slot: string): Promise<void> {
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  const timer = setTimeout(() => reject(new Error(`slot ${slot} was not released`)), 5000);
+  releaseWaiters.set(slot, () => {
+    clearTimeout(timer);
+    resolve();
+  });
+  return promise;
+}
+const registrar = {
+  register: (slot: string) => {
+    slots.asked.push(slot);
+    return Promise.resolve(slots.asked.length === 1 ? ("collision" as const) : ("registered" as const));
+  },
+  release: (slot: string) => {
+    slots.released.push(slot);
+    releaseWaiters.get(slot)?.();
+  },
+};
 
 async function cli(...args: string[]): Promise<{ readonly code: number; readonly stdout: string }> {
   const proc = Bun.spawn([process.execPath, CLI, ...args, "--state-dir", stateDir], { stdout: "pipe", stderr: "pipe" });
@@ -35,6 +74,15 @@ function endpoint() {
 }
 
 let pairing: ReturnType<typeof parsePairingUrl>;
+let pairOutput = "";
+
+async function pair(): Promise<ReturnType<typeof parsePairingUrl>> {
+  const paired = await cli("pair", "--no-qr", "--web-origin", "https://web.example");
+  const url = paired.stdout.split("\n").find((line) => line.startsWith("https://web.example/pair#"));
+  if (paired.code !== 0 || url === undefined) throw new Error(`pair failed: ${paired.stdout}`);
+  pairOutput = paired.stdout;
+  return parsePairingUrl(url);
+}
 
 const dial = (staticKey: KeyPair, extra: { readonly psk?: Uint8Array; readonly payload?: Uint8Array } = {}) =>
   openE2eeClient(endpoint().url, {
@@ -63,12 +111,12 @@ beforeAll(async () => {
     env: session.env,
     stateDir,
     lanListen: { hostname: "127.0.0.1", port: 0 },
-    log: () => {},
+    pairingSlots: registrar,
+    log: (line) => {
+      for (const waiter of logWaiters) waiter(line);
+    },
   });
-  const paired = await cli("pair", "--no-qr", "--web-origin", "https://web.example");
-  const url = paired.stdout.split("\n").find((line) => line.startsWith("https://web.example/pair#"));
-  if (paired.code !== 0 || url === undefined) throw new Error(`pair failed: ${paired.stdout}`);
-  pairing = parsePairingUrl(url);
+  pairing = await pair();
 });
 
 afterAll(async () => {
@@ -84,15 +132,33 @@ describe("/v1/e2ee against a real hc", () => {
     expect(statSync(stateDir).mode & 0o777).toBe(0o700);
     expect(statSync(join(stateDir, "host-keys.json")).mode & 0o777).toBe(0o600);
     expect(statSync(join(stateDir, "pairing.json")).mode & 0o777).toBe(0o600);
+    expect(pairOutput).toContain(`\nfingerprint ${endpoint().fingerprint}\n`);
+  });
+
+  test("a relay slot collision draws a new code before pair prints it", () => {
+    expect(slots.asked).toHaveLength(2);
+    expect(slots.asked[1]).toBe(pairingSlotOf(pairing.code));
+    expect(pairOutput).toContain(`\ncode        ${formatPairingCode(pairing.code)}\n`);
+  });
+
+  test("fingerprint prints the host fingerprint in ten groups of four", async () => {
+    const printed = await cli("fingerprint");
+    expect(printed).toEqual({ code: 0, stdout: `${endpoint().fingerprint}\n` });
+    expect(printed.stdout).toMatch(/^([0-9A-F]{4} ){9}[0-9A-F]{4}\n$/);
   });
 
   test("a device pairs once over IKpsk2; the code then refuses anyone else with 4401", async () => {
     const psk = pairingPsk(pairing.code);
+    const used = released(pairingSlotOf(pairing.code));
+    const stored = nextLog(/^paired device "test phone"$/);
     const first = await dial(device, { psk, payload: encodePairingHello("test phone") });
     expect(first.link.pattern).toBe("IKpsk2");
     first.link.close();
+    await stored;
     const listed = await cli("devices", "list");
-    expect(listed.stdout).toMatch(/^[a-z2-7]{8} {2}\S+ {2}test phone\n$/);
+    expect(listed.stdout).toMatch(/^[0-9A-F]{8} {2}\S+ {2}test phone\n$/);
+    await used;
+    expect(slots.released).toEqual([pairingSlotOf(pairing.code)]);
     const second = dial(generateX25519(), { psk, payload: encodePairingHello("intruder") });
     expect(await refusal(second)).toBe(CloseCode.UnknownDevice);
     expect(statSync(join(stateDir, "devices.json")).mode & 0o777).toBe(0o600);
@@ -121,6 +187,21 @@ describe("/v1/e2ee against a real hc", () => {
       `byte-identical over e2ee: hello ${helloViaE2ee.byteLength} B, terminal.list ${listViaE2ee.byteLength} B`,
     );
     client.link.close();
+  });
+
+  test("three failed handshakes burn the code and release its relay slot", async () => {
+    const offer = await pair();
+    const burned = released(pairingSlotOf(offer.code));
+    const wrong = pairingPsk(`${offer.code.slice(0, 7)}${offer.code.endsWith("0") ? "1" : "0"}`);
+    const guess = (): Promise<number | undefined> =>
+      refusal(dial(generateX25519(), { psk: wrong, payload: encodePairingHello("guesser") }));
+    expect(await guess()).toBe(CloseCode.CryptoFailure);
+    expect(await guess()).toBe(CloseCode.CryptoFailure);
+    expect(await guess()).toBe(CloseCode.CryptoFailure);
+    await burned;
+    expect(existsSync(join(stateDir, "pairing.json"))).toBe(false);
+    const late = dial(generateX25519(), { psk: pairingPsk(offer.code), payload: encodePairingHello("late") });
+    expect(await refusal(late)).toBe(CloseCode.UnknownDevice);
   });
 
   test("an unpaired key is refused with 4401", async () => {

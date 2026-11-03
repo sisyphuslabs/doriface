@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { assertValidToken, generateToken } from "./auth.ts";
 import { DEVICES_USAGE, devicesCommand } from "./commands/devices.ts";
+import { FINGERPRINT_USAGE, fingerprintCommand } from "./commands/fingerprint.ts";
 import { PAIR_USAGE, pairCommand } from "./commands/pair.ts";
 import { HOST_VERSION, startHost } from "./host.ts";
 import { parseListen } from "./listen.ts";
@@ -10,6 +11,7 @@ import { defaultStateDir } from "./state/files.ts";
 const USAGE = `usage: doriface-host [options]
        doriface-host pair [options]
        doriface-host devices list|revoke <id>
+       doriface-host fingerprint
 
   --listen <host:port>  where to listen (default 127.0.0.1:7766; loopback only)
   --hc <path>           the herdr-core binary (default hc)
@@ -32,8 +34,9 @@ const out = (text: string): void => {
 async function main(args: readonly string[]): Promise<void> {
   const [command, ...rest] = args;
   if (command === "pair") return pairCommand(rest, out);
+  if (command === "fingerprint") return fingerprintCommand(rest, out);
   if (command === "devices") {
-    process.exitCode = devicesCommand(rest, out);
+    process.exitCode = await devicesCommand(rest, out);
     return;
   }
   return serve(args);
@@ -97,7 +100,12 @@ async function serve(args: readonly string[]): Promise<void> {
 }
 
 main(Bun.argv.slice(2)).catch((error: unknown) => {
-  const usage = Bun.argv[2] === "pair" ? PAIR_USAGE : Bun.argv[2] === "devices" ? DEVICES_USAGE : USAGE;
+  const usages: Readonly<Record<string, string>> = {
+    pair: PAIR_USAGE,
+    devices: DEVICES_USAGE,
+    fingerprint: FINGERPRINT_USAGE,
+  };
+  const usage = usages[Bun.argv[2] ?? ""] ?? USAGE;
   process.stderr.write(`doriface-host: ${error instanceof Error ? error.message : String(error)}\n\n${usage}\n`);
   process.exit(2);
 });

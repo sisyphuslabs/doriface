@@ -1,5 +1,4 @@
 import { base64urlDecode, base64urlEncode, fingerprintOf } from "@doriface/crypto";
-import { type FSWatcher, watch } from "node:fs";
 import { join } from "node:path";
 import { ensureStateDir, isRecord, readJson, stringField, writePrivateJson } from "./files.ts";
 
@@ -13,21 +12,19 @@ export interface PairedDevice {
   readonly pairedAt: string;
 }
 
-/** A short handle for a device: the first group of its key's fingerprint. */
+/** A short handle for a device: the first two groups of its key's fingerprint, e.g. `3FA94C0E`. */
 export const deviceIdOf = (device: PairedDevice): string =>
-  fingerprintOf(base64urlDecode(device.clientStaticPub)).slice(0, 8);
+  fingerprintOf(base64urlDecode(device.clientStaticPub)).replaceAll(" ", "").slice(0, 8);
 
 /**
  * The paired-devices file (0600 JSON). Every read goes to disk, so a `doriface-host devices revoke` run by another
- * process takes effect on the next handshake; `watch` reports such edits to a running host.
+ * process takes effect on the next handshake.
  */
 export class DeviceStore {
-  readonly #dir: string;
   readonly #path: string;
 
   constructor(stateDir: string) {
-    this.#dir = ensureStateDir(stateDir);
-    this.#path = join(this.#dir, FILE);
+    this.#path = join(ensureStateDir(stateDir), FILE);
   }
 
   list(): readonly PairedDevice[] {
@@ -60,17 +57,10 @@ export class DeviceStore {
   /** Removes the devices whose id (or full base64url key) is `handle`; returns what was removed. */
   revoke(handle: string): readonly PairedDevice[] {
     const devices = this.list();
-    const removed = devices.filter((device) => deviceIdOf(device) === handle || device.clientStaticPub === handle);
+    const id = handle.replaceAll(" ", "").toUpperCase();
+    const removed = devices.filter((device) => deviceIdOf(device) === id || device.clientStaticPub === handle);
     if (removed.length > 0) this.#save(devices.filter((device) => !removed.includes(device)));
     return removed;
-  }
-
-  /** Calls `onChange` whenever the devices file is replaced; returns a stop function. */
-  watch(onChange: () => void): () => void {
-    const watcher: FSWatcher = watch(this.#dir, (_, filename) => {
-      if (filename === null || filename.startsWith(FILE)) onChange();
-    });
-    return () => watcher.close();
   }
 
   #save(devices: readonly PairedDevice[]): void {
