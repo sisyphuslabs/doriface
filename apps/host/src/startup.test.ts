@@ -79,6 +79,19 @@ describe("the control socket", () => {
   });
 });
 
+describe("a LAN listener", () => {
+  test("without a state dir is refused rather than silently not served", async () => {
+    const start = startHost({
+      listen: { hostname: "127.0.0.1", port: 0 },
+      lanListen: { hostname: "127.0.0.1", port: 0 },
+      token: generateToken(),
+      hc: resolveHcBin(),
+      log: () => {},
+    });
+    await expect(start).rejects.toThrow("needs a state dir");
+  });
+});
+
 describe("a second host", () => {
   test("refuses to start on a state dir a running host serves", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "dh-twice-"));
