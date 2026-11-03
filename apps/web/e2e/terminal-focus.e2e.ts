@@ -30,7 +30,8 @@ test("opening a terminal from the sidebar puts keyboard focus in it", async ({ p
   await expect(shown).toContainText("$", { timeout: 15_000 });
   const before = await shown.getAttribute("data-terminal");
   const sidebar = page.getByRole("complementary", { name: "Workspace" });
-  await sidebar.locator("button:not([aria-current])").filter({ hasText: "·" }).first().click();
+  // New shells report no state, so they list under Idle; the one without aria-current has no tab yet.
+  await sidebar.getByRole("region", { name: "Idle" }).locator("button:not([aria-current])").first().click();
   await expect(shown).not.toHaveAttribute("data-terminal", before ?? "");
   await expect(shown).toContainText("$", { timeout: 15_000 });
   await expect.poll(() => focusedAddress(page)).toBe(await shown.getAttribute("data-terminal"));

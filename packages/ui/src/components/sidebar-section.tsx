@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
 
 export interface SidebarSectionProps {
@@ -13,10 +13,13 @@ export interface SidebarSectionProps {
 
 /** A labelled group in the sidebar. The label names the group; the count is its size. */
 export function SidebarSection({ title, count, tone, action, children, className }: SidebarSectionProps) {
+  const heading = useId();
   return (
-    <section className={cn("flex flex-col gap-px", className)}>
+    <section aria-labelledby={heading} className={cn("flex flex-col gap-px", className)}>
       <header className="flex h-7 items-center gap-2 px-2 text-xs font-medium">
-        <h2 className={cn("min-w-0 flex-1 truncate text-muted-foreground", tone)}>{title}</h2>
+        <h2 id={heading} className={cn("min-w-0 flex-1 truncate text-muted-foreground", tone)}>
+          {title}
+        </h2>
         {count === undefined ? null : (
           <span data-numeric className="text-muted-foreground">
             {count}
