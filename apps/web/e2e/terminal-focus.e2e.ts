@@ -35,3 +35,14 @@ test("opening a terminal from the sidebar puts keyboard focus in it", async ({ p
   await expect(shown).toContainText("$", { timeout: 15_000 });
   await expect.poll(() => focusedAddress(page)).toBe(await shown.getAttribute("data-terminal"));
 });
+
+test("dismissing the palette gives keyboard focus back to the terminal", async ({ page }) => {
+  await page.goto("/");
+  const opened = await openNewTerminal(page);
+  await opened.getByRole("textbox").focus();
+  await page.getByRole("button", { name: "Command palette" }).first().click();
+  await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeHidden();
+  await expect.poll(() => focusedAddress(page)).toBe(await opened.getAttribute("data-terminal"));
+});
