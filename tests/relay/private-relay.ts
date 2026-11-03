@@ -11,7 +11,7 @@
  * git a read-only token through a credential helper).
  * `DORIFACE_RELAY_DIR` points at a relay checkout of your own instead, which is used as it is and never moved.
  */
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync, readdirSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
@@ -116,12 +116,16 @@ function kindOf(path: string): "missing" | "directory" | "other" {
 }
 
 /**
- * True only when `dir/.git` is a real directory that git resolves to itself, with its own store: a symlinked `.relay`
- * or `.git`, a `gitdir:` file and a `commondir` into another repository all point git at someone else's.
+ * True only when `dir/.git` is a real directory that git resolves to itself, with its own store and nothing linked
+ * out of it: a symlinked `.relay` or `.git`, a `gitdir:` file, a `commondir` into another repository, or any symlink
+ * inside `.git` (an `objects/` or `index` borrowed from another repository, as `git-new-workdir` lays out) would let
+ * git write somewhere else. git itself never creates symlinks there.
  */
 async function ownsRepository(dir: string, env: Env): Promise<boolean> {
   const gitDir = join(dir, ".git");
   if (kindOf(dir) !== "directory" || kindOf(gitDir) !== "directory") return false;
+  if (readdirSync(gitDir, { recursive: true, withFileTypes: true }).some((entry) => entry.isSymbolicLink()))
+    return false;
   const [absolute, common] = await Promise.all([
     gitOutput(dir, env, ["rev-parse", "--absolute-git-dir"]),
     gitOutput(dir, env, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),

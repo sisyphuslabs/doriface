@@ -150,6 +150,25 @@ const variants: readonly Variant[] = [
     },
   },
   {
+    name: ".relay/.git/objects symlinked to the parent's store",
+    outcome: "refused",
+    arrange: async (p) => {
+      await emptyRepo(p);
+      rmSync(join(relay(p), ".git", "objects"), { recursive: true });
+      symlinkSync(join(p, ".git", "objects"), join(relay(p), ".git", "objects"));
+      return {};
+    },
+  },
+  {
+    name: ".relay/.git/index symlinked to the parent's index",
+    outcome: "refused",
+    arrange: async (p) => {
+      await emptyRepo(p);
+      symlinkSync(join(p, ".git", "index"), join(relay(p), ".git", "index"));
+      return {};
+    },
+  },
+  {
     name: "GIT_DIR inherited (absolute), no .relay yet",
     outcome: "fetched",
     arrange: async (p) => ({ GIT_DIR: join(p, ".git") }),
