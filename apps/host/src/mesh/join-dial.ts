@@ -1,0 +1,130 @@
+import {
+  base64urlEncode,
+  fingerprintOf,
+  type HostIdentity,
+  type PairingSecret,
+  rawStaticKey,
+  type SecureLink,
+  secureLink,
+} from "@doriface/crypto";
+import { checkName } from "@doriface/mesh";
+import { connectRelayClient, type CreateSocket, lookupPairSlot, pairSlotOf } from "@doriface/relay-client";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { confirmFingerprint, fingerprintGiven } from "../connect/dial.ts";
+import type { ConnectTarget } from "../connect/target.ts";
+import { loadDeviceKey } from "../state/known-hosts.ts";
+import { MeshStore } from "../state/mesh.ts";
+import { PairingStore } from "../state/pairing.ts";
+import { JoinRefused } from "./invite.ts";
+import { MeshLines } from "./lines.ts";
+import { runJoiner } from "./join.ts";
+
+export interface JoinOptions {
+  readonly stateDir: string;
+  readonly identity: HostIdentity;
+  readonly target: ConnectTarget;
+  /** With a typed code: at least the first 4 groups of the inviting member's fingerprint. */
+  readonly fingerprint: string | undefined;
+  /** This host's mesh name (herdr's machine-name rule) and herdr core id, for its card. */
+  readonly name: string;
+  readonly hcId: string;
+  /** Skips the link's interactive confirmation; never a typed code's fingerprint. */
+  readonly yes: boolean;
+  readonly confirm: (question: string) => Promise<boolean>;
+  readonly relayUrl: string | undefined;
+  readonly defaultRelayUrl: string;
+  readonly createSocket?: CreateSocket | undefined;
+  readonly log: (line: string) => void;
+}
+
+export interface Joined {
+  readonly meshId: string;
+  readonly hostId: string;
+  /** The session the join ran on; it stays open as a sync session. */
+  readonly secure: SecureLink;
+  readonly lines: MeshLines;
+}
+
+interface Inviter {
+  readonly hostId: string;
+  readonly hostKey: Uint8Array;
+  readonly relayUrl: string;
+  readonly pairing: PairingSecret;
+  readonly pairSlot?: string;
+}
+
+/** Section 4.2 step 2: every refusal that needs no network, checked before anything is dialed. */
+async function refuseEarly(options: JoinOptions): Promise<void> {
+  const mesh = new MeshStore(options.stateDir, { log: options.log }).read();
+  if (mesh !== undefined) throw new JoinRefused(`this host is in mesh ${mesh.meshId} already: run mesh leave first`);
+  const offer = new PairingStore(options.stateDir).read();
+  if (offer?.mesh === true && Date.now() < offer.expiresAt) {
+    throw new JoinRefused("this host has an open mesh offer: a host cannot be invited and inviting at once");
+  }
+  if (!checkName(options.name)) throw new JoinRefused(`"${options.name}" is not a valid mesh name`);
+  const { target } = options;
+  if (target.kind === "host") throw new JoinRefused("mesh join takes a mesh pairing link or code, not a hostId");
+  if (target.kind === "code") {
+    fingerprintGiven(options.fingerprint);
+    return;
+  }
+  if (target.link.mesh !== true)
+    throw new JoinRefused("this link pairs a device: run doriface-host mesh pair on the member");
+  if (options.yes) return;
+  const question = `join the mesh of host ${target.link.hostId}, fingerprint ${fingerprintOf(target.link.noiseStaticPub)}?`;
+  if (!(await options.confirm(question))) throw new JoinRefused("not joined");
+}
+
+async function inviterOf(options: JoinOptions): Promise<Inviter> {
+  const { target, name } = options;
+  if (target.kind === "link") {
+    const { hostId, noiseStaticPub, linkSecret } = target.link;
+    const relayUrl = options.relayUrl ?? target.link.relayUrl;
+    return { hostId, hostKey: noiseStaticPub, relayUrl, pairing: { mode: "link", linkSecret, name } };
+  }
+  if (target.kind !== "code") throw new JoinRefused("mesh join takes a mesh pairing link or code");
+  const relayUrl = options.relayUrl ?? options.defaultRelayUrl;
+  const record = await lookupPairSlot({ relayUrl, code: target.code });
+  if (record === undefined) throw new JoinRefused("no host is offering this code on the relay: it may have expired");
+  confirmFingerprint(options.fingerprint, record.noiseStaticPub);
+  const pairing = { mode: "code", code: target.code, name } as const;
+  return {
+    hostId: record.hostId,
+    hostKey: record.noiseStaticPub,
+    relayUrl,
+    pairing,
+    pairSlot: pairSlotOf(target.code),
+  };
+}
+
+/**
+ * Joins a mesh by pairing with one member (section 4.2): refusals first, then the pairing handshake as initiator with
+ * this host's own Noise key and `stream: "mesh"`, then the join exchange. Stores the welcome only once it checked out.
+ */
+export async function joinMesh(options: JoinOptions): Promise<Joined> {
+  await refuseEarly(options);
+  const inviter = await inviterOf(options);
+  const link = await connectRelayClient({
+    relayUrl: inviter.relayUrl,
+    hostId: inviter.hostId,
+    ...(options.createSocket === undefined ? {} : { createSocket: options.createSocket }),
+    ...(inviter.pairSlot === undefined ? {} : { pairSlot: inviter.pairSlot }),
+  });
+  const secure = await secureLink(link, {
+    role: "initiator",
+    hostId: inviter.hostId,
+    staticKey: rawStaticKey(options.identity.noise),
+    remoteStatic: inviter.hostKey,
+    pairing: inviter.pairing,
+    stream: "mesh",
+  });
+  const lines = new MeshLines(secure);
+  const hasDevice = existsSync(join(options.stateDir, "device-key.json"));
+  const devicePub = hasDevice ? base64urlEncode(loadDeviceKey(options.stateDir).publicKey) : undefined;
+  const own = { name: options.name, hcId: options.hcId, ...(devicePub === undefined ? {} : { devicePub }) };
+  const mesh = new MeshStore(options.stateDir, { log: options.log });
+  const dialed = { hostId: inviter.hostId, noisePub: inviter.hostKey };
+  const meshId = await runJoiner(lines, { identity: options.identity, mesh, own, dialed, log: options.log });
+  return { meshId, hostId: inviter.hostId, secure, lines };
+}
