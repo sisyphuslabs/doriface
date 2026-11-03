@@ -7,8 +7,10 @@ import {
   decodePairingHello,
   DEFAULT_RELAY_URL,
   encodePairingHello,
+  encodePairSlot,
   formatPairingCode,
   normalizePairingCode,
+  PAIR_SLOT_CLEAR,
   PAIRING_ALPHABET,
   PAIRING_TTL_MS,
   pairingPsk,
@@ -139,5 +141,24 @@ describe("pairing hello", () => {
     `{"name":"${"x".repeat(65)}"}`,
   ])("rejects %p", (bad) => {
     expect(() => decodePairingHello(new TextEncoder().encode(bad))).toThrow();
+  });
+});
+
+describe("PAIR_SLOT payload", () => {
+  test("is the 3 ASCII slot characters then the 32-byte noiseStaticPub; empty clears", () => {
+    const key = crypto.getRandomValues(new Uint8Array(32));
+    const payload = encodePairSlot("Q7M", key);
+    expect(payload.byteLength).toBe(35);
+    expect(new TextDecoder().decode(payload.subarray(0, 3))).toBe("Q7M");
+    expect(payload.subarray(3)).toEqual(key);
+    expect(PAIR_SLOT_CLEAR.byteLength).toBe(0);
+  });
+
+  test.each([
+    ["Q7", 32],
+    ["Q7U", 32],
+    ["Q7M", 31],
+  ])("refuses slot %p with a %p-byte key", (slot, size) => {
+    expect(() => encodePairSlot(slot, new Uint8Array(size))).toThrow();
   });
 });
