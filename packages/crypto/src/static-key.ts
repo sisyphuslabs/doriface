@@ -18,10 +18,11 @@ export const rawStaticKey = (pair: KeyPair): StaticKey => ({
 
 const X25519 = { name: "X25519" } as const;
 
-/** Whether this runtime's WebCrypto can generate X25519 keys and derive bits with them. */
+/** Whether this runtime's WebCrypto can generate X25519 keys and derive bits with them (one real DH). */
 export async function supportsWebCryptoX25519(): Promise<boolean> {
   try {
-    await generateWebCryptoStaticKey();
+    const { staticKey } = await generateWebCryptoStaticKey();
+    await staticKey.dh(x25519.getPublicKey(x25519.utils.randomSecretKey()));
     return true;
   } catch {
     return false;
