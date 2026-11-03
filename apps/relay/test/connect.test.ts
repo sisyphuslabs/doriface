@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
-import { generateHostIdentity, generateX25519 } from "@doriface/crypto";
+import { fingerprintOf, generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KnownHosts } from "../../host/src/state/known-hosts.ts";
@@ -71,15 +71,32 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     expect(await within(run.exited, "exit after SIGTERM")).toBe(0);
   }, 30_000);
 
-  test("a typed code pairs with CPace through the relay", async () => {
+  test("a typed code pairs with CPace through the relay once the host's fingerprint is confirmed", async () => {
     const code = await host().pairingCode();
     const other = join(scratch, "other");
-    const run = runConnect(other, host().relayUrl, code, "--name", "typed");
+    const fingerprint = fingerprintOf(host().hostKey).split(" ").slice(0, 4).join(" ");
+    const run = runConnect(other, host().relayUrl, code, "--name", "typed", "--fingerprint", fingerprint);
     await run.write(HELLO);
     expect(JSON.parse(decoder.decode(await within(run.reader.line(), "hello"))).result.framed).toBe(true);
     run.end();
     expect(await within(run.exited, "exit")).toBe(0);
   }, 60_000);
+
+  test.each([
+    ["no fingerprint", [], "--fingerprint"],
+    ["a fingerprint that does not match", ["--fingerprint", "0000 0000 0000 0000"], "does not match"],
+    ["too short a fingerprint", ["--fingerprint", "3FA9"], "at least the first 4 groups"],
+  ])(
+    "a typed code with %s is refused before any pairing",
+    async (_case, extra, says) => {
+      const before = host().logs.filter((line) => line.startsWith("paired device")).length;
+      const run = runConnect(join(scratch, "unconfirmed"), host().relayUrl, await host().pairingCode(), ...extra);
+      expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
+      expect((await run.stderr()).trim().split("\n").at(-1)).toContain(says);
+      expect(host().logs.filter((line) => line.startsWith("paired device")).length).toBe(before);
+    },
+    30_000,
+  );
 
   test("the shell line hc appends to a --via command is taken and ignored", async () => {
     const line =
