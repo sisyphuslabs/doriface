@@ -32,10 +32,13 @@ if (unknown.length > 0) {
 
 const compile = async (name: Target): Promise<number> => {
   const outfile = join(root, "dist", "host", name, name.startsWith("win-") ? "doriface-host.exe" : "doriface-host");
-  const proc = Bun.spawn(["bun", "build", "--compile", `--target=${TARGETS[name]}`, cli, "--outfile", outfile], {
-    stdout: "inherit",
-    stderr: "inherit",
-  });
+  const proc = Bun.spawn(
+    [process.execPath, "build", "--compile", `--target=${TARGETS[name]}`, cli, "--outfile", outfile],
+    {
+      stdout: "inherit",
+      stderr: "inherit",
+    },
+  );
   return proc.exited;
 };
 
