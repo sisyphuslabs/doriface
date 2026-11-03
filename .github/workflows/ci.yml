@@ -161,6 +161,15 @@ jobs:
       - name: Package (electron-builder --dir)
         working-directory: apps/desktop
         run: bun run pack
+      # Installing and packing must not rewrite tracked files: a declared bin that is not committed executable gets chmodded.
+      - name: The tree is clean after install and pack
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff --stat --summary
+            git --no-pager diff
+            exit 1
+          fi
       - name: Launch the packaged app
         working-directory: apps/desktop
         env:
