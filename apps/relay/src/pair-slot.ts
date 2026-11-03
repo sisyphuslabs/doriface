@@ -23,7 +23,7 @@ export class PairSlot extends DurableObject {
     const next = claimSlot(await this.#slot(), record, Date.now());
     if (next === undefined) return false;
     await this.ctx.storage.put(SLOT, next);
-    await this.#scheduleCleanup();
+    await this.#cleanupNoEarlierThan(next.expiresAt);
     return true;
   }
 
@@ -46,8 +46,9 @@ export class PairSlot extends DurableObject {
   }
 
   override async alarm(): Promise<void> {
-    if ((await this.#cleanupAt()) <= Date.now()) await this.ctx.storage.deleteAll();
-    else await this.#scheduleCleanup();
+    const cleanupAt = await this.#cleanupAt();
+    if (cleanupAt <= Date.now()) await this.ctx.storage.deleteAll();
+    else await this.ctx.storage.setAlarm(cleanupAt);
   }
 
   #slot(): Promise<StoredSlot | undefined> {
@@ -57,7 +58,7 @@ export class PairSlot extends DurableObject {
   async #spend(key: string, now: number): Promise<boolean> {
     const { allowed, times } = spendAttempt((await this.ctx.storage.get<number[]>(key)) ?? [], now);
     await this.ctx.storage.put(key, times);
-    await this.#scheduleCleanup();
+    if (allowed) await this.#cleanupNoEarlierThan(budgetResetAt(times));
     return allowed;
   }
 
@@ -70,8 +71,10 @@ export class PairSlot extends DurableObject {
     return Math.max(slot?.expiresAt ?? 0, budgetResetAt(lookups), budgetResetAt(opens));
   }
 
-  async #scheduleCleanup(): Promise<void> {
-    await this.ctx.storage.setAlarm(await this.#cleanupAt());
+  /** Moves the cleanup alarm later when `at` is later; every other input to it only ever expires earlier. */
+  async #cleanupNoEarlierThan(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current < at) await this.ctx.storage.setAlarm(at);
   }
 }
 
