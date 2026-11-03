@@ -22,6 +22,9 @@ export {
   type Unsubscribe,
 } from "./link.ts";
 export { PROTOCOL_NAMES, type Pattern } from "./noise/handshake.ts";
+export { SessionKind } from "./kinds.ts";
+export type { PairingSecret } from "./client-flight.ts";
+export type { HostPairingSecret } from "./host-flight.ts";
 export {
   buildPairingUrl,
   createPairingOffer,
@@ -31,11 +34,13 @@ export {
   generatePairingCode,
   normalizePairingCode,
   PAIR_SLOT_CLEAR,
+  generateLinkSecret,
+  LINK_SECRET_LENGTH,
   PAIRING_ALPHABET,
+  PAIRING_CODE_ATTEMPTS,
   PAIRING_CODE_LENGTH,
   PAIRING_SLOT_LENGTH,
   PAIRING_TTL_MS,
-  pairingPsk,
   pairingSlotOf,
   PairingGuard,
   pairingWebOrigin,

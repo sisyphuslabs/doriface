@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { hkdfSync } from "node:crypto";
 import { generateHostIdentity } from "./identity.ts";
 import {
   buildPairingUrl,
@@ -11,7 +10,6 @@ import {
   PAIR_SLOT_CLEAR,
   PAIRING_ALPHABET,
   PAIRING_TTL_MS,
-  pairingPsk,
   pairingSlotOf,
   PairingGuard,
   parsePairingUrl,
@@ -33,10 +31,10 @@ describe("pairing code", () => {
     expect([...seen].toSorted().join("")).toBe(PAIRING_ALPHABET);
   });
 
-  test("psk is HKDF-SHA256(UTF-8 of the 8 characters, empty salt, 'doriface pair v1', 32)", () => {
-    const { code } = createPairingOffer();
-    const expected = new Uint8Array(hkdfSync("sha256", code, new Uint8Array(0), "doriface pair v1", 32));
-    expect(pairingPsk(code)).toEqual(expected);
+  test("an offer carries a fresh 32-byte link secret", () => {
+    const [a, b] = [createPairingOffer(), createPairingOffer()];
+    expect(a.linkSecret.byteLength).toBe(32);
+    expect(a.linkSecret).not.toEqual(b.linkSecret);
   });
 
   test.each([
@@ -45,19 +43,18 @@ describe("pairing code", () => {
     ["oil1 abcd", "0111ABCD"],
   ])("a typed %p reads as %p", (typed, code) => {
     expect(normalizePairingCode(typed)).toBe(code);
-    expect(pairingPsk(typed)).toEqual(pairingPsk(code));
   });
 
   test.each(["", "ABC", "ABCDEFGHJ", "ABCD EFGU", "ABCD!EFG"])("rejects code %p", (bad) => {
-    expect(() => pairingPsk(bad)).toThrow();
+    expect(() => normalizePairingCode(bad)).toThrow();
   });
 });
 
 describe("PairingGuard", () => {
   test("an attempt in flight does not lock others out; the first success uses the code up", () => {
     const guard = new PairingGuard(createPairingOffer(0));
-    expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
-    expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
+    expect(guard.claim(1)).toBe(guard.offer);
+    expect(guard.claim(1)).toBe(guard.offer);
     expect(guard.use(1)).toBe(true);
     expect(guard.use(1)).toBe(false);
     expect([guard.state, guard.claim(1)]).toEqual(["used", undefined]);
@@ -65,7 +62,7 @@ describe("PairingGuard", () => {
 
   test("failed attempts never end the code: only a success or expiry does", () => {
     const guard = new PairingGuard(createPairingOffer(0));
-    for (let attempt = 0; attempt < 20; attempt++) expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
+    for (let attempt = 0; attempt < 20; attempt++) expect(guard.claim(1)).toBe(guard.offer);
     expect(guard.state).toBe("open");
   });
 
@@ -83,13 +80,15 @@ describe("PairingGuard", () => {
   });
 });
 
+const fragment = (from: string): URLSearchParams => new URLSearchParams(new URL(from).hash.slice(1));
+
 describe("pairing URL", () => {
   const link = {
     webOrigin: "https://doriface.omo.dev/",
     hostId: identity.hostId,
     noiseStaticPub: identity.noise.publicKey,
     signPub: identity.sign.publicKey,
-    code: createPairingOffer().code,
+    linkSecret: createPairingOffer().linkSecret,
     relayUrl: DEFAULT_RELAY_URL,
   };
   const url = buildPairingUrl(link);
@@ -102,6 +101,16 @@ describe("pairing URL", () => {
       webOrigin: "https://doriface.omo.dev",
       relayUrl: "wss://relay-doriface.omo.dev",
     });
+  });
+
+  test("carries the link secret as 43 base64url characters and never the typed code", () => {
+    expect(fragment(url).get("p")).toHaveLength(43);
+    expect(fragment(url).has("c")).toBe(false);
+  });
+
+  test("a link with a code and no link secret comes from an older host", () => {
+    const old = url.replace(/p=[^&]+/, "c=7KQ39D2M");
+    expect(() => parsePairingUrl(old)).toThrow("older doriface-host");
   });
 
   test.each([
@@ -119,11 +128,12 @@ describe("pairing URL", () => {
 
   test.each([
     ["a hostId of another key", url.replace(identity.hostId, generateHostIdentity().hostId)],
-    ["a missing code", url.replace(/&c=[^&]+/, "")],
+    ["a missing link secret", url.replace(/&p=[^&]+/, "")],
+    ["a 42-character link secret", url.replace(/p=[^&]+/, `p=${"A".repeat(42)}`)],
+    ["a 44-character link secret", url.replace(/p=[^&]+/, `p=${"A".repeat(44)}`)],
     ["a short key", url.replace(/k=[^&]+/, "k=AAAA")],
     ["a relay that is not a URL", url.replace(/r=[^&]+$/, "r=relay")],
     ["an oversized key", url.replace(/k=[^&]+/, `k=${"A".repeat(100_000)}`)],
-    ["an oversized code", url.replace(/c=[^&]+/, `c=${"A".repeat(100_000)}`)],
     ["a non-HTTP(S) page", url.replace("https://doriface.omo.dev", "file://")],
   ])("rejects %s", (_, bad) => {
     expect(() => parsePairingUrl(bad)).toThrow();
@@ -139,7 +149,7 @@ describe("pairing URL origins", () => {
         hostId: identity2.hostId,
         noiseStaticPub: identity2.noise.publicKey,
         signPub: identity2.sign.publicKey,
-        code: createPairingOffer().code,
+        linkSecret: createPairingOffer().linkSecret,
         relayUrl: DEFAULT_RELAY_URL,
       });
     expect(build).toThrow("HTTP(S)");
