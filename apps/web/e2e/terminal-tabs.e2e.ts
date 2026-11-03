@@ -50,7 +50,7 @@ test("open tabs and the active terminal survive Settings and Back", async ({ pag
   await page.goto("/");
   const before = await twoTabs(page);
   await page.getByRole("complementary", { name: "Workspace" }).getByRole("link", { name: "Settings" }).click();
-  await page.getByRole("link", { name: "Back to workspace" }).first().click();
+  await page.getByRole("button", { name: "Close settings" }).first().click();
   await expect.poll(() => layout(page), { timeout: 15_000 }).toEqual(before);
   await runsInActive(page, before, 200);
 });
