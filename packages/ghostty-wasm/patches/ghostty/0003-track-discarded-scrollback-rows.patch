@@ -42,17 +42,17 @@
              break :prune;
          }
  
-@@ -6827,6 +6834,10 @@
- ///
- /// This is very slow, it traverses the full list of pages to count the
- /// rows, so it is not pub. This is only used for testing/debugging.
-+pub fn discardedRows(self: *const PageList) usize {
-+    return self.discarded_rows;
+@@ -6820,6 +6827,10 @@
+             break :active br;
+         },
+     };
 +}
 +
- fn totalRows(self: *const PageList) usize {
-     var rows: usize = 0;
-     var node_ = self.pages.first;
++pub fn discardedRows(self: *const PageList) usize {
++    return self.discarded_rows;
+ }
+ 
+ /// The total rows in the screen. This is the actual row count currently
 @@ -7122,6 +7133,7 @@
              // by paths that already adjusted total_rows.
              pagelist.erasePage(first);

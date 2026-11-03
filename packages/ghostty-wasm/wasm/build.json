@@ -18,7 +18,7 @@
     },
     {
       "path": "patches/ghostty/0003-track-discarded-scrollback-rows.patch",
-      "sha256": "d41423c3ca6a48fc5fba15dc72243474c36d849933a42f2d0c05f313b883bdf4"
+      "sha256": "b4ef1486c87ef4e7b8b5fd6d94e34de1b597a67f3ba3f2079affa28a128acf5e"
     },
     {
       "path": "patches/ghostty/0004-expose-stream-fast-paths.patch",
