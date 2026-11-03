@@ -7,19 +7,24 @@ import { scratchHcSession } from "./hc-session.ts";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
-const hc = scratchHcSession();
-/** A scratch profile, so the app always starts on first run with nothing saved. */
-const profile = mkdtempSync(join(tmpdir(), "dd-profile-"));
-/**
- * A shell that starts clean: bash without profile or rc files (macOS's /etc/bashrc sets a prompt with
- * the host and user), a fixed prompt, and a scratch HOME, so the screenshot shows nothing of this machine.
- */
-const shellHome = mkdtempSync(join(tmpdir(), "dd-shell-"));
-const cleanShell = join(shellHome, "clean-shell");
-writeFileSync(cleanShell, "#!/bin/sh\nexec /bin/bash --noprofile --norc -i\n", { mode: 0o755 });
+/** A scratch hc session and a scratch profile, made only when the tests run (not on --list). */
+interface Scratch {
+  readonly hc: ReturnType<typeof scratchHcSession>;
+  readonly profile: string;
+  readonly shellHome: string;
+}
+let scratch: Scratch | undefined;
 let launched: ElectronApplication | undefined;
 
 test.beforeAll(async () => {
+  const hc = scratchHcSession();
+  // A scratch profile, so the app always starts on first run with nothing saved.
+  const profile = mkdtempSync(join(tmpdir(), "dd-profile-"));
+  // A shell that starts clean: bash without profile or rc files (macOS's /etc/bashrc sets a prompt with
+  // the host and user) and a scratch HOME, so the screenshot shows nothing of this machine.
+  const shellHome = mkdtempSync(join(tmpdir(), "dd-shell-"));
+  writeFileSync(join(shellHome, "clean-shell"), "#!/bin/sh\nexec /bin/bash --noprofile --norc -i\n", { mode: 0o755 });
+  scratch = { hc, profile, shellHome };
   const env = Object.fromEntries(
     Object.entries({
       ...process.env,
@@ -44,9 +49,11 @@ test.afterAll(async () => {
   try {
     await launched?.close();
   } finally {
-    await hc.dispose();
-    rmSync(profile, { recursive: true, force: true });
-    rmSync(shellHome, { recursive: true, force: true });
+    if (scratch !== undefined) {
+      await scratch.hc.dispose();
+      rmSync(scratch.profile, { recursive: true, force: true });
+      rmSync(scratch.shellHome, { recursive: true, force: true });
+    }
   }
 });
 
@@ -74,7 +81,7 @@ test("Use this computer attaches a live terminal that echoes", async () => {
   expect(host).not.toBe("");
   expect(shown.toLowerCase()).not.toContain(host.toLowerCase());
   expect(shown).not.toContain(userInfo().username);
-  expect(shown).not.toContain(shellHome);
+  expect(shown).not.toContain(scratch?.shellHome ?? "no scratch home");
   const screenshot = test.info().outputPath("terminal.png");
   await page.screenshot({ path: screenshot });
   console.log(`screenshot ${screenshot}`);
