@@ -65,8 +65,9 @@ export function useTabs(core: string, terminals: readonly Terminal[] | null): Ta
   const toggleSplit = useCallback(() => {
     setState((prev) => {
       if (prev.split !== null) return { ...prev, split: null };
-      const other = prev.open.find((address) => address !== prev.active) ?? null;
-      return { ...prev, split: other };
+      const other = prev.open.find((address) => address !== prev.active);
+      // The new pane takes focus, like a new split in Ghostty; the focused pane is the left one.
+      return other === undefined ? prev : { ...prev, active: other, split: prev.active };
     });
   }, []);
 
