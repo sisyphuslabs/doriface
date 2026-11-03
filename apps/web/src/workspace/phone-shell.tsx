@@ -10,8 +10,9 @@ import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
+import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
-import { agentStatus, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, terminalTitle, UNREACHABLE } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
@@ -102,6 +103,7 @@ function PhoneTerminal(props: {
     if (sequence !== undefined) send.current?.(transform(sequence));
   };
   const title = terminalTitle(terminal);
+  const machine = machineOf(terminal.address);
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">
@@ -117,18 +119,22 @@ function PhoneTerminal(props: {
           <StatusChip status={agentStatus(terminal)} />
         </div>
       </header>
-      <TerminalView
-        key={terminal.pid ?? undefined}
-        connection={connection}
-        address={terminal.address}
-        pid={terminal.pid ?? null}
-        live={terminal.state === "live"}
-        focused
-        label={`${title} output`}
-        transformInput={transform}
-        onSend={onSend}
-        onEnd={(_address, end) => (closesTab(end) ? onBack() : undefined)}
-      />
+      {terminal.state === UNREACHABLE && machine !== undefined ? (
+        <MachineOffline machine={machine} />
+      ) : (
+        <TerminalView
+          key={terminal.pid ?? undefined}
+          connection={connection}
+          address={terminal.address}
+          pid={terminal.pid ?? null}
+          live={terminal.state === "live"}
+          focused
+          label={`${title} output`}
+          transformInput={transform}
+          onSend={onSend}
+          onEnd={(_address, end) => (closesTab(end) ? onBack() : undefined)}
+        />
+      )}
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
     </div>
   );

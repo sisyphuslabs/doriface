@@ -1,5 +1,5 @@
 import type { HcConnection, TerminalStream } from "@doriface/client";
-import { cn, useToastManager } from "@doriface/ui";
+import { Button, EmptyState, cn, useToastManager } from "@doriface/ui";
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
+import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
@@ -51,6 +52,8 @@ export function TerminalView(props: TerminalViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
   const toasts = useToastManager();
+  /** Why attaching failed, in plain words; Try again clears it, which mounts the terminal and attaches again. */
+  const [unopened, setUnopened] = useState<string | null>(null);
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
@@ -152,8 +155,7 @@ export function TerminalView(props: TerminalViewProps) {
         restarting: () => setRestarting(true),
         reattach: () => attach(ready),
         replaced: () => undefined,
-        error: () =>
-          setError(`Could not open ${address}: ${String("error" in answer ? answer.error : refusal?.cause)}`),
+        error: () => setUnopened(openFailure(address, "error" in answer ? answer.error : refusal?.cause)),
       };
       return then[settled(answer, program.current, !attachedBefore.current, refusal !== null)]();
     });
@@ -230,6 +232,21 @@ export function TerminalView(props: TerminalViewProps) {
       <p role="status" className="p-4 text-sm text-muted-foreground">
         The program in this terminal is restarting…
       </p>
+    );
+  }
+  if (unopened !== null) {
+    return (
+      <div className={cn("flex min-h-0 flex-1 flex-col justify-center bg-card", className)}>
+        <EmptyState
+          title="This terminal didn't open"
+          description={unopened}
+          actions={
+            <Button variant="secondary" onClick={() => setUnopened(null)}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
     );
   }
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
