@@ -92,6 +92,14 @@ export function KeybindingRow({
     returnFocus.current = true;
     setRecording(false);
   };
+  const keepButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (pending !== null) keepButton.current?.focus({ focusVisible: true });
+  }, [pending]);
+  const keep = (): void => {
+    returnFocus.current = true;
+    setPending(null);
+  };
   const record = (trigger: string): void => {
     finish();
     if (keymap.get(trigger) === action.id) return;
@@ -111,7 +119,18 @@ export function KeybindingRow({
         pending === null ? (
           <span className="font-mono text-xs">{displayActionId(action.id)}</span>
         ) : (
-          <span className="flex flex-wrap items-center gap-2 text-foreground">
+          // Keep is the safe default: it takes focus, and Escape means Keep. data-captures-keys tells Settings'
+          // own Escape (close) to leave the key to this prompt.
+          <span
+            data-captures-keys
+            className="flex flex-wrap items-center gap-2 text-foreground"
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              keep();
+            }}
+          >
             <Kbd keys={triggerKeys(pending, platform)} persistent /> is {conflictLabel}.
             <Button
               size="sm"
@@ -124,14 +143,7 @@ export function KeybindingRow({
             >
               Replace
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                returnFocus.current = true;
-                setPending(null);
-              }}
-            >
+            <Button ref={keepButton} size="sm" variant="ghost" onClick={keep}>
               Keep
             </Button>
           </span>
