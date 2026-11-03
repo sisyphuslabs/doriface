@@ -73,13 +73,21 @@ export function memoryLinkPair(synchronous = false): readonly [MemoryEnd, Memory
 /** Resolves with the next close error a link reports, or rejects after `ms`. */
 export function nextClose(link: ByteLink, ms = 2000): Promise<Error | undefined> {
   const { promise, resolve, reject } = Promise.withResolvers<Error | undefined>();
-  const unsubscribe = link.onClose((error) => {
+  let closed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let unsubscribe: (() => void) | undefined;
+  unsubscribe = link.onClose((error) => {
+    closed = true;
     clearTimeout(timer);
-    unsubscribe();
+    unsubscribe?.();
     resolve(error);
   });
-  const timer = setTimeout(() => {
+  if (closed) {
     unsubscribe();
+    return promise;
+  }
+  timer = setTimeout(() => {
+    unsubscribe?.();
     reject(new Error(`no close within ${ms} ms`));
   }, ms);
   return promise;
