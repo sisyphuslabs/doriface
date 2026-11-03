@@ -1,0 +1,506 @@
+--- a/build.zig
++++ b/build.zig
+@@ -1,11 +1,7 @@
+ const std = @import("std");
+ 
+-const Artifact = enum { ghostty, lib };
+-
+-
+ pub fn build(b: *std.Build) void {
+     const optimize = b.standardOptimizeOption(.{});
+-
+     const wasm_target = b.resolveTargetQuery(.{
+         .cpu_arch = .wasm32,
+         .os_tag = .freestanding,
+@@ -19,64 +15,17 @@
+ 
+     if (b.lazyDependency("ghostty", .{
+         .target = wasm_target,
++        .optimize = optimize,
+         .simd = false,
+     })) |dep| {
+-        const options = b.addOptions();
+-        options.addOption(Artifact, "artifact", .lib);
+-        options.addOption(bool, "oniguruma", true);
+-        options.addOption(bool, "simd", false);
+-        options.addOption(bool, "c_abi", false);
+-        options.addOption(bool, "slow_runtime_safety", false);
+-        options.addOption(bool, "kitty_graphics", true);
+-        options.addOption(bool, "tmux_control_mode", false);
+-        const ghostty_module = dep.module("ghostty-vt");
+-        if (b.lazyDependency("wuffs", .{
+-            .target = wasm_target,
+-            .optimize = optimize,
+-        })) |wuffs_c| {
+-            const wuffs_module = b.createModule(.{
+-                .root_source_file = dep.path("pkg/wuffs/src/main.zig"),
+-                .target = wasm_target,
+-                .optimize = optimize,
+-                .link_libc = false,
+-            });
+-            // Wuffs is a C single-header library. Its normal build assumes a
+-            // hosted libc, but the terminal module is deliberately
+-            // wasm32-freestanding. These declarations are the small C ABI
+-            // surface used by the generated base implementation; the Zig
+-            // runtime provides the symbols when the final module is linked.
+-            wuffs_module.addIncludePath(b.path("src/wuffs-compat"));
+-            wuffs_module.addIncludePath(wuffs_c.path("release/c"));
+-            wuffs_module.addCSourceFile(.{
+-                .file = wuffs_c.path("release/c/wuffs-v0.4.c"),
+-                .flags = &.{
+-                    "-DWUFFS_IMPLEMENTATION",
+-                    "-DWUFFS_CONFIG__MODULES",
+-                    "-DWUFFS_CONFIG__MODULE__AUX__BASE",
+-                    "-DWUFFS_CONFIG__MODULE__AUX__IMAGE",
+-                    "-DWUFFS_CONFIG__MODULE__BASE",
+-                    "-DWUFFS_CONFIG__MODULE__ADLER32",
+-                    "-DWUFFS_CONFIG__MODULE__CRC32",
+-                    "-DWUFFS_CONFIG__MODULE__DEFLATE",
+-                    "-DWUFFS_CONFIG__MODULE__PNG",
+-                    "-DWUFFS_CONFIG__MODULE__ZLIB",
+-                },
+-            });
+-            ghostty_module.addImport("wuffs", wuffs_module);
+-        }
+-        ghostty_module.addOptions("terminal_options", options);
+-        exe_mod.addImport("ghostty-vt", ghostty_module);
++        exe_mod.addImport("ghostty-vt", dep.module("ghostty-vt"));
+     }
+ 
+-
+-
+     const exe = b.addExecutable(.{
+         .name = "ghostty-vt",
+         .root_module = exe_mod,
+     });
+-
+     exe.rdynamic = true;
+     exe.entry = .disabled;
+-
+     b.installArtifact(exe);
+ }
+--- a/build.zig.zon
++++ b/build.zig.zon
+@@ -2,16 +2,9 @@
+     .name = .wterm_ghostty,
+     .version = "0.0.0",
+     .fingerprint = 0xe486cbc71ccad0ae,
+-    .minimum_zig_version = "0.15.2",
++    .minimum_zig_version = "0.17.0",
+     .dependencies = .{
+-        .ghostty = .{
+-            .url = "https://github.com/ghostty-org/ghostty/archive/v1.3.1.tar.gz",
+-            .hash = "ghostty-1.3.1-5UdBCwYm-gQeBa4bu1-sMooCQS4KVriv5wWSIJ_sI-Cb",
+-        },
+-        .wuffs = .{
+-            .url = "https://deps.files.ghostty.org/wuffs-122037b39d577ec2db3fd7b2130e7b69ef6cc1807d68607a7c232c958315d381b5cd.tar.gz",
+-            .hash = "N-V-__8AAAzZywE3s51XfsLbP9eyEw57ae9swYB9aGB6fCMs",
+-        },
++        .ghostty = .{ .path = "../ghostty" },
+     },
+     .paths = .{
+         "build.zig",
+--- a/src/wasm_api.zig
++++ b/src/wasm_api.zig
+@@ -7,16 +7,23 @@
+ const Style = vt.Style;
+ const color = vt.color;
+ const modes = vt.modes;
+-const ReadonlyHandler = vt.ReadonlyHandler;
++const ReadonlyHandler = vt.TerminalStream.Handler;
+ const StreamAction = vt.StreamAction;
+ const KittyHandler = vt.apc.Handler;
+ const KittyCommand = vt.kitty.graphics.Command;
+ const KittyImage = vt.kitty.graphics.Image;
+ const KittyStorage = vt.kitty.graphics.ImageStorage;
++const GlyphRequest = vt.apc.glyph.Request;
++const GlyphResponse = vt.apc.glyph.Response;
+ 
+ const Allocator = std.mem.Allocator;
+ const allocator = std.heap.wasm_allocator;
+ 
++/// Freestanding WASM has no syscalls; upstream degrades TinyIo to failing ops.
++fn ioImpl() std.Io {
++    return vt.TinyIo.init.io();
++}
++
+ const GRAPHICS_IMAGE_RECORD_BYTES = 16;
+ const GRAPHICS_PLACEMENT_RECORD_BYTES = 60;
+ const GRAPHICS_MAX_RECORDS = 16 * 1024;
+@@ -157,7 +164,7 @@
+ // or invalidated handles, even when their slots are reused.
+ const PositionTracker = struct {
+     const Entry = struct { id: u32, pin: *vt.Pin, screen: *Screen };
+-    entries: [64]?Entry = [_]?Entry{null} ** 64,
++    entries: [64]?Entry = @splat(null),
+     next_id: u32 = 1,
+ 
+     fn clear(self: *PositionTracker) void {
+@@ -185,7 +192,7 @@
+ 
+ const ResponseQueue = struct {
+     slots: [RESPONSE_QUEUE_MAX][RESPONSE_MAX_BYTES]u8 = undefined,
+-    lens: [RESPONSE_QUEUE_MAX]u8 = [_]u8{0} ** RESPONSE_QUEUE_MAX,
++    lens: [RESPONSE_QUEUE_MAX]u8 = @splat(0),
+     head: u16 = 0,
+     tail: u16 = 0,
+     count: u16 = 0,
+@@ -236,23 +243,7 @@
+         const take = @min(room, bytes.len);
+         if (take < bytes.len) self.apc_oversized = true;
+         self.apc_bytes += take;
+-        var rem = bytes[0..take];
+-        while (rem.len > 0) {
+-            switch (self.apc.state) {
+-                .kitty => |*parser| if (parser.state == .data) {
+-                    parser.data.appendSlice(parser.arena.child_allocator, rem) catch {
+-                        // Matches feed(): a failed append drops the command.
+-                        self.apc.state.deinit();
+-                        self.apc.state = .{ .ignore = {} };
+-                    };
+-                    return;
+-                },
+-                .ignore => return,
+-                else => {},
+-            }
+-            self.apc.feed(self.alloc, rem[0]);
+-            rem = rem[1..];
+-        }
++        self.apc.feedSlice(self.alloc, bytes[0..take]);
+     }
+ 
+     pub fn init(
+@@ -306,10 +297,18 @@
+         return true;
+     }
+ 
++    fn handleGlyphRequest(self: *ResponseHandler, req: *GlyphRequest) void {
++        const resp = self.inner.terminal.glyphProtocol(self.alloc, req) orelse return;
++        var buf: [GlyphResponse.max_wire_bytes]u8 = undefined;
++        var writer: std.Io.Writer = .fixed(&buf);
++        resp.formatWire(&writer) catch return;
++        self.queue.push(writer.buffered());
++    }
++
+     fn handleKittyCommand(self: *ResponseHandler, cmd: *KittyCommand) void {
+         if (self.rejectNonDirect(cmd)) return;
+ 
+-        const response = self.inner.terminal.kittyGraphics(self.alloc, cmd);
++        const response = self.inner.terminal.kittyGraphics(ioImpl(), self.alloc, cmd);
+ 
+         if (response) |resp| {
+             if (!resp.ok()) self.rejected_images.* +%= 1;
+@@ -325,7 +324,7 @@
+         self: *ResponseHandler,
+         comptime action: StreamAction.Tag,
+         value: StreamAction.Value(action),
+-    ) !void {
++    ) void {
+         // Full reset destroys the alternate screen. Release its pins first.
+         if (comptime action == .full_reset) {
+             self.positions.clear();
+@@ -337,7 +336,7 @@
+         switch (action) {
+             .set_mode => {
+                 const was_synchronized = self.inner.terminal.modes.get(.synchronized_output);
+-                try self.inner.vt(action, value);
++                self.inner.vt(action, value);
+                 if (value.mode == .synchronized_output and
+                     !was_synchronized and
+                     self.inner.terminal.modes.get(.synchronized_output))
+@@ -347,7 +346,7 @@
+             },
+             .restore_mode => {
+                 const was_synchronized = self.inner.terminal.modes.get(.synchronized_output);
+-                try self.inner.vt(action, value);
++                self.inner.vt(action, value);
+                 if (value.mode == .synchronized_output and
+                     !was_synchronized and
+                     self.inner.terminal.modes.get(.synchronized_output))
+@@ -419,13 +418,13 @@
+             .report_pwd => self.directory.set(value.url),
+             .clipboard_contents => self.clipboard.set(value.kind, value.data),
+             .semantic_prompt => {
+-                try self.inner.vt(action, value);
++                self.inner.vt(action, value);
+                 if (self.inner.terminal.screens.active_key == .primary)
+                     self.shell.marker(value);
+             },
+             .bell => self.bell_count.* +|= 1,
+             .color_operation => {
+-                try self.inner.vt(action, value);
++                self.inner.vt(action, value);
+                 var it = value.requests.constIterator(0);
+                 while (it.next()) |request| {
+                     // DynamicRGB.reset stores the configured default in override.
+@@ -497,12 +496,14 @@
+                     defer owned_cmd.deinit(self.alloc);
+                     switch (owned_cmd) {
+                         .kitty => |*kitty_cmd| self.handleKittyCommand(kitty_cmd),
++                        .glyph => |*glyph_req| self.handleGlyphRequest(glyph_req),
++                        .unknown => {},
+                     }
+                 }
+                 self.apc_bytes = 0;
+                 self.apc_oversized = false;
+             },
+-            else => try self.inner.vt(action, value),
++            else => self.inner.vt(action, value),
+         }
+     }
+ };
+@@ -523,6 +524,7 @@
+     graphics_generation: u32,
+     graphics_fingerprint: u64,
+     graphics_screen: u32,
++    graphics_dirty: u64,
+     rejected_images: u32,
+     evicted_images: u32,
+     positions: PositionTracker,
+@@ -566,11 +568,11 @@
+     while (images.next()) |entry| {
+         const image = entry.value_ptr;
+         mix(&fingerprint, image.id);
+-        mix(&fingerprint, image.transmit_time);
++        mix(&fingerprint, image.generation);
+         mix(&fingerprint, image.width);
+         mix(&fingerprint, image.height);
+         mix(&fingerprint, @intFromEnum(image.format));
+-        mix(&fingerprint, image.data.len);
++        mix(&fingerprint, image.data.len());
+     }
+ 
+     mix(&fingerprint, activeStorage(state).placements.count());
+@@ -580,7 +582,7 @@
+         const placement = entry.value_ptr;
+         const pin = switch (placement.location) {
+             .pin => |p| p,
+-            .virtual => continue,
++            .virtual, .relative => continue,
+         };
+         const point = screen.pages.pointFromPin(.screen, pin.*) orelse {
+             mix(&fingerprint, entry.key_ptr.image_id);
+@@ -616,7 +618,7 @@
+ fn refreshGraphicsGeneration(state: *State) void {
+     const screen = @intFromEnum(state.terminal.screens.active_key);
+     const storage = activeStorage(state);
+-    if (!storage.dirty and state.graphics_screen == screen) return;
++    if (storage.dirty == state.graphics_dirty and state.graphics_screen == screen) return;
+ 
+     const fingerprint = graphicsFingerprint(state);
+     if (fingerprint != state.graphics_fingerprint) {
+@@ -627,7 +629,7 @@
+     // This field is informational in upstream Ghostty. Clearing it here
+     // makes it a useful change hint for this adapter without affecting the
+     // terminal's image storage or compositor behavior.
+-    storage.dirty = false;
++    state.graphics_dirty = storage.dirty;
+ }
+ 
+ fn writeU32(buf: [*]u8, offset: usize, value: u32) void {
+@@ -662,7 +664,7 @@
+     // transmit counter. Use that resident value as the cache-busting version
+     // instead of keeping a side map of every ID ever mentioned by a terminal.
+     // This means evicted/deleted IDs release all version metadata immediately.
+-    var base: u32 = @truncate(image.transmit_time);
++    var base: u32 = @truncate(image.generation);
+     base &= 0x7fffffff;
+     if (base == 0) base = 1;
+     return base | (@as(u32, @intFromEnum(state.terminal.screens.active_key)) << 31);
+@@ -678,7 +680,7 @@
+         const placement = entry.value_ptr;
+         const pin = switch (placement.location) {
+             .pin => |p| p,
+-            .virtual => continue,
++            .virtual, .relative => continue,
+         };
+         const point = screen.pages.pointFromPin(.screen, pin.*) orelse continue;
+         const image = activeStorage(state).imageById(entry.key_ptr.image_id) orelse continue;
+@@ -719,9 +721,9 @@
+     colors.foreground.default = themeRgb(values[0]);
+     colors.background.default = themeRgb(values[1]);
+     colors.cursor.default = themeRgb(values[2]);
+-    var palette = colors.palette.original;
++    var palette = colors.palette.original.*;
+     for (0..16) |index| palette[index] = themeRgb(values[index + 3]);
+-    colors.palette.changeDefault(palette);
++    colors.palette.changeDefault(allocator, palette) catch return;
+     state.terminal.flags.dirty.palette = true;
+ }
+ 
+@@ -734,10 +736,10 @@
+     image_storage_limit: u32,
+ ) usize {
+     const state = allocator.create(State) catch return 0;
+-    state.terminal = Terminal.init(allocator, .{
++    state.terminal = Terminal.init(ioImpl(), allocator, .{
+         .cols = cols,
+         .rows = rows,
+-        .max_scrollback = max_scrollback,
++        .max_scrollback_bytes = max_scrollback,
+         .kitty_image_storage_limit = image_storage_limit,
+         .colors = .{
+             .background = .init(.{
+@@ -769,7 +771,7 @@
+     state.rejected_images = 0;
+     state.evicted_images = 0;
+     state.positions = .{};
+-    state.stream = .initAlloc(allocator, .init(
++    state.stream = .init(.{ .allocator = allocator, .handler = .init(
+         allocator,
+         &state.terminal,
+         &state.responses,
+@@ -781,11 +783,11 @@
+         &state.synchronized_output_generation,
+         &state.rejected_images,
+         &state.positions,
+-    ));
++    ) });
+     state.render = RenderState.empty;
+     state.graphics_fingerprint = graphicsFingerprint(state);
+     state.graphics_screen = @intFromEnum(state.terminal.screens.active_key);
+-    activeStorage(state).dirty = false;
++    state.graphics_dirty = activeStorage(state).dirty;
+     return @intFromPtr(state);
+ }
+ 
+@@ -800,7 +802,7 @@
+ 
+ export fn resize(ptr: usize, cols: u16, rows: u16) void {
+     const state = stateFromPtr(ptr);
+-    state.terminal.resize(allocator, cols, rows) catch {};
++    state.terminal.resize(allocator, .{ .cols = cols, .rows = rows }) catch {};
+     refreshGraphicsGeneration(state);
+ }
+ 
+@@ -829,7 +831,7 @@
+                 continue;
+             }
+         }
+-        stream.next(rem[0]) catch {};
++        stream.next(rem[0]);
+         rem = rem[1..];
+     }
+     refreshGraphicsGeneration(state);
+@@ -872,9 +874,9 @@
+                 stream.csiDispatch(.{
+                     .intermediates = &intermediates,
+                     .params = params[0..count],
+-                    .params_sep = .initEmpty(),
++                    .params_sep = .empty,
+                     .final = c,
+-                }) catch {};
++                });
+                 return i + 1;
+             },
+             else => return 0,
+@@ -891,7 +893,7 @@
+         const b = bytes[i];
+         if (b < 0x80) {
+             if (b < 0x20 or b == 0x7f) break;
+-            stream.print(b) catch {};
++            stream.print(b);
+             i += 1;
+             continue;
+         }
+@@ -899,7 +901,7 @@
+         if (i + len > bytes.len) break;
+         const cp = std.unicode.utf8Decode(bytes[i .. i + len]) catch break;
+         if (cp < 0xa0) break;
+-        stream.print(cp) catch {};
++        stream.print(cp);
+         i += len;
+     }
+     return i;
+@@ -1033,7 +1035,7 @@
+     out: *[cell_bytes]u8,
+ ) void {
+     const cp: u32 = switch (raw.content_tag) {
+-        .codepoint, .codepoint_grapheme => raw.content.codepoint,
++        .codepoint, .codepoint_grapheme => raw.content.codepoint.data,
+         else => 0,
+     };
+ 
+@@ -1044,7 +1046,7 @@
+ 
+     const fg = if (has_fg) resolveRgb(style.fg_color, palette) else color.RGB{};
+     const bg = if (has_bg_cell) switch (raw.content_tag) {
+-        .bg_color_palette => palette[raw.content.color_palette],
++        .bg_color_palette => palette[raw.content.color_palette.data],
+         .bg_color_rgb => blk: {
+             const c = raw.content.color_rgb;
+             break :blk color.RGB{ .r = c.r, .g = c.g, .b = c.b };
+@@ -1179,7 +1181,7 @@
+     const raw = cells.items(.raw);
+     if (col >= raw.len or raw[col].content_tag != .codepoint_grapheme) return 0;
+     return encodeGrapheme(
+-        raw[col].content.codepoint,
++        raw[col].content.codepoint.data,
+         cells.items(.grapheme)[col],
+         buf_ptr,
+         buf_len,
+@@ -1194,7 +1196,7 @@
+ ) u32 {
+     const cells = pin.cells(.all);
+     if (col >= cells.len or !cells[col].hyperlink) return 0;
+-    const page = &pin.node.data;
++    const page = pin.node.page();
+     const link_id = page.lookupHyperlink(&cells[col]) orelse return 0;
+     const entry = page.hyperlink_set.get(page.memory, link_id);
+     const uri = entry.uri.slice(page.memory);
+@@ -1395,13 +1397,14 @@
+     if (imageVersionFor(state, image_id) != version) return null;
+     if (image.format != .rgb and image.format != .rgba) return null;
+     if (image.width == 0 or image.height == 0) return null;
+-    const bpp = image.format.bpp();
++    const bpp: usize = if (image.format == .rgba) 4 else 3;
+     const expected = std.math.mul(
+         usize,
+         std.math.mul(usize, image.width, image.height) catch return null,
+         bpp,
+     ) catch return null;
+-    if (image.data.len != expected) return null;
++    const data = image.data.bytes() orelse return null;
++    if (data.len != expected) return null;
+     return image;
+ }
+ 
+@@ -1423,15 +1426,16 @@
+         4,
+     ) catch return 0;
+     if (buf_ptr == 0 or buf_len < size) return 0;
++    const data = image.data.bytes() orelse return 0;
+     const out = @as([*]u8, @ptrFromInt(buf_ptr))[0..size];
+     switch (image.format) {
+-        .rgba => @memcpy(out, image.data),
++        .rgba => @memcpy(out, data),
+         .rgb => for (0..@as(usize, image.width) * image.height) |i| {
+             const src = i * 3;
+             const dst = i * 4;
+-            out[dst] = image.data[src];
+-            out[dst + 1] = image.data[src + 1];
+-            out[dst + 2] = image.data[src + 2];
++            out[dst] = data[src];
++            out[dst + 1] = data[src + 1];
++            out[dst + 2] = data[src + 2];
+             out[dst + 3] = 255;
+         },
+         else => return 0,
+@@ -1562,7 +1566,7 @@
+     var total: usize = 0;
+     var node_ = screen.pages.pages.first;
+     while (node_) |node| : (node_ = node.next) {
+-        total += node.data.size.rows;
++        total += node.rows();
+     }
+     if (total <= state.terminal.rows) return 0;
+     return @intCast(total - state.terminal.rows);
+@@ -1631,7 +1635,7 @@
+     const cells = pin.cells(.all);
+     if (col >= cells.len or cells[col].content_tag != .codepoint_grapheme) return 0;
+     return encodeGrapheme(
+-        cells[col].content.codepoint,
++        cells[col].content.codepoint.data,
+         pin.grapheme(&cells[col]) orelse return 0,
+         buf_ptr,
+         buf_len,

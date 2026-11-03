@@ -1,0 +1,20 @@
+--- a/src/terminal/stream.zig
++++ b/src/terminal/stream.zig
+@@ -1539,7 +1539,7 @@
+             self.csiDispatch(action);
+         }
+ 
+-        inline fn print(self: *Self, c: u21) void {
++        pub inline fn print(self: *Self, c: u21) void {
+             self.handler.vt(.print, .{ .cp = c });
+         }
+ 
+@@ -1575,7 +1575,7 @@
+             }
+         }
+ 
+-        inline fn csiDispatch(self: *Self, input: Parser.Action.CSI) void {
++        pub inline fn csiDispatch(self: *Self, input: Parser.Action.CSI) void {
+             // The branch hints here are based on real world data
+             // which indicates that the most common CSI finals are:
+             //

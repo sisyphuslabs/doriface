@@ -1,0 +1,45 @@
+--- a/src/terminal/kitty/graphics_storage.zig
++++ b/src/terminal/kitty/graphics_storage.zig
+@@ -1,4 +1,5 @@
+ const std = @import("std");
++const builtin = @import("builtin");
+ const assert = @import("../../quirks.zig").inlineAssert;
+ const Allocator = std.mem.Allocator;
+ const ArenaAllocator = std.heap.ArenaAllocator;
+@@ -17,6 +18,12 @@
+ const Command = command.Command;
+ 
+ const log = std.log.scoped(.kitty_gfx);
++
++/// WASM linear memory never shrinks, so resident image and placement
++/// metadata is bounded independently of decoded image bytes there.
++const wasm_max_images: usize = 4096;
++const wasm_max_placements: usize = 4096;
++const bound_metadata = builtin.target.cpu.arch.isWasm();
+ 
+ /// Process-global counter backing all generation stamps (see
+ /// ImageStorage.generation and Image.generation). This is global rather
+@@ -414,6 +421,11 @@
+         // If the image itself is over the limit, then error immediately
+         if (new_len > self.total_limit) return error.OutOfMemory;
+ 
++        if (comptime bound_metadata) {
++            if (!self.images.contains(img.id) and
++                self.images.count() >= wasm_max_images) return error.OutOfMemory;
++        }
++
+         // Credit an existing image's reservation before calculating the
+         // replacement size. In particular, a completed live transmission
+         // replacing pending snapshot metadata must be able to reuse the
+@@ -535,6 +547,11 @@
+                 .id = placement_id,
+             },
+         };
++
++        if (comptime bound_metadata) {
++            if (!self.placements.contains(key) and
++                self.placements.count() >= wasm_max_placements) return error.OutOfMemory;
++        }
+ 
+         const gop = try self.placements.getOrPut(alloc, key);
+         if (gop.found_existing) {

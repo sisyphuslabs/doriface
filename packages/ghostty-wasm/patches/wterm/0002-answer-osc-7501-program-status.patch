@@ -1,0 +1,140 @@
+--- a/src/wasm_api.zig
++++ b/src/wasm_api.zig
+@@ -15,6 +15,9 @@
+ const KittyStorage = vt.kitty.graphics.ImageStorage;
+ const GlyphRequest = vt.apc.glyph.Request;
+ const GlyphResponse = vt.apc.glyph.Response;
++const ProgramStatus = vt.osc.Command.ProgramStatus;
++const ProgramStatusReport = ProgramStatus.Report;
++const PROGRAM_STATUS_QUERY_REPLY = vt.osc.program_status.query_reply;
+ 
+ const Allocator = std.mem.Allocator;
+ const allocator = std.heap.wasm_allocator;
+@@ -89,7 +92,7 @@
+ // order they were produced. This mirrors the built-in core's contract.
+ 
+ const RESPONSE_QUEUE_MAX = 256;
+-const RESPONSE_MAX_BYTES = 64;
++const RESPONSE_MAX_BYTES = 128;
+ const TITLE_BUFFER_BYTES = 256;
+ // Upstream's fixed 2048-byte OSC buffer reserves one byte for the trailing NUL.
+ const DIRECTORY_BUFFER_BYTES = 2047;
+@@ -190,6 +193,30 @@
+     }
+ };
+ 
++/// The root record of the OSC 7501 Program Status Protocol. Records with an
++/// id are children owned by the program and are not tracked here.
++const ProgramStatusState = struct {
++    const APP_MAX_BYTES = 64;
++    state: i32 = -1,
++    progress: i32 = -1,
++    app: [APP_MAX_BYTES]u8 = undefined,
++    app_len: u8 = 0,
++
++    fn apply(self: *ProgramStatusState, report: ProgramStatusReport) void {
++        if (report.state == .clear) {
++            if (report.readOption(.id) == null) self.* = .{};
++            return;
++        }
++        if (report.readOption(.id) != null) return;
++        self.state = @intFromEnum(report.state);
++        self.progress = if (report.readOption(.progress)) |value| value else -1;
++        const app = report.readOption(.app) orelse "";
++        const len = @min(app.len, APP_MAX_BYTES);
++        @memcpy(self.app[0..len], app[0..len]);
++        self.app_len = @intCast(len);
++    }
++};
++
+ const ResponseQueue = struct {
+     slots: [RESPONSE_QUEUE_MAX][RESPONSE_MAX_BYTES]u8 = undefined,
+     lens: [RESPONSE_QUEUE_MAX]u8 = @splat(0),
+@@ -232,6 +259,7 @@
+     synchronized_output_generation: *u32,
+     rejected_images: *u32,
+     positions: *PositionTracker,
++    program_status: *ProgramStatusState,
+     apc: KittyHandler = .{},
+     apc_bytes: usize = 0,
+     apc_oversized: bool = false,
+@@ -258,6 +286,7 @@
+         generation: *u32,
+         rejected_images: *u32,
+         positions: *PositionTracker,
++        program_status: *ProgramStatusState,
+     ) ResponseHandler {
+         return .{
+             .alloc = alloc,
+@@ -271,6 +300,7 @@
+             .synchronized_output_generation = generation,
+             .rejected_images = rejected_images,
+             .positions = positions,
++            .program_status = program_status,
+         };
+     }
+ 
+@@ -423,6 +453,14 @@
+                     self.shell.marker(value);
+             },
+             .bell => self.bell_count.* +|= 1,
++            .program_status => switch (value) {
++                .report => |report| self.program_status.apply(report),
++                .query => |terminator| switch (terminator) {
++                    inline else => |t| self.queue.push(
++                        "\x1b]7501;" ++ PROGRAM_STATUS_QUERY_REPLY ++ comptime t.string(),
++                    ),
++                },
++            },
+             .color_operation => {
+                 self.inner.vt(action, value);
+                 var it = value.requests.constIterator(0);
+@@ -528,6 +566,7 @@
+     rejected_images: u32,
+     evicted_images: u32,
+     positions: PositionTracker,
++    program_status: ProgramStatusState,
+ };
+ 
+ fn stateFromPtr(ptr: usize) *State {
+@@ -771,6 +810,7 @@
+     state.rejected_images = 0;
+     state.evicted_images = 0;
+     state.positions = .{};
++    state.program_status = .{};
+     state.stream = .init(.{ .allocator = allocator, .handler = .init(
+         allocator,
+         &state.terminal,
+@@ -783,6 +823,7 @@
+         &state.synchronized_output_generation,
+         &state.rejected_images,
+         &state.positions,
++        &state.program_status,
+     ) });
+     state.render = RenderState.empty;
+     state.graphics_fingerprint = graphicsFingerprint(state);
+@@ -938,6 +979,24 @@
+ 
+ export fn get_working_directory_ptr(ptr: usize) [*]const u8 {
+     return &stateFromPtr(ptr).directory.bytes;
++}
++
++/// Root OSC 7501 state index (idle, working, done, blocked, error) or -1.
++export fn get_program_status_state(ptr: usize) i32 {
++    return stateFromPtr(ptr).program_status.state;
++}
++
++/// Root OSC 7501 progress percentage, or -1 when the report carries none.
++export fn get_program_status_progress(ptr: usize) i32 {
++    return stateFromPtr(ptr).program_status.progress;
++}
++
++export fn get_program_status_app_len(ptr: usize) i32 {
++    return stateFromPtr(ptr).program_status.app_len;
++}
++
++export fn get_program_status_app_ptr(ptr: usize) [*]const u8 {
++    return &stateFromPtr(ptr).program_status.app;
+ }
+ 
+ export fn get_bell_count(ptr: usize) u32 {

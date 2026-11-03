@@ -1,0 +1,18 @@
+--- a/src/terminal/kitty/graphics_storage.zig
++++ b/src/terminal/kitty/graphics_storage.zig
+@@ -170,6 +170,7 @@
+     /// space. Unused images take priority.
+     total_bytes: usize = 0,
+     total_limit: usize = 320 * 1000 * 1000, // 320MB
++    evicted_count: usize = 0,
+ 
+     /// A ticket for attaching pixels to an image that was added before its
+     /// pixels arrived. `addPendingImage` returns one.
+@@ -1897,6 +1898,7 @@
+ 
+             evicted += image_len;
+             self.total_bytes -= image_len;
++            self.evicted_count += 1;
+ 
+             entry.value_ptr.deinit(alloc);
+             self.images.removeByPtr(entry.key_ptr);

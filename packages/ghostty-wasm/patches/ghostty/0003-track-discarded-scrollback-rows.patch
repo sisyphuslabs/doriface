@@ -1,0 +1,63 @@
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -455,6 +455,9 @@
+ /// The total number of rows represented by this PageList. This is used
+ /// specifically for scrollbar information so we can have the total size.
+ total_rows: usize,
++
++/// Rows removed from the top of history by pruning since the last reset.
++discarded_rows: usize = 0,
+ 
+ /// The list of tracked pins. These are kept up to date automatically.
+ tracked_pins: PinSet,
+@@ -1036,6 +1039,7 @@
+ 
+     // Our total rows always goes back to the default
+     self.total_rows = self.rows;
++    self.discarded_rows = 0;
+ 
+     // Update all our tracked pins to point to our first page top-left
+     // and mark them as garbage, because it got mangled in a way where
+@@ -1187,6 +1191,7 @@
+         .cols = self.cols,
+         .rows = self.rows,
+         .total_rows = total_rows,
++        .discarded_rows = self.discarded_rows,
+         .tracked_pins = tracked_pins,
+         .viewport = .{ .active = {} },
+         .viewport_pin = viewport_pin,
+@@ -4050,6 +4055,7 @@
+ 
+         // Decrease our total row count from the pruned page
+         self.total_rows -= first.rows();
++        self.discarded_rows += first.rows();
+ 
+         // If our total row count is now less than our required
+         // rows then we can't prune. The "+ 1" is because we'll add one
+@@ -4058,6 +4064,7 @@
+             self.pages.prepend(first);
+             assert(self.pages.first == first);
+             self.total_rows += first.rows();
++            self.discarded_rows -= first.rows();
+             break :prune;
+         }
+ 
+@@ -6827,6 +6834,10 @@
+ ///
+ /// This is very slow, it traverses the full list of pages to count the
+ /// rows, so it is not pub. This is only used for testing/debugging.
++pub fn discardedRows(self: *const PageList) usize {
++    return self.discarded_rows;
++}
++
+ fn totalRows(self: *const PageList) usize {
+     var rows: usize = 0;
+     var node_ = self.pages.first;
+@@ -7122,6 +7133,7 @@
+             // by paths that already adjusted total_rows.
+             pagelist.erasePage(first);
+             pagelist.total_rows -= first_rows;
++            pagelist.discarded_rows += first_rows;
+             removed += first_rows;
+         }
+ 

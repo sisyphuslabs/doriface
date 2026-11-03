@@ -1,0 +1,27 @@
+{
+  "name": "@doriface/ghostty-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "files": [
+    "src",
+    "wasm",
+    "NOTICE"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ghostty-vt.wasm": "./wasm/ghostty-vt.wasm",
+    "./build.json": "./wasm/build.json"
+  },
+  "scripts": {
+    "build:wasm": "bun scripts/build.ts",
+    "verify:wasm": "bun scripts/verify.ts"
+  },
+  "devDependencies": {
+    "@wterm/ghostty": "0.5.8"
+  },
+  "peerDependencies": {
+    "@wterm/ghostty": "0.5.8"
+  }
+}

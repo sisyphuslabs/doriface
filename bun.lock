@@ -72,6 +72,16 @@
         "@doriface/protocol": "workspace:*",
       },
     },
+    "packages/ghostty-wasm": {
+      "name": "@doriface/ghostty-wasm",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@wterm/ghostty": "0.5.8",
+      },
+      "peerDependencies": {
+        "@wterm/ghostty": "0.5.8",
+      },
+    },
     "packages/protocol": {
       "name": "@doriface/protocol",
       "version": "0.0.0",
@@ -301,6 +311,8 @@
     "@doriface/client": ["@doriface/client@workspace:packages/client"],
 
     "@doriface/desktop": ["@doriface/desktop@workspace:apps/desktop"],
+
+    "@doriface/ghostty-wasm": ["@doriface/ghostty-wasm@workspace:packages/ghostty-wasm"],
 
     "@doriface/host": ["@doriface/host@workspace:apps/host"],
 
