@@ -17,7 +17,7 @@ export interface DialogProps {
 
 const popupClass = "w-[min(28rem,calc(100%-2rem))] p-5";
 const titleClass = "text-lg font-semibold text-foreground";
-const descriptionClass = "mt-1.5 text-base text-muted-foreground";
+const descriptionClass = "mt-1.5 text-base text-pretty text-muted-foreground";
 
 function Body({ children, actions }: Pick<DialogProps, "children" | "actions">) {
   return (
