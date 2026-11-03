@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "types",
+    "rootDir": ".",
+    "types": ["bun"]
+  },
+  "include": ["."],
+  "exclude": ["types"],
+  "references": [
+    {
+      "path": "../../packages/relay-client"
+    },
+    {
+      "path": "../../packages/protocol"
+    },
+    {
+      "path": "../../packages/crypto"
+    },
+    {
+      "path": "../../packages/client"
+    },
+    {
+      "path": "../../apps/host"
+    }
+  ]
+}

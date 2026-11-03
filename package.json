@@ -4,7 +4,8 @@
   "license": "AGPL-3.0-only",
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "tests/relay"
   ],
   "type": "module",
   "scripts": {
@@ -14,7 +15,10 @@
     "fmt:check": "oxfmt --check",
     "gen:api:check": "bun run --cwd packages/protocol gen:api:check",
     "test": "bun test",
-    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run gen:api:check && bun run test"
+    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run gen:api:check && bun run test",
+    "relay:fetch": "bun tests/relay/private-relay.ts fetch",
+    "relay:test": "bun tests/relay/private-relay.ts test",
+    "relay:dev": "bun tests/relay/private-relay.ts dev"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",

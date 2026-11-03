@@ -8,6 +8,7 @@ coverage/
 playwright-report/
 test-results/
 .wrangler/
+.relay/
 .dev.vars
 .env
 .env.*
