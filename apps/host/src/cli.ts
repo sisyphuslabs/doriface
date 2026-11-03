@@ -1,0 +1,72 @@
+#!/usr/bin/env bun
+import { parseArgs } from "node:util";
+import { assertValidToken, generateToken } from "./auth.ts";
+import { HOST_VERSION, startHost } from "./host.ts";
+import { parseListen } from "./listen.ts";
+
+const USAGE = `usage: doriface-host [options]
+
+  --listen <host:port>  where to listen (default 127.0.0.1:7766; loopback only)
+  --hc <path>           the herdr-core binary (default hc)
+  --session <name>      the hc session to reach (hc connect --session)
+  --token <token>       the client token (default $DORIFACE_HOST_TOKEN, else 32 random bytes)
+  --print-token         print the token on stdout once listening
+  --unsafe-listen       allow a non-loopback --listen (plaintext: anyone who can reach it gets a shell)
+  -h, --help            show this help`;
+
+const log = (line: string): void => {
+  process.stderr.write(`${new Date().toISOString()} ${line}\n`);
+};
+
+async function main(args: readonly string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: [...args],
+    strict: true,
+    allowPositionals: false,
+    options: {
+      listen: { type: "string", default: "127.0.0.1:7766" },
+      hc: { type: "string", default: "hc" },
+      session: { type: "string" },
+      token: { type: "string" },
+      "print-token": { type: "boolean", default: false },
+      "unsafe-listen": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
+    },
+  });
+  if (values.help) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
+  const given = values.token ?? process.env["DORIFACE_HOST_TOKEN"] ?? "";
+  const token = given === "" ? generateToken() : assertValidToken(given);
+  const host = await startHost({
+    listen: parseListen(values.listen),
+    token,
+    hc: values.hc,
+    session: values.session,
+    unsafeListen: values["unsafe-listen"],
+    log,
+  });
+  const session = values.session === undefined ? "" : `, session ${values.session}`;
+  log(`doriface-host ${HOST_VERSION} listening on ${host.url} (hc ${host.hcVersion}${session})`);
+  if (values["print-token"]) process.stdout.write(`${token}\n`);
+  else if (given === "") log("generated a token; pass --print-token to see it");
+
+  const shutdown = (signal: string): void => {
+    log(`${signal}: closing all pipes`);
+    host.stop().then(
+      () => process.exit(0),
+      (error: unknown) => {
+        log(`shutdown failed: ${String(error)}`);
+        process.exit(1);
+      },
+    );
+  };
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+}
+
+main(Bun.argv.slice(2)).catch((error: unknown) => {
+  process.stderr.write(`doriface-host: ${error instanceof Error ? error.message : String(error)}\n\n${USAGE}\n`);
+  process.exit(2);
+});
