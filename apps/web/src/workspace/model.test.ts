@@ -1,6 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { agentStatus, groupAgents } from "./model.ts";
+import { agentStatus, firstInSpace, groupAgents, spaceId, toSpaces } from "./model.ts";
 
 const terminal = (fields: Partial<Terminal>): Terminal => ({
   address: "t1",
@@ -13,6 +13,21 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
   screen: "exact",
   state: "live",
   ...fields,
+});
+
+describe("spaces", () => {
+  test("one name on two machines is two spaces, each opening and matching its own machine's terminal", () => {
+    const here = terminal({ address: "t1", cwd: "/home/me/api" });
+    const there = terminal({ address: "box/t4", cwd: "/srv/api" });
+    const spaces = toSpaces([here, there]);
+    expect(spaces.map((space) => space.name)).toEqual(["api", "api"]);
+    expect(new Set(spaces.map((space) => space.id)).size).toBe(2);
+    for (const active of [here, there]) {
+      const selected = spaces.filter((space) => space.id === spaceId(active));
+      expect(selected).toHaveLength(1);
+      expect(firstInSpace([here, there], selected[0]?.id ?? "")).toBe(active.address);
+    }
+  });
 });
 
 describe("agentStatus", () => {

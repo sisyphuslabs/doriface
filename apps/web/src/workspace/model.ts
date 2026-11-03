@@ -30,6 +30,12 @@ export function machineOf(address: string): string | undefined {
   return slash === -1 ? undefined : address.slice(0, slash);
 }
 
+/** A machine's id: `local` for this one, `machine:<name>` for an added one, unique even when the names match. */
+export const idOfMachine = (name: string | undefined): string => (name === undefined ? "local" : `machine:${name}`);
+
+/** The id of the machine an address is on: this one for a bare `t7`, the named machine for `machine/t7`. */
+export const machineId = (address: string): string => idOfMachine(machineOf(address));
+
 function basename(path: string): string {
   return path.split("/").findLast((part) => part !== "") ?? "/";
 }
@@ -37,6 +43,14 @@ function basename(path: string): string {
 /** A space is the `space` label, else the working directory's last segment. */
 export function spaceName(terminal: Terminal): string {
   return terminal.labels["space"] ?? basename(terminal.foreground?.cwd ?? terminal.cwd);
+}
+
+/**
+ * Which space a terminal is in: its machine's id and the space name, so a name used on two machines is two spaces.
+ * Selection, list keys and opening a space all compare this id, never the name alone.
+ */
+export function spaceId(terminal: Terminal): string {
+  return `${machineId(terminal.address)}/${spaceName(terminal)}`;
 }
 
 /** "<1m", "6m", "2h", "3d" since a moment, for agent rows. */
@@ -91,9 +105,8 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
   for (const terminal of terminals) {
     if (terminal.state !== "live") continue;
     const machine = machineOf(terminal.address);
-    const name = spaceName(terminal);
-    const key = `${machine ?? ""}/${name}`;
-    const group = groups.get(key) ?? { name, machine, statuses: new Set<AgentStatus>() };
+    const key = spaceId(terminal);
+    const group = groups.get(key) ?? { name: spaceName(terminal), machine, statuses: new Set<AgentStatus>() };
     group.statuses.add(agentStatus(terminal));
     groups.set(key, group);
   }
@@ -102,9 +115,7 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
   );
   return ordered.map(([id, group]) => {
     const attention = ATTENTION.find((status) => group.statuses.has(status));
-    const tabs = terminals.filter(
-      (t) => t.state === "live" && `${machineOf(t.address) ?? ""}/${spaceName(t)}` === id,
-    ).length;
+    const tabs = terminals.filter((t) => t.state === "live" && spaceId(t) === id).length;
     const space: Space = { id, name: group.name, tabs };
     if (group.machine !== undefined) Object.assign(space, { machine: group.machine });
     if (attention !== undefined) Object.assign(space, { attention });
@@ -113,7 +124,6 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
 }
 
 /** The first live terminal of a space, to open when the space is picked. */
-export function firstInSpace(terminals: readonly Terminal[], spaceId: string): string | undefined {
-  return terminals.find((t) => t.state === "live" && `${machineOf(t.address) ?? ""}/${spaceName(t)}` === spaceId)
-    ?.address;
+export function firstInSpace(terminals: readonly Terminal[], id: string): string | undefined {
+  return terminals.find((t) => t.state === "live" && spaceId(t) === id)?.address;
 }
