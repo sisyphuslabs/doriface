@@ -168,13 +168,18 @@ export async function fetchRelay(): Promise<string> {
     return dir;
   }
   const pin = await readPin();
-  const url = relaySource();
   const env = confinedTo(dir, await repositoryVariables());
-  if (kindOf(dir) === "missing") await mkdir(dir);
+  // A checkout already at the pin needs no source; a fresh one finds out it has none before `.relay` exists.
+  let url: string | undefined;
+  if (kindOf(dir) === "missing") {
+    url = relaySource();
+    await mkdir(dir);
+  }
   if (kindOf(dir) !== "directory") throw new RelayCheckoutInvalid(dir);
   if (kindOf(join(dir, ".git")) === "missing") await must(["git", "init", "--quiet"], dir, env);
   if (!(await ownsRepository(dir, env))) throw new RelayCheckoutInvalid(dir);
   if ((await gitOutput(dir, env, ["rev-parse", "--verify", "--quiet", "HEAD"])) !== pin.rev) {
+    url ??= relaySource();
     const fetched = await run(["git", "fetch", "--quiet", "--depth", "1", url, pin.rev], dir, env);
     if (fetched.code !== 0) throw new RelayUnreachable(`the relay at ${pin.rev}`);
     await must(["git", "checkout", "--quiet", "--detach", "--force", "FETCH_HEAD"], dir, env);
