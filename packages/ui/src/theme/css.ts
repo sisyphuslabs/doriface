@@ -24,7 +24,10 @@ export function themeVariables(theme: ResolvedTheme): CssVariables {
   const r = theme.roles;
   const base = rgb(r.background);
   const ink = rgb(r.foreground);
-  const surfaces = [base, rgb(r.canvas), rgb(r.chrome), flatten(r.popover, base), flatten(r.raised, base)];
+  const canvas = rgb(r.canvas);
+  const popover = flatten(r.popover, base);
+  const selected = [base, canvas, popover].map((under) => flatten(r.selected, under));
+  const surfaces = [base, canvas, rgb(r.chrome), popover, flatten(r.raised, base), ...selected];
   const text = (value: string): string => ensureContrast(value, surfaces, AA_TEXT, ink);
   const graphic = (value: string): string => ensureContrast(value, surfaces, AA_GRAPHIC, ink);
   const edge = ensureContrast(hex(mix(base, ink, 0.3)), surfaces, AA_GRAPHIC, ink);
