@@ -192,7 +192,7 @@ export class Uplink {
     }
     if (frame.type === MuxType.PairSlot)
       return closeSocket(ws, CloseCode.RelayProtocolError, "PAIR_SLOT is host to relay");
-    if (frame.type === MuxType.Data) return;
+    if (frame.type === MuxType.Data || frame.type === MuxType.Credit) return;
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
     if (session !== undefined)
       return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);

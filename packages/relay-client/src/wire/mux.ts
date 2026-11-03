@@ -4,9 +4,10 @@ import { PAIR_SLOT_LENGTH, PAIR_SLOT_PATTERN } from "./pair-code.ts";
  * Relay <-> host multiplexing frame: `[type u8][sessionId u32 LE][payload]`.
  * OPEN has no payload, or the 3 slot characters for a pairing session; DATA carries opaque bytes; CLOSE carries a u16
  * LE close code. PAIR_SLOT and PAIR_SLOT_ACK are control frames on sessionId 0; their payloads are in pair-slot.ts.
+ * CREDIT carries a u32 LE count of session bytes the peer consumed (credit.ts); only peers that opted in see it.
  */
 
-export const MuxType = { Open: 1, Data: 2, Close: 3, PairSlot: 4, PairSlotAck: 5 } as const;
+export const MuxType = { Open: 1, Data: 2, Close: 3, PairSlot: 4, PairSlotAck: 5, Credit: 6 } as const;
 export type MuxType = (typeof MuxType)[keyof typeof MuxType];
 
 export const MUX_HEADER_BYTES = 5;
@@ -16,7 +17,8 @@ export type MuxFrame =
   | { readonly type: typeof MuxType.Data; readonly sessionId: number; readonly payload: Uint8Array }
   | { readonly type: typeof MuxType.Close; readonly sessionId: number; readonly code: number }
   | { readonly type: typeof MuxType.PairSlot; readonly sessionId: number; readonly payload: Uint8Array }
-  | { readonly type: typeof MuxType.PairSlotAck; readonly sessionId: number; readonly payload: Uint8Array };
+  | { readonly type: typeof MuxType.PairSlotAck; readonly sessionId: number; readonly payload: Uint8Array }
+  | { readonly type: typeof MuxType.Credit; readonly sessionId: number; readonly bytes: number };
 
 export class MuxError extends Error {
   override readonly name = "MuxError";
@@ -55,6 +57,13 @@ export function encodeClose(sessionId: number, code: number): Uint8Array<ArrayBu
   return out;
 }
 
+export function encodeCredit(sessionId: number, bytes: number): Uint8Array<ArrayBuffer> {
+  if (!Number.isInteger(bytes) || bytes < 0 || bytes > 0xffff_ffff) throw new MuxError(`credit ${bytes} is not a u32`);
+  const out = muxHeader(MuxType.Credit, sessionId, 4);
+  new DataView(out.buffer).setUint32(MUX_HEADER_BYTES, bytes, true);
+  return out;
+}
+
 function decodeOpen(sessionId: number, payload: Uint8Array): MuxFrame {
   if (payload.byteLength === 0) return { type: MuxType.Open, sessionId };
   const pairSlot = payload.byteLength === PAIR_SLOT_LENGTH ? new TextDecoder().decode(payload) : "";
@@ -82,6 +91,9 @@ export function decodeMux(bytes: Uint8Array): MuxFrame {
     case MuxType.Close:
       if (rest !== 2) throw new MuxError(`CLOSE payload must be 2 bytes, got ${rest}`);
       return { type, sessionId, code: view.getUint16(MUX_HEADER_BYTES, true) };
+    case MuxType.Credit:
+      if (rest !== 4) throw new MuxError(`CREDIT payload must be 4 bytes, got ${rest}`);
+      return { type, sessionId, bytes: view.getUint32(MUX_HEADER_BYTES, true) };
     default:
       throw new MuxError(`unknown frame type ${type}`);
   }
