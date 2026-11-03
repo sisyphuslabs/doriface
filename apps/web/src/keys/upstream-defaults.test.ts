@@ -18,3 +18,12 @@ describe("doriface-only bindings", () => {
     expect(triggers.filter((trigger) => taken.has(trigger))).toEqual([]);
   });
 });
+
+describe("the vendored Ghostty table", () => {
+  test("includes the bindings whose modifier Ghostty computes per platform (ctrlOrSuper and its mods variables)", () => {
+    const computed = ["shift+super+p", "ctrl+shift+p", "super+,", "ctrl+,", "super+enter", "ctrl+enter"];
+    const variables = ["super+c", "ctrl+shift+c", "super+v", "ctrl+shift+v", "super+=", "ctrl+="];
+    const listed = new Set(GHOSTTY_DEFAULTS);
+    expect([...computed, ...variables].filter((trigger) => !listed.has(trigger))).toEqual([]);
+  });
+});
