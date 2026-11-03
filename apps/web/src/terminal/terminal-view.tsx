@@ -103,7 +103,10 @@ export function TerminalView(props: TerminalViewProps) {
           // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
           if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
         });
-        attached.onClose(() => onClosed?.(address));
+        // Only the program ending closes the tab; a detach (unmount) or a lost connection leaves it open.
+        attached.onClose((close) => {
+          if (close.by === "core") onClosed?.(address);
+        });
         // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
         if (focused) ready.focus();
         return attached;
