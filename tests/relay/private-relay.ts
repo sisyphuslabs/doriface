@@ -7,7 +7,8 @@
  *   bun run relay:test    fetch, then run the relay suites
  *   bun run relay:dev     fetch, then serve the relay locally with wrangler dev
  *
- * `DORIFACE_RELAY_REPO` overrides the clone URL (default HTTPS with your git credentials; CI passes an SSH URL).
+ * `DORIFACE_RELAY_REPO` overrides the clone URL (default HTTPS with your git credentials; CI keeps the default and gives
+ * git a read-only token through a credential helper).
  * `DORIFACE_RELAY_DIR` points at a relay checkout of your own instead, which is used as it is and never moved.
  */
 import { existsSync, realpathSync } from "node:fs";
