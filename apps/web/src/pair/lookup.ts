@@ -12,7 +12,7 @@ function field(body: unknown, key: string): unknown {
 
 /**
  * Asks the relay which host holds this code's slot. The answer is untrusted: the fingerprint
- * check and the psk handshake authenticate it.
+ * check and the CPace pairing handshake authenticate it.
  */
 export async function lookupCode(code: string, relayUrl: string, signal?: AbortSignal): Promise<PairingParse> {
   let response: Response;
@@ -36,5 +36,5 @@ export async function lookupCode(code: string, relayUrl: string, signal?: AbortS
   const noiseStaticPub = fromBase64Url(noise);
   const signPub = fromBase64Url(sign);
   if (noiseStaticPub === null || signPub === null) return { ok: false, reason: "The relay's answer is malformed." };
-  return offerFrom({ hostId, noiseStaticPub, signPub }, code, relayUrl);
+  return offerFrom({ hostId, noiseStaticPub, signPub }, { mode: "code", code }, relayUrl);
 }
