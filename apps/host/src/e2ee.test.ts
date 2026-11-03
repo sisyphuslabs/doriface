@@ -38,7 +38,11 @@ function nextLog(pattern: RegExp): Promise<string> {
   return promise;
 }
 /** A relay stand-in: the first slot collides (409), later ones register. */
-const slots = { asked: [] as string[], keys: [] as Uint8Array[], released: [] as string[] };
+const slots: { readonly asked: string[]; readonly keys: Uint8Array[]; readonly released: string[] } = {
+  asked: [],
+  keys: [],
+  released: [],
+};
 const releaseWaiters = new Map<string, () => void>();
 /** Resolves when the host releases `slot`; subscribe before the action that should release it. */
 function released(slot: string): Promise<void> {
