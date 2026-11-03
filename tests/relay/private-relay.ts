@@ -1,5 +1,5 @@
 /**
- * The relay is a separate private service, github.com/sisyphuslabs/doriface-relay; its public contract is
+ * The relay server is deployed separately, from its own private repository; its public contract is
  * docs/transport.md. The suites in this directory run this repository's host and client against it, at the commit
  * `relay-pin.json` names, from a checkout this module keeps:
  *
@@ -7,8 +7,9 @@
  *   bun run relay:test    fetch, then run the relay suites
  *   bun run relay:dev     fetch, then serve the relay locally with wrangler dev
  *
- * `DORIFACE_RELAY_REPO` overrides the clone URL (default HTTPS with your git credentials; CI keeps the default and gives
- * git a read-only token through a credential helper).
+ * `RELAY_REPO` names that repository as `owner/name`; it is cloned over HTTPS with your git credentials (CI reads it
+ * from a repository variable and gives git a read-only token through a credential helper). `DORIFACE_RELAY_REPO`
+ * overrides the whole clone URL instead, e.g. for SSH.
  * `DORIFACE_RELAY_DIR` points at a relay checkout of your own instead, which is used as it is and never moved.
  */
 import { lstatSync, readdirSync, realpathSync } from "node:fs";
@@ -19,7 +20,6 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 const MANAGED_DIR = resolve(REPO_ROOT, ".relay");
 
 interface RelayPin {
-  readonly repository: string;
   readonly rev: string;
 }
 
@@ -27,6 +27,9 @@ interface RelayPin {
 export const relayDir = (): string => process.env["DORIFACE_RELAY_DIR"] ?? MANAGED_DIR;
 
 class RelayUnreachable extends Error {}
+
+/** Neither `RELAY_REPO` nor `DORIFACE_RELAY_REPO` says where the relay lives. */
+class RelaySourceUnset extends Error {}
 
 /** `.relay` holds something that is not a repository of its own; it is left exactly as found. */
 class RelayCheckoutInvalid extends Error {}
@@ -39,15 +42,23 @@ async function readPin(): Promise<RelayPin> {
   if (
     typeof pin !== "object" ||
     pin === null ||
-    !("repository" in pin) ||
     !("rev" in pin) ||
-    typeof pin.repository !== "string" ||
     typeof pin.rev !== "string" ||
     !/^[0-9a-f]{40}$/.test(pin.rev)
   ) {
-    throw new Error("relay-pin.json must be {repository, rev} with rev a full commit id");
+    throw new Error("relay-pin.json must be {rev} with rev a full commit id");
   }
-  return { repository: pin.repository, rev: pin.rev };
+  return { rev: pin.rev };
+}
+
+/** The clone URL: `DORIFACE_RELAY_REPO` as given, else HTTPS for `RELAY_REPO` (`owner/name`). */
+function relaySource(): string {
+  const url = process.env["DORIFACE_RELAY_REPO"];
+  if (url) return url;
+  const slug = process.env["RELAY_REPO"];
+  if (!slug) throw new RelaySourceUnset();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) throw new Error("RELAY_REPO must be owner/name");
+  return `https://github.com/${slug}.git`;
 }
 
 /**
@@ -157,7 +168,7 @@ export async function fetchRelay(): Promise<string> {
     return dir;
   }
   const pin = await readPin();
-  const url = process.env["DORIFACE_RELAY_REPO"] ?? `https://github.com/${pin.repository}.git`;
+  const url = relaySource();
   const env = confinedTo(dir, await repositoryVariables());
   if (kindOf(dir) === "missing") await mkdir(dir);
   if (kindOf(dir) !== "directory") throw new RelayCheckoutInvalid(dir);
@@ -165,7 +176,7 @@ export async function fetchRelay(): Promise<string> {
   if (!(await ownsRepository(dir, env))) throw new RelayCheckoutInvalid(dir);
   if ((await gitOutput(dir, env, ["rev-parse", "--verify", "--quiet", "HEAD"])) !== pin.rev) {
     const fetched = await run(["git", "fetch", "--quiet", "--depth", "1", url, pin.rev], dir, env);
-    if (fetched.code !== 0) throw new RelayUnreachable(`${pin.repository} at ${pin.rev} from ${url}`);
+    if (fetched.code !== 0) throw new RelayUnreachable(`the relay at ${pin.rev}`);
     await must(["git", "checkout", "--quiet", "--detach", "--force", "FETCH_HEAD"], dir, env);
   }
   // The checkout is this module's own: discard what `bun install` changes inside the submodule (it marks the vendored
@@ -175,7 +186,7 @@ export async function fetchRelay(): Promise<string> {
   delete installEnv["GIT_DIR"];
   delete installEnv["GIT_WORK_TREE"];
   await must([process.execPath, "install", "--frozen-lockfile"], dir, installEnv);
-  console.log(`relay: ${pin.repository} at ${pin.rev} in ${dir}`);
+  console.log(`relay: ${pin.rev} in ${dir}`);
   return dir;
 }
 
@@ -214,14 +225,18 @@ if (import.meta.main) {
 relay: ${error.message} is not a git checkout of its own, so relay:fetch leaves it alone. Move it aside or delete
 it (rm -rf .relay), then run \`bun run relay:fetch\` again to clone the relay afresh.`);
       process.exitCode = REFUSED_EXIT;
-    } else if (error instanceof RelayUnreachable) {
+    } else if (error instanceof RelaySourceUnset || error instanceof RelayUnreachable) {
+      const what =
+        error instanceof RelaySourceUnset
+          ? "RELAY_REPO is not set, so there is no relay repository to fetch"
+          : `Could not fetch ${error.message}`;
       console.error(`
-Could not fetch the relay (${error.message}).
+${what}.
 
-The relay is a separate private service, github.com/sisyphuslabs/doriface-relay. Its public contract is
-docs/transport.md. Without access, \`bun run check\` still runs every other suite; only the relay suites in tests/relay
-need this checkout. With access, let git reach the repository (\`gh auth setup-git\`, or
-DORIFACE_RELAY_REPO=git@github.com:sisyphuslabs/doriface-relay.git for SSH) and run \`bun run relay:fetch\` again.`);
+The relay server is deployed separately, from its own private repository. Its public contract is docs/transport.md.
+Without access, \`bun run check\` still runs every other suite; only the relay suites in tests/relay need this
+checkout. With access, set RELAY_REPO=<owner>/<name>, let git reach the repository (\`gh auth setup-git\`, or
+DORIFACE_RELAY_REPO=<ssh clone URL> for SSH) and run \`bun run relay:fetch\` again.`);
       process.exitCode = 1;
     } else {
       throw error;

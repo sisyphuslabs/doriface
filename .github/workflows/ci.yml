@@ -53,14 +53,15 @@ jobs:
       - run: bun run lint
       - run: bun run fmt:check
       - run: bun run test
-      # The relay is a separate private service (sisyphuslabs/doriface-relay). tests/relay runs this repository's
-      # host and client against it at the commit relay-pin.json names, cloned over HTTPS with a fine-grained token that
-      # can only read that repository. git asks a step-scoped credential helper for it, so it never appears in a URL,
+      # The relay server is deployed separately, from its own private repository, named by the RELAY_REPO repository
+      # variable. tests/relay runs this repository's host and client against it at the commit relay-pin.json names,
+      # cloned over HTTPS with a fine-grained token that can only read that repository. git asks a step-scoped credential helper for it, so it never appears in a URL,
       # an argument or the log (Actions masks secrets as well).
       - name: Fetch the private relay
         if: env.RELAY_TOKEN_SET == 'true'
         env:
           RELAY_READ_TOKEN: ${{ secrets.DORIFACE_RELAY_READ_TOKEN }}
+          RELAY_REPO: ${{ vars.RELAY_REPO }}
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: credential.https://github.com.helper
           GIT_CONFIG_VALUE_0: '!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "$RELAY_READ_TOKEN"; }; f'
