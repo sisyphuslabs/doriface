@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ColorSwatch, FontFamilyList, PaletteEditor, SettingRow, ShortcutField, Switch } from "../../src/index.ts";
 import { Cell, FORCED, Row, Section } from "./specimen.tsx";
 
@@ -6,6 +7,7 @@ const PALETTE = Array.from({ length: 16 }, (_, index) => `var(--term-color-${ind
 
 /** The parts of the Ghostty-grade terminal settings, each in the states it ships with. */
 export function TerminalSettingsParts() {
+  const [slot, setSlot] = useState(4);
   return (
     <Section title="Terminal settings parts">
       <Row>
@@ -22,7 +24,7 @@ export function TerminalSettingsParts() {
         </Cell>
       </Row>
       <Cell label="PaletteEditor · ansi 4 selected" className="items-stretch">
-        <PaletteEditor colors={PALETTE} selected={4} showValues={false} />
+        <PaletteEditor colors={PALETTE} selected={slot} onSelect={setSlot} showValues={false} />
       </Cell>
       <Row>
         <Cell label="ShortcutField · idle">
