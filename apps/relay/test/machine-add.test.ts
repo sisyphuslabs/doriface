@@ -1,7 +1,6 @@
 import { type EventFeed, HcConnection } from "@doriface/client";
-import { generateX25519 } from "@doriface/crypto";
+import { generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { generateHostIdentity } from "@doriface/crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

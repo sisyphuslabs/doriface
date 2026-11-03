@@ -119,7 +119,7 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     expect((await run.stderr()).trim().split("\n").at(-1)).toMatch(/is not connected to the relay: .*\(4404\)$/);
   }, 30_000);
 
-  test("a typed code no host is pairing with (the 4410 case) fails within a few seconds, exit 1", async () => {
+  test("a typed code no host is pairing with (the relay's lookup answers 404) fails within a few seconds, exit 1", async () => {
     const run = runConnect(join(scratch, "nocode"), host().relayUrl, "ZZZZ-ZZZZ");
     expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
     expect((await run.stderr()).trim().split("\n").at(-1)).toContain("no host is pairing with this code");
