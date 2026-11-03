@@ -32,7 +32,7 @@ function migrate(stored: Stored): Overrides {
 
 export class KeymapStore {
   #overrides: Overrides = NO_OVERRIDES;
-  #dirty = false;
+  #queue: Promise<void>;
   #listeners = new Set<() => void>();
   readonly #storage: KeyValueStore;
   readonly loaded: Promise<void>;
@@ -40,6 +40,7 @@ export class KeymapStore {
   constructor(storage: KeyValueStore) {
     this.#storage = storage;
     this.loaded = this.#load();
+    this.#queue = this.loaded;
   }
 
   get overrides(): Overrides {
@@ -52,26 +53,31 @@ export class KeymapStore {
   };
 
   /** Refuses the whole write when any binding is invalid, so storage never holds a bad trigger. */
-  update(overrides: Overrides): Promise<void> {
-    for (const [trigger, action] of overrides) {
+  update(change: (current: Overrides) => Overrides): Promise<void> {
+    const applied = this.#queue.then(async () => this.#apply(change));
+    this.#queue = applied.catch(() => undefined);
+    return applied;
+  }
+
+  async #apply(change: (current: Overrides) => Overrides): Promise<void> {
+    const next = change(this.#overrides);
+    for (const [trigger, action] of next) {
       const checked = checkBinding(trigger, action);
-      if (!checked.ok) return Promise.reject(new Error(checked.reason));
+      if (!checked.ok) throw new Error(checked.reason);
     }
-    this.#dirty = true;
-    this.#set(overrides);
-    const stored: Stored = { version: KEYMAP_VERSION, bindings: [...overrides] };
-    return this.#storage.put(KEY, stored);
+    this.#set(next);
+    const stored: Stored = { version: KEYMAP_VERSION, bindings: [...next] };
+    await this.#storage.put(KEY, stored);
   }
 
   async #load(): Promise<void> {
     const raw = await this.#storage.get(KEY).catch(() => undefined);
-    if (this.#dirty || !isStored(raw)) return;
+    if (!isStored(raw)) return;
     // A newer build's keymap is left as it is, so going back a version never rewrites it.
     if (raw.version > KEYMAP_VERSION) return;
     if (raw.version < KEYMAP_VERSION) {
       await this.#storage.put(`${KEY}.backup.v${raw.version}`, raw);
       const migrated = migrate(raw);
-      if (this.#dirty) return;
       await this.#storage.put(KEY, { version: KEYMAP_VERSION, bindings: [...migrated] });
       this.#set(migrated);
       return;

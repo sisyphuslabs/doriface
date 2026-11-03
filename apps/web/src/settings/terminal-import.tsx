@@ -40,9 +40,7 @@ export function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedConf
             variant="primary"
             disabled={parsed.config.size === 0}
             onClick={() => {
-              void terminalConfigStore.loaded.then(() =>
-                terminalConfigStore.update(mergeConfig(terminalConfigStore.config, parsed.config)),
-              );
+              void terminalConfigStore.update((current) => mergeConfig(current, parsed.config));
               onClose();
             }}
           >
