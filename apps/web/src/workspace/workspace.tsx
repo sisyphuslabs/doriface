@@ -28,7 +28,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPalette((shown) => !shown);
     return true;
   });
-  const { entries, refresh } = useMachines(connection, terminals);
+  const { entries, refresh, listError } = useMachines(connection, terminals);
   const [failure, setFailure] = useState<RunFailure | undefined>(undefined);
   const opened = (address: string): void => {
     tabs.select(address);
@@ -61,7 +61,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   };
   const onPalette = (): void => setPalette(true);
 
-  const machines = { entries, newTerminalOn, failure, dismissFailure: () => setFailure(undefined) };
+  const machines = { entries, newTerminalOn, failure, dismissFailure: () => setFailure(undefined), listError };
   return (
     <MachinesContext value={machines}>
       {narrow ? (

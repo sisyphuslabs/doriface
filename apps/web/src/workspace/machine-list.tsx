@@ -10,6 +10,7 @@ export interface MachineListProps {
   readonly onOpen: (address: string) => void;
   readonly onNewOn: (machine: string) => void;
   readonly failure?: RunFailure | undefined;
+  readonly listError?: string | undefined;
   readonly onDismiss?: () => void;
   readonly className?: string;
 }
@@ -26,6 +27,7 @@ export function MachineList({
   onOpen,
   onNewOn,
   failure,
+  listError,
   onDismiss,
   className,
 }: MachineListProps) {
@@ -72,6 +74,11 @@ export function MachineList({
           </div>
         );
       })}
+      {listError === undefined ? null : (
+        <Notice tone="error" className="mx-1 mt-1" title="Could not list the machines">
+          {listError}
+        </Notice>
+      )}
       {failure === undefined ? null : (
         <Notice
           tone="error"

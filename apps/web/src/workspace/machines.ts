@@ -20,6 +20,10 @@ export const stateLabel = (state: string): string => LABELS[state] ?? state;
 const LOCAL_ID = "local";
 const remoteId = (name: string): string => `machine:${name}`;
 
+/** The section shows when hc has added machines, or when listing them failed so the person can see why. */
+export const showMachines = (entries: readonly MachineEntry[], listError: string | undefined): boolean =>
+  entries.length > 1 || listError !== undefined;
+
 /** The id of the machine an address is on: this one for a bare `t7`, the named machine for `machine/t7`. */
 export function activeMachineId(address: string): string {
   const machine = machineOf(address);
