@@ -22,9 +22,10 @@ function request<T>(req: IDBRequest<T>): Promise<T> {
 function committed(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.addEventListener("complete", () => resolve());
-    const fail = () => reject(transaction.error ?? new Error("IndexedDB transaction did not commit"));
-    transaction.addEventListener("abort", fail);
-    transaction.addEventListener("error", fail);
+    // abort always follows a failed write, with transaction.error set; an earlier error event may not have it yet.
+    transaction.addEventListener("abort", () =>
+      reject(transaction.error ?? new Error("IndexedDB transaction did not commit")),
+    );
   });
 }
 
