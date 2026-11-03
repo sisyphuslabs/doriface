@@ -70,7 +70,7 @@ export function Header() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 className="flex-1 text-lg font-semibold text-foreground">Terminal</h2>
+        <h2 className="flex-1 text-lg font-semibold text-foreground md:text-xl">Terminal</h2>
         <Button size="sm">
           <FileUp />
           Import Ghostty config…
