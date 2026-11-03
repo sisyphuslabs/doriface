@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Monitor, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
+import { ACTION_BY_ID } from "../keys/actions.ts";
 import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
@@ -32,7 +33,12 @@ export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew,
         <header className="flex h-12 shrink-0 items-center gap-1 px-4 pt-[env(safe-area-inset-top)]">
           <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
           <IconButton label="Command palette" icon={<Search />} size="md" onClick={onPalette} />
-          <IconButton label="New terminal" icon={<Plus />} size="md" onClick={onNew} />
+          <IconButton
+            label={ACTION_BY_ID.get("tab.new")?.label ?? "New tab"}
+            icon={<Plus />}
+            size="md"
+            onClick={onNew}
+          />
           <IconButton label="Settings" icon={<Settings />} size="md" render={<Link to="/settings" />} />
         </header>
         <ScrollArea slot="agents-list" className="flex-1">

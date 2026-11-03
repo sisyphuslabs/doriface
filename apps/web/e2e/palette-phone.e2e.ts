@@ -30,6 +30,8 @@ test("on a phone every palette row does what it says", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
 
+  // The header button and the palette row are one action, so they carry one label.
+  await expect(page.getByRole("banner").getByRole("button", { name: "New tab" })).toBeVisible();
   await openPalette(page);
   const actions = page.getByRole("group", { name: "Actions" }).getByRole("option");
   // Each row's text also holds its key hint, which touch layouts hide.
