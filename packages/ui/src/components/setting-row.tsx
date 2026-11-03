@@ -8,8 +8,8 @@ export interface SettingRowProps {
   readonly control: ReactNode;
   /** The config file key this row writes, e.g. a Ghostty key; shown as a monospace label. */
   readonly configKey?: string;
-  /** Why this setting cannot apply here. The row stays visible, its control is disabled. */
-  readonly disabledReason?: ReactNode;
+  /** Why this setting cannot apply here, in words. The row stays visible, its control is disabled. */
+  readonly disabledReason?: string | undefined;
   /** Keep the control trailing on narrow screens instead of stacking it full width. */
   readonly inline?: boolean;
   readonly id?: string;
