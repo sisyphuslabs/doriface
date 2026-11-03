@@ -22,6 +22,17 @@ function plan(mesh: MeshFixture, self: Machine, member: string, compromised = fa
 
 const ref = (m: Machine) => ({ hostId: m.identity.hostId, name: m.name });
 
+/** A mesh of 12 or more keys writes each record through the store, which evaluates the view per write. */
+const LARGE_MESH_MS = 30_000;
+
+/** f, a and m1..m10: twelve members, so the next admitted key is over-cap. */
+function twelve(mesh: MeshFixture, f: Machine, a: Machine): readonly Machine[] {
+  mesh.admit(f, a);
+  const rest = Array.from({ length: 10 }, (_, i) => machine(`m${i + 1}`));
+  for (const m of rest) mesh.admit(f, m);
+  return rest;
+}
+
 describe("design 6.1: what mesh revoke writes and what it says first", () => {
   test("a plain revoke names one key and warns about the subtree it leaves in place", () => {
     const f = machine("f"),
@@ -86,20 +97,103 @@ describe("design 6.1: what mesh revoke writes and what it says first", () => {
     });
   });
 
-  test("--compromised names an over-cap key the member admitted (13 keys: f admits 11, a admits z)", () => {
-    const f = machine("f"),
-      a = machine("a"),
-      z = machine("z");
-    withMesh(f, (mesh) => {
-      mesh.admit(f, a);
-      for (let i = 1; i <= 10; i++) mesh.admit(f, machine(`m${i}`));
-      mesh.admit(a, z);
-      const records = mesh.store.read()?.records ?? [];
-      expect(viewOf(records).overCap.has(signPubOf(z))).toBe(true);
-      const p = plan(mesh, f, "a", true);
-      expect(p.keys).toEqual([a, z].map(signPubOf));
-      expect(p.subtree).toEqual([ref(z)]);
-    });
+  test(
+    "--compromised names an over-cap key the member admitted (13 keys: f admits 11, a admits z)",
+    () => {
+      const f = machine("f"),
+        a = machine("a"),
+        z = machine("z");
+      withMesh(f, (mesh) => {
+        mesh.admit(f, a);
+        for (let i = 1; i <= 10; i++) mesh.admit(f, machine(`m${i}`));
+        mesh.admit(a, z);
+        const records = mesh.store.read()?.records ?? [];
+        expect(viewOf(records).overCap.has(signPubOf(z))).toBe(true);
+        const p = plan(mesh, f, "a", true);
+        expect(p.keys).toEqual([a, z].map(signPubOf));
+        expect(p.subtree).toEqual([ref(z)]);
+      });
+    },
+    LARGE_MESH_MS,
+  );
+
+  describe("the subtree follows each key's one admitter, its governing admission's signer (H1b)", () => {
+    test(
+      "C1: a second admit of an over-cap key does not make it the second admitter's lineage",
+      () => {
+        const f = machine("f"),
+          a = machine("a"),
+          z = machine("z");
+        withMesh(f, (mesh) => {
+          const [m1] = twelve(mesh, f, a);
+          if (m1 === undefined) throw new Error("no m1");
+          mesh.admit(m1, z);
+          mesh.admit(a, z);
+          expect(plan(mesh, f, "a", true).keys).toEqual([signPubOf(a)]);
+        });
+      },
+      LARGE_MESH_MS,
+    );
+
+    test(
+      "D1: a key revoked and re-admitted by another member leaves the first admitter's lineage",
+      () => {
+        const f = machine("f"),
+          a = machine("a"),
+          z = machine("z");
+        withMesh(f, (mesh) => {
+          const [m1] = twelve(mesh, f, a);
+          if (m1 === undefined) throw new Error("no m1");
+          mesh.admit(a, z);
+          mesh.revoke(f, z);
+          mesh.admit(m1, z);
+          expect(plan(mesh, f, "a", true).keys).toEqual([signPubOf(a)]);
+        });
+      },
+      LARGE_MESH_MS,
+    );
+
+    test(
+      "G: a non-governing admit of a re-admitted over-cap key sweeps in neither it nor the members it admitted",
+      () => {
+        const f = machine("f"),
+          a = machine("a"),
+          b = machine("b"),
+          c = machine("c");
+        withMesh(f, (mesh) => {
+          mesh.admit(f, a);
+          mesh.admit(f, b);
+          mesh.admit(a, c);
+          const rest = Array.from({ length: 9 }, (_, i) => machine(`m${i + 1}`));
+          for (const m of rest.slice(0, 8)) mesh.admit(f, m);
+          mesh.revoke(f, a);
+          const [m1, , , , , , , , m9] = rest;
+          if (m1 === undefined || m9 === undefined) throw new Error("no m1 or m9");
+          mesh.admit(f, m9);
+          mesh.admit(m1, a);
+          mesh.admit(b, a);
+          const records = mesh.store.read()?.records ?? [];
+          expect(viewOf(records).overCap.has(signPubOf(a))).toBe(true);
+          expect(plan(mesh, f, "b", true).keys).toEqual([signPubOf(b)]);
+        });
+      },
+      LARGE_MESH_MS,
+    );
+
+    test(
+      "an over-cap key is found by the name on its card (L10)",
+      () => {
+        const f = machine("f"),
+          a = machine("a"),
+          z = machine("z");
+        withMesh(f, (mesh) => {
+          twelve(mesh, f, a);
+          mesh.admit(a, z);
+          expect(plan(mesh, f, "z").target).toEqual(ref(z));
+        });
+      },
+      LARGE_MESH_MS,
+    );
   });
 
   test("an exact hostId wins over a member renamed to that hostId", () => {
