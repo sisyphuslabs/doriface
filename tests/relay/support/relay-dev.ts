@@ -146,7 +146,7 @@ async function startOnce(
       },
     ),
   );
-  adoptProcessGroup(proc);
+  adoptProcessGroup(proc, scratch);
   let output = earlier;
   const ready = Promise.withResolvers<string>();
   const bindRace = `Address already in use (127.0.0.1:${port})`;
