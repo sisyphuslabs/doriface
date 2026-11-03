@@ -18,6 +18,8 @@ export interface HostAttachment extends Flow {
   readonly state: HostState;
   /** Set once the host has proved it holds the key. */
   readonly signPub?: Uint8Array | undefined;
+  /** The uplink dialed with `?credit=1` (contract v1.3). */
+  readonly credit?: boolean | undefined;
 }
 
 export interface ClientAttachment extends Flow {
@@ -30,6 +32,11 @@ export interface ClientAttachment extends Flow {
   readonly ip: string;
   /** Set for a pairing session (`?pair=<slot>`), which is charged to that slot once the host answers it. */
   readonly pairSlot?: string | undefined;
+  /** Both ends asked for session credit (contract v1.3), so the host's CREDIT reaches this client as `c:<n>`. */
+  readonly credit?: boolean | undefined;
+  /** Session bytes forwarded to a credit host, and how many of them it has credited back. */
+  readonly toHost?: number | undefined;
+  readonly hostCredited?: number | undefined;
 }
 
 export type Attachment = HostAttachment | ClientAttachment;
@@ -44,6 +51,8 @@ function hostState(value: unknown): HostState | undefined {
     : undefined;
 }
 
+const counted = (count: unknown): number => (typeof count === "number" ? count : 0);
+
 function parseFlow(value: Readonly<Record<string, unknown>>): Flow | undefined {
   const { sent, acked, openedAt } = value;
   if (typeof sent !== "number" || typeof acked !== "number" || typeof openedAt !== "number") return undefined;
@@ -56,19 +65,30 @@ function parse(value: unknown): Attachment | undefined {
   if (flow === undefined) return undefined;
   const { role } = value;
   if (role === "host") {
-    const { hostId, relayOrigin, challenge, signPub, state: rawState } = value;
+    const { hostId, relayOrigin, challenge, signPub, credit, state: rawState } = value;
     const state = hostState(rawState);
     if (typeof hostId !== "string" || typeof relayOrigin !== "string") return undefined;
     if (!(challenge instanceof Uint8Array) || state === undefined) return undefined;
     if (signPub !== undefined && !(signPub instanceof Uint8Array)) return undefined;
-    return { ...flow, role, hostId, relayOrigin, challenge, state, signPub };
+    return { ...flow, role, hostId, relayOrigin, challenge, state, signPub, credit: credit === true };
   }
   if (role === "client") {
-    const { sessionId, ended, pending, ip, pairSlot } = value;
+    const { sessionId, ended, pending, ip, pairSlot, credit, toHost, hostCredited } = value;
     if (typeof sessionId !== "number" || typeof ended !== "boolean") return undefined;
     if (typeof pending !== "boolean" || typeof ip !== "string") return undefined;
     if (pairSlot !== undefined && typeof pairSlot !== "string") return undefined;
-    return { ...flow, role, sessionId, ended, pending, ip, pairSlot };
+    return {
+      ...flow,
+      role,
+      sessionId,
+      ended,
+      pending,
+      ip,
+      pairSlot,
+      credit: credit === true,
+      toHost: counted(toHost),
+      hostCredited: counted(hostCredited),
+    };
   }
   return undefined;
 }
