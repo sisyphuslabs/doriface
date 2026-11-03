@@ -199,13 +199,13 @@ describe("backpressure (C3)", () => {
     second.close();
   });
 
-  test("an ack for bytes the relay never sent closes the socket with 1003", async () => {
+  test("an ack for bytes the relay never sent closes the socket with 4402", async () => {
     const ip = testIp();
     const host = await startTestHost(relay.url, ip);
     const probe = new Probe(clientUrl(host.uplink.hostId), ip);
     await probe.opened();
     probe.socket.send("a:65536");
-    expect((await probe.closed).code).toBe(CloseCode.UnsupportedData);
+    expect((await probe.closed).code).toBe(CloseCode.RelayProtocolError);
     host.uplink.stop();
   });
 });

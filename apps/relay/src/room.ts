@@ -27,9 +27,10 @@ import {
 } from "./attachment.ts";
 import { verifyAuthAnswer } from "./auth.ts";
 import { applyAck, forward, sendControl } from "./flow.ts";
-import { AUTH_TIMEOUT_MS, sourceOf } from "./limits.ts";
+import { sourceOf } from "./limits.ts";
 import type { PairSlotsEnv } from "./pair-slot.ts";
-import { handlePairSlot } from "./pairing.ts";
+import { handlePairSlot, PairingCharges, pairingRefusal } from "./pairing.ts";
+import { PendingAuths } from "./pending-auths.ts";
 import { alarmBy, overdue, type TimeoutVars, timeoutsOf } from "./reaper.ts";
 import { closedSocket } from "./reject.ts";
 import {
@@ -49,19 +50,14 @@ import {
 
 export interface RoomEnv extends PairSlotsEnv, TimeoutVars {}
 
-interface PendingAuth {
-  readonly settled: PromiseWithResolvers<void>;
-  /** Cleared on settle; a pending timer keeps the object from hibernating. */
-  readonly timer: ReturnType<typeof setTimeout>;
-}
-
 /**
  * One room per hostId: the host's uplink and every client session to it. All state lives in socket attachments,
  * so the object can hibernate between messages. Payloads are forwarded as they arrive and never inspected.
  */
 export class Room extends DurableObject<RoomEnv> {
   /** Hosts that have not finished the challenge yet; a client arriving meanwhile waits for them to settle. */
-  readonly #authenticating = new Map<WebSocket, PendingAuth>();
+  readonly #authenticating = new PendingAuths();
+  readonly #charges = new PairingCharges(this.env);
 
   constructor(ctx: DurableObjectState, env: RoomEnv) {
     super(ctx, env);
@@ -75,21 +71,18 @@ export class Room extends DurableObject<RoomEnv> {
     if (role === "host") return this.#acceptHost(hostId, relayOriginOf(request.url));
     if (role !== "client") return new Response("not found", { status: 404 });
     if ((await this.#settledHost()) === undefined) return closedSocket(CloseCode.HostOffline, "host offline");
-    const pairSlot = url.searchParams.get("pair");
-    if (pairSlot !== null) {
-      const slots = this.env.PAIR_SLOTS;
-      const verdict = await slots.get(slots.idFromName(pairSlot)).admitOpen(hostId);
-      if (verdict === "not-held") return closedSocket(CloseCode.HostOffline, "no host is pairing on this slot");
-      if (verdict === "limited") return closedSocket(CloseCode.RateLimited, "pairing budget spent for this slot");
-    }
-    return this.#acceptClient(sourceOf(request));
+    const source = sourceOf(request);
+    const pairSlot = url.searchParams.get("pair") ?? undefined;
+    const refusal = pairSlot === undefined ? undefined : await pairingRefusal(this.env, hostId, pairSlot, source);
+    if (refusal !== undefined) return closedSocket(refusal.code, refusal.reason);
+    return this.#acceptClient(source, pairSlot);
   }
 
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const attachment = attachmentOf(ws);
     if (attachment === undefined) return ws.close(CloseCode.InternalError, "unknown socket");
     if (typeof message === "string") {
-      if (!applyAck(ws, message)) ws.close(CloseCode.UnsupportedData, "binary messages, pings and acks only");
+      if (!applyAck(ws, message)) ws.close(CloseCode.RelayProtocolError, "binary messages, pings and valid acks only");
       return;
     }
     // A client's message becomes an uplink frame with a 5-byte header, which must fit the same 1 MiB cap.
@@ -126,11 +119,7 @@ export class Room extends DurableObject<RoomEnv> {
     const challenge = crypto.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
     const openedAt = Date.now();
     attach(server, { role: "host", hostId, relayOrigin, challenge, state: "challenged", sent: 0, acked: 0, openedAt });
-    const timer = setTimeout(() => {
-      closeIfOpen(server, CloseCode.RelayAuthFailed, "relay auth timed out");
-      this.#settle(server);
-    }, AUTH_TIMEOUT_MS);
-    this.#authenticating.set(server, { settled: Promise.withResolvers(), timer });
+    this.#authenticating.begin(server, () => closeIfOpen(server, CloseCode.RelayAuthFailed, "relay auth timed out"));
     sendControl(server, challenge);
     await alarmBy(this.ctx, openedAt + timeoutsOf(this.env).idleMs);
     return new Response(null, { status: 101, webSocket: client });
@@ -140,20 +129,12 @@ export class Room extends DurableObject<RoomEnv> {
   async #settledHost(): Promise<WebSocket | undefined> {
     const host = onlineHost(this.ctx);
     if (host !== undefined || this.#authenticating.size === 0) return host;
-    await Promise.race([...this.#authenticating.values()].map(({ settled }) => settled.promise));
+    await this.#authenticating.next();
     return this.#settledHost();
   }
 
-  #settle(ws: WebSocket): void {
-    const pending = this.#authenticating.get(ws);
-    if (pending === undefined) return;
-    clearTimeout(pending.timer);
-    pending.settled.resolve();
-    this.#authenticating.delete(ws);
-  }
-
   /** Admits a session as pending (contract v1.2 C1); it counts against the 32 only once the host sends DATA. */
-  async #acceptClient(ip: string): Promise<Response> {
+  async #acceptClient(ip: string, pairSlot: string | undefined): Promise<Response> {
     const host = onlineHost(this.ctx);
     if (host === undefined) return closedSocket(CloseCode.HostOffline, "host offline");
     const live = liveClients(this.ctx);
@@ -171,8 +152,18 @@ export class Room extends DurableObject<RoomEnv> {
     const { client, server } = newSocketPair();
     this.ctx.acceptWebSocket(server, [CLIENT_TAG, sessionTag(sessionId)]);
     const openedAt = Date.now();
-    attach(server, { role: "client", sessionId, ended: false, pending: true, ip, sent: 0, acked: 0, openedAt });
-    sendControl(host, encodeOpen(sessionId));
+    attach(server, {
+      role: "client",
+      sessionId,
+      ended: false,
+      pending: true,
+      ip,
+      pairSlot,
+      sent: 0,
+      acked: 0,
+      openedAt,
+    });
+    sendControl(host, encodeOpen(sessionId, pairSlot));
     await alarmBy(this.ctx, openedAt + timeoutsOf(this.env).pendingMs);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -185,7 +176,7 @@ export class Room extends DurableObject<RoomEnv> {
     const signPub = await verifyAuthAnswer(relayOrigin, hostId, challenge, answer);
     if (signPub !== undefined && isOpen(ws)) this.#promote(ws, signPub);
     else closeIfOpen(ws, CloseCode.RelayAuthFailed, "relay auth failed");
-    this.#settle(ws);
+    this.#authenticating.settle(ws);
   }
 
   /** Makes `ws` the host's uplink; an older one is closed with its sessions. */
@@ -211,17 +202,28 @@ export class Room extends DurableObject<RoomEnv> {
     try {
       frame = decodeMux(bytes);
     } catch (error) {
-      if (error instanceof MuxError) return host.close(CloseCode.ProtocolError, error.message);
+      if (error instanceof MuxError) return host.close(CloseCode.RelayProtocolError, error.message);
       throw error;
     }
-    if (frame.type === MuxType.Open) return host.close(CloseCode.ProtocolError, "the relay assigns sessions");
+    if (frame.type === MuxType.Open || frame.type === MuxType.PairSlotAck) {
+      return host.close(CloseCode.RelayProtocolError, "OPEN and PAIR_SLOT_ACK go relay to host only");
+    }
     if (frame.type === MuxType.PairSlot) return handlePairSlot(this.env, host, attachment, frame.payload);
     const client = clientSocket(this.ctx, frame.sessionId);
     const session = client === undefined ? undefined : attachmentOf(client);
     // A session the relay or the client just ended: its CLOSE is already on the way to the host.
     if (client === undefined || session?.role !== "client" || session.ended) return;
     if (frame.type === MuxType.Close) return this.#endClient(client, sendableCloseCode(frame.code), "closed by host");
-    if (session.pending && !this.#activate(client, session)) return;
+    if (session.pending) {
+      if (!this.#activate(client, session)) return;
+      // A pairing session is charged to its slot once the host has answered it, i.e. on this first DATA.
+      if (session.pairSlot !== undefined && !(await this.#charges.charge(session.sessionId, session.pairSlot))) {
+        return this.#endSession(client, session, CloseCode.RateLimited, "pairing budget spent for this slot");
+      }
+    } else {
+      const charging = this.#charges.inFlight(session.sessionId);
+      if (charging !== undefined && !(await charging)) return;
+    }
     if (!forward(client, frame.payload.slice())) {
       this.#endSession(client, session, CloseCode.IdleTimeout, "the client is too far behind");
     }
@@ -238,7 +240,7 @@ export class Room extends DurableObject<RoomEnv> {
   }
 
   #closed(ws: WebSocket, code: number): void {
-    this.#settle(ws);
+    this.#authenticating.settle(ws);
     const attachment = attachmentOf(ws);
     if (attachment?.role === "client" && !attachment.ended) this.#endSession(ws, attachment, code, "");
     if (attachment?.role === "host" && attachment.state === "online") this.#dropHost(ws, code, "");

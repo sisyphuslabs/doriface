@@ -29,6 +29,8 @@ export interface ClientAttachment extends Flow {
   /** Admitted but the host has not sent DATA yet (contract v1.2 C1). */
   readonly pending: boolean;
   readonly ip: string;
+  /** Set for a pairing session (`?pair=<slot>`), which is charged to that slot once the host answers it. */
+  readonly pairSlot?: string | undefined;
 }
 
 export type Attachment = HostAttachment | ClientAttachment;
@@ -64,10 +66,11 @@ function parse(value: unknown): Attachment | undefined {
     return { ...flow, role, hostId, relayOrigin, challenge, state, signPub, pairSlot };
   }
   if (role === "client") {
-    const { sessionId, ended, pending, ip } = value;
+    const { sessionId, ended, pending, ip, pairSlot } = value;
     if (typeof sessionId !== "number" || typeof ended !== "boolean") return undefined;
     if (typeof pending !== "boolean" || typeof ip !== "string") return undefined;
-    return { ...flow, role, sessionId, ended, pending, ip };
+    if (pairSlot !== undefined && typeof pairSlot !== "string") return undefined;
+    return { ...flow, role, sessionId, ended, pending, ip, pairSlot };
   }
   return undefined;
 }
