@@ -15,10 +15,17 @@ describe("loadDeviceKey", () => {
     expect(again.publicKey).toEqual(key.publicKey);
   });
 
+  test("concurrent first calls share one identity", async () => {
+    const storage = memoryStore();
+    const [first, second] = await Promise.all([loadDeviceKey(storage, null), loadDeviceKey(storage, null)]);
+    expect(second.publicKey).toEqual(first.publicKey);
+    expect((await loadDeviceKey(storage, null)).publicKey).toEqual(first.publicKey);
+  });
+
   test("with WebCrypto X25519 the private key is a non-extractable CryptoKey", async () => {
     const storage = memoryStore();
     const key = await loadDeviceKey(storage, crypto.subtle);
-    if (key.kind !== "webcrypto") return;
+    expect(key.kind).toBe("webcrypto");
     const stored = await storage.get("device-key");
     expect(stored).toMatchObject({ kind: "webcrypto" });
     const privateKey: unknown = Reflect.get(Object(stored), "privateKey");
