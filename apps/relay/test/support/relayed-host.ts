@@ -1,7 +1,14 @@
 import { HcConnection } from "@doriface/client";
-import { type KeyPair, parsePairingUrl, rawStaticKey, type SecureLink, secureLink } from "@doriface/crypto";
+import {
+  type KeyPair,
+  type PairingSecret,
+  parsePairingUrl,
+  rawStaticKey,
+  type SecureLink,
+  secureLink,
+} from "@doriface/crypto";
 import { type Host, startHost } from "@doriface/host";
-import { connectRelayClient, type CreateSocket } from "@doriface/relay-client";
+import { connectRelayClient, type CreateSocket, pairSlotOf } from "@doriface/relay-client";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +31,13 @@ export interface RelayedHost {
   /** Sends the test's own client IP, so the relay's per-IP budgets are this test's alone. */
   readonly createSocket: CreateSocket;
   readonly logs: readonly string[];
+  /** The source IP this host's sockets claim, for requests the relay rate-limits by IP. */
+  readonly ip: string;
   pairingLink(): Promise<string>;
+  /** A fresh offer as `doriface-host pair` prints it: the link and the typed code. */
+  pairingOffer(): Promise<{ readonly url: string; readonly code: string }>;
+  /** Runs typed-code pairing (CPace on a `?pair=<slot>` session) and returns the confirmed session. */
+  dialPairCode(device: KeyPair, code: string, name: string): Promise<SecureLink>;
   pair(device: KeyPair, name: string): Promise<void>;
   dial(device: KeyPair): Promise<SecureLink>;
   connect(device: KeyPair): Promise<HcConnection>;
@@ -39,6 +52,8 @@ export interface RelayedHostOptions {
   /** For tests of this helper: the relay the host dials, instead of the local one. */
   readonly hostRelayUrl?: string;
   readonly uplinkTimeoutMs?: number;
+  /** Wraps the sockets the host's uplink and the clients open, e.g. to capture what the relay forwards. */
+  readonly wrapSockets?: (base: CreateSocket) => { readonly host: CreateSocket; readonly client: CreateSocket };
 }
 
 const UPLINK_TIMEOUT_MS = 30_000;
@@ -47,7 +62,10 @@ const UPLINK_TIMEOUT_MS = 30_000;
 export async function startRelayedHost(prefix: string, options: RelayedHostOptions = {}): Promise<RelayedHost> {
   const scratch = mkdtempSync(join(tmpdir(), "rh-"));
   const stateDir = join(scratch, "host-state");
-  const createSocket = socketFrom(testIp());
+  const ip = testIp();
+  const base = socketFrom(ip);
+  const sockets = options.wrapSockets?.(base) ?? { host: base, client: base };
+  const createSocket = sockets.client;
   const logs: string[] = [];
   const connected = Promise.withResolvers<void>();
   let relay: LocalRelay | undefined;
@@ -70,7 +88,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
       session: session.name,
       env: session.env,
       stateDir,
-      relay: { url: options.hostRelayUrl ?? relay.url, createSocket },
+      relay: { url: options.hostRelayUrl ?? relay.url, createSocket: sockets.host },
       log: (line) => {
         logs.push(line);
         if (line.startsWith("relay: connected")) connected.resolve();
@@ -83,6 +101,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
     return await relayedHost({
       relayUrl: relay.url,
       hostId: e2ee.hostId,
+      ip,
       session,
       stateDir,
       scratch,
@@ -99,6 +118,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
 interface Started {
   readonly relayUrl: string;
   readonly hostId: string;
+  readonly ip: string;
   readonly session: HcSession;
   readonly stateDir: string;
   readonly scratch: string;
@@ -109,33 +129,43 @@ interface Started {
 
 async function relayedHost(started: Started): Promise<RelayedHost> {
   const { relayUrl, hostId, stateDir, scratch, createSocket } = started;
-  const pairingLink = async (): Promise<string> => {
+  const pairingOffer = async (): Promise<{ readonly url: string; readonly code: string }> => {
     const args = ["pair", "--no-qr", "--web-origin", "https://web.example", "--relay", relayUrl];
     const proc = Bun.spawn([process.execPath, CLI, ...args, "--state-dir", stateDir], { stdout: "pipe" });
     const stdout = await new Response(proc.stdout).text();
     const url = stdout.split("\n").find((line) => line.startsWith("https://web.example/pair#"));
-    if ((await proc.exited) !== 0 || url === undefined) throw new Error(`pair failed: ${stdout}`);
-    return url;
+    const code = /^code\s+(\S{4}) (\S{4})/m.exec(stdout);
+    if ((await proc.exited) !== 0 || url === undefined || code === null) throw new Error(`pair failed: ${stdout}`);
+    return { url, code: `${code[1]}${code[2]}` };
   };
+  const pairingLink = async (): Promise<string> => (await pairingOffer()).url;
   const hostKey = parsePairingUrl(await pairingLink()).noiseStaticPub;
-  const open = async (device: KeyPair, linkSecret?: Uint8Array, name?: string): Promise<SecureLink> => {
-    const link = await connectRelayClient({ relayUrl, hostId, createSocket });
+  const open = async (device: KeyPair, pairing?: PairingSecret): Promise<SecureLink> => {
+    const pairSlot = pairing?.mode === "code" ? pairSlotOf(pairing.code) : undefined;
+    const link = await connectRelayClient({
+      relayUrl,
+      hostId,
+      createSocket,
+      ...(pairSlot === undefined ? {} : { pairSlot }),
+    });
     return secureLink(link, {
       role: "initiator",
       hostId,
       staticKey: rawStaticKey(device),
       remoteStatic: hostKey,
-      pairing: linkSecret === undefined ? undefined : { mode: "link", linkSecret, name: name ?? "test device" },
+      pairing,
     });
   };
   return {
     ...started,
     hostKey,
     pairingLink,
+    pairingOffer,
+    dialPairCode: (device, code, name) => open(device, { mode: "code", code, name }),
     async pair(device, name) {
       const { linkSecret } = parsePairingUrl(await pairingLink());
       // The host answers hello on a pairing session only once it stored the device.
-      (await HcConnection.open(await open(device, linkSecret, name))).close();
+      (await HcConnection.open(await open(device, { mode: "link", linkSecret, name }))).close();
     },
     dial: (device) => open(device),
     connect: async (device) => HcConnection.open(await open(device)),
