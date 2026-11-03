@@ -2,7 +2,9 @@ import type { Terminal } from "@doriface/protocol";
 import { AgentRow, SidebarSection, SpaceRow, cn, type Agent } from "@doriface/ui";
 import { useMemo } from "react";
 import { useNow } from "./use-now.ts";
-import { firstInSpace, groupAgents, spaceName, toSpaces } from "./model.ts";
+import { MachineList } from "./machine-list.tsx";
+import { firstInSpace, groupAgents, machineOf, spaceName, toSpaces } from "./model.ts";
+import { useMachinesContext } from "./use-machines.ts";
 
 export interface AgentListsProps {
   readonly terminals: readonly Terminal[];
@@ -26,6 +28,8 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
   const spaces = useMemo(() => toSpaces(terminals), [terminals]);
   const activeTerminal = terminals.find((terminal) => terminal.address === active);
   const activeSpace = activeTerminal === undefined ? undefined : spaceName(activeTerminal);
+  const machines = useMachinesContext();
+  const activeMachine = active === null ? undefined : (machineOf(active) ?? machines.entries[0]?.name);
   const openSpace = (id: string): void => {
     const address = firstInSpace(terminals, id);
     if (address !== undefined) onOpen(address);
@@ -43,6 +47,15 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
 
   return (
     <div className="flex flex-col gap-4 px-2 pb-3">
+      {machines.entries.length > 1 ? (
+        <MachineList
+          entries={machines.entries}
+          activeMachine={activeMachine}
+          onOpen={onOpen}
+          onNewOn={machines.newTerminalOn}
+          {...(agentsFirst ? { className: "order-last" } : {})}
+        />
+      ) : null}
       <SidebarSection title="Spaces" count={spaces.length} className={cn(agentsFirst && "order-last")}>
         {spaces.map((space) => (
           <SpaceRow key={space.id} space={space} selected={space.name === activeSpace} onSelect={openSpace} />

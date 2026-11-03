@@ -3,7 +3,7 @@ import type { Terminal } from "@doriface/protocol";
 import { StatusChip, cn } from "@doriface/ui";
 import { SquareTerminal } from "lucide-react";
 import { TerminalView } from "../terminal/terminal-view.tsx";
-import { agentStatus, spaceName, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, spaceName, terminalTitle } from "./model.ts";
 
 export interface PaneProps {
   readonly connection: HcConnection;
@@ -38,6 +38,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onC
         <h2 className="truncate font-medium">{title}</h2>
         <StatusChip status={agentStatus(terminal)} />
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {machineOf(terminal.address) === undefined ? "" : `${terminal.address} · `}
           {spaceName(terminal)} · ⌘{index}
         </span>
       </header>
