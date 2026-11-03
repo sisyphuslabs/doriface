@@ -1,5 +1,7 @@
 import { Folder } from "lucide-react";
+import { useRef } from "react";
 import { cn } from "../lib/cn.ts";
+import { useRowFloors } from "./row-floors.ts";
 import { StatusIndicator, type AgentStatus } from "./status.tsx";
 
 export interface Space {
@@ -19,10 +21,16 @@ export interface SpaceRowProps {
   readonly className?: string;
 }
 
-/** A workspace (herdr space) in the sidebar: folder, name, its most urgent agent, tab count. */
+/**
+ * A workspace (herdr space) in the sidebar: folder, name, machine, its most urgent agent, tab count. When the row is
+ * short the machine gives way first; the name keeps five characters and an ellipsis (see useRowFloors).
+ */
 export function SpaceRow({ space, selected = false, onSelect, className }: SpaceRowProps) {
+  const row = useRef<HTMLButtonElement | null>(null);
+  useRowFloors(row, `${space.name}\u0000${space.machine ?? ""}`);
   return (
     <button
+      ref={row}
       type="button"
       aria-current={selected ? "true" : undefined}
       onClick={() => onSelect?.(space.id)}
@@ -34,11 +42,15 @@ export function SpaceRow({ space, selected = false, onSelect, className }: Space
       )}
     >
       <Folder aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-      <span title={space.name} className="min-w-0 flex-1 truncate">
+      <span title={space.name} data-floor="name" className="min-w-0 flex-1 truncate">
         {space.name}
       </span>
       {space.machine === undefined ? null : (
-        <span title={space.machine} className="min-w-0 max-w-[50%] truncate text-2xs text-muted-foreground">
+        <span
+          title={space.machine}
+          data-floor="machine"
+          className="min-w-0 max-w-[35%] truncate text-2xs text-muted-foreground"
+        >
           {space.machine}
         </span>
       )}
