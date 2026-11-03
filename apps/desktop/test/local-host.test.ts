@@ -56,6 +56,17 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
     expect(logs.some((line) => line.startsWith("doriface-host exited"))).toBe(true);
   });
 
+  test("a start issued while a stopped child is still exiting keeps its own in-flight spawn", async () => {
+    await host.stop();
+    const abandoned = host.start();
+    const stopped = host.stop();
+    const restarted = host.start();
+    await expect(abandoned).rejects.toThrow("exited before listening");
+    await stopped;
+    expect(host.start()).toBe(restarted);
+    expect((await restarted).url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/v1\/hc$/);
+  });
+
   test("a host that dies before listening rejects with its stderr, and the next start retries", async () => {
     const broken = new LocalHost({
       command: { file: process.execPath, args: ["-e", "console.error('boom'); process.exit(3)"] },

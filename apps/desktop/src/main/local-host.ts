@@ -28,11 +28,14 @@ export class LocalHost {
   }
 
   start(): Promise<LocalHostEndpoint> {
-    this.#starting ??= this.#spawn().catch((error: unknown) => {
-      this.#starting = undefined;
+    if (this.#starting !== undefined) return this.#starting;
+    const starting: Promise<LocalHostEndpoint> = this.#spawn().catch((error: unknown) => {
+      // A stop() followed by a new start() may already have replaced this attempt.
+      if (this.#starting === starting) this.#starting = undefined;
       throw error;
     });
-    return this.#starting;
+    this.#starting = starting;
+    return starting;
   }
 
   /** Signals the child (doriface-host closes its pipes on SIGTERM) and resolves once it exits. */
