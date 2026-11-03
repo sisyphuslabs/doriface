@@ -3,12 +3,12 @@ import {
   authMessage,
   base32,
   decodeMux,
-  decodePairSlotReply,
+  decodePairSlotAck,
   decodePairSlotRequest,
   encodeClose,
   encodeData,
   encodeOpen,
-  encodePairSlotReply,
+  encodePairSlotAck,
   encodePairSlotRequest,
   fromBase64Url,
   HOST_ID_PATTERN,
@@ -18,7 +18,7 @@ import {
   normalizePairCode,
   parseAck,
   pairSlotOf,
-  PairSlotStatus,
+  PairSlotAckStatus,
   relayOriginOf,
   toBase64Url,
 } from "./wire/index.ts";
@@ -30,6 +30,8 @@ describe("mux frames", () => {
     const payload = crypto.getRandomValues(new Uint8Array(300));
     expect([...encodeOpen(0x0102_0304)]).toEqual([1, 4, 3, 2, 1]);
     expect(decodeMux(encodeOpen(0xffff_ffff))).toEqual({ type: MuxType.Open, sessionId: 0xffff_ffff });
+    expect([...encodeOpen(7, "AB3")]).toEqual([1, 7, 0, 0, 0, 0x41, 0x42, 0x33]);
+    expect(decodeMux(encodeOpen(7, "AB3"))).toEqual({ type: MuxType.Open, sessionId: 7, pairSlot: "AB3" });
     expect(decodeMux(encodeData(7, payload))).toEqual({ type: MuxType.Data, sessionId: 7, payload });
     expect([...encodeClose(9, 4404)]).toEqual([3, 9, 0, 0, 0, 0x34, 0x11]);
     expect(decodeMux(encodeClose(9, 4404))).toEqual({ type: MuxType.Close, sessionId: 9, code: 4404 });
@@ -39,6 +41,7 @@ describe("mux frames", () => {
     for (const bad of [
       [2, 0, 0],
       [1, 0, 0, 0, 0, 9],
+      [1, 0, 0, 0, 0, 0x41, 0x42, 0x55],
       [3, 0, 0, 0, 0, 1],
       [9, 0, 0, 0, 0],
     ]) {
@@ -137,8 +140,14 @@ describe("pairing codes and slots", () => {
       slot: "AB3",
       noiseStaticPub: key,
     });
-    const reply = decodeMux(encodePairSlotReply("AB3", PairSlotStatus.Taken));
-    expect(reply.type === MuxType.PairSlot && decodePairSlotReply(reply.payload)).toEqual({ slot: "AB3", status: 409 });
+    const ack = encodePairSlotAck("AB3", PairSlotAckStatus.Taken);
+    expect([...ack]).toEqual([5, 0, 0, 0, 0, 1, 0x41, 0x42, 0x33]);
+    const decoded = decodeMux(ack);
+    expect(decoded.type === MuxType.PairSlotAck && decodePairSlotAck(decoded.payload)).toEqual({
+      slot: "AB3",
+      status: 1,
+    });
+    expect(decodePairSlotAck(new Uint8Array([3, 0x41, 0x42, 0x33]))).toBeUndefined();
     expect(() => encodePairSlotRequest("AB", key)).toThrow(RangeError);
     expect(decodePairSlotRequest(new Uint8Array(10))).toBeUndefined();
   });
