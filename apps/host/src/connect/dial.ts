@@ -110,11 +110,8 @@ async function resolveHost(target: ConnectTarget, options: DialOptions): Promise
 
 const FINGERPRINT_GROUPS = 4;
 
-/**
- * The relay's slot answer is untrusted; as in the web flow, the person confirms the host's fingerprint before the
- * code is used (pairing design D10). The bridge cannot ask, so the fingerprint comes in as an option.
- */
-function confirmFingerprint(given: string | undefined, hostKey: Uint8Array): void {
+/** The typed fingerprint, normalized; refused without one, or with fewer than 4 groups, before anything is dialed. */
+export function fingerprintGiven(given: string | undefined): string {
   const printed = "the fingerprint doriface-host pair printed on the host";
   if (given === undefined) {
     throw new Error(
@@ -125,6 +122,15 @@ function confirmFingerprint(given: string | undefined, hostKey: Uint8Array): voi
   if (!/^[0-9A-F]+$/.test(typed) || typed.length < FINGERPRINT_GROUPS * 4) {
     throw new Error(`--fingerprint wants at least the first ${FINGERPRINT_GROUPS} groups of ${printed}`);
   }
+  return typed;
+}
+
+/**
+ * The relay's slot answer is untrusted; as in the web flow, the person confirms the host's fingerprint before the
+ * code is used (pairing design D10). The bridge cannot ask, so the fingerprint comes in as an option.
+ */
+export function confirmFingerprint(given: string | undefined, hostKey: Uint8Array): void {
+  const typed = fingerprintGiven(given);
   const actual = fingerprintOf(hostKey);
   if (!actual.replaceAll(" ", "").startsWith(typed)) {
     throw new Error(
