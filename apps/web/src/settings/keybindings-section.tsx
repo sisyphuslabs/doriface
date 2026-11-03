@@ -100,7 +100,8 @@ export function KeybindingsSection() {
     <div className="flex flex-col gap-5">
       {storageError === null ? null : (
         <Notice tone="error" title="Keybindings could not be read from this browser's storage">
-          Changes are not saved, so the stored keybindings stay as they are. {storageError.message}
+          Changes are not saved, so the stored keybindings stay as they are. Reload the page to try again.{" "}
+          {storageError.message}
         </Notice>
       )}
       <div className="flex flex-wrap items-center gap-2">
@@ -112,7 +113,7 @@ export function KeybindingsSection() {
           className="sm:w-64"
           onValueChange={(next: string) => setQuery(next)}
         />
-        <Button size="sm" onClick={pick}>
+        <Button size="sm" onClick={pick} disabled={storageError !== null}>
           Import keybinds…
         </Button>
         <Button size="sm" onClick={() => download("ghostty-keybinds", serializeKeybinds(overrides))}>
@@ -121,7 +122,7 @@ export function KeybindingsSection() {
         <Button
           size="sm"
           variant="ghost"
-          disabled={overrides.size === 0}
+          disabled={overrides.size === 0 || storageError !== null}
           onClick={() => void keymapStore.update(() => NO_OVERRIDES)}
         >
           Reset all
@@ -137,6 +138,7 @@ export function KeybindingsSection() {
             </h3>
             {defs.map((action) => (
               <KeybindingRow
+                disabled={storageError !== null}
                 key={action.id}
                 action={action}
                 keymap={keymap}

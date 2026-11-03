@@ -44,7 +44,15 @@ function matches(def: KeyDef, query: string): boolean {
   return needle === "" || def.key.includes(needle) || def.description.toLowerCase().includes(needle);
 }
 
-function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: TerminalConfig }) {
+function KeyRow({
+  def,
+  config,
+  readOnly,
+}: {
+  readonly def: KeyDef;
+  readonly config: TerminalConfig;
+  readonly readOnly: boolean;
+}) {
   const [invalid, setInvalid] = useState<string | null>(null);
   const unsupported = def.support.level === "unsupported";
   const changed = !isDefault(config, def.key);
@@ -71,7 +79,7 @@ function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: Termin
           <KeyControl
             def={def}
             values={effective(config, def.key)}
-            disabled={unsupported}
+            disabled={unsupported || readOnly}
             onCommit={(values) => {
               setInvalid(null);
               void terminalConfigStore.update((current) => withValues(current, def.key, values));
@@ -80,6 +88,7 @@ function KeyRow({ def, config }: { readonly def: KeyDef; readonly config: Termin
           />
           <IconButton
             label={`Reset ${def.key}`}
+            disabled={readOnly}
             icon={<RotateCcw />}
             className={changed ? "" : "invisible"}
             onClick={() => void terminalConfigStore.update((current) => withoutKey(current, def.key))}
@@ -100,7 +109,8 @@ export function TerminalSection() {
     <div className="flex flex-col gap-5">
       {storageError === null ? null : (
         <Notice tone="error" title="Terminal settings could not be read from this browser's storage">
-          Changes are not saved, so the stored terminal settings stay as they are. {storageError.message}
+          Changes are not saved, so the stored terminal settings stay as they are. Reload the page to try again.{" "}
+          {storageError.message}
         </Notice>
       )}
       <div className="wterm overflow-hidden rounded-lg border border-border" data-terminal-preview>
@@ -120,11 +130,11 @@ export function TerminalSection() {
           className="sm:w-64"
           onValueChange={(next: string) => setQuery(next)}
         />
-        <ImportExport />
+        <ImportExport readOnly={storageError !== null} />
         <Button
           size="sm"
           variant="ghost"
-          disabled={config.size === 0}
+          disabled={config.size === 0 || storageError !== null}
           onClick={() => void terminalConfigStore.update(() => EMPTY_CONFIG)}
         >
           Reset all
@@ -139,7 +149,7 @@ export function TerminalSection() {
               {GROUP_LABEL[group]}
             </h3>
             {defs.map((def) => (
-              <KeyRow key={def.key} def={def} config={config} />
+              <KeyRow key={def.key} def={def} config={config} readOnly={storageError !== null} />
             ))}
           </section>
         );
