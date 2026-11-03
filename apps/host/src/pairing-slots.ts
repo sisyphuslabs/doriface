@@ -1,5 +1,5 @@
 import { pairingSlotOf } from "@doriface/crypto";
-import type { PairingStore, PendingPairing } from "./state/pairing.ts";
+import { codeRetired, type PairingStore, type PendingPairing } from "./state/pairing.ts";
 
 /**
  * The relay side of typed-code pairing: the host uplink's PAIR_SLOT control frame (type 4, payload = the 3 ASCII slot
@@ -106,6 +106,7 @@ export class PairingSlots {
       return this.#store.expire();
     }
     this.#arm(pending);
+    if (codeRetired(pending)) return this.#release();
     if (pending.slot === "unavailable" || (pending.slot === "registered" && pending.code === this.#registered)) return;
     if (this.#registrar === undefined) return this.#store.setSlot(pending.code, "unavailable");
     return this.#register(this.#registrar, pending, 0);
