@@ -10,7 +10,7 @@ import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
-import { useAppActions } from "./use-app-actions.ts";
+import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown } from "./layout-store.ts";
 import type { Tabs } from "./use-tabs.ts";
@@ -25,9 +25,10 @@ export interface DesktopShellProps {
   readonly tabs: Tabs;
   readonly onNew: () => void;
   readonly onPalette: () => void;
+  readonly onSession: SessionVerb;
 }
 
-export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette }: DesktopShellProps) {
+export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette, onSession }: DesktopShellProps) {
   const [sidebar, setSidebar] = useSidebarShown();
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
@@ -39,6 +40,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     onNew,
     onToggleSidebar: () => setSidebar((shown) => !shown),
     onFocusSidebar: focusSidebar,
+    onSession,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
@@ -105,7 +107,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           active={tabs.active}
           split={tabs.split}
           onFocus={tabs.focus}
-          onEnd={(address, end) => (closesTab(end) ? tabs.close(address) : undefined)}
+          onEnd={(address, end) => (closesTab(end) ? tabs.drop(address) : undefined)}
         />
         <StatusBar
           start={

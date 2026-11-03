@@ -13,6 +13,16 @@ export interface AppActionTargets {
   readonly onToggleSidebar: () => void;
   /** Moves focus from the terminal to the sidebar, or back. */
   readonly onFocusSidebar: () => void;
+  /** Renames or ends the session in view; false when there is none. */
+  readonly onSession: SessionVerb;
+}
+
+export type SessionVerb = (verb: "rename" | "end") => boolean;
+
+function sessionAction(action: string, onSession: SessionVerb): boolean {
+  if (action === "session.rename") return onSession("rename");
+  if (action === "session.end") return onSession("end");
+  return zoomAction(action);
 }
 
 const FONT_STEP = 1;
@@ -51,19 +61,19 @@ function zoomAction(verb: string): boolean {
 }
 
 /** The phone shell's app actions: new terminal, settings and terminal text size; it has no tabs, panes or sidebar. */
-export function phoneActions(onNew: () => void, openSettings: () => void): ActionHandler {
+export function phoneActions(onNew: () => void, openSettings: () => void, onSession: SessionVerb): ActionHandler {
   return (action) => {
     if (action === "tab.new") return (onNew(), true);
     if (action === "app.settings") return (openSettings(), true);
-    return zoomAction(action);
+    return sessionAction(action, onSession);
   };
 }
 
-export function usePhoneActions(onNew: () => void): void {
+export function usePhoneActions(onNew: () => void, onSession: SessionVerb): void {
   const navigate = useNavigate();
   useActionHandler(
     "app",
-    phoneActions(onNew, () => void navigate({ to: "/settings" })),
+    phoneActions(onNew, () => void navigate({ to: "/settings" }), onSession),
   );
 }
 
@@ -83,7 +93,7 @@ function selectTab(tabs: Tabs, address: string | null): boolean {
 }
 
 export function desktopActions(
-  { terminals, tabs, onNew, onToggleSidebar, onFocusSidebar }: AppActionTargets,
+  { terminals, tabs, onNew, onToggleSidebar, onFocusSidebar, onSession }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
   return (action) => {
@@ -127,7 +137,7 @@ export function desktopActions(
         openSettings();
         return true;
       default:
-        return zoomAction(action);
+        return sessionAction(action, onSession);
     }
   };
 }

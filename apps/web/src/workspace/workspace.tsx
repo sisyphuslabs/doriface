@@ -5,12 +5,15 @@ import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
+import { SessionContext, type SessionAsk } from "./session-context.ts";
+import { SessionDialogs } from "./session-dialogs.tsx";
 import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
+import type { SessionVerb } from "./use-app-actions.ts";
 import { useMachineRuns } from "./use-machine-runs.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { useNarrow } from "./use-narrow.ts";
-import { useTabs } from "./use-tabs.ts";
+import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
 
 export interface WorkspaceProps {
@@ -24,6 +27,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   const narrow = useNarrow();
   const [phoneOpen, setPhoneOpen] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
+  const [ask, setAsk] = useState<SessionAsk | null>(null);
   useActionHandler("app", (action) => {
     if (action !== "app.palette") return false;
     setPalette((shown) => !shown);
@@ -62,36 +66,50 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPhoneOpen(address);
   };
   const onPalette = (): void => setPalette(true);
+  const inView = narrow ? phoneOpen : tabs.active;
+  const onSession: SessionVerb = (verb) => {
+    if (inView === null) return false;
+    setAsk({ kind: verb, address: inView });
+    return true;
+  };
+  // Closing a tab of a live session asks keep or end; the dialog drops the tab itself once the session is gone.
+  const desktopTabs: Tabs = { ...tabs, close: (address) => setAsk({ kind: "close", address }) };
+  const done = useCallback(() => setAsk(null), []);
 
   const machines = useMemo(() => ({ entries, listError, ...runs }), [entries, listError, runs]);
   return (
     <MachinesContext value={machines}>
-      {narrow ? (
-        <PhoneShell
-          connection={connection}
-          terminals={terminals}
-          open={phoneOpen}
-          onOpen={setPhoneOpen}
-          onBack={() => setPhoneOpen(null)}
-          onNew={() => newTerminal()}
-          onPalette={onPalette}
-        />
-      ) : (
-        <DesktopShell
-          connection={connection}
-          terminals={terminals}
-          loaded={loaded}
-          tabs={tabs}
-          onNew={() => newTerminal()}
-          onPalette={onPalette}
-        />
-      )}
+      <SessionContext value={setAsk}>
+        {narrow ? (
+          <PhoneShell
+            connection={connection}
+            terminals={terminals}
+            open={phoneOpen}
+            onOpen={setPhoneOpen}
+            onBack={() => setPhoneOpen(null)}
+            onNew={() => newTerminal()}
+            onPalette={onPalette}
+            onSession={onSession}
+          />
+        ) : (
+          <DesktopShell
+            connection={connection}
+            terminals={terminals}
+            loaded={loaded}
+            tabs={desktopTabs}
+            onNew={() => newTerminal()}
+            onPalette={onPalette}
+            onSession={onSession}
+          />
+        )}
+      </SessionContext>
+      <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={tabs.drop} />
       {palette ? (
         <Palette
           terminals={terminals}
           host={connection.hello.core.name}
           route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
-          actions={availableActions(narrow ? "phone" : "desktop", tabs)}
+          actions={availableActions(narrow ? "phone" : "desktop", tabs, inView !== null)}
           onOpenTerminal={openTerminal}
           onClose={() => setPalette(false)}
         />
