@@ -1,6 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { agentStatus, firstInSpace, groupAgents, spaceId, toSpaces } from "./model.ts";
+import { agentStatus, firstInSpace, groupAgents, spaceId, terminalTitle, toSpaces } from "./model.ts";
 
 const terminal = (fields: Partial<Terminal>): Terminal => ({
   address: "t1",
@@ -57,5 +57,14 @@ describe("agentStatus", () => {
       const section = status === "unknown" ? [] : groups[status];
       expect(section.map((agent) => agent.id)).toContain(entry.address);
     }
+  });
+});
+
+describe("terminalTitle", () => {
+  test("a herdr.name label wins over hc's name and the program's title; an empty one does not count", () => {
+    expect(terminalTitle(terminal({ name: "worker", title: "vim", labels: { "herdr.name": "deploy" } }))).toBe(
+      "deploy",
+    );
+    expect(terminalTitle(terminal({ name: "worker", labels: { "herdr.name": "", title: "old" } }))).toBe("worker");
   });
 });
