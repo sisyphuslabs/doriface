@@ -18,8 +18,9 @@ export function terminalColors(): {
   readonly selection: string;
 } {
   const pinned = document.documentElement.dataset["theme"];
-  const dark = pinned === undefined ? matchMedia("(prefers-color-scheme: dark)").matches : pinned !== "day";
-  const theme = resolveTheme(dark ? BUILTIN_PALETTES.night : BUILTIN_PALETTES.day);
+  const system = matchMedia("(prefers-color-scheme: dark)").matches ? BUILTIN_PALETTES.night : BUILTIN_PALETTES.day;
+  const palette = Object.entries(BUILTIN_PALETTES).find(([name]) => name === pinned)?.[1] ?? system;
+  const theme = resolveTheme(palette);
   return { ansi: theme.ansi, cursor: theme.roles.cursor, selection: theme.roles.selection };
 }
 
