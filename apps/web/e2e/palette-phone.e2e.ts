@@ -31,9 +31,15 @@ test("on a phone every palette row does what it says", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
 
   // The header button and the palette row are one action, so they carry one label.
-  await expect(page.getByRole("banner").getByRole("button", { name: "New tab" })).toBeVisible();
+  const headerNew = page
+    .getByRole("banner")
+    .getByRole("button")
+    .filter({ has: page.locator("svg.lucide-plus") });
+  const headerLabel = (await headerNew.getAttribute("aria-label")) ?? "";
   await openPalette(page);
   const actions = page.getByRole("group", { name: "Actions" }).getByRole("option");
+  const rowLabel = (await actions.first().locator("span").first().textContent()) ?? "";
+  expect(headerLabel).toBe(rowLabel);
   // Each row's text also holds its key hint, which touch layouts hide.
   await expect(actions).toHaveText([/^New tab/, /^Larger terminal text/, /^Smaller terminal text/]);
   await page.keyboard.press("Escape");
