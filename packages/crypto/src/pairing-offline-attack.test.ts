@@ -1,4 +1,4 @@
-import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { clientFlight } from "./client-flight.ts";
 import { cpaceIsk, cpaceRespond } from "./cpace.ts";
 import { concatBytes, utf8 } from "./encoding.ts";
@@ -14,6 +14,7 @@ import {
   type AttackerState,
   composedPairing,
   decryptsUnder,
+  offlineOracle,
   sameSlotDecoys,
   v12Psk,
 } from "./testing/offline-attack.ts";
@@ -25,8 +26,6 @@ const wrongGuess = sameSlotDecoys(realCode, 1, 7)[0] ?? "";
 const decoys = sameSlotDecoys(realCode, 1024);
 const candidates = [realCode, wrongGuess, ...decoys];
 const hostScalar = 0x5eed5eedn;
-/** Each S1 search runs 1026 handshakes; a loaded host can take longer than bun's 5 s default. */
-setDefaultTimeout(30_000);
 
 /** The C1 shape: the attacker is the initiator, commits one wrong guess, and captures the host's answer. */
 async function attackerSession(guess: string) {
@@ -59,10 +58,8 @@ async function attackerSession(guess: string) {
 
 /** S1, the v1.2 attack: every candidate's v1.2 psk tried against message 2. Returns the candidates that decrypt it. */
 async function s1Hits(state: AttackerState, message2: Uint8Array): Promise<readonly string[]> {
-  const tried = await Promise.all(
-    candidates.map(async (c) => ((await decryptsUnder(state, v12Psk(c), message2)) ? c : "")),
-  );
-  return tried.filter((c) => c !== "");
+  const decrypts = await offlineOracle(state, message2);
+  return candidates.filter((c) => decrypts(v12Psk(c)));
 }
 
 describe("the reviewer's offline attack (C1) fails against v1.3", () => {
@@ -125,8 +122,10 @@ describe("positive controls: the harness can find a code when the composition is
   test("the oracle exists: the host's real ISK decrypts the captured message 2", async () => {
     const attack = await attackerSession(wrongGuess);
     const inputs = { ...codePairingInputs(realCode, host.hostId, host.noise.publicKey), sid: attack.sid };
-    const isk = cpaceRespond(inputs, attack.ya, { scalar: hostScalar }).isk;
-    expect(await decryptsUnder(attack.state, codePairingPsk(isk), attack.message2)).toBe(true);
+    const psk = codePairingPsk(cpaceRespond(inputs, attack.ya, { scalar: hostScalar }).isk);
+    expect(await decryptsUnder(attack.state, psk, attack.message2)).toBe(true);
+    const oracle = await offlineOracle(attack.state, attack.message2);
+    expect([oracle(psk), oracle(v12Psk(wrongGuess))]).toEqual([true, false]);
   });
 
   test("the one online guess is real: a committed guess equal to the code pairs", async () => {

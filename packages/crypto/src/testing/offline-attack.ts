@@ -1,10 +1,12 @@
+import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { cpaceInitiate, cpaceRespond } from "../cpace.ts";
 import { concatBytes, utf8 } from "../encoding.ts";
-import { prologueFor } from "../identity.ts";
+import { prologueFor, x25519FromSecret } from "../identity.ts";
 import { SessionKind } from "../kinds.ts";
-import { Handshake } from "../noise/handshake.ts";
+import { Handshake, PROTOCOL_NAMES } from "../noise/handshake.ts";
+import { SymmetricState } from "../noise/symmetric-state.ts";
 import { codePairingCi, codePairingPsk } from "../pairing-keys.ts";
 import { PAIRING_ALPHABET, pairingSlotOf } from "../pairing.ts";
 import { encodePairingHello, encodeReply } from "../payloads.ts";
@@ -60,6 +62,44 @@ export async function decryptsUnder(state: AttackerState, psk: Uint8Array, messa
     () => true,
     () => false,
   );
+}
+
+/**
+ * The same test as {@link decryptsUnder}, for many candidates against one captured message 2. Every Diffie-Hellman
+ * in the replay depends only on the attacker's own keys and the host's ephemeral, never on the psk (IKpsk2 mixes it
+ * last), so the four DHs run once here and each candidate costs only the symmetric steps. The positive controls hold
+ * this oracle and the full-`Handshake` replay to the same answers.
+ */
+export async function offlineOracle(state: AttackerState, message2: Uint8Array): Promise<(psk: Uint8Array) => boolean> {
+  const e = x25519FromSecret(state.ephemeralSecret);
+  const re = message2.subarray(0, 32);
+  const es = x25519.getSharedSecret(e.secretKey, state.hostPub);
+  const ss = await state.deviceKey.dh(state.hostPub);
+  const ee = x25519.getSharedSecret(e.secretKey, re);
+  const se = await state.deviceKey.dh(re);
+  const hello = encodePairingHello("phone");
+  return (psk) => {
+    const symmetric = new SymmetricState(PROTOCOL_NAMES.IKpsk2);
+    symmetric.mixHash(state.prologue);
+    symmetric.mixHash(state.hostPub);
+    symmetric.mixHash(e.publicKey);
+    symmetric.mixKey(e.publicKey);
+    symmetric.mixKey(es);
+    symmetric.encryptAndHash(state.deviceKey.publicKey);
+    symmetric.mixKey(ss);
+    symmetric.encryptAndHash(hello);
+    symmetric.mixHash(re);
+    symmetric.mixKey(re);
+    symmetric.mixKey(ee);
+    symmetric.mixKey(se);
+    symmetric.mixKeyAndHash(psk);
+    try {
+      symmetric.decryptAndHash(message2.subarray(32));
+      return true;
+    } catch {
+      return false;
+    }
+  };
 }
 
 /**
