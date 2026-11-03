@@ -45,13 +45,19 @@ export function withoutTrigger(platform: Platform, overrides: Overrides, trigger
   return next;
 }
 
+/** An override touches an action when it binds a trigger to it or moves one of its default triggers away. */
+function touches(platform: Platform, trigger: string, bound: string | null, action: string): boolean {
+  return bound === action || defaultKeymap(platform).get(trigger) === action;
+}
+
+export function isChanged(platform: Platform, overrides: Overrides, action: string): boolean {
+  return [...overrides].some(([trigger, bound]) => touches(platform, trigger, bound, action));
+}
+
 /** Forgets every override that touches the action, so its defaults come back. */
 export function resetAction(platform: Platform, overrides: Overrides, action: string): Overrides {
-  const defaults = defaultKeymap(platform);
   const next = new Map(overrides);
-  for (const [trigger, bound] of overrides) {
-    if (bound === action || (bound === null && defaults.get(trigger) === action)) next.delete(trigger);
-  }
+  for (const [trigger, bound] of overrides) if (touches(platform, trigger, bound, action)) next.delete(trigger);
   return next;
 }
 
@@ -64,6 +70,8 @@ export interface KeybindLine {
 
 export interface ParsedKeybinds {
   readonly lines: readonly KeybindLine[];
+  /** True when the file had `keybind = clear`: every default is dropped before its own lines apply. */
+  readonly clear: boolean;
   readonly overrides: Overrides;
 }
 
@@ -71,6 +79,7 @@ export interface ParsedKeybinds {
 export function parseKeybinds(text: string): ParsedKeybinds {
   const lines: KeybindLine[] = [];
   const overrides = new Map<string, string | null>();
+  let clear = false;
   text.split(/\r?\n/).forEach((raw, index) => {
     const line = index + 1;
     const trimmed = raw.trim();
@@ -78,6 +87,7 @@ export function parseKeybinds(text: string): ParsedKeybinds {
     if (match === null) return;
     const body = (match[1] ?? "").trim().replace(/^"(.*)"$/, "$1");
     if (body === "clear") {
+      clear = true;
       overrides.clear();
       lines.push({ line, text: body, status: "applies" });
       return;
@@ -98,14 +108,26 @@ export function parseKeybinds(text: string): ParsedKeybinds {
     overrides.set(checked.trigger, action);
     lines.push({ line, text: body, status: "applies" });
   });
-  return { lines, overrides };
+  return { lines, clear, overrides };
 }
+
+/** The overrides after importing: a clear removes every default first, then the file's lines apply. */
+export function importKeybinds(platform: Platform, current: Overrides, parsed: ParsedKeybinds): Overrides {
+  const base = parsed.clear
+    ? new Map([...defaultKeymap(platform).keys()].map((trigger) => [trigger, null] as const))
+    : current;
+  return new Map([...base, ...parsed.overrides]);
+}
+
+/** A trigger ending in the "=" key is written with Ghostty's "equal" name so the line has one separator. */
+const ghosttyTrigger = (trigger: string): string => trigger.replace(/(^|\+)=$/, "$1equal");
 
 export function serializeKeybinds(overrides: Overrides): string {
   const out = ["# Keybindings exported from doriface (Ghostty keybind syntax)"];
   for (const [trigger, action] of overrides) {
-    const ghostty = action === null ? "unbind" : (actionFor(action)?.ghostty ?? action);
-    out.push(`keybind = ${trigger}=${ghostty}`);
+    const ghostty = action === null ? "unbind" : actionFor(action)?.ghostty;
+    const line = `keybind = ${ghosttyTrigger(trigger)}=${ghostty ?? action}`;
+    out.push(ghostty === undefined ? `# ${line} (no Ghostty equivalent)` : line);
   }
   return `${out.join("\n")}\n`;
 }
