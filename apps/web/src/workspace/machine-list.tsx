@@ -5,6 +5,7 @@ import type { RunFailure } from "./start-on.ts";
 
 export interface MachineListProps {
   readonly entries: readonly MachineEntry[];
+  /** The id of the machine the active terminal is on. */
   readonly activeMachine: string | undefined;
   readonly onOpen: (address: string) => void;
   readonly onNewOn: (machine: string) => void;
@@ -33,11 +34,11 @@ export function MachineList({
     <SidebarSection title="Machines" count={entries.length} {...(className === undefined ? {} : { className })}>
       {entries.map((machine) => {
         const Icon = machine.local ? Monitor : Server;
-        const selected = machine.name === activeMachine;
+        const selected = machine.id === activeMachine;
         const state = machine.local ? "this machine" : stateLabel(machine.state);
         return (
           <div
-            key={machine.name}
+            key={machine.id}
             className={cn(
               "group flex h-(--row) min-w-0 items-center rounded-md hover:bg-hover",
               selected && "bg-selected",
