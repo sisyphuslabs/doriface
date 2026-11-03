@@ -46,20 +46,3 @@ export function generateHostIdentity(): HostIdentity {
 
 /** The Noise prologue for both patterns: UTF-8 `doriface/1` followed by the UTF-8 hostId. */
 export const prologueFor = (hostId: string): Uint8Array => concatBytes(utf8("doriface/1"), utf8(hostId));
-
-/** The bytes a relay challenge signature covers: `doriface-relay-v1` || hostId || challenge. */
-export const relayChallengeMessage = (hostId: string, challenge: Uint8Array): Uint8Array =>
-  concatBytes(utf8("doriface-relay-v1"), utf8(hostId), challenge);
-
-export const signRelayChallenge = (identity: HostIdentity, challenge: Uint8Array): Uint8Array =>
-  concatBytes(
-    identity.sign.publicKey,
-    ed25519.sign(relayChallengeMessage(identity.hostId, challenge), identity.sign.secretKey),
-  );
-
-export function verifyRelayAnswer(hostId: string, challenge: Uint8Array, answer: Uint8Array): boolean {
-  if (answer.byteLength !== 96) return false;
-  const signPub = answer.subarray(0, 32);
-  if (hostIdOf(signPub) !== hostId) return false;
-  return ed25519.verify(answer.subarray(32), relayChallengeMessage(hostId, challenge), signPub);
-}
