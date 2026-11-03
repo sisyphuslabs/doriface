@@ -6,29 +6,33 @@ import {
   slotOf,
   toBase64Url,
 } from "@doriface/relay-client/wire";
-import { type HostAttachment, patchHost } from "./attachment.ts";
+import type { HostAttachment } from "./attachment.ts";
 import { sendControl } from "./flow.ts";
 import type { PairSlotsEnv } from "./pair-slot.ts";
 
 /**
  * Handles a PAIR_SLOT frame from an authenticated uplink and answers it with a PAIR_SLOT_ACK: registered or taken for
- * a claim; registered for an empty payload, which releases the slot the uplink registered last (with no slot
- * registered there is nothing to name, so no ack); malformed for a request whose slot is readable but whose payload is
+ * a claim; registered for an empty payload, which releases the host's registered slot, whichever uplink registered it
+ * (with no slot registered there is nothing to name, so no ack); malformed for a request whose slot is readable but whose payload is
  * not. A payload with no readable slot closes the uplink (4402).
  */
+/** The host's registered slot, kept in its Room's storage: it belongs to the host and outlives any one uplink. */
+const HOST_SLOT = "pairSlot";
+
 export async function handlePairSlot(
   env: PairSlotsEnv,
+  storage: DurableObjectStorage,
   host: WebSocket,
   attachment: HostAttachment,
   payload: Uint8Array,
 ): Promise<void> {
   const slots = env.PAIR_SLOTS;
-  const { pairSlot } = attachment;
+  const pairSlot = await storage.get<string>(HOST_SLOT);
   if (payload.byteLength === 0) {
     if (pairSlot === undefined) return;
-    // Released first: if the release fails, the uplink still knows its slot and a retried clear can release it.
+    // Released first: if the release fails, the host's slot is still recorded and a retried clear can release it.
     await slots.get(slots.idFromName(pairSlot)).release(attachment.hostId);
-    patchHost(host, { pairSlot: undefined });
+    await storage.delete(HOST_SLOT);
     return sendControl(host, encodePairSlotAck(pairSlot, PairSlotAckStatus.Registered));
   }
   const request = decodePairSlotRequest(payload);
@@ -46,7 +50,7 @@ export async function handlePairSlot(
     if (pairSlot !== undefined && pairSlot !== request.slot) {
       await slots.get(slots.idFromName(pairSlot)).release(attachment.hostId);
     }
-    patchHost(host, { pairSlot: request.slot });
+    await storage.put(HOST_SLOT, request.slot);
   }
   sendControl(host, encodePairSlotAck(request.slot, claimed ? PairSlotAckStatus.Registered : PairSlotAckStatus.Taken));
 }

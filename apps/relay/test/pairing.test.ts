@@ -1,13 +1,17 @@
 import {
   CloseCode,
   CROCKFORD_ALPHABET,
+  ed25519Signer,
+  generateSigningKey,
+  Uplink,
   encodePairSlotRequest,
   lookupPairSlot,
   PairLookupError,
 } from "@doriface/relay-client";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { runDeferred } from "./support/cleanup.ts";
-import { Probe, testIp } from "./support/probe.ts";
+import { defer, runDeferred } from "./support/cleanup.ts";
+import { Probe, socketFrom, testIp } from "./support/probe.ts";
+import { AsyncQueue } from "./support/queue.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { inOrder, times } from "./support/sequential.ts";
 import { startTestHost } from "./support/test-host.ts";
@@ -87,6 +91,48 @@ describe("pairing slots", () => {
     expect(await lookup(typed(first))).toBeUndefined();
     expect((await lookup(typed(second)))?.hostId).toBe(host.uplink.hostId);
     host.uplink.stop();
+  });
+
+  test("after the uplink reconnects, the host can still clear its slot and moving it releases the old one", async () => {
+    const ip = testIp();
+    const sockets: WebSocket[] = [];
+    const answered = new AsyncQueue<void>();
+    const uplink = await Uplink.start({
+      relayUrl: relay.url,
+      signer: ed25519Signer(generateSigningKey()),
+      onSession: () => {},
+      onState: (state) => {
+        if (state.state === "answered") answered.push();
+      },
+      createSocket: (url) => {
+        const ws = socketFrom(ip)(url);
+        sockets.push(ws);
+        return ws;
+      },
+    });
+    defer(() => uplink.stop());
+    await answered.take();
+    const [moved, kept] = [randomSlot(), randomSlot()];
+    await uplink.registerPairSlot(moved, crypto.getRandomValues(new Uint8Array(32)));
+    sockets.at(-1)?.close();
+    await answered.take();
+    await uplink.registerPairSlot(kept, crypto.getRandomValues(new Uint8Array(32)));
+    expect(await lookup(typed(moved))).toBeUndefined();
+    sockets.at(-1)?.close();
+    await answered.take();
+    await uplink.clearPairSlot();
+    expect(await lookup(typed(kept))).toBeUndefined();
+  });
+
+  test("a host whose uplink was replaced can clear the slot the old uplink registered", async () => {
+    const ip = testIp();
+    const first = await startTestHost(relay.url, ip);
+    const slot = randomSlot();
+    await first.uplink.registerPairSlot(slot, crypto.getRandomValues(new Uint8Array(32)));
+    const second = await startTestHost(relay.url, ip, { secretKey: first.secretKey });
+    expect(await first.uplink.stopped).toBe(CloseCode.UplinkReplaced);
+    await second.uplink.clearPairSlot(slot);
+    expect(await lookup(typed(slot))).toBeUndefined();
   });
 
   test("a cleared slot is not found any more", async () => {
