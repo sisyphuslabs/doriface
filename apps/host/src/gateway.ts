@@ -91,10 +91,7 @@ export function createGateway(options: GatewayOptions): Gateway {
     const secure = await acceptE2ee(wire, deps);
     if (secure === undefined) return;
     deps.sessions.add(secure);
-    pipeTo(
-      plaintextLink(secure, () => wire.flushed()),
-      (code, reason) => secure.close(code, reason),
-    );
+    pipeTo(plaintextLink(secure, wire), (code, reason) => secure.close(code, reason));
   };
 
   const websocket: WebSocketHandler<BunWebSocketData> = {
