@@ -19,6 +19,13 @@ export interface CommandBench {
   readonly ready: () => void;
 }
 
+/**
+ * Budget for tests that build a mesh of 12 or more keys through the store. The view is about 8 ms per write; most of
+ * the 50-90 ms per write is ed25519 re-verification of every stored card by the authorize index, the door and
+ * `recordsOf` (#94), so these tests run in about 0.5 s alone and several seconds on a loaded machine.
+ */
+export const LARGE_MESH_MS = 30_000;
+
 const dirs: string[] = [];
 
 export function removeBenches(): void {
