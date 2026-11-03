@@ -16,7 +16,7 @@ const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
 export function agentStatus(terminal: Terminal): AgentStatus {
   if (terminal.state === "finished") return "done";
   const word = terminal.status?.state;
-  return word === undefined ? "idle" : (OSC_STATES[word] ?? "idle");
+  return word !== undefined && Object.hasOwn(OSC_STATES, word) ? (OSC_STATES[word] ?? "idle") : "idle";
 }
 
 export function terminalTitle(terminal: Terminal): string {
