@@ -6,7 +6,8 @@ import { currentPlatform } from "../keys/trigger.ts";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
-import { agentStatus, machineOf, spaceName, terminalTitle } from "./model.ts";
+import { MachineOffline } from "./machine-offline.tsx";
+import { agentStatus, machineOf, spaceName, terminalTitle, UNREACHABLE } from "./model.ts";
 import { SessionMenu } from "./session-menu.tsx";
 
 export interface PaneProps {
@@ -32,6 +33,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
     spaceName(terminal),
     ...(shortcut === undefined ? [] : [shortcut]),
   ].join(" · ");
+  const machine = machineOf(terminal.address);
   return (
     <section
       aria-label={`${title} terminal`}
@@ -56,17 +58,21 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
         </span>
         <SessionMenu address={terminal.address} />
       </header>
-      {/* A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh. */}
-      <TerminalView
-        key={terminal.pid ?? undefined}
-        connection={connection}
-        address={terminal.address}
-        pid={terminal.pid ?? null}
-        live={terminal.state === "live"}
-        focused={focused}
-        label={`${title} output`}
-        onEnd={onEnd}
-      />
+      {terminal.state === UNREACHABLE && machine !== undefined ? (
+        <MachineOffline machine={machine} />
+      ) : (
+        // A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh.
+        <TerminalView
+          key={terminal.pid ?? undefined}
+          connection={connection}
+          address={terminal.address}
+          pid={terminal.pid ?? null}
+          live={terminal.state === "live"}
+          focused={focused}
+          label={`${title} output`}
+          onEnd={onEnd}
+        />
+      )}
     </section>
   );
 }

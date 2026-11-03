@@ -12,6 +12,10 @@ export interface Machines {
   readonly listError: string | undefined;
   /** Shows how to add a machine (the pairing commands). */
   readonly openAddMachine: () => void;
+  /** The added machines as machine.list last said: state, `why`, since when. */
+  readonly views: readonly MachineView[];
+  /** Dials a machine now (`machine.connect`) instead of at hc's next retry, then reads machine.list again. */
+  readonly retry: (machine: string) => Promise<void>;
 }
 
 export const MachinesContext = createContext<Machines>({
@@ -19,6 +23,8 @@ export const MachinesContext = createContext<Machines>({
   newTerminalOn: () => {},
   listError: undefined,
   openAddMachine: () => {},
+  views: [],
+  retry: async () => {},
 });
 
 export const useMachinesContext = (): Machines => useContext(MachinesContext);
@@ -37,6 +43,8 @@ export interface MachineState {
   /** Reads machine.list again now, e.g. after a call on a machine failed. */
   readonly refresh: () => void;
   readonly listError: string | undefined;
+  readonly views: readonly MachineView[];
+  readonly retry: (machine: string) => Promise<void>;
 }
 
 /** machine.list, read again when a machine's live terminals change, on a timer while visible, and on return. */
@@ -77,5 +85,10 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
   const localName = connection.hello.core.name;
   const reached = useMemo(() => withReach(terminals, views), [terminals, views]);
   const entries = useMemo(() => machineEntries(localName, views, reached), [localName, views, reached]);
-  return { entries, terminals: reached, refresh, listError };
+  // A refused dial is not lost: hc records it as the machine's `why`, which the re-read brings in.
+  const retry = useCallback(
+    (machine: string) => connection.call("machine.connect", { machine }).then(refresh, refresh),
+    [connection, refresh],
+  );
+  return { entries, terminals: reached, refresh, listError, views, retry };
 }
