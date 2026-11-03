@@ -2,6 +2,8 @@ import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
 import { StatusChip, cn } from "@doriface/ui";
 import { SquareTerminal } from "lucide-react";
+import { currentPlatform } from "../keys/trigger.ts";
+import { useActionKeys } from "../keys/use-action-keys.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { agentStatus, machineOf, spaceName, terminalTitle } from "./model.ts";
 
@@ -20,6 +22,9 @@ export interface PaneProps {
 /** A terminal card: header with title, state and where it runs, then the live terminal. */
 export function Pane({ connection, terminal, focused, index, split, onFocus, onClosed }: PaneProps) {
   const title = terminalTitle(terminal);
+  const keys = useActionKeys(`tab.select:${index}`);
+  // macOS writes shortcuts as joined glyphs (⌘1); elsewhere they read Ctrl+1.
+  const shortcut = keys?.join(currentPlatform() === "mac" ? "" : "+");
   return (
     <section
       aria-label={`${title} terminal`}
@@ -39,7 +44,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onC
         <StatusChip status={agentStatus(terminal)} />
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">
           {machineOf(terminal.address) === undefined ? "" : `${terminal.address} · `}
-          {spaceName(terminal)} · ⌘{index}
+          {shortcut === undefined ? spaceName(terminal) : `${spaceName(terminal)} · ${shortcut}`}
         </span>
       </header>
       <TerminalView
