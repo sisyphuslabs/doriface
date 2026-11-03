@@ -84,6 +84,48 @@ test("dismissing the palette over the paste dialog leaves focus in that dialog, 
   await expect(terminal).not.toContainText("qqleak");
 });
 
+test.describe("with clipboard access", () => {
+  test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+  test("selecting text with the mouse keeps keyboard focus in the terminal and copy still works", async ({ page }) => {
+    await page.goto("/");
+    const terminal = await openNewTerminal(page);
+    const address = await terminal.getAttribute("data-terminal");
+    await terminal.getByRole("textbox").focus();
+    await page.keyboard.type("echo copysrc-$((6*7))-end");
+    await page.keyboard.press("Enter");
+    await expect(terminal).toContainText("copysrc-42-end", { timeout: 15_000 });
+
+    // The drag runs across the output line's own glyphs, as a user would select it.
+    const box = await terminal.evaluate((root) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        const at = node.textContent?.indexOf("copysrc-42-end") ?? -1;
+        if (at < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + "copysrc-42-end".length);
+        const rect = range.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+      }
+      return null;
+    });
+    if (box === null) throw new Error("the output line is not in the terminal");
+    await page.mouse.move(box.left + 1, box.y);
+    await page.mouse.down();
+    await page.mouse.move(box.right - 1, box.y, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toContain("copysrc-42");
+
+    await page.keyboard.press("ControlOrMeta+C");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("copysrc-42");
+    await expect.poll(() => focusedAddress(page)).toBe(address);
+    await page.keyboard.type("echo after-$((2+3))");
+    await page.keyboard.press("Enter");
+    await expect(terminal).toContainText("after-5", { timeout: 15_000 });
+  });
+});
+
 test("closing the palette with its shortcut or by running an action gives focus back to the terminal", async ({
   page,
 }) => {
