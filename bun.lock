@@ -20,6 +20,9 @@
       "dependencies": {
         "hono": "4.13.16",
       },
+      "devDependencies": {
+        "@doriface/protocol": "workspace:*",
+      },
     },
     "packages/protocol": {
       "name": "@doriface/protocol",
