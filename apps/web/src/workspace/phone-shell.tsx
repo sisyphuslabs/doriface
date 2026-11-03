@@ -106,6 +106,7 @@ function PhoneTerminal(props: {
         key={terminal.pid ?? undefined}
         connection={connection}
         address={terminal.address}
+        pid={terminal.pid ?? null}
         focused
         label={`${title} output`}
         transformInput={transform}
