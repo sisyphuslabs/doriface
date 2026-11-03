@@ -14,18 +14,23 @@ const appDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** CI points this at the electron-builder --dir output so the packaged app is what launches. */
 const executablePath = process.env["DORIFACE_E2E_EXECUTABLE"];
 const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
-const hc = scratchHcSession();
 /** Playwright wants a string-only environment. */
-const launchEnv = (): Record<string, string> =>
+const launchEnv = (session: ReturnType<typeof scratchHcSession>): Record<string, string> =>
   Object.fromEntries(
-    Object.entries({ ...process.env, ...hc.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries({ ...process.env, ...session.env }).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
   );
+let hc: ReturnType<typeof scratchHcSession> | undefined;
 let launched: ElectronApplication | undefined;
 
 test.beforeAll(async () => {
+  // Made here, not at import, so --list and other specs' runs leave no scratch session behind.
+  const session = scratchHcSession();
+  hc = session;
   launched = await electron.launch({
     ...(executablePath === undefined ? { args: [appDir] } : { executablePath: attachAfterFirstLoad, args: [] }),
-    env: launchEnv(),
+    env: launchEnv(session),
   });
 });
 
@@ -33,7 +38,7 @@ test.afterAll(async () => {
   try {
     await launched?.close();
   } finally {
-    await hc.dispose();
+    await hc?.dispose();
   }
 });
 
