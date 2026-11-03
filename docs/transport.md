@@ -83,9 +83,9 @@ Residual risk: `hostId` binds only `signPub`, so a lying lookup can return the r
 - Reconnect always runs a fresh IK handshake (1 RTT; msg1 may carry the first stream bytes). Resuming without a repaint is deferred.
 - API: `secureLink(link: ByteLink, opts): Promise<SecureLink>` for the initiator and responder roles. `ByteLink` is `@doriface/client`'s interface (`send(bytes)`, `onData(cb)`, `onClose(cb)`, `close()`), and `SecureLink` is a `ByteLink` that also exposes the authenticated remote static key.
 
-## Relay (Cloudflare Workers + Durable Objects, `apps/relay`)
+## Relay (Cloudflare Workers + Durable Objects)
 
-- Default public relay: `https://relay-doriface.omo.dev`. Self-hosting is one `wrangler deploy`.
+- Default public relay: `https://relay-doriface.omo.dev`. The relay implementation is a separate private service; this section is its public contract, and any server that implements it can stand in.
 - `GET /healthz` -> `{ok:true, version}`.
 - Host uplink: `GET /v1/host/<hostId>` (WebSocket). The relay sends a 32-byte random challenge as the first binary message. The host answers with `signPub(32) || Ed25519-signature(64)` over `"doriface-relay-v1" || relayOrigin || hostId || challenge`, where `relayOrigin` is the exact `wss://host[:port]` the host dialed. The relay rebuilds `relayOrigin` from its own request URL and checks the signature and that `hostId` matches signPub; otherwise it closes with 4403. Binding the origin stops a second relay from replaying a challenge from this one. One uplink per hostId; a newer authenticated uplink replaces the old one, which the relay closes with 4409.
 - Client: `GET /v1/client/<hostId>` (WebSocket). There is no relay-level auth (E2EE authenticates). An offline host closes the socket with 4404. A typed-code pairing session adds `?pair=<slot>`: the relay charges it to that slot's pairing budget, refuses it with 4410 when the slot is not registered to this hostId, and sends the host an OPEN whose payload is the 3 slot characters (an ordinary OPEN has no payload). A QR/URL pairing is an ordinary session.
