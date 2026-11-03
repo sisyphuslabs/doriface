@@ -116,6 +116,19 @@ function kindOf(path: string): "missing" | "directory" | "other" {
 }
 
 /**
+ * True when anything under `dir` is a symlink. It reads each directory without following links (a dirent's type is
+ * the entry's own), descends only into real directories and stops at the first link, so a link into a huge tree or a
+ * link loop costs nothing.
+ */
+function holdsSymlink(dir: string): boolean {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) return true;
+    if (entry.isDirectory() && holdsSymlink(join(dir, entry.name))) return true;
+  }
+  return false;
+}
+
+/**
  * True only when `dir/.git` is a real directory that git resolves to itself, with its own store and nothing linked
  * out of it: a symlinked `.relay` or `.git`, a `gitdir:` file, a `commondir` into another repository, or any symlink
  * inside `.git` (an `objects/` or `index` borrowed from another repository, as `git-new-workdir` lays out) would let
@@ -124,8 +137,7 @@ function kindOf(path: string): "missing" | "directory" | "other" {
 async function ownsRepository(dir: string, env: Env): Promise<boolean> {
   const gitDir = join(dir, ".git");
   if (kindOf(dir) !== "directory" || kindOf(gitDir) !== "directory") return false;
-  if (readdirSync(gitDir, { recursive: true, withFileTypes: true }).some((entry) => entry.isSymbolicLink()))
-    return false;
+  if (holdsSymlink(gitDir)) return false;
   const [absolute, common] = await Promise.all([
     gitOutput(dir, env, ["rev-parse", "--absolute-git-dir"]),
     gitOutput(dir, env, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
