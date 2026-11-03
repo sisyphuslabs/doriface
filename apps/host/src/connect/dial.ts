@@ -60,7 +60,6 @@ const REFUSALS: Readonly<Record<number, (hostId: string) => string>> = {
   4403: (hostId) => `the relay refused host ${hostId}'s key`,
   4404: (hostId) => `host ${hostId} is not connected to the relay: start doriface-host there`,
   4408: (hostId) => `host ${hostId} did not answer in time`,
-  4410: () => "no host is pairing with this code on the relay: it may have expired",
   4429: () => "the relay is rate limiting this machine or that host: try again in a minute",
 };
 
