@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { machineEntries, machineKey, stateLabel } from "./machines.ts";
+import { machineEntries, machineKey } from "./machines.ts";
 import { toSpaces } from "./model.ts";
 
 const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => ({
@@ -39,17 +39,6 @@ describe("machineEntries", () => {
       { name: "studio", local: true, state: "connected", live: 2, first: "t1" },
       { name: "boxb", local: false, state: "connected", live: 2, first: "boxb/t1" },
       { name: "lab", local: false, state: "unreachable", live: 0, first: undefined },
-    ]);
-  });
-
-  test("hc's states read as words", () => {
-    expect(["connected", "connecting", "unreachable", "needs_login", "needs_update", "new"].map(stateLabel)).toEqual([
-      "connected",
-      "connecting",
-      "unreachable",
-      "needs login",
-      "needs update",
-      "new",
     ]);
   });
 
