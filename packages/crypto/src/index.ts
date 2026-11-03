@@ -8,9 +8,6 @@ export {
   hostIdentityFromSecrets,
   hostIdOf,
   prologueFor,
-  relayChallengeMessage,
-  signRelayChallenge,
-  verifyRelayAnswer,
   x25519FromSecret,
   type HostIdentity,
   type KeyPair,
@@ -46,6 +43,7 @@ export {
   type PairingLink,
   type PairingOffer,
 } from "./pairing.ts";
+export { relayChallengeMessage, relayOriginOf, signRelayChallenge, verifyRelayAnswer } from "./relay-auth.ts";
 export {
   HANDSHAKE_TIMEOUT_MS,
   secureLink,
