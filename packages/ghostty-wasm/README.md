@@ -20,7 +20,9 @@ const core = await loadGhosttyCore({ scrollbackLimit: 8_000_000 });
 (`packages/@wterm/ghostty/zig` in wterm), compiled against Ghostty. `bun run build:wasm` fetches both by commit,
 checks their archive digests, applies `patches/`, builds with the pinned Zig 0.17.0 (the minimum Ghostty v1.4.0
 accepts), and writes `wasm/ghostty-vt.wasm` and `wasm/build.json`. `bun run build:wasm --ref <tag|commit>` builds
-another Ghostty revision; an unpinned revision has its archive digest recorded rather than checked.
+another Ghostty revision into the same two files, overwriting the committed ones; an unpinned revision has its
+archive digest recorded rather than checked. Commit only a pinned build: to move to another revision, change
+`scripts/pins.ts` first, because `scripts/verify.ts` rejects a `build.json` whose revisions differ from the pins.
 
 | Patch          | Why                                                                                                                                                        |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -33,7 +35,7 @@ another Ghostty revision; an unpinned revision has its archive digest recorded r
 | `wterm/0002`   | Answers the OSC 7501 Program Status probe and keeps the root status record, readable through `get_program_status_*`.                                       |
 
 CI does not rebuild Zig. `scripts/verify.ts` checks that the committed wasm, its size, and every patch match
-`wasm/build.json`.
+`wasm/build.json`, and that `wasm/build.json` names the pinned revisions and Zig.
 
 ## Differences from the stock 0.5.8 binary
 

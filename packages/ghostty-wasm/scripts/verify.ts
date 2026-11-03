@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parseBuildInfo } from "../src/build-info.ts";
 import type { BuildInfo, PatchRecord } from "../src/build-info.ts";
 import { sha256Hex } from "./artifacts.ts";
+import { GHOSTTY, OPTIMIZE, WTERM, ZIG_VERSION } from "./pins.ts";
 
 const PACKAGE_ROOT = join(import.meta.dir, "..");
 const REQUIRED_EXPORTS = ["memory", "init", "write", "get_viewport_v2", "read_response", "get_program_status_state"];
@@ -26,8 +27,24 @@ async function checkPatch(patch: PatchRecord): Promise<string | null> {
   return digest === patch.sha256 ? null : `${patch.path} sha256 ${digest}, build.json says ${patch.sha256}`;
 }
 
+function pinProblems(info: BuildInfo): readonly string[] {
+  const fields: ReadonlyArray<readonly [string, string, string]> = [
+    ["ghosttyTag", info.ghosttyTag, GHOSTTY.tag],
+    ["ghosttyCommit", info.ghosttyCommit, GHOSTTY.commit],
+    ["ghosttyArchiveSha256", info.ghosttyArchiveSha256, GHOSTTY.archiveSha256],
+    ["wtermTag", info.wtermTag, WTERM.tag],
+    ["wtermCommit", info.wtermCommit, WTERM.commit],
+    ["wtermArchiveSha256", info.wtermArchiveSha256, WTERM.archiveSha256],
+    ["zig", info.zig, ZIG_VERSION],
+    ["optimize", info.optimize, OPTIMIZE],
+  ];
+  return fields
+    .filter(([, built, pinned]) => built !== pinned)
+    .map(([field, built, pinned]) => `${field} ${built}, scripts/pins.ts pins ${pinned}`);
+}
+
 export async function verify(info: BuildInfo): Promise<readonly string[]> {
-  const problems: string[] = [];
+  const problems: string[] = [...pinProblems(info)];
   const wasm = await Bun.file(join(PACKAGE_ROOT, "wasm", "ghostty-vt.wasm")).bytes();
   if (wasm.byteLength !== info.bytes) problems.push(`wasm is ${wasm.byteLength} bytes, build.json says ${info.bytes}`);
   const digest = sha256Hex(wasm);
