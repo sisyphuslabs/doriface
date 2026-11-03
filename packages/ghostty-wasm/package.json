@@ -6,7 +6,8 @@
   "files": [
     "src",
     "wasm",
-    "NOTICE"
+    "NOTICE",
+    "licenses"
   ],
   "type": "module",
   "exports": {
