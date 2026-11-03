@@ -13,8 +13,8 @@ export interface HcSocket {
   /** Closes every open connection; while `down` is true the page's reconnects are refused. */
   readonly drop: (down: boolean) => Promise<void>;
   readonly restore: () => void;
-  /** Holds the page's requests for `method` (others pass) until the returned release sends them, in order. */
-  readonly hold: (method: string) => () => void;
+  /** Holds the page's requests for these methods (others pass) until the returned release sends them, in order. */
+  readonly hold: (...methods: string[]) => () => void;
 }
 
 /** Call before page.goto: every connection to the e2e host passes through the returned handle. */
@@ -26,7 +26,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   let refused = 0;
   let delay = 0;
   let lastDue = 0;
-  let held: string | null = null;
+  let held: readonly string[] = [];
   const parked: (() => void)[] = [];
   await page.routeWebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, (socket) => {
     if (down) {
@@ -38,7 +38,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
     socket.onMessage((frame) => {
       const text = typeof frame === "string" ? frame : frame.toString("latin1");
       sent.push(text);
-      if (held !== null && text.includes(`"method":"${held}"`)) parked.push(() => host.send(frame));
+      if (held.some((method) => text.includes(`"method":"${method}"`))) parked.push(() => host.send(frame));
       else host.send(frame);
     });
     host.onMessage((frame) => {
@@ -62,10 +62,10 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
     restore: () => {
       down = false;
     },
-    hold: (method) => {
-      held = method;
+    hold: (...methods) => {
+      held = methods;
       return () => {
-        held = null;
+        held = [];
         for (const send of parked.splice(0)) send();
       };
     },

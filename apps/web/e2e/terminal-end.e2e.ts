@@ -187,3 +187,55 @@ test("a kept program that ends while its view waits for the restart closes its t
   await expect(tabs).toHaveCount(tabsBefore - 1, { timeout: 15_000 });
   await expect(restarting).toHaveCount(0);
 });
+
+test("a view that goes away with keys queued says they were not sent, even if the line drops while it asks why", async ({
+  page,
+}) => {
+  // Every not-sent notice the page renders, however briefly.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    const counted = new WeakSet<Node>();
+    Object.assign(window, { notSent: seen });
+    new MutationObserver(() => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (!counted.has(node) && (node.textContent ?? "").startsWith("Typed input was not sent")) {
+          counted.add(node);
+          seen.push(node.textContent ?? "");
+        }
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  const notSent = (): Promise<unknown> => page.evaluate(() => Reflect.get(window, "notSent"));
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  await terminal.getByRole("textbox").focus();
+  const reconnecting = page.getByRole("status").filter({ hasText: "Reconnecting" });
+
+  await socket.drop(true);
+  await expect(reconnecting).toBeVisible();
+  const queued = test.info().outputPath("queued.txt");
+  await page.keyboard.type(`echo queued > '${queued}'`);
+  await page.keyboard.press("Enter");
+  // The reattach, and the question the view asks the core on its way out, both stay unanswered.
+  socket.hold("terminal.attach", "terminal.get");
+  const from = socket.sent().length;
+  socket.restore();
+  await expect(reconnecting).toBeHidden({ timeout: 15_000 });
+  const asked = (method: string) =>
+    socket
+      .sent()
+      .slice(from)
+      .some((frame) => frame.includes(`"method":"${method}"`));
+  await expect.poll(() => asked("terminal.attach"), { timeout: 10_000 }).toBe(true);
+  // Crossing the phone breakpoint unmounts the desktop view while its reattach is in flight.
+  await page.setViewportSize({ width: 390, height: 800 });
+  await expect.poll(() => asked("terminal.get"), { timeout: 10_000 }).toBe(true);
+  expect(await notSent()).toEqual([]);
+
+  // The line drops again before the core answers: the input was still never sent, so say so, with no reason.
+  await socket.drop(true);
+  await expect.poll(notSent, { timeout: 10_000 }).toEqual(["Typed input was not sent"]);
+  expect(existsSync(queued)).toBe(false);
+});
