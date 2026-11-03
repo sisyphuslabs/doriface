@@ -40,3 +40,15 @@ export async function startTerminal(
     };
   }
 }
+
+/** What a failed New terminal tells the user; while the link is down the cause is the reconnect, not the machine. */
+export function failureNotice(
+  failure: RunFailure,
+  reconnecting: boolean,
+  core: string,
+): { readonly title: string; readonly description: string } {
+  return {
+    title: "Could not open a new tab",
+    description: reconnecting ? `Reconnecting to ${core}; try again once it is back.` : failure.message,
+  };
+}

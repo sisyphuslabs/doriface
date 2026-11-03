@@ -2,15 +2,11 @@ import type { HcConnection } from "@doriface/client";
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { machineEntries, machineKey, type MachineEntry } from "./machines.ts";
-import type { RunFailure } from "./start-on.ts";
 
 export interface Machines {
   readonly entries: readonly MachineEntry[];
   /** Starts a shell on that machine (`terminal.run` with `on`) and opens it at its `machine/tN` address. */
   readonly newTerminalOn: (machine: string) => void;
-  /** The last New terminal that a machine refused, shown in the machine list until dismissed. */
-  readonly failure: RunFailure | undefined;
-  readonly dismissFailure: () => void;
   /** Why the last machine.list failed, until one succeeds. */
   readonly listError: string | undefined;
   /** Shows how to add a machine (the pairing commands). */
@@ -20,8 +16,6 @@ export interface Machines {
 export const MachinesContext = createContext<Machines>({
   entries: [],
   newTerminalOn: () => {},
-  failure: undefined,
-  dismissFailure: () => {},
   listError: undefined,
   openAddMachine: () => {},
 });
