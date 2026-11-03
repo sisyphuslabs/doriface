@@ -12,6 +12,8 @@ import { Sidebar } from "./sidebar.tsx";
 import { useAppActions } from "./use-app-actions.ts";
 import type { Tabs } from "./use-tabs.ts";
 
+const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
+
 export interface DesktopShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Terminal[];
@@ -41,7 +43,12 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
       icon={<Columns2 />}
       pressed={tabs.split !== null}
       disabled={tabs.open.length < 2}
-      onClick={tabs.toggleSplit}
+      onClick={() => {
+        const unsplitting = tabs.split !== null;
+        tabs.toggleSplit();
+        // Splitting focuses the new pane; unsplitting keeps the focused one, so keys must leave this button for it.
+        if (unsplitting) document.querySelector<HTMLElement>(FOCUSED_TERMINAL_INPUT)?.focus();
+      }}
     />
   );
 
