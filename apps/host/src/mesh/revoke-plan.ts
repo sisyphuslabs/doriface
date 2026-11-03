@@ -1,3 +1,4 @@
+import { HOST_ID_PATTERN } from "@doriface/relay-client";
 import { MAX_REVOKE_SUBJECTS, presentAt, type Signed, type View, ViewCache } from "@doriface/mesh";
 import type { MemberRef } from "./command-replies.ts";
 import { admittedKeys, overCapNames, subtreeOf } from "./lineage.ts";
@@ -39,9 +40,11 @@ export const findMember = (
 ): string | undefined =>
   admittedKeys(view).find((key) => hostIdOfKey(key) === ref) ??
   admittedKeys(view).find((key) => view.name.get(key) === ref) ??
-  [...view.overCap].find((key) => cardNames.get(key) === ref);
+  (HOST_ID_PATTERN.test(ref) ? undefined : [...view.overCap].find((key) => cardNames.get(key) === ref));
 
-const names = (refs: readonly MemberRef[]): string => refs.map((ref) => ref.name).join(", ");
+/** Every listed key with its hostId: an over-cap key's card name is its owner's choice and may copy another's. */
+const names = (refs: readonly MemberRef[]): string =>
+  refs.map((ref) => (ref.name === ref.hostId ? ref.hostId : `${ref.name} (${ref.hostId})`)).join(", ");
 
 function warningOf(u: Undecidable): string {
   const x = u.subject.name;
@@ -79,7 +82,10 @@ export function planRevoke(
 ): RevokePlan {
   const cardNames = overCapNames(records, view);
   const key = findMember(view, ref, cardNames);
-  if (key === undefined) throw new Error(`no member "${ref}" in this host's view of the mesh`);
+  if (key === undefined)
+    throw new Error(
+      `no member "${ref}" in this host's view of the mesh (a member by mesh name or hostId, an over-cap key by card name or hostId)`,
+    );
   if (key === self) throw new Error("that is this host: to take it out of the mesh, run doriface-host mesh leave");
   const subtree = subtreeOf(view, key);
   const keys = compromised ? [key, ...subtree] : [key];
