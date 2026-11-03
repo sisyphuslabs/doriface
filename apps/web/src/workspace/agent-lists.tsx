@@ -3,8 +3,8 @@ import { AgentRow, SidebarSection, SpaceRow, cn, type Agent } from "@doriface/ui
 import { useMemo } from "react";
 import { useNow } from "./use-now.ts";
 import { MachineList } from "./machine-list.tsx";
-import { activeMachineId, showMachines } from "./machines.ts";
-import { firstInSpace, groupAgents, spaceName, toSpaces } from "./model.ts";
+import { showMachines } from "./machines.ts";
+import { firstInSpace, groupAgents, machineId, spaceId, toSpaces } from "./model.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
 export interface AgentListsProps {
@@ -28,9 +28,9 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
   const groups = useMemo(() => groupAgents(terminals, now), [terminals, now]);
   const spaces = useMemo(() => toSpaces(terminals), [terminals]);
   const activeTerminal = terminals.find((terminal) => terminal.address === active);
-  const activeSpace = activeTerminal === undefined ? undefined : spaceName(activeTerminal);
+  const activeSpace = activeTerminal === undefined ? undefined : spaceId(activeTerminal);
   const machines = useMachinesContext();
-  const activeMachine = active === null ? undefined : activeMachineId(active);
+  const activeMachine = active === null ? undefined : machineId(active);
   const openSpace = (id: string): void => {
     const address = firstInSpace(terminals, id);
     if (address !== undefined) onOpen(address);
@@ -62,7 +62,7 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
       ) : null}
       <SidebarSection title="Spaces" count={spaces.length} className={cn(agentsFirst && "order-last")}>
         {spaces.map((space) => (
-          <SpaceRow key={space.id} space={space} selected={space.name === activeSpace} onSelect={openSpace} />
+          <SpaceRow key={space.id} space={space} selected={space.id === activeSpace} onSelect={openSpace} />
         ))}
       </SidebarSection>
       {SECTIONS.map(({ key, title, tone }) =>

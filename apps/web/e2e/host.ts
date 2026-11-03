@@ -2,7 +2,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
+import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { addMachine } from "./machine.ts";
 import { seed } from "./seed.ts";
 
@@ -10,12 +10,15 @@ const hc = process.env["HC_BIN"] || Bun.which("hc");
 if (hc === null || hc === undefined || hc === "") throw new Error("set HC_BIN to an hc 0.1.17 binary");
 const dir = mkdtempSync(join(tmpdir(), "dw-"));
 const session = `web-e2e-${crypto.randomUUID().slice(0, 8)}`;
-const env = {
-  ...process.env,
+const own = {
   HC_SESSION: session,
   XDG_STATE_HOME: join(dir, "state"),
   XDG_RUNTIME_DIR: join(dir, "run"),
   HC_SOCKET: join(dir, "c.sock"),
+};
+const env = {
+  ...process.env,
+  ...own,
   // A plain shell and a neutral core name keep captures free of this machine's identity.
   SHELL: "/bin/sh",
   PS1: "$ ",
@@ -28,6 +31,8 @@ writeFileSync(
   join(coreDir, "core.json"),
   JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: "studio" }),
 );
+// Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
+writeFileSync(E2E_HOST_ENV, JSON.stringify({ hc, env: own }));
 const host = Bun.spawn(
   [
     "bun",
@@ -62,6 +67,7 @@ async function shutdown(): Promise<void> {
   await host.exited;
   await stopCore();
   await stopMachine?.();
+  rmSync(E2E_HOST_ENV, { force: true });
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);
 }
