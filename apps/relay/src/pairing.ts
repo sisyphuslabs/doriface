@@ -23,8 +23,9 @@ export async function handlePairSlot(
   const { pairSlot } = attachment;
   if (payload.byteLength === 0) {
     if (pairSlot === undefined) return;
-    patchHost(host, { pairSlot: undefined });
+    // Released first: if the release fails, the uplink still knows its slot and a retried clear can release it.
     await slots.get(slots.idFromName(pairSlot)).release(attachment.hostId);
+    patchHost(host, { pairSlot: undefined });
     return sendControl(host, encodePairSlotReply(pairSlot, PairSlotStatus.Registered));
   }
   const request = decodePairSlotRequest(payload);
@@ -36,6 +37,11 @@ export async function handlePairSlot(
     noiseStaticPub: toBase64Url(request.noiseStaticPub),
     signPub: toBase64Url(attachment.signPub),
   });
-  if (claimed) patchHost(host, { pairSlot: request.slot });
+  if (claimed) {
+    if (pairSlot !== undefined && pairSlot !== request.slot) {
+      await slots.get(slots.idFromName(pairSlot)).release(attachment.hostId);
+    }
+    patchHost(host, { pairSlot: request.slot });
+  }
   sendControl(host, encodePairSlotReply(request.slot, claimed ? PairSlotStatus.Registered : PairSlotStatus.Taken));
 }
