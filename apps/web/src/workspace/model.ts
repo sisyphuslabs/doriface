@@ -83,6 +83,9 @@ export function groupAgents(terminals: readonly Terminal[], nowMs: number): Agen
 
 const ATTENTION: readonly AgentStatus[] = ["blocked", "working", "done"];
 
+const remoteRank = (machine: string | undefined): number => (machine === undefined ? 0 : 1);
+
+/** One space per machine and name: this machine's first, then each machine's in name order. */
 export function toSpaces(terminals: readonly Terminal[]): Space[] {
   const groups = new Map<string, { name: string; machine: string | undefined; statuses: Set<AgentStatus> }>();
   for (const terminal of terminals) {
@@ -94,7 +97,10 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
     group.statuses.add(agentStatus(terminal));
     groups.set(key, group);
   }
-  return [...groups].map(([id, group]) => {
+  const ordered = [...groups].toSorted(
+    ([, a], [, b]) => remoteRank(a.machine) - remoteRank(b.machine) || (a.machine ?? "").localeCompare(b.machine ?? ""),
+  );
+  return ordered.map(([id, group]) => {
     const attention = ATTENTION.find((status) => group.statuses.has(status));
     const tabs = terminals.filter(
       (t) => t.state === "live" && `${machineOf(t.address) ?? ""}/${spaceName(t)}` === id,
