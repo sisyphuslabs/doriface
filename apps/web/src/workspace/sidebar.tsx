@@ -1,0 +1,35 @@
+import type { Terminal } from "@doriface/protocol";
+import { Button, IconButton, ScrollArea } from "@doriface/ui";
+import { Link } from "@tanstack/react-router";
+import { PanelLeft, Settings } from "lucide-react";
+import { AgentLists } from "./agent-lists.tsx";
+
+export interface SidebarProps {
+  readonly terminals: readonly Terminal[];
+  readonly active: string | null;
+  readonly onOpen: (address: string) => void;
+  readonly onHide: () => void;
+}
+
+export function Sidebar({ terminals, active, onOpen, onHide }: SidebarProps) {
+  return (
+    <aside
+      aria-label="Workspace"
+      className="flex w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar"
+    >
+      <div className="flex h-11 shrink-0 items-center gap-1 pr-2 pl-3.5">
+        <span className="flex-1 text-sm font-semibold text-sidebar-foreground">doriface</span>
+        <IconButton label="Hide sidebar" keys={["⌘", "B"]} icon={<PanelLeft />} onClick={onHide} />
+      </div>
+      <ScrollArea slot="agents-list" className="flex-1">
+        <AgentLists terminals={terminals} active={active} onOpen={onOpen} />
+      </ScrollArea>
+      <div className="flex shrink-0 flex-col gap-px border-t border-sidebar-border p-2">
+        <Button variant="ghost" className="justify-start gap-2.5 px-2 text-sm" render={<Link to="/settings" />}>
+          <Settings aria-hidden className="size-3.5" />
+          Settings
+        </Button>
+      </div>
+    </aside>
+  );
+}

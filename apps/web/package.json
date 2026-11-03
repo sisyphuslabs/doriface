@@ -1,0 +1,39 @@
+{
+  "name": "@doriface/web",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@doriface/client": "workspace:*",
+    "@doriface/protocol": "workspace:*",
+    "@doriface/ui": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "@tanstack/react-router": "1.170.46",
+    "@wterm/dom": "0.5.8",
+    "@wterm/ghostty": "0.5.8",
+    "@wterm/react": "0.5.8",
+    "lucide-react": "1.66.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "workbox-window": "7.4.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/vite": "4.3.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "react-grab": "0.2.0",
+    "react-scan": "0.5.7",
+    "tailwindcss": "4.3.4",
+    "vite": "8.3.5",
+    "vite-plugin-pwa": "2.0.0"
+  }
+}

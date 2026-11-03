@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@import "@doriface/ui/styles/tokens.css";
+@import "@doriface/ui/styles/base.css";
+@import "@wterm/react/css";
+@source "../../../packages/ui/src";
+
+:root {
+  --term-font-family: var(--font-term);
+  --term-font-size: 14px;
+}
+
+/* wterm declares its own palette on .wterm; take the design tokens from the page instead. */
+.wterm.wterm {
+  --term-fg: inherit;
+  --term-bg: inherit;
+  --term-cursor: inherit;
+  --term-font-size: inherit;
+  --term-color-0: inherit;
+  --term-color-1: inherit;
+  --term-color-2: inherit;
+  --term-color-3: inherit;
+  --term-color-4: inherit;
+  --term-color-5: inherit;
+  --term-color-6: inherit;
+  --term-color-7: inherit;
+  --term-color-8: inherit;
+  --term-color-9: inherit;
+  --term-color-10: inherit;
+  --term-color-11: inherit;
+  --term-color-12: inherit;
+  --term-color-13: inherit;
+  --term-color-14: inherit;
+  --term-color-15: inherit;
+  --term-font-family: var(--font-term);
+  --term-selection-bg: var(--term-selection);
+}

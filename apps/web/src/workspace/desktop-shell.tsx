@@ -1,0 +1,92 @@
+import type { HcConnection } from "@doriface/client";
+import type { Terminal } from "@doriface/protocol";
+import { IconButton, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
+import { Columns2, Monitor, PanelLeft } from "lucide-react";
+import { useState } from "react";
+import { agentStatus, terminalTitle } from "./model.ts";
+import { NoTerminal } from "./no-terminal.tsx";
+import { Panes } from "./panes.tsx";
+import { Sidebar } from "./sidebar.tsx";
+import type { Tabs } from "./use-tabs.ts";
+
+export interface DesktopShellProps {
+  readonly connection: HcConnection;
+  readonly terminals: readonly Terminal[];
+  readonly tabs: Tabs;
+  readonly onNew: () => void;
+}
+
+export function DesktopShell({ connection, terminals, tabs, onNew }: DesktopShellProps) {
+  const [sidebar, setSidebar] = useState(true);
+  const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
+  const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
+    const terminal = byAddress.get(address);
+    return terminal === undefined
+      ? []
+      : [{ id: address, title: terminalTitle(terminal), status: agentStatus(terminal) }];
+  });
+  const live = terminals.filter((terminal) => terminal.state === "live");
+  const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
+  const toggle = (
+    <IconButton
+      label="Split"
+      icon={<Columns2 />}
+      pressed={tabs.split !== null}
+      disabled={tabs.open.length < 2}
+      onClick={tabs.toggleSplit}
+    />
+  );
+
+  return (
+    <div className="relative flex h-dvh overflow-hidden bg-background">
+      {sidebar ? (
+        <Sidebar terminals={terminals} active={tabs.active} onOpen={tabs.select} onHide={() => setSidebar(false)} />
+      ) : null}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <TabBar
+          tabs={tabList}
+          activeId={tabs.active ?? ""}
+          onSelect={tabs.select}
+          onClose={tabs.close}
+          onNew={onNew}
+          trailing={
+            sidebar ? (
+              toggle
+            ) : (
+              <>
+                {toggle}
+                <IconButton
+                  label="Show sidebar"
+                  keys={["⌘", "B"]}
+                  icon={<PanelLeft />}
+                  onClick={() => setSidebar(true)}
+                />
+              </>
+            )
+          }
+        />
+        {tabs.open.length === 0 ? <NoTerminal onNew={onNew} /> : null}
+        <Panes
+          connection={connection}
+          terminals={terminals}
+          open={tabs.open}
+          active={tabs.active}
+          split={tabs.split}
+          onFocus={tabs.focus}
+          onClosed={tabs.close}
+        />
+        <StatusBar
+          start={
+            <>
+              <StatusBarItem icon={<Monitor aria-hidden />}>{connection.hello.core.name}</StatusBarItem>
+              <StatusBarItem>
+                {live.length} {live.length === 1 ? "terminal" : "terminals"}
+                {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
+              </StatusBarItem>
+            </>
+          }
+        />
+      </div>
+    </div>
+  );
+}

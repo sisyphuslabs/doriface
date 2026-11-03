@@ -1,0 +1,49 @@
+import type { HcConnection } from "@doriface/client";
+import type { Terminal } from "@doriface/protocol";
+import { StatusChip, cn } from "@doriface/ui";
+import { SquareTerminal } from "lucide-react";
+import { TerminalView } from "../terminal/terminal-view.tsx";
+import { agentStatus, spaceName, terminalTitle } from "./model.ts";
+
+export interface PaneProps {
+  readonly connection: HcConnection;
+  readonly terminal: Terminal;
+  readonly focused: boolean;
+  /** 1-based position among the shown panes, for the shortcut hint. */
+  readonly index: number;
+  readonly onFocus: (address: string) => void;
+  readonly onClosed: (address: string) => void;
+}
+
+/** A terminal card: header with title, state and where it runs, then the live terminal. */
+export function Pane({ connection, terminal, focused, index, onFocus, onClosed }: PaneProps) {
+  const title = terminalTitle(terminal);
+  return (
+    <section
+      aria-label={`${title} terminal`}
+      onFocusCapture={() => onFocus(terminal.address)}
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
+    >
+      <header
+        className={cn(
+          "flex h-(--pane-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm",
+          focused ? "bg-raised text-foreground" : "text-muted-foreground",
+        )}
+      >
+        <SquareTerminal aria-hidden className="size-3.5 shrink-0" />
+        <h2 className="truncate font-medium">{title}</h2>
+        <StatusChip status={agentStatus(terminal)} />
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+          {spaceName(terminal)} · ⌘{index}
+        </span>
+      </header>
+      <TerminalView
+        connection={connection}
+        address={terminal.address}
+        focused={focused}
+        label={`${title} output`}
+        onClosed={onClosed}
+      />
+    </section>
+  );
+}
