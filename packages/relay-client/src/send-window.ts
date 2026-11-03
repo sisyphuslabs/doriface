@@ -1,4 +1,4 @@
-import { SESSION_WINDOW_BYTES } from "./wire/index.ts";
+import { ACK_INTERVAL_BYTES, SESSION_WINDOW_BYTES } from "./wire/index.ts";
 
 interface Waiting {
   readonly bytes: number;
@@ -12,13 +12,16 @@ interface Waiting {
  */
 export class SendWindow {
   readonly #limit: number;
+  readonly #step: number;
   readonly #waiting: Waiting[] = [];
   readonly #idle = new Set<() => void>();
   #inFlight = 0;
   #enforced = false;
 
-  constructor(limit = SESSION_WINDOW_BYTES) {
+  /** `step` is the far side's credit step: up to `step - 1` bytes may stay uncredited, so they never hold a send back. */
+  constructor(limit = SESSION_WINDOW_BYTES, step = ACK_INTERVAL_BYTES) {
     this.#limit = limit;
+    this.#step = step;
   }
 
   admit(bytes: number, go: () => void, fail: (error: Error) => void): void {
@@ -62,6 +65,6 @@ export class SendWindow {
   }
 
   #fits(bytes: number): boolean {
-    return !this.#enforced || this.#inFlight === 0 || this.#inFlight + bytes <= this.#limit;
+    return !this.#enforced || this.#inFlight < this.#step || this.#inFlight + bytes <= this.#limit;
   }
 }
