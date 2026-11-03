@@ -40,9 +40,10 @@ test("off macOS the tab bar and pane headers show Ctrl shortcuts", async ({ page
   await expect(page.locator('[data-focused="true"] header')).toContainText("Ctrl+1");
   await expect(page.locator('[data-focused="true"] header')).not.toContainText("⌘");
   await expect(terminal).toBeVisible();
-  // openNewTerminal clicked this button and left the pointer on it; a click closes the tooltip and
-  // hovering in place sends no new pointerenter, so move off first.
-  await page.mouse.move(0, 0);
+  // openNewTerminal clicked New tab, and a clicked trigger keeps its tooltip shut; a reload starts
+  // from a button that was never clicked (the terminal survives it).
+  await page.reload();
+  await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 15_000 });
   await page.getByRole("button", { name: "New tab" }).hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "New tab" }).locator("kbd > span");
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "T"]);
