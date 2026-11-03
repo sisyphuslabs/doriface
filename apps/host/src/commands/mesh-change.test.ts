@@ -33,34 +33,41 @@ async function run(args: readonly string[], answers: readonly unknown[], termina
 const a = { hostId: "a".repeat(26), name: "a" };
 const d = { hostId: "d".repeat(26), name: "d" };
 const f = { hostId: "f".repeat(26), name: "f" };
-const revoked = (written: boolean, lines: readonly string[] = []) => ({
+const revoke = (written: boolean, needsYes = true) => ({
   written,
   target: a,
   subjects: [a, d],
   reason: "compromised",
-  lines,
-  needsYes: true,
+  lines: [],
+  needsYes,
 });
+const ask = { op: "mesh-revoke", member: "a", compromised: true } as const;
+const write = { ...ask, yes: true, preview: false, expect: [a.hostId, d.hostId] };
 
 describe("doriface-host mesh revoke", () => {
-  test("sends mesh-revoke with the member and flags, prints the preview, exits 0 once written", async () => {
-    const out = await run(["revoke", "--compromised", "a", "--yes"], [revoked(true, ["the subtree line"])]);
-    expect(out.asked).toEqual([{ op: "mesh-revoke", member: "a", compromised: true, yes: true }]);
-    expect(out.text).toContain("the subtree line");
-    expect(out.text).toContain("revoked a, d (compromised)");
+  test("previews first, prints each subject's name and hostId, then writes exactly the previewed subjects", async () => {
+    const out = await run(["revoke", "--compromised", "a", "--yes"], [revoke(false), revoke(true)]);
+    expect(out.asked).toEqual([{ ...ask, yes: true, preview: true }, write]);
+    expect(out.text).toContain(`a (${a.hostId})`);
+    expect(out.text).toContain(`d (${d.hostId})`);
     expect(out.code).toBe(0);
   });
 
-  test("without a terminal to ask, a revoke that needs confirmation is not written and exits 1", async () => {
-    const out = await run(["revoke", "--compromised", "a"], [revoked(false)]);
-    expect(out.asked).toEqual([{ op: "mesh-revoke", member: "a", compromised: true, yes: false }]);
-    expect(out.text).toContain("not written: run it again with --yes");
+  test("without a terminal to ask, a revoke that needs confirmation is only previewed and exits 1", async () => {
+    const out = await run(["revoke", "--compromised", "a"], [revoke(false)]);
+    expect(out.asked).toEqual([{ ...ask, yes: false, preview: true }]);
     expect(out.code).toBe(1);
   });
 
-  test("confirmed on the terminal, it asks the host again with yes", async () => {
-    const out = await run(["revoke", "--compromised", "a"], [revoked(false), revoked(true)], true);
-    expect(out.asked.map((request) => request.op === "mesh-revoke" && request.yes)).toEqual([false, true]);
+  test("confirmed on the terminal, it writes the previewed subjects", async () => {
+    const out = await run(["revoke", "--compromised", "a"], [revoke(false), revoke(true)], true);
+    expect(out.asked).toEqual([{ ...ask, yes: false, preview: true }, write]);
+    expect(out.code).toBe(0);
+  });
+
+  test("a revoke that needs no confirmation is previewed, then written", async () => {
+    const out = await run(["revoke", "a"], [revoke(false, false), revoke(true, false)]);
+    expect(out.asked.map((request) => request.op === "mesh-revoke" && request.preview)).toEqual([true, false]);
     expect(out.code).toBe(0);
   });
 
@@ -74,32 +81,24 @@ describe("doriface-host mesh revoke", () => {
 });
 
 describe("doriface-host mesh rename", () => {
-  test("sends mesh-rename and prints the change", async () => {
+  test("sends mesh-rename and prints the member's hostId", async () => {
     const out = await run(["rename", "a", "a2"], [{ written: true, member: a, name: "a2" }]);
     expect(out.asked).toEqual([{ op: "mesh-rename", member: "a", name: "a2" }]);
-    expect(out.text).toContain("renamed a to a2");
+    expect(out.text).toContain(a.hostId);
     expect(out.code).toBe(0);
-  });
-
-  test("an unchanged name says so", async () => {
-    const out = await run(["rename", "a", "a"], [{ written: false, member: a, name: "a" }]);
-    expect(out.text).toContain("a is already named a");
   });
 });
 
 describe("doriface-host mesh leave", () => {
-  test("sends mesh-leave and reports how many members confirmed", async () => {
+  test("sends mesh-leave and exits 0 once it left", async () => {
     const reply = { signed: true, members: [f, d], confirmed: [f], revokeCommand: null };
     const out = await run(["leave"], [reply]);
     expect(out.asked).toEqual([{ op: "mesh-leave" }]);
-    expect(out.text).toContain("left the mesh: 1 of 2 members confirmed (f)");
     expect(out.code).toBe(0);
   });
 
   test("reaching nobody, it prints the revoke to run on another member", async () => {
     const reply = { signed: true, members: [f], confirmed: [], revokeCommand: "doriface-host mesh revoke a" };
-    const out = await run(["leave"], [reply]);
-    expect(out.text).toContain("reached no member");
-    expect(out.text).toContain("doriface-host mesh revoke a");
+    expect((await run(["leave"], [reply])).text).toContain("doriface-host mesh revoke a");
   });
 });

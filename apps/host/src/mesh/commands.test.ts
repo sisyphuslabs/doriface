@@ -90,7 +90,9 @@ describe("mesh-revoke on the running host (design 6.1, 6.2)", () => {
   });
 
   test("--compromised on a member that admitted an over-cap key revokes that key too, so it never becomes a member", async () => {
-    const f = machine("f"), a = machine("a"), z = machine("z");
+    const f = machine("f"),
+      a = machine("a"),
+      z = machine("z");
     const it = bench(f);
     it.mesh.admit(f, a);
     for (let i = 1; i <= 10; i++) it.mesh.admit(f, machine(`m${i}`));
@@ -102,6 +104,25 @@ describe("mesh-revoke on the running host (design 6.1, 6.2)", () => {
     expect(view.members.has(signPubOf(z))).toBe(false);
     expect(view.overCap.has(signPubOf(z))).toBe(false);
     expect(view.revoked.has(signPubOf(z))).toBe(true);
+  });
+
+  test("a preview writes nothing, even with yes, and a write whose previewed subjects changed is refused", async () => {
+    const f = machine("f"),
+      a = machine("a"),
+      d = machine("d");
+    const it = bench(f);
+    it.mesh.admit(f, a);
+    it.mesh.admit(a, d);
+    it.ready();
+    const before = records(it).length;
+    const preview = await it.commands.revoke({ member: "a", compromised: true, yes: true, preview: true });
+    expect(preview).toMatchObject({ written: false, subjects: [{ name: "a" }, { name: "d" }] });
+    expect(records(it)).toHaveLength(before);
+    const stale = { member: "a", compromised: true, yes: true, expect: [a.identity.hostId] };
+    await expect(it.commands.revoke(stale)).rejects.toThrow("changed since the preview");
+    expect(records(it)).toHaveLength(before);
+    const expected = [a, d].map((m) => m.identity.hostId);
+    expect(await it.commands.revoke({ ...stale, expect: expected })).toMatchObject({ written: true });
   });
 
   test("an undecidable revoke waits for --yes", async () => {

@@ -29,6 +29,10 @@ export interface RevokeRequest {
   readonly member: string;
   readonly compromised: boolean;
   readonly yes: boolean;
+  /** Return the plan and write nothing: the CLI shows it before anything is written (design 6.1). */
+  readonly preview?: boolean | undefined;
+  /** The subjects' hostIds the operator saw in the preview; a plan that names others since is refused. */
+  readonly expect?: readonly string[] | undefined;
 }
 
 export interface RenameRequest {
@@ -62,7 +66,15 @@ export class MeshCommands {
       const plan = planRevoke(tx.records, this.#member(tx), this.#self, request.member, request.compromised);
       const { target, subjects, reason, lines, needsYes } = plan;
       const preview = { target, subjects, reason, lines, needsYes };
-      if (needsYes && !request.yes) return { reply: { written: false, ...preview }, record: undefined };
+      if (request.preview === true || (needsYes && !request.yes)) {
+        return { reply: { written: false, ...preview }, record: undefined };
+      }
+      const named = subjects.map((subject) => subject.hostId);
+      if (request.expect !== undefined && named.join(" ") !== request.expect.join(" ")) {
+        throw new Error(
+          `the mesh changed since the preview: this revoke would now name ${subjects.map((s) => s.name).join(", ")}; run it again`,
+        );
+      }
       const signed = this.#sign(tx, meshId, "revoke", { signPubs: plan.keys, reason });
       return { reply: { written: true, ...preview }, record: signed };
     });
