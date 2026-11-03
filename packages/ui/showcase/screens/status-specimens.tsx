@@ -43,7 +43,7 @@ export function StatusSpecimens() {
 
       <Section title="AgentRow, SpaceRow, TabBar">
         <div className="grid gap-6 md:grid-cols-2">
-          <div className="flex flex-col gap-px rounded-lg bg-sidebar p-2">
+          <div className="flex min-w-0 flex-col gap-px rounded-lg bg-sidebar p-2">
             {[...AGENTS_NEEDS_YOU, ...AGENTS_DONE, ...AGENTS_WORKING, ...AGENTS_IDLE].map((agent) => (
               <AgentRow key={agent.id} agent={agent} selected={agent.id === "a2"} />
             ))}
@@ -66,7 +66,7 @@ export function StatusSpecimens() {
             />
           </div>
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-px rounded-lg bg-sidebar p-2">
+            <div className="flex min-w-0 flex-col gap-px rounded-lg bg-sidebar p-2">
               {SPACES.map((space) => (
                 <SpaceRow key={space.id} space={space} selected={space.id === "api"} />
               ))}

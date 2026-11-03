@@ -68,8 +68,8 @@ export function ControlSpecimens() {
           <Cell label="disabled">
             <IconButton label="Copy" icon={<Copy />} disabled />
           </Cell>
-          <Cell label="tooltip open" className="pb-8">
-            <Tooltip label="Close pane" keys={["⌘", "⇧", "W"]} defaultOpen>
+          <Cell label="tooltip open" className="pr-40">
+            <Tooltip label="Close pane" keys={["⌘", "⇧", "W"]} side="right" defaultOpen>
               <Button size="sm">Hover target</Button>
             </Tooltip>
           </Cell>

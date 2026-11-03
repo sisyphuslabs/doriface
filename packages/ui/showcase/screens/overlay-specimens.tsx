@@ -49,7 +49,7 @@ export function OverlaySpecimens() {
           </Cell>
           <Cell label="popover (open)" className="h-56">
             <Popover defaultOpen fixedSide title="Route" trigger={<Button size="sm">Relay</Button>}>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-pretty text-muted-foreground">
                 Connected through relay-doriface.omo.dev. Traffic is end-to-end encrypted.
               </p>
             </Popover>

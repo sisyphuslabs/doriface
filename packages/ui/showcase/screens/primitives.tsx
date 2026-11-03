@@ -6,7 +6,11 @@ import { Section } from "./specimen.tsx";
 import { StatusSpecimens } from "./status-specimens.tsx";
 import { TerminalSettingsParts } from "./terminal-primitives.tsx";
 
-const ANSI_LINE = Array.from({ length: 16 }, (_, color) => ({ text: ` ${color.toString().padStart(2, "0")} `, color }));
+/** ansi0 sits next to the background in dark themes, so the text sample starts at 1; PaletteEditor shows all 16. */
+const ANSI_LINE = Array.from({ length: 15 }, (_, index) => ({
+  text: ` ${(index + 1).toString().padStart(2, "0")} `,
+  color: index + 1,
+}));
 
 export function PrimitivesScreen() {
   return (
@@ -38,8 +42,12 @@ export function PrimitivesScreen() {
       <Section title="Terminal">
         <div className="overflow-hidden rounded-lg border border-border">
           <TerminalPreview
-            label="ANSI colours 0 to 15"
-            lines={[ANSI_LINE.slice(0, 8), ANSI_LINE.slice(8), [{ text: "default foreground" }]]}
+            label="ANSI colours 1 to 15"
+            lines={[
+              ANSI_LINE.slice(0, 7),
+              ANSI_LINE.slice(7),
+              [{ text: "default foreground" }, { text: "  faint", dim: true }],
+            ]}
             cursor
           />
           <ExtraKeysBar latched={["ctrl"]} />
