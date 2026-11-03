@@ -10,7 +10,6 @@
     { "path": "apps/web" },
     { "path": "apps/desktop" },
     { "path": "apps/desktop/tsconfig.tools.json" },
-    { "path": "apps/relay" },
     { "path": "packages/ghostty-wasm" },
     { "path": "tests/relay" }
   ]
