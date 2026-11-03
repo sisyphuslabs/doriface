@@ -8,6 +8,9 @@ import { readSavedEnv } from "./saved-env.ts";
 /** Long enough to fill the machine column of a sidebar row. */
 export const LONG_MACHINE = "build-box-in-the-staging-rack";
 export const SHARED_SPACE = "api-gateway";
+/** A space named in Korean, whose characters run about twice as wide as Latin ones. */
+export const KOREAN_SPACE = "한국어-문서-정리";
+export const KOREAN_TITLE = "오모 - 원격 세션 정리 작업";
 
 function hc(args: readonly string[]): string {
   const { hc: bin, env } = readSavedEnv(E2E_HOST_ENV);
@@ -28,6 +31,8 @@ export const SEEDS: readonly Seed[] = [
   { name: "sb-bench", title: "OmO - Verify bun benchmarks on the box", space: SHARED_SPACE, remote: true },
   { name: "sb-review", title: "linuxuser@build-box: ~/work/review", space: "review", remote: true },
   { name: "sb-notes", title: "OmO - Summarize the release notes", space: "notes" },
+  { name: "sb-docs", title: "OmO - Draft the onboarding docs", space: KOREAN_SPACE, remote: true },
+  { name: "sb-korean", title: KOREAN_TITLE, space: KOREAN_SPACE, remote: true },
 ];
 
 /** Starts an idle session that never reports a status and returns its address. */
