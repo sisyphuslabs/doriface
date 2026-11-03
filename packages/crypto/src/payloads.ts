@@ -70,15 +70,17 @@ export function decodeHello(pattern: "IK" | "IKpsk2", payload: Uint8Array): Hell
   return { kind: "pairing", name: deviceName(name) };
 }
 
+/** `ws://`, an IPv4 or bracketed IPv6 literal, an explicit port, `/v1/e2ee`, and nothing else. */
+const LAN_URL = /^ws:\/\/(?:\d{1,3}(?:\.\d{1,3}){3}|\[[0-9A-Fa-f:.]+\]):(\d{1,5})\/v1\/e2ee$/;
+
 /** Accepts `ws://<IP literal>:<port>/v1/e2ee` only: LAN addresses are literals, never hostnames to resolve. */
 function lanUrl(value: unknown): string {
-  if (typeof value !== "string" || !URL.canParse(value)) throw new PayloadError("a LAN URL is a ws:// URL");
-  const url = new URL(value);
-  const literal = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(url.hostname) || url.hostname.startsWith("[");
-  if (url.protocol !== "ws:" || !literal || url.port === "" || url.pathname !== "/v1/e2ee") {
-    throw new PayloadError(`not a LAN e2ee URL: ${value}`);
+  const match = typeof value === "string" ? LAN_URL.exec(value) : null;
+  const port = Number(match?.[1]);
+  if (typeof value !== "string" || match === null || !URL.canParse(value) || port < 1 || port > 65_535) {
+    throw new PayloadError(`not a LAN e2ee URL: ${String(value)}`);
   }
-  return url.toString();
+  return value;
 }
 
 /** Message 2: `{"v":1,"lan":[…]}\n` with at most 8 IP-literal LAN URLs, and nothing after it. */
