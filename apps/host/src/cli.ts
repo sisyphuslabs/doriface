@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { DEFAULT_RELAY_URL } from "@doriface/crypto";
 import { assertValidToken, generateToken } from "./auth.ts";
+import { CONNECT_USAGE, connectCommand } from "./commands/connect.ts";
 import { DEVICES_USAGE, devicesCommand } from "./commands/devices.ts";
 import { FINGERPRINT_USAGE, fingerprintCommand } from "./commands/fingerprint.ts";
 import { PAIR_USAGE, pairCommand } from "./commands/pair.ts";
@@ -13,6 +14,7 @@ const USAGE = `usage: doriface-host [options]
        doriface-host pair [options]
        doriface-host devices list|revoke <id>
        doriface-host fingerprint
+       doriface-host connect <hostId | pairing link | code>
 
   --listen <host:port>  where to listen (default 127.0.0.1:7766; loopback only)
   --hc <path>           the herdr-core binary (default hc)
@@ -38,11 +40,25 @@ async function main(args: readonly string[]): Promise<void> {
   const [command, ...rest] = args;
   if (command === "pair") return pairCommand(rest, out);
   if (command === "fingerprint") return fingerprintCommand(rest, out);
+  if (command === "connect") return connect(rest);
   if (command === "devices") {
     process.exitCode = await devicesCommand(rest, out);
     return;
   }
   return serve(args);
+}
+
+const say = (line: string): void => {
+  process.stderr.write(`doriface-host connect: ${line}\n`);
+};
+
+/** Exits itself: an open relay socket would keep the process alive, and hc reads only the last stderr line. */
+async function connect(args: readonly string[]): Promise<void> {
+  const code = await connectCommand(args, say).catch((error: unknown) => {
+    say(error instanceof Error ? error.message : String(error));
+    return 1;
+  });
+  process.exit(code);
 }
 
 async function serve(args: readonly string[]): Promise<void> {
@@ -112,6 +128,7 @@ main(Bun.argv.slice(2)).catch((error: unknown) => {
     pair: PAIR_USAGE,
     devices: DEVICES_USAGE,
     fingerprint: FINGERPRINT_USAGE,
+    connect: CONNECT_USAGE,
   };
   const usage = usages[Bun.argv[2] ?? ""] ?? USAGE;
   process.stderr.write(`doriface-host: ${error instanceof Error ? error.message : String(error)}\n\n${usage}\n`);
