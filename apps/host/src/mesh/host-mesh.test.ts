@@ -1,4 +1,4 @@
-import { CloseCode, PAIRING_TTL_MS, SessionKind } from "@doriface/crypto";
+import { CloseCode, PAIRING_TTL_MS, type SecureLink, SessionKind } from "@doriface/crypto";
 import { memoryLinkPair, type MemoryEnd } from "@doriface/crypto/testing";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -25,7 +25,7 @@ afterEach(() => {
 
 const log = (): void => {};
 
-function hostMesh() {
+function hostMesh(sync?: (session: SecureLink) => void) {
   const dir = mkdtempSync(join(tmpdir(), "dh-host-mesh-"));
   dirs.push(dir);
   const m = machine("alpha");
@@ -43,13 +43,14 @@ function hostMesh() {
       hc: { hc: "hc" },
       relay: { url: undefined },
       log,
+      sync,
     });
   return { dir, m, mesh, sessions, create };
 }
 
-const pairLink = (end: MemoryEnd, remoteStatic: Uint8Array) =>
+const pairLink = (end: MemoryEnd, remoteStatic: Uint8Array, kind: SessionKind = SessionKind.PairLink): SecureLink =>
   Object.assign(end, {
-    kind: SessionKind.PairLink,
+    kind,
     remoteStatic,
     handshakeHash: new Uint8Array(32),
     peerName: "beta",
@@ -104,5 +105,41 @@ describe("the running host's mesh offers", () => {
     rmSync(join(dir, "mesh.json"));
     sessions.closeRevoked();
     expect(inviterEnd.closeCode).toBe(CloseCode.UnknownDevice);
+  });
+
+  test("an authorized mesh sync session is handed to the sync hook and stays open", async () => {
+    const synced: SecureLink[] = [];
+    const host = hostMesh((session) => void synced.push(session)).create();
+    const [end] = memoryLinkPair();
+    const session = pairLink(end, new Uint8Array(32), SessionKind.Session);
+    host.serve(session);
+    expect(synced).toEqual([session]);
+    expect(end.closeCode).toBeUndefined();
+  });
+
+  test("without a sync hook, an authorized mesh sync session stays open", () => {
+    const [end] = memoryLinkPair();
+    hostMesh()
+      .create()
+      .serve(pairLink(end, new Uint8Array(32), SessionKind.Session));
+    expect(end.closeCode).toBeUndefined();
+  });
+
+  test("the session a served join ran on is handed to the sync hook once the join is over", async () => {
+    const synced: SecureLink[] = [];
+    const { m, mesh, create } = hostMesh((session) => void synced.push(session));
+    mesh.found(m.identity, { name: "alpha", hcId: "core" });
+    const host = create();
+    await host.pair(true);
+    const b = side("beta");
+    const [inviterEnd, joinerEnd] = memoryLinkPair();
+    const served = pairLink(inviterEnd, b.m.identity.noise.publicKey);
+    host.serve(served);
+    const dialed = { hostId: m.identity.hostId, noisePub: m.identity.noise.publicKey };
+    const ctx = { identity: b.m.identity, mesh: b.mesh, own: { name: "beta", hcId: "core-b" }, dialed, log };
+    await runJoiner(new MeshLines(joinerEnd, JOINER_EXPECTS), { ...ctx, deadline: Date.now() + 60_000 });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(synced).toEqual([served]);
+    expect(inviterEnd.closeCode).toBeUndefined();
   });
 });
