@@ -19,6 +19,14 @@ doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON
 | `apps/web`          | React web client and installable PWA               |
 | `apps/desktop`      | Electron shell                                     |
 
+## Design
+
+The design system lives in [DESIGN.md](DESIGN.md): herdr-compatible themes, tokens, the Base UI component set in `packages/ui`, and a brief for every screen. `bun run --filter @doriface/ui showcase` opens the primitives and mockups.
+
+| Workspace (dark, 1440)                                            | Phone (light, 390)                                                 |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------ |
+| ![Workspace shell, dark](docs/design/mockups/shell-dark-1440.png) | ![Phone terminal, light](docs/design/mockups/mobile-light-390.png) |
+
 ## Development
 
 Requires [Bun](https://bun.sh) 1.4.4 or newer.

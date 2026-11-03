@@ -1,0 +1,222 @@
+# doriface Design System
+
+The single source of truth for doriface's look and behaviour. Tokens live in `packages/ui/src/styles`, the theme engine in `packages/ui/src/theme`, primitives in `packages/ui/src/components`. The showcase (`bun run --filter @doriface/ui showcase`) renders every primitive in every state and every screen below; `bun run --filter @doriface/ui capture` writes `docs/design/`.
+
+## 0. Research Log
+
+- Grounding: Apple HIG digests (color, dark mode, typography, layout, accessibility, motion, buttons, progress, feedback, modality, settings, keyboards, pointing devices) and herdr-app's visual model (42-token `resolve()`, sidebar/tab/status-bar geometry, status grammar, shortcuts). Both are quoted by rule below; no screen copies another product's pixels.
+- Embedded refs: shortlisted Layer B `warp.md`, `linear.app.md`, `raycast.md` -> read `minimalist-skill.md` (Layer A) and `warp.md` (Layer B) in full. Warp because doriface is a terminal client: warm near-black instead of blue-black, parchment ink, monochrome chrome, hairline containment, no glass. Minimalist because the product is an operational tool where restraint and typographic hierarchy beat atmosphere. Overridden on purpose by lead decisions: minimalist's "no Lucide" and editorial serif (lucide-react and the system UI stack are binding), and Warp's pill buttons and marketing-scale type (an app shell runs at 13-14 px).
+- Lazyweb: 4 queries (terminal app agent sidebar tabs; developer tool command palette; device pairing QR code setup; terminal ssh mobile app), 12 screens downloaded, viewed GitHub Codespaces' palette, Wise's authenticator pairing and Termius' mobile host list. Taken: palette anchored near the top with grouped results and right-aligned key hints; pairing as a narrow centred column with step indicator, QR, "or" divider and a typed code; phone list rows that lead with state and end with age. Screenshots stay out of the repo.
+- StyleGallery: CATALOG fetched; patterns chosen per screen in section 4 (fixed-sidenav-shell, split-screen, center, step-nav, imposter, list-detail, scroll-body-shell, switcher).
+- Imagen drafts: 3 drafts (gpt-image-2.5-flare) seeded with the night/day tokens: workspace shell, command palette, light pairing screen. Picked the shell draft as the composition contract (sectioned agent list with "Needs you" chip, pane header with status chip and `branch · ⌘1`, status bar with "N needs you"). Rejected from the drafts: the blue-filled active tab and segment and the accent underline under the current step (accent-edge tells); selection is a tonal wash here.
+- Skipped lanes: none.
+
+## 1. Atmosphere & Identity
+
+A quiet control room at night. Terminals are the content; everything around them is warm graphite chrome that steps back. The signature is **status you can read without colour**: a spinning arc for working, a "Needs you" chip or `!` mark for blocked, a filled dot for done, a ring for idle, the same grammar on desktop, phone and in the tab strip. Depth comes from tonal steps and 1 px hairlines, never glass or heavy shadow.
+
+## 2. Color
+
+### Contract (lead decision 1)
+
+The theme input is a herdr-app terminal palette (background, foreground, selection, cursor, ansi0..15, optional status). `resolveTheme(palette)` is a TypeScript port of herdr-app's `resolve()` and yields herdr-app's 26 semantic roles plus ansi0..15, byte-identical for herdr-app's presets (unit test: graphite and paper match all 42 values). Any herdr-app `themes/<name>.json` imports through `parseThemeFile` with herdr-app's validation rules.
+
+`themeVariables(theme)` projects those roles onto shadcn-compatible CSS variables, exposed to Tailwind v4 through `@theme inline` in `tokens.css`:
+
+| CSS variable                                                    | herdr role                                    | Use                                          |
+| --------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
+| `--background` / `--canvas`                                     | canvas                                        | app root behind panes                        |
+| `--card` / `--surface`                                          | background (terminal)                         | pane surface                                 |
+| `--sidebar` / `--chrome`                                        | chrome                                        | sidebar, tab bar, status bar                 |
+| `--popover`                                                     | popover                                       | menus, dialogs, palette, toasts              |
+| `--raised`, `--secondary`, `--muted`                            | raised                                        | active tab, secondary button, kbd            |
+| `--hover`, `--accent`, `--sidebar-accent`                       | hover                                         | hover wash (shadcn's "accent")               |
+| `--selected`                                                    | selected                                      | selected row, pressed toggle                 |
+| `--foreground`                                                  | foreground                                    | primary text                                 |
+| `--muted-foreground`                                            | muted (AA-guarded)                            | secondary text, every caption                |
+| `--dim`                                                         | dim                                           | decoration only, never text                  |
+| `--primary` / `--primary-foreground`                            | solid / solid_foreground                      | the one primary button                       |
+| `--brand` / `--brand-foreground`                                | accent / accent_foreground                    | switch on, links                             |
+| `--ring`                                                        | accent (3:1-guarded)                          | focus-visible ring                           |
+| `--destructive`                                                 | blocked (AA-guarded)                          | destructive text and button                  |
+| `--border`                                                      | border                                        | hairlines between regions (decorative)       |
+| `--input`                                                       | derived edge (3:1-guarded)                    | control boundaries (inputs, switch, stepper) |
+| `--selection`                                                   | selection                                     | text selection, terminal selection           |
+| `--status-{working,blocked,done,idle,unknown}`                  | status roles (3:1)                            | glyphs                                       |
+| `--status-*-text`                                               | status roles (4.5:1 on their 15% chip)        | chip labels, section headers                 |
+| `--term-fg`, `--term-bg`, `--term-cursor`, `--term-color-0..15` | terminal_foreground, background, cursor, ansi | libghostty via @wterm                        |
+
+**AA guard.** Text roles are moved toward the ink colour in 1 % steps until they reach 4.5:1 against every surface they sit on (canvas, surface, chrome, popover, raised); control edges, focus ring and status glyphs until 3:1. Values that already pass are emitted unchanged, so herdr-app themes keep their colours wherever they are accessible. `contrast.test.ts` checks every built-in theme.
+
+### Built-in palettes
+
+| Theme                | Source    | bg / chrome / canvas        | ink                      | ansi4 (accent) | status working / blocked / done |
+| -------------------- | --------- | --------------------------- | ------------------------ | -------------- | ------------------------------- |
+| Night (dark default) | doriface  | #161513 / #0f0e0d / #121210 | #d8d4cb term, #eeeeef UI | #9fb4e6        | #e2b86b / #ef7d6b / #7fa8f5     |
+| Day (light default)  | doriface  | #fbfaf7 / #f0efea / #f7f6f3 | #2a2723 term, #1b1b1e UI | #2f5fc4        | #8a5a00 / #bf3a2b / #2f5fc4     |
+| Graphite             | herdr-app | #17191d / #101114 / #131518 | herdr-app                | #96b2d7        | herdr-app                       |
+| Paper                | herdr-app | #ffffff / #f1f1ee / #fafaf9 | herdr-app                | #1f62d0        | herdr-app                       |
+
+`:root` follows the system appearance (day light, night dark); `[data-theme="<name>"]` pins a theme. `themes.css` is generated by `scripts/themes-css.ts` and a test keeps it equal to the generator's output.
+
+### Measured contrast (worst case across canvas, surface, chrome, popover, raised)
+
+| Theme    | foreground | muted-foreground | brand | input edge | focus ring | primary label | terminal text | chip labels (W/B/D/I)     | status glyphs (W/B/D/I)   |
+| -------- | ---------- | ---------------- | ----- | ---------- | ---------- | ------------- | ------------- | ------------------------- | ------------------------- |
+| Night    | 12.37      | 4.92             | 6.93  | 3.03       | 6.93       | 16.51         | 12.34         | 5.60 / 4.51 / 4.58 / 4.52 | 7.72 / 5.34 / 6.02 / 3.03 |
+| Day      | 14.92      | 4.91             | 5.13  | 3.07       | 5.13       | 17.18         | 14.24         | 4.53 / 4.52 / 4.56 / 4.54 | 5.15 / 4.73 / 5.13 / 3.03 |
+| Graphite | 11.74      | 4.78             | 6.25  | 3.03       | 6.25       | 16.15         | 11.87         | 5.61 / 4.53 / 4.52 / 4.53 | 7.88 / 4.66 / 5.72 / 3.04 |
+| Paper    | 15.18      | 4.85             | 4.99  | 3.00       | 4.99       | 17.18         | 14.94         | 4.53 / 4.58 / 4.51 / 4.55 | 4.30 / 4.45 / 4.11 / 3.04 |
+
+### Rules
+
+- One hue, one meaning: the four status hues appear only in status glyphs, chips and section headers (HIG color C1). Destructive reuses blocked's hue because both mean "this needs care"; it always comes with words.
+- Status is never colour-only (lead decision 4, HIG color C3): shape plus label everywhere.
+- Accent marks at most the focus ring, the switch's on state and links; the primary button is solid ink (`--primary`), not accent.
+- `--dim` fails text contrast by design and is used only for decoration. Every secondary text is `--muted-foreground`.
+
+## 3. Typography
+
+| Level | Desktop (fine pointer) | Coarse pointer | Weight  | Usage                                |
+| ----- | ---------------------- | -------------- | ------- | ------------------------------------ |
+| 2xl   | 28 px                  | 28 px          | 600     | screen title (pairing, empty boards) |
+| xl    | 20 px                  | 22 px          | 600     | phone screen title                   |
+| lg    | 16 px                  | 18 px          | 600     | dialog title, section title          |
+| base  | 14 px                  | 17 px          | 400     | body, controls, palette rows         |
+| sm    | 13 px                  | 15 px          | 400/500 | sidebar rows, secondary text, tabs   |
+| xs    | 12 px                  | 13 px          | 500     | section labels, status bar, captions |
+| 2xs   | 11 px                  | 12 px          | 600     | chips, badges, kbd                   |
+
+- UI: system stack (`-apple-system`, SF Pro on Apple per HIG; Segoe UI Variable; system-ui). Terminal and code: JetBrains Mono Variable, self-hosted via @fontsource-variable, ligatures off (herdr-app default).
+- Body is 17 px on coarse pointers (HIG: 17 pt body on iPhone, secondary not below 15 pt). Desktop body 14 px; 13 px rows follow herdr-app's density and stay secondary-level text.
+- Numerals that change (counts, ages) are tabular.
+
+## 4. Spacing & Layout
+
+Base unit 4 px (Tailwind's spacing scale: 1 = 4 px). Fixed geometry tokens from herdr-app's layout: `--sidebar-width` 268 px, `--tabbar-height` 42 px, `--statusbar-height` 28 px, `--pane-header-height` 30 px, `--row` 30 px (44 px coarse), `--control-sm/--control/--control-lg` 26/30/36 px (44/44/48 coarse). Pane gutter and gap 8 px. Breakpoints: Tailwind defaults; the shell collapses below `md` (768 px) to the phone navigation.
+
+Layout lines:
+
+- Layout: workspace shell - fixed navigation beside split terminals -> fixed-sidenav-shell (https://github.com/changeroa/StyleGallery/blob/main/patterns/viewport-shell/fixed-sidenav-shell.md) with split-screen panes (https://github.com/changeroa/StyleGallery/blob/main/patterns/split-sidebar/split-screen.md); scroll owner: `[data-slot=agents-list]` for the sidebar and each `[data-slot=terminal-viewport]` for its pane; anti-patterns: the document scrolling under fixed chrome, a sidebar that scrolls the tab bar away, panes that grow the page instead of scrolling inside.
+- Layout: pairing flow - one short task centred in the window -> center (https://github.com/changeroa/StyleGallery/blob/main/patterns/centering/center.md) with step-nav (https://github.com/changeroa/StyleGallery/blob/main/patterns/stacking/step-nav.md); scroll owner: document; anti-patterns: a full-width form, the step shown only by colour, the QR stretched with the column.
+- Layout: command palette - a transient chooser over the shell -> imposter (https://github.com/changeroa/StyleGallery/blob/main/patterns/overlay-exception/imposter.md); scroll owner: `[data-slot=palette-list]`; anti-patterns: the palette pushing the shell, the page scrolling behind the overlay, the input scrolling away with results.
+- Layout: settings - section navigation beside a long form -> list-detail (https://github.com/changeroa/StyleGallery/blob/main/patterns/split-sidebar/list-detail.md); scroll owner: `[data-slot=settings-body]`; anti-patterns: the nav scrolling with the form, controls wider than the reading measure, a second nested scroller.
+- Layout: phone terminal - full-screen content with a docked keys bar -> scroll-body-shell (https://github.com/changeroa/StyleGallery/blob/main/patterns/viewport-shell/scroll-body-shell.md); scroll owner: `[data-slot=terminal-viewport]`; anti-patterns: the keys bar scrolling away, horizontal scrolling of terminal text, the header covering the notch area.
+- Layout: states board - three equal frames that stack on phones -> switcher (https://github.com/changeroa/StyleGallery/blob/main/patterns/split-sidebar/switcher.md); scroll owner: document; anti-patterns: frames of unequal height in one row, horizontal scrolling at 390.
+
+## 5. Components
+
+Every interactive primitive: hover, pressed, focus-visible (2 px `--ring` outline), disabled (45 % opacity, legible) and, where it can wait, loading; the box never changes size between states (state is colour, opacity or a 0.97 press scale only). Hit areas are at least 24x24 CSS px on fine pointers and 44x44 on coarse pointers (an invisible `::after` extends small controls). Built on Base UI (lead decision 2) restyled with cva + tailwind-merge; icons lucide-react; no emoji; no motion library.
+
+| Component                              | Base                            | Variants / parts                                               | Notes                                                                     |
+| -------------------------------------- | ------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Button                                 | Base UI Button                  | primary, secondary, ghost, destructive x sm, md, lg; `loading` | one primary per view; loading keeps width, shows spinner, stays focusable |
+| IconButton                             | Button + Tooltip                | sm, md; `pressed`                                              | `label` required: aria-label and tooltip                                  |
+| Tooltip                                | Base UI Tooltip                 | label + optional Kbd                                           | after hover intent; never the only path to an action                      |
+| Input, Field                           | Base UI Input                   | `mono`, `invalid`                                              | visible label above, hint or error below; 3:1 `--input` edge              |
+| Switch                                 | Base UI Switch                  | on/off                                                         | position + fill, not colour alone                                         |
+| SegmentedControl                       | Base UI ToggleGroup             | 2-4 options                                                    | selected = popover tone + hairline, not accent fill                       |
+| Tabs, TabList, Tab                     | Base UI Tabs                    |                                                                | settings sections on narrow screens                                       |
+| TabBar                                 | composition                     | tabs with status glyph, close on active/hover, new-tab         | herdr-app tab strip                                                       |
+| Menu, MenuItem                         | Base UI Menu                    | `destructive`, `keys`                                          |                                                                           |
+| Popover                                | Base UI Popover                 |                                                                | one overlay at a time                                                     |
+| Dialog, DialogPanel                    | Base UI Dialog                  | title, description, actions                                    | destructive never the default; Escape closes                              |
+| Sheet, SheetPanel                      | Base UI Dialog                  | right, bottom (grabber)                                        | phones use sheets, not popovers                                           |
+| ToastProvider, ToastViewport           | Base UI Toast                   | info, success, warning, error dot + words                      | only for outcomes not visible in place                                    |
+| ScrollArea                             | Base UI ScrollArea              | `slot` names the scroll owner                                  | overlay scrollbar                                                         |
+| Kbd                                    |                                 | keys array                                                     |                                                                           |
+| Badge                                  | cva                             | neutral, working, blocked, done                                | carries a changing value only                                             |
+| StatusIndicator, StatusChip            |                                 | working, blocked, done, idle, unknown                          | the status grammar; spinner 900 ms/turn, static under reduced motion      |
+| AgentRow                               |                                 | selected, `compactBlocked`                                     | status, name, detail, machine, age, pin                                   |
+| SpaceRow                               |                                 | selected                                                       | folder, name, most urgent status, tab count                               |
+| SidebarSection                         |                                 | title tone, count                                              | status-coloured headers                                                   |
+| CommandPalette                         | combobox + listbox              | groups, hints, keys                                            | arrows move, Enter runs, Escape closes (host)                             |
+| EmptyState                             |                                 | icon, title, description, actions                              | says what happened and the next step                                      |
+| Notice                                 |                                 | info, warning, error                                           | inline, next to what it affects                                           |
+| Skeleton, Spinner                      |                                 |                                                                | placeholder at once; spinner only for waits past ~1 s                     |
+| StatusBar, StatusBarItem               |                                 |                                                                | where you are left, how to act right                                      |
+| TerminalPreview                        |                                 | ANSI spans                                                     | static stand-in for the live libghostty terminal, same `--term-*` vars    |
+| ExtraKeysBar                           |                                 | esc, tab, ctrl, alt, arrows; latched modifiers                 | 44 pt keys above the phone keyboard                                       |
+| QrCode, Fingerprint                    |                                 | mismatched groups                                              | fingerprint groups of 4; mismatch is struck + bold + words                |
+| SettingRow, NumberStepper, ThemePicker | Base UI NumberField, RadioGroup |                                                                | theme swatches are drawn from each theme's own roles                      |
+
+### Screen briefs
+
+**(a) Workspace shell.** Primary action: answer the agent that needs you (focus its pane). Priorities: 1 the "Needs you" section and the focused blocked pane, 2 the other agents by state, 3 where you are (host, branch, agent count). Left out on purpose: per-agent CPU/token stats, a welcome banner, decorative logo, coloured pane borders. Required content: spaces list with tab counts and most urgent status; agent sections Needs you / Done / Working / Idle with counts; agent rows with name, detail, machine, age; tab bar with status per tab and new tab; two terminal panes with header (title, status chip, branch and shortcut); status bar (host, branch, "N agents · N needs you", command shortcut); Settings entry.
+
+**(b) Connect and pair.** Primary action per step: Pair a host / Pair / They match. Priorities: 1 the step's one action, 2 the code (QR or typed), 3 route choice and its consequence. Left out: account sign-up, marketing copy, more than one way to verify. Required content: no-host first run with the host command; step indicator Host · Pair · Verify; QR code; pairing code field with format hint; Relay (default) vs Direct on LAN with one-line explanation; host fingerprint in groups of four with match / don't-match.
+
+**(c) Command palette.** Primary action: run the highlighted result. Priorities: 1 the input, 2 agents (with state), 3 actions with shortcuts. Left out: recent-files list, icons on every row. Required content: search input, esc hint, Agents / Actions / Hosts groups, state or machine hints, key hints.
+
+**(d) Settings.** Primary action: none dominant; each row's control. Priorities: 1 connection route, 2 paired devices with revoke, 3 appearance. Left out: a Save button (changes apply immediately), advanced crypto parameters. Required content: Connect through (Relay / Direct), relay address, paired devices with "This device" and last activity, Revoke on others, theme picker with Night, Day, Graphite, Paper, herdr-app theme import, terminal font size.
+
+**(e) Phone.** Primary action: answer the blocked prompt (type or tap keys). Priorities: 1 the terminal, 2 the agent's state in the header, 3 extra keys. Left out: tab strip, status bar on the terminal screen. Required content: agents list (sections as in the shell, agents before spaces), terminal header with back, name, status chip, actions; terminal text that wraps to the width; extra keys esc, tab, ctrl (latched shown), alt, four arrows.
+
+**(f) Empty, offline and error states.** Primary action: Try again / Retry / Disconnect. Priorities: 1 what happened, 2 the fix, 3 the alternative. Left out: illustrations, error codes, blame. Required content: host offline with last seen; relay unreachable with the direct-LAN alternative; host key mismatch with expected vs received fingerprints, mismatched groups marked, safe default Disconnect and a secondary "Trust the new key…".
+
+## 6. Motion & Interaction
+
+| Type     | Duration                       | Easing                                      | Usage                                        |
+| -------- | ------------------------------ | ------------------------------------------- | -------------------------------------------- |
+| Micro    | 120 ms (`--duration-micro`)    | `--ease-out` cubic-bezier(0.23, 1, 0.32, 1) | press, hover, overlay scale-fade (0.97 -> 1) |
+| Standard | 220 ms (`--duration-standard`) | `--ease-out`                                | sheet slide, backdrop fade                   |
+| Status   | 900 ms per turn, linear        |                                             | working spinner (herdr-app)                  |
+
+- CSS transitions and Base UI's `data-starting-style`/`data-ending-style` only; no motion library (lead decision 2). Only transform, opacity and colours animate.
+- `prefers-reduced-motion`: spinners stop (a static arc still says "working"), slides become fades, pulses stop.
+- Feedback: press acknowledged in the same frame (0.97 scale); loading buttons keep their box; toasts only for outcomes not visible in place.
+- Keyboard: herdr-app's bindings (⌘T new tab, ⌘D split, ⌘B sidebar, ⌘⇧P commands, ⌘, settings, ⌘[ / ⌘] agent prev/next); standard shortcuts keep their meaning (HIG keyboards).
+
+## 7. Depth & Surface
+
+Strategy: **tonal shift + hairline borders** (lead decision 5). Surfaces step canvas -> surface -> chrome -> raised -> popover; regions are divided by 1 px `--border`. Overlays (menu, popover, dialog, sheet, palette, toast) get the one shadow level `--overlay-shadow`. No glass, no blur, no gradients.
+
+| Radius       | Value | Usage                      |
+| ------------ | ----- | -------------------------- |
+| `rounded-xs` | 4 px  | kbd, chips, badges         |
+| `rounded-sm` | 6 px  | tooltip, segment, tabs     |
+| `rounded-md` | 8 px  | buttons, inputs, rows      |
+| `rounded-lg` | 10 px | panes, overlays, cards     |
+| `rounded-xl` | 14 px | bottom sheet, board frames |
+
+Nested corners are concentric: segments (6) inside the 8 px track with 2 px padding.
+
+## 8. Accessibility Constraints & Accepted Debt
+
+Target WCAG 2.2 AA.
+
+| Criterion                                      | How it holds                                                                      | Evidence                                             |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 1.4.3 Contrast (text)                          | AA guard; worst case per theme in section 2 (min 4.78)                            | `contrast.test.ts`                                   |
+| 1.4.11 Non-text contrast                       | input edge, ring, status glyphs >= 3:1 (min 3.00)                                 | `contrast.test.ts`                                   |
+| 1.4.1 Use of colour                            | status shape + word; fingerprint mismatch struck + bold + "differs" label         | StatusIndicator, Fingerprint                         |
+| 2.4.7 / 2.4.11 Focus visible, not obscured     | 2 px `--ring` outline on every control                                            | showcase focus-visible cells                         |
+| 2.5.8 Target size (minimum)                    | >= 24x24 CSS px fine pointer, 44x44 coarse                                        | `--control-*`, `::after` hit areas, 44 px extra keys |
+| 2.1.1 Keyboard                                 | Base UI keyboard models; palette arrows/Enter; Escape closes overlays             | CommandPalette, Dialog, Menu                         |
+| 1.4.10 Reflow (320 px) and 1.4.12 Text spacing | single column below 768 px, no fixed-height text boxes, wrapping terminal preview | 390 captures                                         |
+| 3.3.2 Labels                                   | visible labels on fields; icon buttons require `label`                            | Field, IconButton                                    |
+| State-stable controls                          | states change colour/opacity/0.97 scale only, never size                          | Button, AgentRow                                     |
+| 2.3.3 Animation from interactions              | reduced-motion path in base.css                                                   | base.css                                             |
+
+### Accepted Debt
+
+| Item                                                           | Location                   | Why accepted                                                                 | Owner / Exit                                                 |
+| -------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| QR in mockups is a drawing, not an encoded payload             | showcase `sampleQrModules` | encoding belongs to the pairing lane (packages/crypto)                       | QrCode receives real modules when pairing lands              |
+| Increased-contrast variants of each theme                      | theme engine               | HIG asks for them; AA is met without them                                    | add a `contrast: "more"` pass to `themeVariables`            |
+| Command palette is a custom combobox, not Base UI Autocomplete | command-palette.tsx        | needs grouped hints and keys; behaviour is covered by its own keyboard model | revisit when Base UI Autocomplete supports grouped rich rows |
+
+## 9. Personas, Journeys, Ideal State
+
+Personas: (1) **Supervisor** - a developer running several agents across machines from a laptop; (2) **On the move** - the same person on a phone, unblocking one agent; (3) **Keyboard native** - never leaves the keyboard.
+
+Journeys: (1) notice "Needs you" in the sidebar or status bar -> focus the pane -> answer -> the agent moves to Working. (2) Phone: open the agents list -> Needs you is first -> terminal -> tap ctrl + arrows / type -> back. (3) ⌘⇧P -> type "codex" -> Enter.
+
+Ideal state: every agent state is visible at a glance on every device; the first run reaches a paired host in three steps; a key mismatch is impossible to miss and defaults to the safe action; any herdr-app theme looks the same in doriface.
+
+| Gap ledger                                          | Mockup       | Status                                                                                 |
+| --------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------- |
+| Live libghostty terminal in panes                   | shell, phone | belongs to the web app lane; mockups use TerminalPreview with the same `--term-*` vars |
+| Real pairing crypto, QR payload, fingerprint source | pair, states | packages/crypto lane                                                                   |
+| Sub-agents, pinning UI, rail (collapsed) sidebar    | shell        | primitives support pin; rail and sub-agent rows follow when the client exposes them    |
+| Increased-contrast themes                           | all          | section 8 debt                                                                         |
