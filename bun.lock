@@ -101,6 +101,15 @@
         "@wterm/ghostty": "0.5.8",
       },
     },
+    "packages/mesh": {
+      "name": "@doriface/mesh",
+      "version": "0.0.0",
+      "dependencies": {
+        "@doriface/crypto": "workspace:*",
+        "@noble/curves": "2.4.0",
+        "@noble/hashes": "2.4.0",
+      },
+    },
     "packages/protocol": {
       "name": "@doriface/protocol",
       "version": "0.1.0",
@@ -358,6 +367,8 @@
     "@doriface/ghostty-wasm": ["@doriface/ghostty-wasm@workspace:packages/ghostty-wasm"],
 
     "@doriface/host": ["@doriface/host@workspace:apps/host"],
+
+    "@doriface/mesh": ["@doriface/mesh@workspace:packages/mesh"],
 
     "@doriface/protocol": ["@doriface/protocol@workspace:packages/protocol"],
 
