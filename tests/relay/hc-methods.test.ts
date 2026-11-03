@@ -25,7 +25,7 @@ function started(): { readonly hc: HcConnection; readonly events: EventWatch; re
 }
 
 beforeAll(async () => {
-  relayed = await startRelayedHost("doriface-relay-methods");
+  relayed = await startRelayedHost("relay-methods");
   mkdirSync(join(relayed.scratch, "work"));
   await relayed.pair(phone, "methods");
   ({ connection, link: recorded } = await relayed.connectRecorded(phone));

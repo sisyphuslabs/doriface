@@ -19,7 +19,7 @@ const deviceState = join(scratch, "device");
 let relayed: RelayedHost | undefined;
 
 beforeAll(async () => {
-  relayed = await startRelayedHost("doriface-relay-backpressure");
+  relayed = await startRelayedHost("relay-backpressure");
   const pairing = runConnect(deviceState, relayed.relayUrl, await relayed.pairingLink(), "--name", "slow");
   pairing.end();
   if ((await pairing.exited) !== 0) throw new Error(`pairing failed: ${await pairing.stderr()}`);
