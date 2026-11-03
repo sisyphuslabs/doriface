@@ -11,6 +11,8 @@ export interface AppActionTargets {
   readonly tabs: Tabs;
   readonly onNew: () => void;
   readonly onToggleSidebar: () => void;
+  /** Moves focus from the terminal to the sidebar, or back. */
+  readonly onFocusSidebar: () => void;
 }
 
 const FONT_STEP = 1;
@@ -81,7 +83,7 @@ function selectTab(tabs: Tabs, address: string | null): boolean {
 }
 
 export function desktopActions(
-  { terminals, tabs, onNew, onToggleSidebar }: AppActionTargets,
+  { terminals, tabs, onNew, onToggleSidebar, onFocusSidebar }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
   return (action) => {
@@ -117,6 +119,9 @@ export function desktopActions(
         return selectTab(tabs, neighbour(live, tabs.active, -1));
       case "layout.toggle":
         onToggleSidebar();
+        return true;
+      case "layout.focus":
+        onFocusSidebar();
         return true;
       case "app.settings":
         openSettings();

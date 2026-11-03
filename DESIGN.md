@@ -180,7 +180,7 @@ Every interactive primitive: hover, pressed, focus-visible (2 px `--ring` outlin
 - CSS transitions and Base UI's `data-starting-style`/`data-ending-style` only; no motion library (lead decision 2). Only transform, opacity and colours animate.
 - `prefers-reduced-motion`: spinners stop (a static arc still says "working"), slides become fades, pulses stop.
 - Feedback: press acknowledged in the same frame (0.97 scale); loading buttons keep their box; toasts only for outcomes not visible in place.
-- Keyboard: herdr-app's bindings (⌘T new tab, ⌘D split, ⌘B sidebar, ⌘⇧P commands, ⌘, settings, ⌘[ / ⌘] agent prev/next); standard shortcuts keep their meaning (HIG keyboards).
+- Keyboard: herdr-app's bindings (⌘T new tab, ⌘D split, ⌘B sidebar, ⌘⇧P commands, ⌘, settings, ⌘[ / ⌘] agent prev/next); standard shortcuts keep their meaning (HIG keyboards). ⌘⇧E (Ctrl+Shift+E elsewhere) moves focus from a terminal to the sidebar and back, showing a hidden sidebar first, so Tab and Esc stay with the program in the terminal.
 
 ## 7. Depth & Surface
 

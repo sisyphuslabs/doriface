@@ -33,6 +33,7 @@ export const ACTIONS: readonly ActionDef[] = [
   app("agent.next", "Next agent"),
   app("agent.prev", "Previous agent"),
   app("layout.toggle:sidebar", "Show or hide the sidebar"),
+  app("layout.focus:sidebar", "Move focus between the terminal and the sidebar"),
   app("app.palette", "Command palette", "toggle_command_palette"),
   app("app.settings", "Open settings", "open_config"),
   app("app.zoom_in", "Larger terminal text", "increase_font_size:1"),

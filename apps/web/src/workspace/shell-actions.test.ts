@@ -27,7 +27,7 @@ const tabs: Tabs = {
 const noop = (): void => undefined;
 const handlers = {
   desktop: desktopActions(
-    { terminals: [terminal("t1"), terminal("t2")], tabs, onNew: noop, onToggleSidebar: noop },
+    { terminals: [terminal("t1"), terminal("t2")], tabs, onNew: noop, onToggleSidebar: noop, onFocusSidebar: noop },
     noop,
   ),
   phone: phoneActions(noop, noop),
