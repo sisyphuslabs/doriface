@@ -29,6 +29,7 @@
         "doriface-host": "./src/cli.ts",
       },
       "dependencies": {
+        "@doriface/client": "workspace:*",
         "@doriface/crypto": "workspace:*",
         "@doriface/relay-client": "workspace:*",
         "hono": "4.13.16",

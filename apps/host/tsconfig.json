@@ -9,6 +9,7 @@
   "include": ["src", "scripts", "package.json"],
   "references": [
     { "path": "../../packages/protocol" },
+    { "path": "../../packages/client" },
     { "path": "../../packages/crypto" },
     { "path": "../../packages/relay-client" }
   ]
