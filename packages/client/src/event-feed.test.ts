@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { FrameKind, readCredit, type HcEvent, type HcSnapshot, type JsonRpcNotification } from "@doriface/protocol";
+import {
+  FrameKind,
+  readCredit,
+  type Frame,
+  type HcEvent,
+  type HcSnapshot,
+  type JsonRpcNotification,
+} from "@doriface/protocol";
 import { HcConnection, type SubscribeOptions } from "./connection.ts";
 import type { EventFeed, FeedClose } from "./event-feed.ts";
 import { FakeCore } from "./testing/fake-core.ts";
@@ -20,7 +27,7 @@ async function subscribed(options: SubscribeOptions = { heartbeatTimeoutMs: 0 })
   const request = await core.waitRequest("events.subscribe");
   core.pushFrame(0, 0, withId(SUBSCRIBE_REPLY, Number(request.id)));
   const feed: EventFeed = await subscribing;
-  return { core, feed };
+  return { core, feed, connection: await opening };
 }
 
 function collect(feed: EventFeed, count: number): Promise<HcEvent[]> {
@@ -74,6 +81,46 @@ describe("EventFeed", () => {
     expect(received.map((e) => (e.type === "title" ? e.data.title : e.type))).toEqual(["fresh", "after snapshot"]);
     expect(snapshots).toEqual([{ seq: 10, terminals: [] }]);
     expect(feed.snapshot).toEqual({ seq: 10, terminals: [] });
+  });
+
+  test("returns no credit until the first event listener takes the queued events", async () => {
+    const { core, feed, connection } = await subscribed();
+    const dispatched = next<Frame>((resolve) => connection.raw.onFrame(resolve));
+    const line = event(3, "title", '{"title":"queued"}');
+    core.pushFrame(CHANNEL, FrameKind.Data, line);
+    await dispatched;
+    connection.raw.send(CHANNEL, FrameKind.Focus, new Uint8Array([0]));
+    await core.waitFrame((f) => f.channel === CHANNEL && f.kind === FrameKind.Focus);
+    expect(core.frames.some((f) => f.channel === CHANNEL && f.kind === FrameKind.Credit)).toBe(false);
+    const events = collect(feed, 1);
+    const credit = await core.waitFrame((f) => f.channel === CHANNEL && f.kind === FrameKind.Credit);
+    expect(readCredit(credit.payload)).toBe(bytes(line).byteLength);
+    expect((await events).map((e) => e.seq)).toEqual([3]);
+  });
+
+  test("stops reading a frame once a listener closed the feed", async () => {
+    const { core, feed } = await subscribed();
+    const seen: number[] = [];
+    const closed = next<FeedClose>((resolve) => feed.onClose(resolve));
+    feed.onEvent((received) => {
+      seen.push(received.seq);
+      feed.close();
+    });
+    core.pushFrame(CHANNEL, FrameKind.Data, event(3, "title", '{"title":"a"}') + event(4, "title", '{"title":"b"}'));
+    expect(await closed).toEqual({ reason: "detached" });
+    expect(seen).toEqual([3]);
+  });
+
+  test("stays open while heartbeats keep arriving", async () => {
+    const { core, feed } = await subscribed({ heartbeatTimeoutMs: 200 });
+    const beats = Array.from({ length: 8 }, (_, index) => index);
+    for (const seq of beats) {
+      core.pushFrame(CHANNEL, FrameKind.Data, `{"jsonrpc":"2.0","method":"heartbeat","params":{"seq":${seq}}}\n`);
+      // oxlint-disable-next-line no-await-in-loop -- heartbeats must be spaced in time; time is the behavior under test
+      await Bun.sleep(40);
+    }
+    expect(feed.closed).toBe(false);
+    expect(await next<FeedClose>((resolve) => feed.onClose(resolve))).toEqual({ reason: "heartbeat_timeout" });
   });
 
   test("passes notifications from a newer core to onUnknown", async () => {

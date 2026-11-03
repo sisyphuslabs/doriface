@@ -39,6 +39,7 @@ export class EventFeed implements ChannelHandler {
   readonly #closeListeners = new Listeners<FeedClose>();
   readonly #heartbeatTimeoutMs: number;
   #queue: Delivery[] | undefined = [];
+  #heldCredit = 0;
   #snapshot: HcSnapshot;
   #seq: number;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -66,12 +67,18 @@ export class EventFeed implements ChannelHandler {
     return this.#closeInfo !== undefined;
   }
 
-  /** Events that arrived before the first listener are delivered to it, in order. */
+  /**
+   * Events that arrived before the first listener are delivered to it, in order. Until then the
+   * feed returns no credit, so the core holds further events instead of this client buffering them.
+   */
   onEvent(listener: (event: HcEvent) => void): Unsubscribe {
     const unsubscribe = this.#events.add(listener);
     const queued = this.#queue;
     this.#queue = undefined;
     for (const delivery of queued ?? []) this.#emit(delivery);
+    const held = this.#heldCredit;
+    this.#heldCredit = 0;
+    if (held > 0 && this.#closeInfo === undefined) this.#wire.sendBytes(encodeCredit(this.channel, held));
     return unsubscribe;
   }
 
@@ -117,13 +124,18 @@ export class EventFeed implements ChannelHandler {
 
   #data(payload: Uint8Array): void {
     try {
-      for (const line of this.#lines.push(payload)) this.#line(line);
+      for (const line of this.#lines.push(payload)) {
+        if (this.#closeInfo !== undefined) return;
+        this.#line(line);
+      }
     } catch (error) {
       const failure = error instanceof Error ? error : new HcProtocolError(String(error));
       this.#end({ reason: "protocol_error", error: failure }, true);
       return;
     }
-    if (payload.byteLength > 0) this.#wire.sendBytes(encodeCredit(this.channel, payload.byteLength));
+    if (this.#closeInfo !== undefined || payload.byteLength === 0) return;
+    if (this.#queue === undefined) this.#wire.sendBytes(encodeCredit(this.channel, payload.byteLength));
+    else this.#heldCredit += payload.byteLength;
   }
 
   #line(line: string): void {
