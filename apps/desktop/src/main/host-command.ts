@@ -36,23 +36,20 @@ export function hostCommand(context: HostContext): HostCommand {
   return { file: context.env["BUN_BIN"] ?? "bun", args: [join(context.appPath, "..", "host", "src", "cli.ts")] };
 }
 
+/** Where herdr-core usually lands when PATH does not say. */
+export function usualHcDirs(context: HostContext): readonly string[] {
+  const home = [join(context.home, ".local", "bin"), join(context.home, ".cargo", "bin")];
+  return context.platform === "win32" ? home : [...home, "/opt/homebrew/bin", "/usr/local/bin"];
+}
+
 /**
  * Finds herdr-core. Apps launched from a desktop session inherit a minimal PATH, so the usual install
  * directories are searched after it.
  */
-export function findHc(context: HostContext): string | undefined {
+export function findHc(context: HostContext, usual: readonly string[] = usualHcDirs(context)): string | undefined {
   const pinned = context.env["HC_BIN"];
   if (pinned !== undefined && pinned !== "") return pinned;
   const fromPath = (context.env["PATH"] ?? "").split(delimiter).filter((dir) => dir !== "");
-  const usual =
-    context.platform === "win32"
-      ? [join(context.home, ".local", "bin"), join(context.home, ".cargo", "bin")]
-      : [
-          join(context.home, ".local", "bin"),
-          join(context.home, ".cargo", "bin"),
-          "/opt/homebrew/bin",
-          "/usr/local/bin",
-        ];
   const name = executable("hc", context.platform);
   return [...fromPath, ...usual].map((dir) => join(dir, name)).find(isExecutable);
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findHc, hostCommand, type HostContext } from "../src/main/host-command.ts";
+import { findHc, hostCommand, usualHcDirs, type HostContext } from "../src/main/host-command.ts";
 
 const context = (overrides: Partial<HostContext>): HostContext => ({
   packaged: false,
@@ -35,6 +35,12 @@ describe("doriface-host command", () => {
 });
 
 describe("finding hc", () => {
+  test("the usual directories follow the platform", () => {
+    const unix = [join("/h", ".local", "bin"), join("/h", ".cargo", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
+    expect(usualHcDirs(context({ home: "/h" }))).toEqual(unix);
+    expect(usualHcDirs(context({ home: "/h", platform: "win32" }))).toEqual(unix.slice(0, 2));
+  });
+
   test("HC_BIN wins, then PATH, then the usual install directories", () => {
     const home = mkdtempSync(join(tmpdir(), "dd-hc-"));
     try {
@@ -42,10 +48,11 @@ describe("finding hc", () => {
       mkdirSync(local, { recursive: true });
       writeFileSync(join(local, "hc"), "#!/bin/sh\n");
       chmodSync(join(local, "hc"), 0o755);
-      expect(findHc(context({ home, env: { HC_BIN: "/pinned/hc", PATH: local } }))).toBe("/pinned/hc");
-      expect(findHc(context({ home: "/nowhere", env: { PATH: local } }))).toBe(join(local, "hc"));
-      expect(findHc(context({ home, env: { PATH: "" } }))).toBe(join(local, "hc"));
-      expect(findHc(context({ home: join(home, "empty"), env: { PATH: join(home, "empty") } }))).toBeUndefined();
+      const empty = join(home, "empty");
+      expect(findHc(context({ home, env: { HC_BIN: "/pinned/hc", PATH: local } }), [])).toBe("/pinned/hc");
+      expect(findHc(context({ home, env: { PATH: local } }), [])).toBe(join(local, "hc"));
+      expect(findHc(context({ home, env: { PATH: "" } }), [local])).toBe(join(local, "hc"));
+      expect(findHc(context({ home, env: { PATH: empty } }), [empty])).toBeUndefined();
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
