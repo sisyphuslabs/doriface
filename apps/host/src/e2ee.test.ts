@@ -9,7 +9,7 @@ import {
   parsePairingUrl,
   SecureLinkError,
 } from "@doriface/crypto";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +19,8 @@ import { openE2eeClient, type E2eeClient } from "./testing/e2ee-client.ts";
 import { createHcSession, HELLO, type HcSession, rpcFrame } from "./testing/hc-session.ts";
 
 const CLI = join(import.meta.dir, "cli.ts");
+/** These tests spawn the CLI; a cold transpiler cache alone can take most of bun's 5 s default. */
+setDefaultTimeout(30_000);
 const device = generateX25519();
 const stateDir = mkdtempSync(join(tmpdir(), "dh-e2ee-"));
 let session: HcSession;
