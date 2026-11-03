@@ -1,5 +1,5 @@
 import { FileUp, Search } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   BUILTIN_PALETTES,
   Button,
@@ -22,6 +22,17 @@ export function terminalColors(): {
   const palette = Object.entries(BUILTIN_PALETTES).find(([name]) => name === pinned)?.[1] ?? system;
   const theme = resolveTheme(palette);
   return { ansi: theme.ansi, cursor: theme.roles.cursor, selection: theme.roles.selection };
+}
+
+/** A font stack the mockups can edit: remove drops a family, add appends the next fallback not yet listed. */
+export function useFontStack(initial: readonly string[]) {
+  const [families, setFamilies] = useState(initial);
+  const next = ["Menlo", "SF Mono", "Apple Color Emoji"].find((family) => !families.includes(family));
+  return {
+    families,
+    onRemove: (family: string) => setFamilies(families.filter((entry) => entry !== family)),
+    ...(next === undefined ? {} : { onAdd: () => setFamilies([...families, next]) }),
+  };
 }
 
 export function Toggle({ label, on }: { readonly label: string; readonly on: boolean }) {

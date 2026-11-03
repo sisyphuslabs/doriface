@@ -1,13 +1,23 @@
 import { useState } from "react";
 import { FontFamilyList, NumberStepper, PaletteEditor, SegmentedControl, SettingRow } from "../../src/index.ts";
 import { Group } from "./settings-sections.tsx";
-import { Header, Mono, Rows, Swatch, ThemePair, Toggle, terminalColors } from "./settings-terminal-parts.tsx";
+import {
+  Header,
+  Mono,
+  Rows,
+  Swatch,
+  ThemePair,
+  Toggle,
+  terminalColors,
+  useFontStack,
+} from "./settings-terminal-parts.tsx";
 
 export function TerminalSection() {
   const colors = terminalColors();
   const [cursor, setCursor] = useState<"block" | "bar" | "underline" | "block_hollow">("block");
   const [copy, setCopy] = useState<"false" | "true" | "clipboard">("true");
   const [slot, setSlot] = useState(4);
+  const fonts = useFontStack(["JetBrains Mono", "Symbols Nerd Font Mono", "Apple Color Emoji"]);
   return (
     <>
       <Header />
@@ -19,11 +29,7 @@ export function TerminalSection() {
             description="Tried in order; a glyph missing from one face comes from the next."
             control={null}
           />
-          <FontFamilyList
-            families={["JetBrains Mono", "Symbols Nerd Font Mono", "Apple Color Emoji"]}
-            missing={["Symbols Nerd Font Mono"]}
-            className="pb-3"
-          />
+          <FontFamilyList {...fonts} missing={["Symbols Nerd Font Mono"]} className="pb-3" />
           <SettingRow
             inline
             title="Font size"

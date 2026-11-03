@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ColorSwatch, FontFamilyList, PaletteEditor, SettingRow, ShortcutField, Switch } from "../../src/index.ts";
+import { useFontStack } from "./settings-terminal-parts.tsx";
 import { Cell, FORCED, Row, Section } from "./specimen.tsx";
 
 const SAMPLE = "#9fb4e6";
@@ -8,6 +9,7 @@ const PALETTE = Array.from({ length: 16 }, (_, index) => `var(--term-color-${ind
 /** The parts of the Ghostty-grade terminal settings, each in the states it ships with. */
 export function TerminalSettingsParts() {
   const [slot, setSlot] = useState(4);
+  const fonts = useFontStack(["JetBrains Mono", "Symbols Nerd Font Mono"]);
   return (
     <Section title="Terminal settings parts">
       <Row>
@@ -48,10 +50,7 @@ export function TerminalSettingsParts() {
       </Row>
       <div className="grid items-start gap-6 md:grid-cols-2">
         <Cell label="FontFamilyList · primary, missing fallback" className="items-stretch">
-          <FontFamilyList
-            families={["JetBrains Mono", "Symbols Nerd Font Mono"]}
-            missing={["Symbols Nerd Font Mono"]}
-          />
+          <FontFamilyList {...fonts} missing={["Symbols Nerd Font Mono"]} />
         </Cell>
         <div className="flex flex-col">
           <SettingRow
