@@ -91,7 +91,9 @@ function PhoneTerminal(props: {
       >
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 className="truncate text-base font-semibold text-foreground">{title}</h1>
+          <h1 title={title} className="min-w-0 truncate text-base font-semibold text-foreground">
+            {title}
+          </h1>
           <StatusChip status={agentStatus(terminal)} />
         </div>
       </header>

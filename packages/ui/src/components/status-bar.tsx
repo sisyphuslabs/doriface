@@ -22,11 +22,14 @@ export function StatusBar({ start, end, className }: StatusBarProps) {
   );
 }
 
+/** An icon and words; the words end in an ellipsis, with the full text as their title when it is plain text. */
 export function StatusBarItem({ icon, children }: { readonly icon?: ReactNode; readonly children: ReactNode }) {
   return (
-    <span className="flex min-w-0 items-center gap-1.5 truncate">
+    <span className="flex min-w-0 items-center gap-1.5">
       {icon}
-      {children}
+      <span className="min-w-0 truncate" {...(typeof children === "string" ? { title: children } : {})}>
+        {children}
+      </span>
     </span>
   );
 }

@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { E2E_HOST_PORT, E2E_WEB_PORT } from "./e2e/config.ts";
+import { E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_WEB_PORT } from "./e2e/config.ts";
 
 export default defineConfig({
   testDir: "e2e",
@@ -14,6 +14,12 @@ export default defineConfig({
     {
       command: "bun e2e/host.ts",
       url: `http://127.0.0.1:${E2E_HOST_PORT}/healthz`,
+      reuseExistingServer: false,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
+    },
+    {
+      command: "bun e2e/host.ts layout",
+      url: `http://127.0.0.1:${E2E_LAYOUT_PORT}/healthz`,
       reuseExistingServer: false,
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
     },
