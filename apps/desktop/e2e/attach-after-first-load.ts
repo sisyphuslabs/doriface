@@ -43,13 +43,14 @@ const hasNetworkService = (response: unknown): boolean | undefined => {
 };
 
 /**
- * With DORIFACE_E2E_RACE_REPORT set, records in that file what this wrapper saw at its attach, the moment a launch
+ * With DORIFACE_E2E_RACE_REPORT set, records in that file when this wrapper attached and what it saw at its attach, the moment a launch
  * without it would have attached (whether the first navigation was in flight and whether the network service had
  * started), and whether the network service was running by the time it releases Playwright. first-document.e2e.ts
  * checks these to know it forced the race; the second check keeps the first from passing if the service is renamed or
  * stops being a process of its own.
  */
-function reportAttach(path: string, frameTree: unknown, processes: unknown): void {
+function reportAttach(path: string, attachedAt: number, frameTree: unknown, processes: unknown): void {
+  appendFileSync(path, `attached at=${attachedAt}\n`);
   const result = isRecord(frameTree) ? frameTree["result"] : undefined;
   const tree = isRecord(result) ? result["frameTree"] : undefined;
   const frame = isRecord(tree) ? tree["frame"] : undefined;
@@ -63,6 +64,7 @@ function appDocumentCreated(endpoint: string): Promise<void> {
   let lastId = 0;
   const raceReport = env["DORIFACE_E2E_RACE_REPORT"] ?? "";
   const ids = { frameTree: -1, attachProcesses: -1, releaseProcesses: -1 };
+  let attachedAt = 0;
   const answers = new Map<number, unknown>();
   const send = (method: string, sessionId?: string): number => {
     lastId += 1;
@@ -86,6 +88,7 @@ function appDocumentCreated(endpoint: string): Promise<void> {
         if (isRecord(targetInfo) && targetInfo["type"] === "page" && typeof sessionId === "string") {
           send("Runtime.enable", sessionId);
           if (ids.frameTree < 0 && raceReport !== "") {
+            attachedAt = Date.now();
             ids.frameTree = send("Page.getFrameTree", sessionId);
             ids.attachProcesses = send("SystemInfo.getProcessInfo");
           }
@@ -94,7 +97,7 @@ function appDocumentCreated(endpoint: string): Promise<void> {
       const id = isRecord(parsed) ? parsed["id"] : undefined;
       if (typeof id === "number") answers.set(id, parsed);
       if (answers.has(ids.frameTree) && answers.has(ids.attachProcesses)) {
-        reportAttach(raceReport, answers.get(ids.frameTree), answers.get(ids.attachProcesses));
+        reportAttach(raceReport, attachedAt, answers.get(ids.frameTree), answers.get(ids.attachProcesses));
         answers.delete(ids.frameTree);
         answers.delete(ids.attachProcesses);
       }
