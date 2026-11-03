@@ -38,7 +38,8 @@ export const CLAUDE_LINES: readonly TerminalLine[] = [
   ],
   [],
   [{ text: "  This migration drops ", dim: false }, { text: "sessions.legacy_token", color: 3 }, { text: "." }],
-  [{ text: "  Existing rows lose their old tokens and must sign in again." }],
+  [{ text: "  Existing rows lose their old tokens" }],
+  [{ text: "  and must sign in again." }],
   [],
   [{ text: "  Apply the migration to the staging database?", bold: true }],
   [
