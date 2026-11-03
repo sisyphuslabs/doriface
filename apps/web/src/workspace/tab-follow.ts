@@ -7,9 +7,11 @@ export interface KeyedTabs {
   readonly active: string | null;
   readonly split: string | null;
   readonly missing: ReadonlyMap<string, number>;
+  /** A tab asked for before the feed lists its terminal (New tab answers first): it opens, focused, once listed. */
+  readonly pending: string | null;
 }
 
-export const NO_TABS: KeyedTabs = { open: [], active: null, split: null, missing: new Map() };
+export const NO_TABS: KeyedTabs = { open: [], active: null, split: null, missing: new Map(), pending: null };
 
 const sameList = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((entry, index) => entry === b[index]);
@@ -43,10 +45,35 @@ export function followTerminals(
   const firstLive = terminals.find((terminal) => terminal.state === "live")?.address;
   if (open.length === 0 && firstLive !== undefined) open = [tabKey(firstLive, ids)];
   const was = (key: string | null): string | null => (key === null ? null : (renamed.get(key) ?? null));
-  const active = was(prev.active) ?? open[0] ?? null;
+  const arrived = prev.pending === null ? undefined : tabAddress(prev.pending, ids);
+  const next =
+    arrived !== undefined && known.has(arrived) ? selectTab({ ...prev, open }, tabKey(arrived, ids), true) : null;
+  if (next !== null) open = [...next.open];
+  const active = next?.active ?? was(prev.active) ?? open[0] ?? null;
   const kept = was(prev.split);
   const split = kept !== null && kept !== active ? kept : null;
+  const pending = next === null ? prev.pending : null;
   const same =
-    sameList(open, prev.open) && active === prev.active && split === prev.split && sameWaits(missing, prev.missing);
-  return same ? prev : { open, active, split, missing };
+    sameList(open, prev.open) &&
+    active === prev.active &&
+    split === prev.split &&
+    sameWaits(missing, prev.missing) &&
+    pending === prev.pending;
+  return same ? prev : { open, active, split, missing, pending };
+}
+
+/**
+ * Opens the tab for `key` and makes it the active one. A terminal the feed does not list yet (`listed` false) is only
+ * noted as pending: the current tab stays in front until followTerminals sees it listed, and a later selection
+ * replaces it, so a terminal the feed never lists leaves nothing behind.
+ */
+export function selectTab(prev: KeyedTabs, key: string, listed: boolean): KeyedTabs {
+  if (!listed) return { ...prev, pending: key };
+  return {
+    ...prev,
+    open: prev.open.includes(key) ? prev.open : [...prev.open, key],
+    active: key,
+    split: prev.split === key ? null : prev.split,
+    pending: null,
+  };
 }
