@@ -4,6 +4,7 @@ import {
   fingerprintOf,
   formatPairingCode,
   PAIRING_TTL_MS,
+  pairingWebOrigin,
   relayWebSocketUrl,
 } from "@doriface/crypto";
 import { parseArgs } from "node:util";
@@ -62,6 +63,7 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
   });
   if (values.help) return out(`${PAIR_USAGE}\n`);
   relayWebSocketUrl(values.relay);
+  pairingWebOrigin(values["web-origin"]);
   const stateDir = values["state-dir"] ?? defaultStateDir();
   const identity = loadHostIdentity(stateDir);
   const offer = await openOffer(stateDir);
