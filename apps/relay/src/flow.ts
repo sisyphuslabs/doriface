@@ -1,6 +1,6 @@
-import { MAX_UNACKED_BYTES, parseAck } from "@doriface/relay-client/wire";
+import { CloseCode, MAX_UNACKED_BYTES, parseAck } from "@doriface/relay-client/wire";
 import { type Attachment, attach, attachmentOf } from "./attachment.ts";
-import { isOpen } from "./sockets.ts";
+import { closeIfOpen, isOpen } from "./sockets.ts";
 
 function sendCounted(ws: WebSocket, attachment: Attachment, bytes: Uint8Array<ArrayBuffer>): void {
   if (!isOpen(ws)) return;
@@ -20,10 +20,12 @@ export function forward(ws: WebSocket, bytes: Uint8Array<ArrayBuffer>): boolean 
   return true;
 }
 
-/** Relay messages of its own (challenge, OPEN, CLOSE, PAIR_SLOT replies) are counted but never refused. */
+/**
+ * Sends a relay message of its own (challenge, OPEN, CLOSE, PAIR_SLOT reply) under the same window: a peer so far
+ * behind that it cannot take one more is closed with 4408 instead of queueing without bound.
+ */
 export function sendControl(ws: WebSocket, bytes: Uint8Array<ArrayBuffer>): void {
-  const attachment = attachmentOf(ws);
-  if (attachment !== undefined) sendCounted(ws, attachment, bytes);
+  if (!forward(ws, bytes)) closeIfOpen(ws, CloseCode.IdleTimeout, "the receiver is too far behind");
 }
 
 /** Applies an `a:<total>` ack; false when it is malformed, goes backwards or acks bytes never sent. */
