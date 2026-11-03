@@ -1,8 +1,31 @@
 import { describe, expect, test } from "bun:test";
 import { memoryStore } from "../storage/idb.ts";
 import { KEYMAP_VERSION, KeymapStore } from "./keymap-store.ts";
-import { checkBinding, resetAction, resolveKeymap, triggersFor, withBinding, withoutTrigger } from "./keymap.ts";
+import {
+  actionKeys,
+  checkBinding,
+  resetAction,
+  resolveKeymap,
+  triggersFor,
+  withBinding,
+  withoutTrigger,
+} from "./keymap.ts";
 import { normalizeTrigger, triggerFromEvent } from "./trigger.ts";
+
+describe("actionKeys", () => {
+  test("the palette hint follows the platform", () => {
+    expect(actionKeys(resolveKeymap("mac", new Map()), "app.palette", "mac")).toEqual(["⇧", "⌘", "P"]);
+    expect(actionKeys(resolveKeymap("other", new Map()), "app.palette", "other")).toEqual(["Ctrl", "Shift", "P"]);
+  });
+
+  test("the palette hint follows a rebind and disappears once unbound", () => {
+    const moved = withBinding("mac", new Map(), normalizeTrigger("super+k") ?? "", "app.palette");
+    const rebound = resolveKeymap("mac", withoutTrigger("mac", moved, normalizeTrigger("super+shift+p") ?? ""));
+    expect(actionKeys(rebound, "app.palette", "mac")).toEqual(["⌘", "K"]);
+    const unbound = resolveKeymap("mac", withoutTrigger("mac", new Map(), normalizeTrigger("super+shift+p") ?? ""));
+    expect(actionKeys(unbound, "app.palette", "mac")).toBeUndefined();
+  });
+});
 
 describe("resolveKeymap", () => {
   test("defaults differ per platform and overrides win", () => {
