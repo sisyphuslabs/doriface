@@ -21,6 +21,9 @@ function parseRequest(line: string): ControlRequest {
   throw new Error("unknown control request");
 }
 
+/** A request is one short JSON line; anything longer without a newline is refused. */
+const MAX_REQUEST_BYTES = 4096;
+
 interface ConnectionState {
   buffer: string;
 }
@@ -45,7 +48,13 @@ export function listenControl(stateDir: string, handle: ControlHandler): Control
       data(socket, chunk) {
         socket.data.buffer += chunk.toString();
         const newline = socket.data.buffer.indexOf("\n");
-        if (newline === -1) return;
+        if (newline === -1) {
+          if (socket.data.buffer.length > MAX_REQUEST_BYTES) {
+            socket.data.buffer = "";
+            reply(socket, { ok: false, error: "request too large" });
+          }
+          return;
+        }
         const line = socket.data.buffer.slice(0, newline);
         Promise.resolve()
           .then(() => handle(parseRequest(line)))
