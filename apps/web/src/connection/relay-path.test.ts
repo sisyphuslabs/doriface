@@ -1,4 +1,4 @@
-import { generateX25519, rawStaticKey } from "@doriface/crypto";
+import { base64urlEncode, generateX25519, rawStaticKey } from "@doriface/crypto";
 import { startHost, type Host } from "@doriface/host";
 import { createHcSession, FakeRelay, type HcSession, RelayClientBridge } from "@doriface/host/testing";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -84,7 +84,9 @@ describe("the web relay path against a real doriface-host", () => {
     const saved: RememberedHost[] = [];
     await pairAndRemember(codeOffer(link, code), "phone", (remembered) => saved.push(remembered), deps);
     expect(bridge.dialed.at(-1)?.searchParams.get("pair")).toBe(code.slice(0, 3));
-    expect(saved).toEqual([{ hostId: link.hostId, hostKey: expect.any(String), relayUrl: bridge.url }]);
+    expect(saved).toEqual([
+      { hostId: link.hostId, hostKey: base64urlEncode(link.noiseStaticPub), relayUrl: bridge.url },
+    ]);
   }, 30_000);
 
   test("a link dials an ordinary session and pairs; connect() then runs hello over Noise IK", async () => {
