@@ -15,6 +15,8 @@ export type ConnectionState =
       readonly phase: "failed";
       readonly error: Error;
       readonly retryInMs: number | null;
+      /** When the next attempt starts (Date.now() epoch ms), or null with retryInMs. */
+      readonly retryAt: number | null;
       readonly stale: HcConnection | null;
     };
 
@@ -98,11 +100,11 @@ export class ConnectionStore {
   #retry(error: Error, attempt: number): void {
     if (error instanceof DeviceNotPairedError) {
       this.#stale = null;
-      this.#set({ phase: "failed", error, retryInMs: null, stale: null });
+      this.#set({ phase: "failed", error, retryInMs: null, retryAt: null, stale: null });
       return;
     }
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
-    this.#set({ phase: "failed", error, retryInMs: delay, stale: this.#stale });
+    this.#set({ phase: "failed", error, retryInMs: delay, retryAt: Date.now() + delay, stale: this.#stale });
     this.#timer = setTimeout(() => void this.#attempt(attempt), delay);
   }
 
