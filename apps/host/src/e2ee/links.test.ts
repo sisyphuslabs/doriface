@@ -1,5 +1,6 @@
 import type { SecureLink } from "@doriface/crypto";
 import { describe, expect, test } from "bun:test";
+import { ByteQueue } from "../link.ts";
 import { plaintextLink, type Wire } from "./links.ts";
 
 /** A decrypted session whose records the test emits by hand. */
@@ -25,25 +26,33 @@ function fakeSecure(): SecureLink & { readonly emit: (bytes: Uint8Array) => void
 const OPEN_GATE = (): Promise<void> | undefined => undefined;
 
 describe("plaintextLink", () => {
-  test("holds the socket's reads while hc connect is behind, and releases them once it caught up", async () => {
+  test("the socket reads no further record while hc connect is behind, and resumes once it caught up", async () => {
     const secure = fakeSecure();
     let gate = OPEN_GATE;
     const wire: Wire = { flushed: () => Promise.resolve(), readWhen: (next) => (gate = next) };
     const link = plaintextLink(secure, wire);
-    const first = Promise.withResolvers<void>();
+    const decrypted: number[] = [];
+    // The socket side, as WsByteLink wires it: each record is decrypted, then the next waits for the gate.
+    const errors: unknown[] = [];
+    const socket = new ByteQueue({ onError: (error) => errors.push(error) });
+    socket.setHandler((record) => {
+      decrypted.push(record[0] ?? -1);
+      secure.emit(record);
+      return gate();
+    });
+    const slow = Promise.withResolvers<void>();
     const delivered: number[] = [];
     link.onData((bytes) => {
       delivered.push(bytes[0] ?? -1);
-      return bytes[0] === 1 ? first.promise : undefined;
+      return bytes[0] === 1 ? slow.promise : undefined;
     });
-    secure.emit(Uint8Array.of(1));
-    expect(gate()).toBeUndefined();
-    secure.emit(Uint8Array.of(2));
-    const held = gate();
-    expect(held).toBeInstanceOf(Promise);
-    first.resolve();
-    await held;
-    expect(delivered).toEqual([1, 2]);
-    expect(gate()).toBeUndefined();
+    for (const record of [1, 2, 3]) socket.push(Uint8Array.of(record));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(decrypted).toEqual([1, 2]);
+    slow.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(decrypted).toEqual([1, 2, 3]);
+    expect(delivered).toEqual([1, 2, 3]);
+    expect(errors).toEqual([]);
   });
 });
