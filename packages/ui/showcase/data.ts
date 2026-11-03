@@ -4,7 +4,7 @@ export const SPACES: readonly Space[] = [
   { id: "api", name: "api-server", tabs: 3, attention: "blocked" },
   { id: "web", name: "web-client", tabs: 2, attention: "working" },
   { id: "infra", name: "infra", machine: "build-box", tabs: 1, attention: "done" },
-  { id: "notes", name: "release-notes", tabs: 1 },
+  { id: "notes", name: "release-notes", tabs: 1, attention: "idle" },
 ];
 
 export const AGENTS_NEEDS_YOU: readonly Agent[] = [
@@ -24,7 +24,7 @@ export const AGENTS_IDLE: readonly Agent[] = [
 export const TABS: readonly WorkspaceTab[] = [
   { id: "t1", title: "Claude Code", status: "blocked" },
   { id: "t2", title: "Codex", status: "done" },
-  { id: "t3", title: "shell" },
+  { id: "t3", title: "shell", status: "idle" },
 ];
 
 export const CLAUDE_LINES: readonly TerminalLine[] = [
@@ -67,14 +67,14 @@ export const CODEX_LINES: readonly TerminalLine[] = [
 ];
 
 export const COMMANDS: readonly Command[] = [
-  { id: "go-claude", group: "Agents", label: "Claude Code · approve migration", hint: "Needs you" },
-  { id: "go-codex", group: "Agents", label: "Codex · file sync tests", hint: "Done" },
-  { id: "go-tf", group: "Agents", label: "Codex · terraform plan", hint: "build-box" },
+  { id: "go-claude", group: "Agents", label: "Claude Code · approve migration", status: "blocked" },
+  { id: "go-codex", group: "Agents", label: "Codex · file sync tests", status: "done" },
+  { id: "go-tf", group: "Agents", label: "Codex · terraform plan", hint: "build-box", status: "working" },
   { id: "new-tab", group: "Actions", label: "New tab", keys: ["⌘", "T"] },
   { id: "split", group: "Actions", label: "Split pane right", keys: ["⌘", "D"] },
   { id: "sidebar", group: "Actions", label: "Toggle sidebar", keys: ["⌘", "B"] },
   { id: "pair", group: "Hosts", label: "Pair a new host" },
-  { id: "settings", group: "Hosts", label: "Open settings", keys: ["⌘", ","] },
+  { id: "settings", group: "General", label: "Open settings", keys: ["⌘", ","] },
 ];
 
 /** A deterministic module grid with QR finder patterns, for drawing only. It encodes nothing. */

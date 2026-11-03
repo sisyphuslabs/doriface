@@ -70,12 +70,12 @@ export function StatusChip({ status, className }: StatusChipProps) {
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center gap-1 rounded-xs px-1.5 text-2xs font-semibold whitespace-nowrap",
+        "inline-flex h-5 shrink-0 items-center gap-1 rounded-xs pr-1.5 pl-1 text-2xs font-semibold whitespace-nowrap",
         tint,
         className,
       )}
     >
-      {status === "blocked" ? null : <StatusIndicator status={status} decorative className="size-3" />}
+      <StatusIndicator status={status} decorative className="size-3" />
       {STATUS_LABEL[status]}
     </span>
   );

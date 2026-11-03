@@ -52,9 +52,7 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNew, trailing, cla
               >
                 {tab.icon}
                 <span className="truncate">{tab.title}</span>
-                {tab.status === undefined || tab.status === "idle" ? null : (
-                  <StatusIndicator status={tab.status} className="size-3" />
-                )}
+                {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
               </button>
               <IconButton
                 label={`Close ${tab.title}`}
