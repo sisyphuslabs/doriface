@@ -9,7 +9,7 @@ interface SettingsTarget {
 }
 
 /** Starts this computer's host and points the connection at it; the port and token change per launch. */
-export async function useThisComputer(bridge: DesktopBridge, target: SettingsTarget): Promise<void> {
+export async function startThisComputer(bridge: DesktopBridge, target: SettingsTarget): Promise<void> {
   const { url, token } = await bridge.startLocalHost();
   target.update({ ...target.settings, mode: "loopback", loopbackUrl: url, token });
 }

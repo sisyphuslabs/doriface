@@ -4,7 +4,7 @@ import { Monitor, Server } from "lucide-react";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { desktopBridge, type DesktopBridge } from "../desktop/bridge.ts";
-import { useThisComputer } from "../desktop/local-host.ts";
+import { startThisComputer } from "../desktop/local-host.ts";
 import { Steps } from "./steps.tsx";
 
 const HOST_GUIDE = "https://github.com/sisyphuslabs/doriface#readme";
@@ -15,7 +15,7 @@ function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
   const start = (): void => {
     setStarting(true);
     setError(null);
-    useThisComputer(bridge, connectionStore).catch((cause: unknown) => {
+    startThisComputer(bridge, connectionStore).catch((cause: unknown) => {
       setStarting(false);
       setError(cause instanceof Error ? cause.message : String(cause));
     });
