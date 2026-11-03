@@ -6,11 +6,14 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { findOverflows } from "./overflow.ts";
 
-/** The app's own mono font, so a page's marks draw the same ink on every computer. */
+/**
+ * The app's own mono font, Vietnamese letters, with an ascent and descent as short as a system UI font's. Stacked marks
+ * are placed by the shaper on every platform, so their ink stands 1.02 em above the baseline on macOS and Linux alike.
+ */
 const MONO = createRequire(join(import.meta.dirname, "../../../packages/ui/package.json")).resolve(
-  "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-ext-wght-normal.woff2",
+  "@fontsource-variable/jetbrains-mono/files/jetbrains-mono-vietnamese-wght-normal.woff2",
 );
-const MONO_FACE = `<style>@font-face { font-family: "Fixture Mono"; src: url(data:font/woff2;base64,${readFileSync(MONO).toString("base64")}) format("woff2"); }</style>`;
+const MONO_FACE = `<style>@font-face { font-family: "Fixture Mono"; src: url(data:font/woff2;base64,${readFileSync(MONO).toString("base64")}) format("woff2"); ascent-override: 82%; descent-override: 30%; line-gap-override: 0%; }</style>`;
 
 const LONG = "remote-build-machine-number-0001-workspace";
 const BLOCK_ELLIPSIS = "display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
@@ -75,9 +78,10 @@ const PAGES: readonly { readonly name: string; readonly html: string; readonly f
     found: [],
   },
   {
-    // \u01FA's ring and acute stack 0.215 em past the em box, so a 1.25 line cuts 3 px of ink off at 24 px.
+    // \u1EAA's circumflex and tilde stand 1.02 em above a baseline the 1.25 line puts 0.885 em below its top: 3-4 px of
+    // ink are cut off at 24 px. A widened em box cannot see it, since 1.28 em fits a 1.25 line within the slack.
     name: "a tightly led box that cuts the top off stacked marks",
-    html: `${MONO_FACE}<div style="font:24px/1.25 'Fixture Mono';overflow:hidden">\u01FA\u01FA\u01FA</div>`,
+    html: `${MONO_FACE}<div style="font:24px/1.25 'Fixture Mono';overflow:hidden">\u1EAA\u1EAA\u1EAA</div>`,
     found: ["clipped"],
   },
   {
