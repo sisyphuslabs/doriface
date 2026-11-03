@@ -15,6 +15,7 @@ import { type Clock, monotonicClock, type Random } from "./clock.ts";
 import type { Gossip } from "./gossip.ts";
 import type { HcTarget } from "./hc-machines.ts";
 import { type HostRuntime, startHostRuntime } from "./host-runtime.ts";
+import type { MeshRuntime } from "./runtime.ts";
 
 export interface HostSyncOptions {
   readonly identity: HostIdentity;
@@ -53,6 +54,11 @@ export class HostSync {
 
   get gossip(): Gossip | undefined {
     return this.#running?.runtime.gossip;
+  }
+
+  /** The running mesh (sync, reconciler, lines) once this host has a mesh.json. */
+  get runtime(): MeshRuntime | undefined {
+    return this.#running?.runtime;
   }
 
   /** mesh.json may have changed outside sync (a join, an admit, a CLI write): start, or push what is new. */

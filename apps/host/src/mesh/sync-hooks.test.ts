@@ -17,7 +17,7 @@ function threeMembers() {
   const { records } = meshOf([a, b, c]);
   const [atA, atB, atC] = [a, b, c].map((member) => net.add(member, records));
   if (atA === undefined || atB === undefined || atC === undefined) throw new Error("no hosts");
-  const sync = { gossip: atA.gossip, changed: () => undefined, stop: () => atA.gossip.stop() };
+  const sync = { gossip: atA.gossip, runtime: undefined, changed: () => undefined, stop: () => atA.gossip.stop() };
   const stateDir = mkdtempSync(join(tmpdir(), "dh-sync-hooks-"));
   const commands = new MeshCommands({
     store: atA.store,
@@ -90,5 +90,31 @@ describe("mesh revoke, rename and leave reach the other members through sync (de
     } finally {
       cleanup();
     }
+  });
+});
+
+describe("mesh leave removes this host's mesh machines (design 6.5)", () => {
+  test("sync stops gossiping first, then the reconciler removes every mesh machine, then sync stops", async () => {
+    const calls: string[] = [];
+    const runtime = {
+      gossip: { stop: () => void calls.push("gossip stopped") },
+      reconciler: {
+        reconcile: (view: { readonly members: readonly unknown[]; readonly overCap: readonly unknown[] }) => {
+          calls.push(`reconciled to ${view.members.length + view.overCap.length} members`);
+          return Promise.resolve();
+        },
+      },
+    };
+    const sync = {
+      gossip: undefined,
+      runtime,
+      changed: () => undefined,
+      stop: () => {
+        calls.push("sync stopped");
+        return Promise.resolve();
+      },
+    };
+    await syncHooks(sync, new FakeClock()).left();
+    expect(calls).toEqual(["gossip stopped", "reconciled to 0 members", "sync stopped"]);
   });
 });
