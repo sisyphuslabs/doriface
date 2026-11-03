@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { deviceName } from "./device-name.ts";
-import type { PairingOffer } from "./fragment.ts";
+import type { OfferSecret, PairingOffer } from "./fragment.ts";
 import { pairAndRemember } from "./handshake.ts";
 import { Steps } from "./steps.tsx";
 
@@ -13,6 +13,12 @@ type Outcome =
   | { readonly kind: "paired" }
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "rejected" };
+
+/** What a key mismatch means: a typed code may have reached another host, a link may not come from yours. */
+export const MISMATCH: Readonly<Record<OfferSecret["mode"], string>> = {
+  code: "The key differs from the one your host printed, so this code may have reached another host. Run doriface-host pair again and type the new code.",
+  link: "The key differs from the one your host printed, so this link may not come from it. Run doriface-host pair again and use the new link.",
+};
 
 /** The person compares the host key with what the host printed; only a match runs the pairing handshake. */
 export function VerifyStep({ offer }: { readonly offer: PairingOffer }) {
@@ -42,16 +48,23 @@ export function VerifyStep({ offer }: { readonly offer: PairingOffer }) {
       <div className="rounded-lg bg-raised p-4">
         <Fingerprint label="Host key (SHA-256)" value={offer.fingerprint.replaceAll(" ", "")} />
       </div>
-      <Result outcome={outcome} onMatch={() => void match()} onReject={() => setOutcome({ kind: "rejected" })} />
+      <Result
+        mode={offer.secret.mode}
+        outcome={outcome}
+        onMatch={() => void match()}
+        onReject={() => setOutcome({ kind: "rejected" })}
+      />
     </main>
   );
 }
 
 function Result({
+  mode,
   outcome,
   onMatch,
   onReject,
 }: {
+  readonly mode: OfferSecret["mode"];
   readonly outcome: Outcome;
   readonly onMatch: () => void;
   readonly onReject: () => void;
@@ -93,8 +106,7 @@ function Result({
       return (
         <>
           <Notice tone="error" title="Do not pair with this host">
-            The key differs from the one your host printed, so this link may not come from it. Run doriface-host pair
-            again and use the new link.
+            {MISMATCH[mode]}
           </Notice>
           <Button variant="secondary" size="lg" render={<Link to="/" />}>
             Back
