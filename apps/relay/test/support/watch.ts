@@ -36,16 +36,20 @@ export interface ScreenWatch {
   text(): string;
   /** Resolves once some output line, trimmed, is exactly `line`. */
   line(line: string): Promise<string>;
+  /** Resolves once the output so far contains `text`, escape sequences and all (a first paint has no newlines). */
+  contains(text: string): Promise<string>;
 }
 
 export function watchScreen(stream: TerminalStream): ScreenWatch {
   const decoder = new TextDecoder();
   const lines = new Matches<string>();
+  const snapshots = new Matches<string>();
   let text = "";
   let partial = "";
   stream.onData((bytes) => {
     const chunk = decoder.decode(bytes, { stream: true });
     text += chunk;
+    snapshots.push(text);
     const parts = (partial + chunk).split(/\r?\n/);
     partial = parts.pop() ?? "";
     for (const part of parts) lines.push(part.trim());
@@ -53,6 +57,8 @@ export function watchScreen(stream: TerminalStream): ScreenWatch {
   return {
     text: () => text,
     line: (line) => lines.next((seen) => seen === line, `the line ${JSON.stringify(line)}`),
+    contains: (wanted) =>
+      snapshots.next((seen) => seen.includes(wanted), `output containing ${JSON.stringify(wanted)}`),
   };
 }
 
