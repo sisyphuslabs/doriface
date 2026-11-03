@@ -4,6 +4,7 @@ import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type Workspa
 import { Columns2, Monitor, PanelLeft } from "lucide-react";
 import { useState } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
+import { closesTab } from "../terminal/terminal-end.ts";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
@@ -94,7 +95,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           active={tabs.active}
           split={tabs.split}
           onFocus={tabs.focus}
-          onClosed={tabs.close}
+          onEnd={(address, end) => (closesTab(end) ? tabs.close(address) : undefined)}
         />
         <StatusBar
           start={

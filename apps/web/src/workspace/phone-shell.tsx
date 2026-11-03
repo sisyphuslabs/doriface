@@ -7,6 +7,7 @@ import { useCallback, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { NEW_TAB } from "../keys/actions.ts";
 import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
+import { closesTab } from "../terminal/terminal-end.ts";
 import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx";
 import { AgentLists } from "./agent-lists.tsx";
 import { agentStatus, terminalTitle } from "./model.ts";
@@ -108,7 +109,7 @@ function PhoneTerminal(props: {
         label={`${title} output`}
         transformInput={transform}
         onSend={onSend}
-        onClosed={onBack}
+        onEnd={(_address, end) => (closesTab(end) ? onBack() : undefined)}
       />
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
     </div>
