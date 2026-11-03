@@ -2,6 +2,7 @@ import {
   encodeNotification,
   encodeRequest,
   isJsonObject,
+  isSnapshot,
   isTerminal,
   type EmptyParams,
   type Frame,
@@ -120,7 +121,9 @@ export class HcConnection {
   subscribe(filter: EventsSubscribeParams = {}, options: SubscribeOptions = {}): Promise<EventFeed> {
     return this.#request("events.subscribe", filter, options, (result) => {
       const channel = result.channel;
-      if (!isStreamChannel(channel)) throw new HcProtocolError("events.subscribe gave no stream channel");
+      if (!isStreamChannel(channel) || !isSnapshot(result)) {
+        throw new HcProtocolError("events.subscribe replied without a stream channel and snapshot");
+      }
       const snapshot = { seq: result.seq, terminals: result.terminals };
       const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS;
       const feed = new EventFeed(this.#wire, channel, snapshot, heartbeatTimeoutMs);

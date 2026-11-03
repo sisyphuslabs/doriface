@@ -8,6 +8,7 @@ import {
   type JsonRpcNotification,
 } from "@doriface/protocol";
 import { HcConnection, type SubscribeOptions } from "./connection.ts";
+import { HcProtocolError } from "./errors.ts";
 import type { EventFeed, FeedClose } from "./event-feed.ts";
 import { FakeCore } from "./testing/fake-core.ts";
 import { bytes, FINISHED_EVENT, HELLO_REPLY_LINE, SIZE_EVENT, SUBSCRIBE_REPLY, withId } from "./testing/fixtures.ts";
@@ -121,6 +122,18 @@ describe("EventFeed", () => {
     }
     expect(feed.closed).toBe(false);
     expect(await next<FeedClose>((resolve) => feed.onClose(resolve))).toEqual({ reason: "heartbeat_timeout" });
+  });
+
+  test("rejects a subscribe reply without a snapshot and closes its channel", async () => {
+    const core = new FakeCore();
+    const opening = HcConnection.open(core.client);
+    await core.waitHello();
+    core.push(`${HELLO_REPLY_LINE}\n`);
+    const subscribing = (await opening).subscribe();
+    const request = await core.waitRequest("events.subscribe");
+    core.pushFrame(0, 0, `{"id":${request.id},"jsonrpc":"2.0","result":{"channel":1,"seq":"late","terminals":[]}}`);
+    await expect(subscribing).rejects.toThrow(HcProtocolError);
+    expect((await core.waitFrame((f) => f.channel === CHANNEL)).kind).toBe(FrameKind.Close);
   });
 
   test("passes notifications from a newer core to onUnknown", async () => {
