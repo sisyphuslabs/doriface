@@ -42,7 +42,7 @@ export function TerminalView(props: TerminalViewProps) {
   useEffect(() => {
     let live = true;
     // scrollback-limit applies to new terminals, so the core reads it once.
-    const scrollbackLimit = rendererOptions(terminalConfigStore.config).scrollbackLines;
+    const scrollbackLimit = rendererOptions(terminalConfigStore.config).scrollbackBytes;
     loadGhosttyCore({ scrollbackLimit }).then(
       (loaded) => (live ? setCore(loaded) : loaded.dispose()),
       (cause: unknown) => setError(`The terminal renderer failed to load: ${String(cause)}`),
