@@ -1,6 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
-import { IconButton, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
+import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Monitor, PanelLeft } from "lucide-react";
 import { useState } from "react";
 import { agentStatus, terminalTitle } from "./model.ts";
@@ -15,9 +15,10 @@ export interface DesktopShellProps {
   readonly terminals: readonly Terminal[];
   readonly tabs: Tabs;
   readonly onNew: () => void;
+  readonly onPalette: () => void;
 }
 
-export function DesktopShell({ connection, terminals, tabs, onNew }: DesktopShellProps) {
+export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: DesktopShellProps) {
   const [sidebar, setSidebar] = useState(true);
   useAppActions({ terminals, tabs, onNew, onToggleSidebar: () => setSidebar((shown) => !shown) });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
@@ -42,7 +43,13 @@ export function DesktopShell({ connection, terminals, tabs, onNew }: DesktopShel
   return (
     <div className="relative flex h-dvh overflow-hidden bg-background">
       {sidebar ? (
-        <Sidebar terminals={terminals} active={tabs.active} onOpen={tabs.select} onHide={() => setSidebar(false)} />
+        <Sidebar
+          terminals={terminals}
+          active={tabs.active}
+          onOpen={tabs.select}
+          onHide={() => setSidebar(false)}
+          onPalette={onPalette}
+        />
       ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <TabBar
@@ -86,6 +93,17 @@ export function DesktopShell({ connection, terminals, tabs, onNew }: DesktopShel
                 {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
               </StatusBarItem>
             </>
+          }
+          end={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onPalette}
+              className="h-5 gap-1.5 px-1 text-xs text-muted-foreground"
+            >
+              <Kbd keys={["⌘", "⇧", "P"]} />
+              Commands
+            </Button>
           }
         />
       </div>

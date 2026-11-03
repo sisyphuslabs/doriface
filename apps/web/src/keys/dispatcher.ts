@@ -14,6 +14,12 @@ function dispatch(scope: Scope, action: string): boolean {
   return false;
 }
 
+/** Runs a bound action as if its key was pressed; false when no handler took it. */
+export function runAction(id: string): boolean {
+  const action = actionFor(id);
+  return action !== null && dispatch(action.scope, id);
+}
+
 export function useActionHandler(scope: Scope, handler: ActionHandler): void {
   const latest = useRef(handler);
   latest.current = handler;
