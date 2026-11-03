@@ -103,7 +103,9 @@ export class Room extends DurableObject<RoomEnv> {
     const { expired, next } = overdue(this.ctx, timeoutsOf(this.env), Date.now());
     for (const { ws, attachment, reason } of expired) {
       if (attachment.role === "client") this.#endSession(ws, attachment, CloseCode.IdleTimeout, reason);
-      else this.#dropHost(ws, CloseCode.IdleTimeout, reason);
+      else if (attachment.state === "online") this.#dropHost(ws, CloseCode.IdleTimeout, reason);
+      // A socket that never became (or no longer is) the uplink owns no sessions.
+      else closeIfOpen(ws, CloseCode.IdleTimeout, reason);
     }
     if (next !== undefined) await this.ctx.storage.setAlarm(next);
   }
