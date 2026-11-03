@@ -23,7 +23,7 @@ const webPreferences = secureWebPreferences(join(import.meta.dirname, "preload.c
 const webRoot = (): string =>
   app.isPackaged
     ? join(process.resourcesPath, "web")
-    : (process.env["DORIFACE_WEB_DIST"] ?? join(app.getAppPath(), "test-fixtures", "web"));
+    : (process.env["DORIFACE_WEB_DIST"] ?? join(app.getAppPath(), "..", "web", "dist"));
 
 const hostContext = (): HostContext => ({
   packaged: app.isPackaged,

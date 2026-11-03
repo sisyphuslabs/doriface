@@ -11,10 +11,11 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "build:host": "bun scripts/build-host.ts",
-    "start": "bun run build && electron .",
+    "build:web": "bun run --cwd ../web build",
+    "start": "bun run build:web && bun run build && electron .",
     "dev": "bun scripts/dev.ts",
-    "pack": "bun run build && bun run build:host && electron-builder --dir",
-    "dist": "bun run build && bun run build:host all && electron-builder",
+    "pack": "bun run build:web && bun run build && bun run build:host && electron-builder --dir",
+    "dist": "bun run build:web && bun run build && bun run build:host all && electron-builder",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

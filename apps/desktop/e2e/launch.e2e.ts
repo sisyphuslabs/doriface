@@ -44,8 +44,14 @@ const running = (): ElectronApplication => {
 test("the window opens locked down and reaches a local host", async () => {
   const app = running();
   const page: Page = await app.firstWindow();
-  await page.waitForSelector('#root[data-bridge="ready"]');
-  expect(page.url()).toBe("app://doriface/");
+  // Reload with the listener attached so violations from the very first paint are seen too.
+  const violations: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("Content Security Policy")) violations.push(message.text());
+  });
+  await page.reload();
+  await page.waitForSelector("#root > *");
+  expect(page.url()).toMatch(/^app:\/\/doriface\//);
 
   // getLastWebPreferences is bound on every WebContents but missing from electron.d.ts.
   const prefs = await app.evaluate(({ BrowserWindow }) => {
@@ -89,6 +95,8 @@ test("the window opens locked down and reaches a local host", async () => {
   console.log(`local host ${JSON.stringify(local)}`);
   expect(local.url).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/v1\/hc$/);
   expect(local.protocol).toBe("doriface.v1");
+
+  expect(violations).toEqual([]);
 
   const screenshot = test.info().outputPath("launch.png");
   await page.screenshot({ path: screenshot });

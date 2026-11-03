@@ -7,7 +7,7 @@
   "directories": { "output": "dist/release" },
   "files": ["dist/app/**", "package.json"],
   "extraResources": [
-    { "from": "test-fixtures/web", "to": "web" },
+    { "from": "../web/dist", "to": "web" },
     { "from": "dist/host/${os}-${arch}", "to": "bin" }
   ],
   "asar": true,
