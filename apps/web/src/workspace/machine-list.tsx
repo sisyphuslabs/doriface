@@ -2,6 +2,7 @@ import { Button, IconButton, Notice, SidebarSection, cn } from "@doriface/ui";
 import { Monitor, Plus, Server } from "lucide-react";
 import { machineCause } from "./machine-cause.ts";
 import { type MachineEntry, onlyThisMachine, stateLabel } from "./machines.ts";
+import { RetryButton } from "./retry-button.tsx";
 import { useMachinesContext } from "./use-machines.ts";
 
 export interface MachineListProps {
@@ -36,7 +37,8 @@ export function MachineList({
   );
   const { views, retry } = useMachinesContext();
   const causes = views.flatMap((view) => {
-    const cause = machineCause(view);
+    // A redial in progress is routine: the row already says connecting, so only a problem gets a notice.
+    const cause = view.state === "connecting" ? undefined : machineCause(view);
     return cause === undefined ? [] : [{ machine: view.name, ...cause }];
   });
   return (
@@ -102,9 +104,7 @@ export function MachineList({
       {causes.map(({ machine, title, detail }) => (
         <Notice key={machine} tone="warning" className="mx-1 mt-1" title={title}>
           {detail}
-          <Button variant="secondary" size="sm" className="mt-2 flex" onClick={() => void retry(machine)}>
-            Try again
-          </Button>
+          <RetryButton size="sm" className="mt-2 flex" onRetry={() => retry(machine)} />
         </Notice>
       ))}
       {listError === undefined ? null : (
