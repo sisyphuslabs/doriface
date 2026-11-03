@@ -20,6 +20,7 @@ export class WsByteLink<T> implements ByteLink {
     const sent = this.#ws.send(bytes);
     sent.catch(() => this.#ws.close(1011, "send failed"));
     this.#pending = Promise.all([this.#pending, sent]).then(() => undefined);
+    this.#pending.catch(() => undefined);
   }
 
   flushed(): Promise<void> {
