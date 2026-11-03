@@ -1,0 +1,48 @@
+import type { Server } from "bun";
+import type { FakeRelay } from "./fake-relay.ts";
+
+interface Client {
+  readonly pairSlot: string | undefined;
+  send?: (bytes: Uint8Array) => void;
+  close?: () => void;
+}
+
+/** The client side of a FakeRelay: each `/v1/client/<hostId>[?pair=<slot>]` socket becomes one session on the uplink. */
+export class RelayClientBridge {
+  readonly url: string;
+  /** The URL of every client socket dialed, in order. */
+  readonly dialed: URL[] = [];
+  readonly #server: Server<Client>;
+  #nextSession = 100;
+
+  constructor(relay: FakeRelay) {
+    this.#server = Bun.serve<Client>({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, server) => {
+        const url = new URL(request.url);
+        this.dialed.push(url);
+        const data: Client = { pairSlot: url.searchParams.get("pair") ?? undefined };
+        return server.upgrade(request, { data }) ? undefined : new Response("upgrade", { status: 426 });
+      },
+      websocket: {
+        open: (ws) => {
+          const session = relay.open(this.#nextSession++, ws.data.pairSlot);
+          session.onData((bytes) => ws.send(bytes));
+          void session.closed.then((code) => ws.close(code === 1000 ? 1000 : code, ""));
+          ws.data.send = (bytes) => session.send(bytes);
+          ws.data.close = () => session.close();
+        },
+        message: (ws, message) => {
+          if (typeof message !== "string") ws.data.send?.(message);
+        },
+        close: (ws) => ws.data.close?.(),
+      },
+    });
+    this.url = `http://127.0.0.1:${this.#server.port ?? 0}`;
+  }
+
+  async stop(): Promise<void> {
+    await this.#server.stop(true);
+  }
+}
