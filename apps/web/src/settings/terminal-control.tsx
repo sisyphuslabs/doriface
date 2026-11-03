@@ -25,29 +25,36 @@ function TextValue({
   value,
   disabled,
   placeholder,
+  autoFocus,
   onCommit,
+  onEnterCommit,
   onInvalid,
 }: {
   readonly def: KeyDef;
   readonly value: string;
   readonly disabled: boolean;
   readonly placeholder?: string;
+  readonly autoFocus?: boolean;
   readonly onCommit: (value: string) => void;
+  /** After onCommit, when Enter (not a blur) committed a changed, valid value. */
+  readonly onEnterCommit?: () => void;
   readonly onInvalid: (reason: string | null) => void;
 }) {
   const [draft, setDraft] = useState(value);
   const [invalid, setInvalid] = useState(false);
   useEffect(() => setDraft(value), [value]);
-  const commit = (): void => {
+  /** True when the value was committed. */
+  const commit = (): boolean => {
     if (draft === value) {
       setInvalid(false);
       onInvalid(null);
-      return;
+      return false;
     }
     const checked = draft === "" ? { ok: true as const } : checkValue(def.kind, draft);
     setInvalid(!checked.ok);
     onInvalid(checked.ok ? null : checked.reason);
     if (checked.ok) onCommit(draft);
+    return checked.ok;
   };
   const swatch = def.kind.type === "color" ? parseColor(draft) : null;
   return (
@@ -68,11 +75,15 @@ function TextValue({
         invalid={invalid}
         value={draft}
         {...(placeholder === undefined ? {} : { placeholder })}
+        {...(autoFocus === undefined ? {} : { autoFocus })}
         className={cn(swatch === null ? "" : "pl-8")}
         onValueChange={(next: string) => setDraft(next)}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
+          if (event.key !== "Enter") return;
+          // Consumed: a commit can move focus to a button, which would take this same Enter as a click.
+          event.preventDefault();
+          if (commit()) onEnterCommit?.();
         }}
       />
     </span>
@@ -94,6 +105,14 @@ function useEntryErrors(
 
 function ListValue({ def, values, disabled, onCommit, onInvalid }: KeyControlProps) {
   const [adding, setAdding] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
+  // Set only when Enter committed the new field and closed it: focus goes back to Add instead of the page body.
+  const backToAdd = useRef(false);
+  useEffect(() => {
+    if (adding || !backToAdd.current) return;
+    backToAdd.current = false;
+    addButton.current?.focus();
+  }, [adding]);
   const errorFor = useEntryErrors(onInvalid);
   const set = (index: number, value: string): void => {
     const next = values.map((entry, at) => (at === index ? value : entry)).filter((entry) => entry !== "");
@@ -119,15 +138,25 @@ function ListValue({ def, values, disabled, onCommit, onInvalid }: KeyControlPro
             def={def}
             value=""
             disabled={disabled}
+            autoFocus
             placeholder={PLACEHOLDER[def.kind.type] ?? ""}
             onCommit={(next) => {
               setAdding(false);
               if (next !== "") onCommit([...values, next]);
             }}
+            onEnterCommit={() => {
+              backToAdd.current = true;
+            }}
             onInvalid={errorFor("new")}
           />
         ) : (
-          <IconButton label={`Add ${def.key}`} icon={<Plus />} disabled={disabled} onClick={() => setAdding(true)} />
+          <IconButton
+            ref={addButton}
+            label={`Add ${def.key}`}
+            icon={<Plus />}
+            disabled={disabled}
+            onClick={() => setAdding(true)}
+          />
         )}
       </li>
     </ul>
