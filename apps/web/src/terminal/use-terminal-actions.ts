@@ -12,12 +12,13 @@ export function useTerminalActions(wt: WTerm | null, stream: RefObject<TerminalS
       case "terminal.copy": {
         const text = wt.getSelectionText();
         if (text === null || text === "") return false;
-        void navigator.clipboard?.writeText(text);
+        void navigator.clipboard?.writeText(text).catch(() => undefined);
         return true;
       }
       case "terminal.paste":
-        void navigator.clipboard?.readText().then((text) => stream.current?.write(text));
-        return true;
+        // Not consumed: the browser's own paste event runs clipboard-paste-protection and works where
+        // clipboard-read is denied (the desktop shell).
+        return false;
       case "terminal.select_all":
         void wt.selectAll();
         return true;
