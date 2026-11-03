@@ -38,3 +38,12 @@ test("only the live terminals of a machine that is not connected leave Working f
   expect(groups.working.map((agent) => agent.id)).toEqual(["t1", "rack/t1"]);
   expect(groups.offline.map((agent) => [agent.id, agent.status])).toEqual([["build/t1", "unknown"]]);
 });
+
+test.each([
+  ["connecting", false],
+  ["unreachable", true],
+  ["needs_login", true],
+] as const)("a machine that is %s marks its sessions offline: %p", (state, offline) => {
+  const [reached] = withReach([terminal("build/t1")], [machine("build", state)]);
+  expect(reached?.offline ?? false).toBe(offline);
+});
