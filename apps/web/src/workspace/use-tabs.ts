@@ -16,11 +16,24 @@ export interface Tabs extends TabsState {
   focus(address: string): void;
 }
 
-/** Open tabs follow live terminals: a removed terminal drops its tab, the first live one opens by default. */
-export function useTabs(terminals: readonly Terminal[]): Tabs {
-  const [state, setState] = useState<TabsState>({ open: [], active: null, split: null });
+const EMPTY: TabsState = { open: [], active: null, split: null };
+
+/** Per core, so leaving the workspace (Settings, a reconnect) and coming back finds the same tabs. */
+const kept = new Map<string, TabsState>();
+
+/**
+ * Open tabs follow live terminals: a removed terminal drops its tab, the first live one opens by default.
+ * `terminals` is null until the core has listed them; until then the kept tabs stand as they are.
+ */
+export function useTabs(core: string, terminals: readonly Terminal[] | null): Tabs {
+  const [state, setState] = useState<TabsState>(() => kept.get(core) ?? EMPTY);
 
   useEffect(() => {
+    kept.set(core, state);
+  }, [core, state]);
+
+  useEffect(() => {
+    if (terminals === null) return;
     setState((prev) => {
       const known = new Set(terminals.map((terminal) => terminal.address));
       let open = prev.open.filter((address) => known.has(address));
