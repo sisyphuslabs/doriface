@@ -3,13 +3,12 @@ import {
   connectRelayClient,
   MAX_SESSION_SEND_BYTES,
   RELAY_MESSAGE_CAP,
-  RelayCloseError,
   type SessionLink,
   type WebSocketLink,
 } from "@doriface/relay-client";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
-import { AsyncQueue } from "./support/queue.ts";
 import { inOrder, times } from "./support/sequential.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { startTestHost } from "./support/test-host.ts";
@@ -23,20 +22,6 @@ beforeAll(async () => {
 afterAll(() => relay.stop());
 
 const clientUrl = (hostId: string): string => `${relay.url.replace("http", "ws")}/v1/client/${hostId}`;
-
-function received(link: SessionLink | WebSocketLink): AsyncQueue<Uint8Array> {
-  const queue = new AsyncQueue<Uint8Array>();
-  link.onData((bytes) => queue.push(bytes));
-  link.onClose((error) => queue.end(error ?? new Error("link closed")));
-  return queue;
-}
-
-function closeCodeOf(error: Error | undefined): number | undefined {
-  return error instanceof RelayCloseError ? error.code : error === undefined ? CloseCode.Normal : undefined;
-}
-
-const closedWith = (link: SessionLink | WebSocketLink): Promise<number | undefined> =>
-  new Promise((resolve) => link.onClose((error) => resolve(closeCodeOf(error))));
 
 describe("client sessions through the relay", () => {
   test("a client to an offline host is closed with 4404", async () => {
@@ -97,27 +82,40 @@ describe("client sessions through the relay", () => {
     host.uplink.stop();
   });
 
-  test("the 33rd concurrent client is refused with 4429 and a freed slot is reusable", async () => {
+  test("the 33rd active client is refused with 4429 and a freed slot is reusable", async () => {
     const ip = testIp();
     const host = await startTestHost(relay.url, ip);
-    const connect = (): Promise<WebSocketLink> =>
-      connectRelayClient({ relayUrl: relay.url, hostId: host.uplink.hostId, createSocket: socketFrom(ip) });
-    const clients = await Promise.all(Array.from({ length: 32 }, connect));
-    const sessions = await Promise.all(clients.map(() => host.sessions.take()));
-    expect(new Set(sessions.map((session) => session.sessionId)).size).toBe(32);
-    expect(clients.every((client) => client.closeCode === undefined)).toBe(true);
+    // A session counts against the cap once the host has sent DATA on it (contract v1.2 C1).
+    const connectActive = async (): Promise<{ client: WebSocketLink; session: SessionLink }> => {
+      const client = await connectRelayClient({
+        relayUrl: relay.url,
+        hostId: host.uplink.hostId,
+        createSocket: socketFrom(ip),
+      });
+      const session = await host.sessions.take();
+      const atClient = received(client);
+      await session.send(new Uint8Array([1]));
+      await atClient.take();
+      return { client, session };
+    };
+    const active = await inOrder(times(32), connectActive);
+    expect(new Set(active.map(({ session }) => session.sessionId)).size).toBe(32);
+    expect(active.every(({ client }) => client.closeCode === undefined)).toBe(true);
 
-    const refused = await connect();
+    const refused = await connectRelayClient({
+      relayUrl: relay.url,
+      hostId: host.uplink.hostId,
+      createSocket: socketFrom(ip),
+    });
     expect(await closedWith(refused)).toBe(CloseCode.RateLimited);
 
-    const [first] = sessions;
+    const [first] = active;
     if (first === undefined) throw new Error("no sessions");
-    const released = closedWith(first);
-    clients[0]?.close();
+    const released = closedWith(first.session);
+    first.client.close();
     await released;
-    const again = await connect();
-    await host.sessions.take();
-    expect(again.closeCode).toBeUndefined();
+    const again = await connectActive();
+    expect(again.client.closeCode).toBeUndefined();
     host.uplink.stop();
   });
 

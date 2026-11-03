@@ -23,9 +23,10 @@ function freePort(): number {
 
 /**
  * Runs the relay under workerd with `wrangler dev` on random ports, with wrangler's state, config and logs in a
- * scratch directory. Requires Node 22+ on PATH (wrangler's own requirement).
+ * scratch directory. Requires Node 22+ on PATH (wrangler's own requirement). `vars` become `--var` overrides, e.g.
+ * short timeouts.
  */
-export async function startLocalRelay(): Promise<LocalRelay> {
+export async function startLocalRelay(vars: Readonly<Record<string, string>> = {}): Promise<LocalRelay> {
   const scratch = await mkdtemp(join(tmpdir(), "relay-"));
   const wrangler = join(RELAY_DIR, "node_modules", ".bin", "wrangler");
   const port = String(freePort());
@@ -40,8 +41,13 @@ export async function startLocalRelay(): Promise<LocalRelay> {
       port,
       "--inspector-port",
       inspector,
+      // Without this, wrangler rewrites request URLs to the production route, and the relay origin hosts sign over
+      // would not match the address they dialed.
+      "--local-upstream",
+      `127.0.0.1:${port}`,
       "--persist-to",
       join(scratch, "state"),
+      ...Object.entries(vars).flatMap(([name, value]) => ["--var", `${name}:${value}`]),
     ],
     {
       cwd: RELAY_DIR,

@@ -7,6 +7,7 @@ import {
   generateSigningKey,
   hostIdOf,
   RelayCloseError,
+  relayOriginOf,
   Uplink,
 } from "@doriface/relay-client";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -65,8 +66,21 @@ describe("host challenge auth", () => {
   test("a key that does not hash to the hostId is closed with 4403", async () => {
     const signer = ed25519Signer(generateSigningKey());
     const otherId = await hostIdOf(ed25519Signer(generateSigningKey()).publicKey);
+    const origin = relayOriginOf(hostUrl(otherId));
     const closed = await answerWith(otherId, async (challenge) =>
-      encodeAuthAnswer(signer.publicKey, await signer.sign(authMessage(otherId, challenge))),
+      encodeAuthAnswer(signer.publicKey, await signer.sign(authMessage(origin, otherId, challenge))),
+    );
+    expect(closed.code).toBe(CloseCode.RelayAuthFailed);
+  });
+
+  test("a signature over another relay's origin is closed with 4403", async () => {
+    const signer = ed25519Signer(generateSigningKey());
+    const hostId = await hostIdOf(signer.publicKey);
+    const closed = await answerWith(hostId, async (challenge) =>
+      encodeAuthAnswer(
+        signer.publicKey,
+        await signer.sign(authMessage("wss://other-relay.example", hostId, challenge)),
+      ),
     );
     expect(closed.code).toBe(CloseCode.RelayAuthFailed);
   });
@@ -96,7 +110,7 @@ describe("host challenge auth", () => {
     const oldSessionClosed = new Promise<Error | undefined>((resolve) => oldSession.onClose(resolve));
     const oldClientClosed = new Promise<Error | undefined>((resolve) => oldClient.onClose(resolve));
 
-    const second = await startTestHost(relay.url, ip, first.secretKey);
+    const second = await startTestHost(relay.url, ip, { secretKey: first.secretKey });
     expect(await first.uplink.stopped).toBe(CloseCode.UplinkReplaced);
     expect(await oldSessionClosed).toBeInstanceOf(RelayCloseError);
     const clientError = await oldClientClosed;
