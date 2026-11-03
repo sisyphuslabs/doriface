@@ -36,3 +36,8 @@
   --term-font-family: var(--font-term);
   --term-selection-bg: var(--term-selection);
 }
+
+/* A two-cell glyph is usually narrower than its cells; centre it in the pair rather than leaving a gap after it. */
+.wterm .term-wide {
+  text-align: center;
+}
