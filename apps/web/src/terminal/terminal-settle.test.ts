@@ -1,6 +1,6 @@
 import { HcRpcError } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { type CoreAnswer, settled, type Settled } from "./terminal-settle.ts";
+import { type CoreAnswer, settled, type Settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 
 const PROGRAM = 4242;
 const live = (pid: number | null): CoreAnswer => ({ terminal: { state: "live", pid } });
@@ -25,5 +25,19 @@ describe("settled", () => {
   ];
   test.each(cases)("%s", (_, answer, first, refused, expected) => {
     expect(settled(answer, PROGRAM, first, refused)).toBe(expected);
+  });
+});
+
+describe("unsentReason", () => {
+  const cases: readonly [string, CoreAnswer, Unsent][] = [
+    ["the same program still runs", live(PROGRAM), null],
+    ["another program runs there now", live(PROGRAM + 1), "restarted"],
+    ["it is lost, waiting for its new shell", live(null), "restarted"],
+    ["it finished", finished, "ended"],
+    ["the core no longer knows it", failed("not_found"), "ended"],
+    ["its machine cannot answer", failed("unavailable"), null],
+  ];
+  test.each(cases)("%s", (_, answer, expected) => {
+    expect(unsentReason(answer, PROGRAM)).toBe(expected);
   });
 });

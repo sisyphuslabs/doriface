@@ -13,7 +13,7 @@ import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
-import { type CoreAnswer, type Settled, settled } from "./terminal-settle.ts";
+import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
 /** Typed text, or the bytes a bound key sends. */
@@ -114,8 +114,9 @@ export function TerminalView(props: TerminalViewProps) {
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
   const program = useRef(pid);
-  const reportUnsent = (why: "restarted" | "ended"): void => {
-    toasts.add({ type: "warning", title: `Typed input was not sent because the program ${why}` });
+  const reportUnsent = (why: Unsent): void => {
+    const title = why === null ? "Typed input was not sent" : `Typed input was not sent because the program ${why}`;
+    toasts.add({ type: "warning", title });
   };
   /** The core's answer about this terminal over `over`, as a CoreAnswer. */
   const askCore = (over: HcConnection): Promise<CoreAnswer> =>
@@ -130,11 +131,8 @@ export function TerminalView(props: TerminalViewProps) {
       const queued = pending.current.splice(0).length;
       const latest = attachedTo.current;
       if (queued === 0 || latest.closed) return;
-      void latest.call("terminal.get", { terminal: address }).then(
-        (terminal) =>
-          reportUnsent(terminal.state === "live" && terminal.pid !== program.current ? "restarted" : "ended"),
-        () => reportUnsent("ended"),
-      );
+      // A question the dropped line cannot answer still reports, without a reason.
+      void askCore(latest).then((answer) => reportUnsent(unsentReason(answer, program.current)));
     };
   });
   const isFocused = useRef(focused);
