@@ -26,7 +26,7 @@ Versions are from research note `stack-versions` (npm registry, 2026-11-03, SOUR
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A web, PWA and desktop face for herdr-core that passes `hc`'s own JSON-RPC + framed protocol through untouched, so every `hc` method works with no translation layer (`REPO:README.md:5`, SOURCE) | A second runtime: doriface never owns a PTY, never parses terminal output on the host, never re-implements an `hc` method (INFERRED from the passthrough rule) |
 | End-to-end encryption between device and host; the public relay sees ciphertext only (`CONTRACT:5-8`, `:45`, SOURCE)                                                                              | Relay-side accounts, entitlements or message storage; the relay is a dumb pipe with per-host rooms (`CONTRACT:42-45`)                                          |
-| Keystroke-to-echo latency within ~0.2 ms of overhead per direction on top of the network (research note `e2ee-relay-spec` section 11, INFERRED figures)                                           | Pixel/semantic frame streaming: the host ships raw bytes, the client runs its own VT (section 9)                                                               |
+| Keystroke-to-echo latency within ~0.3 ms of overhead per direction on top of the network (measured 2026-11-03, section 5)                                                                         | Pixel/semantic frame streaming: the host ships raw bytes, the client runs its own VT (section 9)                                                               |
 | Share herdr-app's layout document and labels so a herdr-app window and a doriface window agree (research note `app-client` section 13)                                                            | Inventing a doriface-only workspace schema in the core                                                                                                         |
 | One client SDK (`packages/client`) for web, Electron and future native apps                                                                                                                       | iOS/iPadOS in v1 (HIG rules are retained for later, research note `hig-pl1`)                                                                                   |
 
@@ -97,18 +97,23 @@ Two shapes considered for the host (INFERRED): (A) pass-through, chosen; (B) hos
 
 ## 5. Latency budget and techniques
 
-Budget per direction, 64-byte keystroke message versus 16 KiB paint (research note `e2ee-relay-spec` section 11; SOURCE rows cite the noble README benchmark, INFERRED rows are estimates the V10 bench replaces):
+Measured on 2026-11-03 with `latency-bench`: 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, the host's load average 17-22 on 18 cores), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink.
 
-| Hop                                                   | 64 B     | 16 KiB  | Basis                                                                                                                                                                     |
-| ----------------------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| hc encode + coalesce + seal (noble ChaCha20-Poly1305) | < 3 µs   | ~50 µs  | 1,742 ns / 64 B and 336 MiB/s on M4 (`https://raw.githubusercontent.com/paulmillr/noble-ciphers/main/README.md`, SOURCE)                                                  |
-| client ↔ edge PoP                                     | 5–30 ms  | same    | INFERRED (geography)                                                                                                                                                      |
-| PoP → DO → host PoP → host                            | 6–40 ms  | same    | INFERRED; DO lands near the first request, the host connects first (`https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/`, SOURCE) |
-| host open + loopback write to core                    | < 50 µs  | ~150 µs | INFERRED                                                                                                                                                                  |
-| core → PTY → program → core                           | 0.2–2 ms | —       | INFERRED                                                                                                                                                                  |
-| direct LAN path replacing the three network rows      | 0.5–3 ms | 1–4 ms  | INFERRED                                                                                                                                                                  |
+| Path                                                                         | p50      | p95      | p99      | min      |
+| ---------------------------------------------------------------------------- | -------- | -------- | -------- | -------- |
+| client SDK → Noise IK → `relay-doriface.omo.dev` → doriface-host → hc, run 1 | 181 ms   | 329 ms   | 513 ms   | 136 ms   |
+| the same, run 2                                                              | 158 ms   | 327 ms   | 522 ms   | 145 ms   |
+| HTTPS `GET /healthz` to the same edge (the Worker alone, 50 calls)           | 76 ms    | 139 ms   | -        | 69 ms    |
+| client SDK → Noise IK → local relay (`wrangler dev`) → doriface-host → hc    | 0.67 ms  | 2.67 ms  | 4.88 ms  | 0.38 ms  |
+| client SDK → `hc connect` over stdio (no host, no relay, no encryption)      | 0.064 ms | 0.133 ms | 0.177 ms | 0.040 ms |
 
-E2EE adds < 0.1 ms per direction for keystrokes; relay round trip ≈ 25–140 ms by geography; LAN ≈ 1–6 ms (INFERRED).
+What the numbers say:
+
+- Over the production relay, the network dominates. One edge round trip from this connection is about 76 ms at p50, and the relayed path is two of them, which matches the 158-181 ms p50. The p95 and p99 tails, 0.3 s and 0.5 s, follow the edge's own spread.
+- The software adds well under a millisecond. On loopback the whole relayed stack (Noise IK, the relay's Durable Object under workerd, the host's uplink and `hc connect`) costs 0.6 ms per round trip at p50 over talking to `hc connect` directly, so about 0.3 ms per direction. That meets the goal in section 1.
+- A host and a client far apart pay their own two edge legs. The direct LAN path (section 4) skips the relay entirely and was not measured here.
+
+Seal cost per message, for scale: 1,742 ns per 64 B and 336 MiB/s on M4 for noble ChaCha20-Poly1305 (`https://raw.githubusercontent.com/paulmillr/noble-ciphers/main/README.md`, SOURCE).
 
 Techniques (decided):
 
