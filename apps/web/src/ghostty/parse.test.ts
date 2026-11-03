@@ -116,6 +116,11 @@ describe("serializeGhosttyConfig", () => {
     expect(new Map(again)).toEqual(new Map(config));
   });
 
+  test("quotes and backslashes survive export and import", () => {
+    const config = new Map([["font-family", ['Odd "Quoted" \\Font']]]);
+    expect(new Map(parseGhosttyConfig(serializeGhosttyConfig(config)).config)).toEqual(config);
+  });
+
   test("values with surrounding spaces are quoted", () => {
     const text = serializeGhosttyConfig(new Map([["font-family", [" Spaced"]]]));
     expect(text).toContain('font-family = " Spaced"');

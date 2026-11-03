@@ -20,7 +20,8 @@ export interface ParsedConfig {
 }
 
 function unquote(value: string): string {
-  return value.length >= 2 && value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+  if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) return value;
+  return value.slice(1, -1).replace(/\\(["\\])/g, "$1");
 }
 
 /**
