@@ -11,6 +11,7 @@ import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
+import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
 export interface TerminalViewProps {
@@ -85,6 +86,7 @@ export function TerminalView(props: TerminalViewProps) {
   const onUnsafePaste = useCallback((pending: PendingPaste) => setPaste(pending), []);
   useBehaviors(wt, stream, options, onUnsafePaste);
   useTerminalActions(wt, stream, focused);
+  useFocusAfterSelect(wt);
 
   // Input typed while no stream is open (attaching, or the connection dropped) waits here for the next stream.
   const pending = useRef<string[]>([]);
