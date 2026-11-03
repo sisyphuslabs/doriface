@@ -1,5 +1,5 @@
 import type { HcConnection, TerminalStream } from "@doriface/client";
-import { cn } from "@doriface/ui";
+import { cn, useToastManager } from "@doriface/ui";
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
@@ -21,6 +21,8 @@ export type TerminalInput = string | Uint8Array;
 export interface TerminalViewProps {
   readonly connection: HcConnection;
   readonly address: string;
+  /** The program this view was opened for; views are keyed by it, so a restarted program gets a new view. */
+  readonly pid: number | null;
   readonly focused: boolean;
   readonly label: string;
   readonly className?: string;
@@ -38,12 +40,13 @@ const FULL_RESET = "\u001bc";
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
-  const { connection, address, focused, label, className, transformInput, onSend, onEnd } = props;
+  const { connection, address, pid, focused, label, className, transformInput, onSend, onEnd } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const [core, setCore] = useState<GhosttyCore | null>(null);
   const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toasts = useToastManager();
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
@@ -99,6 +102,7 @@ export function TerminalView(props: TerminalViewProps) {
   useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
+  const program = useRef(pid);
   const isFocused = useRef(focused);
   useEffect(() => {
     isFocused.current = focused;
@@ -117,6 +121,14 @@ export function TerminalView(props: TerminalViewProps) {
       .attach({ terminal: address, cols, rows, history: HISTORY_LINES, display, ...resumed }, { autoCredit: false })
       .then(
         (attached) => {
+          // The program restarted while the line was down: what was typed for it must not reach the new one.
+          if (attachedBefore.current && attached.terminal.pid !== program.current) {
+            void attached.close();
+            if (pending.current.splice(0).length > 0) {
+              toasts.add({ type: "warning", title: "Typed input was not sent because the program restarted" });
+            }
+            return undefined;
+          }
           stream.current = attached;
           // The view in use was the active viewer before the drop; a FOCUS frame makes it active again, so the core
           // applies its size now. Unfocused views stay deferred until they are focused (onFocus), as resumed intends.

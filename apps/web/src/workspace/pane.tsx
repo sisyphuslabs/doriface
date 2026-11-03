@@ -59,6 +59,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
         key={terminal.pid ?? undefined}
         connection={connection}
         address={terminal.address}
+        pid={terminal.pid ?? null}
         focused={focused}
         label={`${title} output`}
         onEnd={onEnd}
