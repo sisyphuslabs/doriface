@@ -9,6 +9,7 @@ import type { WsLink } from "../ws-link.ts";
 export class WsByteLink<T> implements ByteLink {
   readonly #ws: WsLink<T>;
   #pending: Promise<void> = Promise.resolve();
+  #gate: () => Promise<void> | undefined = () => undefined;
 
   constructor(ws: WsLink<T>) {
     this.#ws = ws;
@@ -23,10 +24,16 @@ export class WsByteLink<T> implements ByteLink {
     return this.#pending;
   }
 
+  /** While `gate` returns a promise, the socket reads no further message (and pauses once more arrive). */
+  readWhen(gate: () => Promise<void> | undefined): void {
+    this.#gate = gate;
+  }
+
   onData(listener: (bytes: Uint8Array) => void): Unsubscribe {
     let active = true;
     this.#ws.onData((bytes) => {
       if (active) listener(bytes);
+      return this.#gate();
     });
     return () => {
       active = false;
@@ -48,14 +55,35 @@ export class WsByteLink<T> implements ByteLink {
   }
 }
 
-/** The decrypted session as the host's Link, so `bridge` pipes it to `hc connect` exactly like `/v1/hc`. */
-export function plaintextLink(secure: SecureLink, flushed: () => Promise<void>): Link {
-  const inbox = new ByteQueue({ onError: () => secure.close(1011, "internal error") });
+/** The socket side `plaintextLink` needs: its write backpressure and a way to hold its reads. */
+export interface Wire {
+  flushed(): Promise<void>;
+  readWhen(gate: () => Promise<void> | undefined): void;
+}
+
+/**
+ * The decrypted session as the host's Link, so `bridge` pipes it to `hc connect` exactly like `/v1/hc`. While
+ * `hc connect` is still taking an earlier chunk, the socket stops reading, so decrypted data cannot pile up.
+ */
+export function plaintextLink(secure: SecureLink, wire: Wire): Link {
+  let backlog: PromiseWithResolvers<void> | undefined;
+  const release = (): void => {
+    backlog?.resolve();
+    backlog = undefined;
+  };
+  const inbox = new ByteQueue({
+    onBacklog: () => {
+      backlog ??= Promise.withResolvers();
+    },
+    onDrained: release,
+    onError: () => secure.close(1011, "internal error"),
+  });
+  wire.readWhen(() => backlog?.promise);
   secure.onData((bytes) => inbox.push(bytes));
   return {
     async send(bytes) {
       secure.send(bytes);
-      await flushed();
+      await wire.flushed();
     },
     onData(handler: DataHandler) {
       inbox.setHandler(handler);
@@ -65,6 +93,7 @@ export function plaintextLink(secure: SecureLink, flushed: () => Promise<void>):
     },
     close() {
       inbox.clear();
+      release();
       secure.close();
     },
   };
