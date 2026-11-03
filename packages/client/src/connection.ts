@@ -8,6 +8,7 @@ import {
   type HcParams,
   type HcResult,
   type HelloResult,
+  type EventsSubscribeParams,
   type JsonRpcNotification,
   type TerminalAttachParams,
 } from "@doriface/protocol";
@@ -15,6 +16,7 @@ import { raceDeadline } from "./deadline.ts";
 import { HcConnectionClosedError, HcHandshakeError, HcProtocolError, HcTimeoutError } from "./errors.ts";
 import type { ByteLink } from "./link.ts";
 import type { Unsubscribe } from "./listeners.ts";
+import { EventFeed } from "./event-feed.ts";
 import { TerminalStream } from "./terminal-stream.ts";
 import { Wire } from "./wire.ts";
 
@@ -36,6 +38,11 @@ export interface AttachOptions extends CallOptions {
   readonly autoCredit?: boolean;
 }
 
+export interface SubscribeOptions extends CallOptions {
+  /** Close the feed after this much silence (default 45 000 ms, three missed heartbeats); 0 disables. */
+  readonly heartbeatTimeoutMs?: number;
+}
+
 /** Params may be omitted only for methods whose params are all optional. */
 export type CallArgs<M extends HcMethod> = [HcParams<M>] extends [EmptyParams]
   ? readonly [params?: EmptyParams, options?: CallOptions]
@@ -50,6 +57,7 @@ export interface RawFrames {
 }
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+const DEFAULT_HEARTBEAT_TIMEOUT_MS = 45_000;
 
 /** One framed herdr-core connection over a ByteLink. */
 export class HcConnection {
@@ -100,6 +108,19 @@ export class HcConnection {
       const stream = new TerminalStream(this.#wire, result, automaticInput, options.autoCredit ?? true);
       this.#wire.register(result.channel, stream);
       return stream;
+    });
+  }
+
+  /** Subscribes to terminal facts: a snapshot, then ordered events on a dedicated channel. */
+  subscribe(filter: EventsSubscribeParams = {}, options: SubscribeOptions = {}): Promise<EventFeed> {
+    return this.#request("events.subscribe", filter, options, (result) => {
+      const channel = result.channel;
+      if (typeof channel !== "number") throw new HcProtocolError("events.subscribe gave no channel on a framed line");
+      const snapshot = { seq: result.seq, terminals: result.terminals };
+      const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS;
+      const feed = new EventFeed(this.#wire, channel, snapshot, heartbeatTimeoutMs);
+      this.#wire.register(channel, feed);
+      return feed;
     });
   }
 
