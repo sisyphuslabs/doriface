@@ -40,8 +40,8 @@ test("off macOS the tab bar and pane headers show Ctrl shortcuts", async ({ page
   await expect(page.locator('[data-focused="true"] header')).toContainText("Ctrl+1");
   await expect(page.locator('[data-focused="true"] header')).not.toContainText("⌘");
   await expect(terminal).toBeVisible();
-  // openNewTerminal clicked New tab, and a clicked trigger keeps its tooltip shut; a reload starts
-  // from a button that was never clicked (the terminal survives it).
+  // CI intermittently showed no tooltip when re-hovering New tab right after openNewTerminal clicked
+  // it; the cause is unknown (#43). A reload sidesteps it, and the terminal survives the reload.
   await page.reload();
   await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 15_000 });
   await page.getByRole("button", { name: "New tab" }).hover();
