@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { devices, type Locator } from "@playwright/test";
+import { devices, type Locator, type Page } from "@playwright/test";
 import {
   KOREAN_SPACE,
   KOREAN_TITLE,
@@ -11,6 +11,10 @@ import {
   start,
   stop,
 } from "./sidebar-seed.ts";
+
+/** What the macOS app sets beside its window buttons (apps/desktop TITLEBAR_INSET_START), and removes in full screen. */
+const TITLEBAR_INSET_START = 78;
+const MAC_INSET_CSS = `:root { --titlebar-inset-start: ${TITLEBAR_INSET_START}px; }`;
 
 /** How far each row's content runs past the row's right edge, and where its age column ends. */
 const rowEdges = (rows: Locator) =>
@@ -53,6 +57,14 @@ const visibleCharacters = (part: Locator, title: string) =>
     const drawn = rights.filter((right) => right <= end).length;
     return { visible: Math.max(0, drawn - before), total: [...segmenter.segment(wanted)].length };
   }, title);
+
+/** Hides the sidebar with its own button and returns the button that brings it back. */
+async function hideSidebar(page: Page): Promise<Locator> {
+  const sidebar = page.getByRole("complementary", { name: "Workspace" });
+  await sidebar.getByRole("button", { name: "Hide sidebar" }).click();
+  await expect(sidebar).toBeHidden();
+  return page.getByRole("button", { name: "Show sidebar" });
+}
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -170,3 +182,43 @@ for (const { name, use } of VIEWPORTS) {
     });
   });
 }
+
+test("a hidden sidebar comes back from a named button at the window's left edge, by click, keyboard or shortcut", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" });
+    Object.defineProperty(Navigator.prototype, "userAgent", { get: () => "Mozilla/5.0 (X11; Linux x86_64)" });
+  });
+  await page.goto("/");
+  const sidebar = page.getByRole("complementary", { name: "Workspace" });
+  await sidebar.getByRole("region", { name: "Spaces" }).getByRole("button").first().click({ timeout: 20_000 });
+  const show = await hideSidebar(page);
+  const tablist = page.getByRole("tablist", { name: "Tabs" });
+  const [button, tabs] = await Promise.all([show.boundingBox(), tablist.boundingBox()]);
+  expect(button?.x).toBeLessThan(24);
+  expect((button?.x ?? 0) + (button?.width ?? 0)).toBeLessThanOrEqual(tabs?.x ?? 0);
+
+  await show.hover();
+  await expect(page.locator("[data-side]").filter({ hasText: "Show sidebar" }).first()).toBeVisible();
+  await tablist.getByRole("tab").first().focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(show).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(sidebar).toBeVisible();
+
+  await page.keyboard.press("Control+Shift+B");
+  await expect(sidebar).toBeHidden();
+  await page.keyboard.press("Control+Shift+B");
+  await expect(sidebar).toBeVisible();
+});
+
+test("with the macOS app's titlebar inset, the button that brings the sidebar back starts past the window buttons", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("complementary", { name: "Workspace" })).toBeVisible({ timeout: 20_000 });
+  await page.addStyleTag({ content: MAC_INSET_CSS });
+  const box = await (await hideSidebar(page)).boundingBox();
+  expect(box?.x).toBe(TITLEBAR_INSET_START);
+});

@@ -64,21 +64,17 @@ export function DesktopShell({ connection, terminals, tabs, onNew, onPalette }: 
           onClose={tabs.close}
           onNew={onNew}
           {...(sidebar ? {} : { className: "pl-[var(--titlebar-inset-start,0.625rem)]" })}
-          trailing={
-            sidebar ? (
-              toggle
-            ) : (
-              <>
-                {toggle}
-                <IconButton
-                  label="Show sidebar"
-                  {...(sidebarKeys === undefined ? {} : { keys: sidebarKeys })}
-                  icon={<PanelLeft />}
-                  onClick={() => setSidebar(true)}
-                />
-              </>
+          leading={
+            sidebar ? null : (
+              <IconButton
+                label="Show sidebar"
+                {...(sidebarKeys === undefined ? {} : { keys: sidebarKeys })}
+                icon={<PanelLeft />}
+                onClick={() => setSidebar(true)}
+              />
             )
           }
+          trailing={toggle}
         />
         {tabs.open.length === 0 ? <NoTerminal onNew={onNew} /> : null}
         <Panes
