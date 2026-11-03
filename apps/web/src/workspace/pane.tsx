@@ -11,17 +11,21 @@ export interface PaneProps {
   readonly focused: boolean;
   /** 1-based position among the shown panes, for the shortcut hint. */
   readonly index: number;
+  /** True while two panes are shown; unfocused-split-opacity dims only those. */
+  readonly split: boolean;
   readonly onFocus: (address: string) => void;
   readonly onClosed: (address: string) => void;
 }
 
 /** A terminal card: header with title, state and where it runs, then the live terminal. */
-export function Pane({ connection, terminal, focused, index, onFocus, onClosed }: PaneProps) {
+export function Pane({ connection, terminal, focused, index, split, onFocus, onClosed }: PaneProps) {
   const title = terminalTitle(terminal);
   return (
     <section
       aria-label={`${title} terminal`}
       onFocusCapture={() => onFocus(terminal.address)}
+      data-split={split}
+      data-focused={focused}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
       <header

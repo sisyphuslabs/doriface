@@ -1,0 +1,90 @@
+import { LIVE, NEW_TERMINALS, unsupported, type KeyDef } from "./schema.ts";
+
+const BOOL = { type: "bool" } as const;
+
+export const SPACING_KEYS: readonly KeyDef[] = [
+  ...(["x", "y"] as const).map((axis): KeyDef => ({
+    key: `window-padding-${axis}`,
+    group: "spacing",
+    kind: { type: "padding" },
+    repeatable: false,
+    defaults: ["2"],
+    description: `Padding in pixels on the ${axis === "x" ? "left and right" : "top and bottom"}; two values set each side.`,
+    support: LIVE,
+  })),
+  {
+    key: "window-padding-balance",
+    group: "spacing",
+    kind: BOOL,
+    repeatable: false,
+    defaults: ["false"],
+    description: "Spread leftover space evenly around the grid.",
+    support: unsupported("The renderer fills from the top left and does not redistribute leftover space."),
+  },
+  {
+    key: "unfocused-split-opacity",
+    group: "spacing",
+    kind: { type: "number", min: 0.15, max: 1, step: 0.05 },
+    repeatable: false,
+    defaults: ["0.7"],
+    description: "Opacity of split panes that are not focused.",
+    support: LIVE,
+  },
+];
+
+export const BEHAVIOR_KEYS: readonly KeyDef[] = [
+  {
+    key: "scrollback-limit",
+    group: "behavior",
+    kind: { type: "integer", min: 0, max: 4_000_000_000 },
+    repeatable: false,
+    defaults: ["10000000"],
+    description: "Scrollback size in bytes, per terminal.",
+    support: NEW_TERMINALS,
+  },
+  {
+    key: "copy-on-select",
+    group: "behavior",
+    kind: { type: "enum", values: ["true", "false", "clipboard"] },
+    repeatable: false,
+    defaults: ["true"],
+    description: "Copy selected text automatically (browsers have only the clipboard).",
+    support: LIVE,
+  },
+  {
+    key: "mouse-hide-while-typing",
+    group: "behavior",
+    kind: BOOL,
+    repeatable: false,
+    defaults: ["false"],
+    description: "Hide the pointer while typing until the mouse moves.",
+    support: LIVE,
+  },
+  {
+    key: "link-url",
+    group: "behavior",
+    kind: BOOL,
+    repeatable: false,
+    defaults: ["true"],
+    description: "Detect plain URLs in output and make them clickable.",
+    support: unsupported("The renderer opens OSC 8 hyperlinks only; plain URL matching is not available."),
+  },
+  {
+    key: "clipboard-paste-protection",
+    group: "behavior",
+    kind: BOOL,
+    repeatable: false,
+    defaults: ["true"],
+    description: "Ask before pasting text that would run commands (several lines without bracketed paste).",
+    support: LIVE,
+  },
+  {
+    key: "confirm-close-surface",
+    group: "behavior",
+    kind: { type: "enum", values: ["true", "false", "always"] },
+    repeatable: false,
+    defaults: ["true"],
+    description: "Ask before closing a tab with a program running in it (always: every tab).",
+    support: LIVE,
+  },
+];

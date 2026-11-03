@@ -11,13 +11,11 @@ export interface CustomTheme {
 export interface Appearance {
   /** "system", a builtin palette name, or a custom theme id. */
   readonly theme: string;
-  readonly fontSize: number;
   readonly custom: readonly CustomTheme[];
 }
 
-export const FONT_SIZE = { min: 10, max: 24, initial: 14 } as const;
 const KEY = "doriface.appearance";
-const DEFAULT: Appearance = { theme: "system", fontSize: FONT_SIZE.initial, custom: [] };
+const DEFAULT: Appearance = { theme: "system", custom: [] };
 
 function isCustomTheme(value: unknown): value is CustomTheme {
   return (
@@ -37,14 +35,9 @@ function load(): Appearance {
   }
   if (typeof parsed !== "object" || parsed === null) return DEFAULT;
   const theme: unknown = Reflect.get(parsed, "theme");
-  const fontSize: unknown = Reflect.get(parsed, "fontSize");
   const custom: unknown = Reflect.get(parsed, "custom");
   return {
     theme: typeof theme === "string" ? theme : DEFAULT.theme,
-    fontSize:
-      typeof fontSize === "number" && fontSize >= FONT_SIZE.min && fontSize <= FONT_SIZE.max
-        ? fontSize
-        : DEFAULT.fontSize,
     custom: Array.isArray(custom) ? custom.filter(isCustomTheme) : [],
   };
 }
@@ -69,7 +62,6 @@ export function themeChoices(appearance: Appearance): ReadonlyMap<string, { name
 export function applyAppearance(appearance: Appearance, root: HTMLElement = document.documentElement): void {
   for (const name of Array.from(root.style)) if (name.startsWith("--")) root.style.removeProperty(name);
   root.style.removeProperty("color-scheme");
-  root.style.setProperty("--term-font-size", `${appearance.fontSize}px`);
   const choice = themeChoices(appearance).get(appearance.theme);
   if (choice === undefined) return;
   for (const [name, value] of Object.entries(themeVariables(choice.theme))) root.style.setProperty(`--${name}`, value);

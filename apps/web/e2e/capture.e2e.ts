@@ -92,7 +92,7 @@ for (const width of ["1440", "390"] as const) {
           : null;
         await context.addInitScript(
           ([chosen, stored]) => {
-            localStorage.setItem("doriface.appearance", JSON.stringify({ theme: chosen, fontSize: 14, custom: [] }));
+            localStorage.setItem("doriface.appearance", JSON.stringify({ theme: chosen, custom: [] }));
             if (stored === null) localStorage.removeItem("doriface.connection");
             else localStorage.setItem("doriface.connection", stored);
           },
