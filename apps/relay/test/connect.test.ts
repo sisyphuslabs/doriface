@@ -29,7 +29,8 @@ afterAll(async () => {
 describe("doriface-host connect: stdin and stdout piped to the host's hc connect through the relay", () => {
   test("a pairing link pairs once, then the hostId alone reaches hc, byte for byte like a direct hc connect", async () => {
     const { relayUrl, hostId, session } = host();
-    const pairing = runConnect(deviceState, relayUrl, await host().pairingLink(), "sh -c 'exec herdr-core connect'");
+    const link = await host().pairingLink();
+    const pairing = runConnect(deviceState, relayUrl, link, "--name", "device", "sh -c 'exec herdr-core connect'");
     await pairing.write(HELLO);
     const pairedHello = await within(pairing.reader.line(), "hello over the pairing run");
     pairing.end();
@@ -67,7 +68,7 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
   test("a typed code pairs with CPace through the relay", async () => {
     const code = await host().pairingCode();
     const other = join(scratch, "other");
-    const run = runConnect(other, host().relayUrl, code);
+    const run = runConnect(other, host().relayUrl, code, "--name", "typed");
     await run.write(HELLO);
     expect(JSON.parse(decoder.decode(await within(run.reader.line(), "hello"))).result.framed).toBe(true);
     run.end();
@@ -83,7 +84,7 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
 
   test("a device the host revoked or never stored is told to pair again", async () => {
     const stranger = join(scratch, "forgotten");
-    const pair = runConnect(stranger, host().relayUrl, await host().pairingLink());
+    const pair = runConnect(stranger, host().relayUrl, await host().pairingLink(), "--name", "forgotten");
     pair.end();
     expect(await within(pair.exited, "pairing")).toBe(0);
     await host().revokeAll();
