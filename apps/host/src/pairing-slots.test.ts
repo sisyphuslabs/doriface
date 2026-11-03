@@ -65,6 +65,25 @@ describe("PairingSlots", () => {
     expect(await within(relay.released, "release")).toBe(pairingSlotOf(offer.code));
   });
 
+  test("a registration the relay failed is tried again", async () => {
+    store.offer();
+    let calls = 0;
+    const second = Promise.withResolvers<void>();
+    const registrar: PairingSlotRegistrar = {
+      register: () => {
+        calls++;
+        if (calls === 1) return Promise.reject(new Error("uplink down"));
+        second.resolve();
+        return Promise.resolve("registered");
+      },
+      release: () => {},
+    };
+    slots = new PairingSlots(store, KEY, registrar, () => {}, 10);
+    slots.start();
+    await within(second.promise, "a second registration");
+    expect(calls).toBe(2);
+  });
+
   test("an offer an earlier host process registered is registered again", async () => {
     const offer = store.offer();
     store.setSlot(offer.code, "registered");
