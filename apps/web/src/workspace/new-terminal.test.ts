@@ -1,6 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { runParamsFor } from "./new-terminal.ts";
+import { currentTerminal, runParamsFor } from "./new-terminal.ts";
 
 const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => ({
   address,
@@ -32,5 +32,19 @@ describe("runParamsFor", () => {
       on: "build",
       labels: { space: "infra" },
     });
+  });
+});
+
+describe("currentTerminal", () => {
+  test("takes the directory the shell has moved to, keeping the address and labels this client knows", async () => {
+    const active = terminal("build/t3", { labels: { space: "infra" } });
+    const moved = { ...terminal("t3"), foreground: { argv: ["sh"], name: "sh", pid: 9, cwd: "/work/api/src" } };
+    const current = await currentTerminal(() => Promise.resolve(moved), active);
+    expect(runParamsFor(current)).toEqual({ cwd: "/work/api/src", on: "build", labels: { space: "infra" } });
+  });
+
+  test("a failed read starts from the snapshot", async () => {
+    const active = terminal("t1");
+    expect(await currentTerminal(() => Promise.reject(new Error("gone")), active)).toBe(active);
   });
 });
