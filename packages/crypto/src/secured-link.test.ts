@@ -28,6 +28,12 @@ describe("held data", () => {
     expect(seen).toEqual([1]);
   });
 
+  test("a peer that closes during a chunked write ends the write quietly", async () => {
+    const { client, server } = await established({ synchronous: true });
+    server.onData(() => server.close());
+    expect(() => client.send(new Uint8Array(200_000))).not.toThrow();
+  });
+
   test("unread data beyond the cap closes the link with 4408", async () => {
     const { client, hostEnd } = await established({ synchronous: true });
     client.send(new Uint8Array(MAX_HELD_BYTES + 1));
