@@ -79,7 +79,7 @@ function endpoint() {
 }
 
 function lanEndpoint(): string {
-  const lanUrl = endpoint().lanUrl;
+  const [lanUrl] = endpoint().lanUrls;
   if (lanUrl === undefined) throw new Error("no LAN listener");
   return lanUrl;
 }

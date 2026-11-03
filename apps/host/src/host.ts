@@ -38,8 +38,8 @@ export interface E2eeEndpoint {
   readonly fingerprint: string;
   /** `/v1/e2ee` on the main listener. */
   readonly url: string;
-  /** `/v1/e2ee` on the LAN listener, when one was asked for. */
-  readonly lanUrl: string | undefined;
+  /** The dialable `/v1/e2ee` URLs of the LAN listener (IP literals, also sent in message 2); empty without one. */
+  readonly lanUrls: readonly string[];
 }
 
 export interface Host {
@@ -106,8 +106,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
             hostId: e2ee.identity.hostId,
             fingerprint: fingerprintOf(e2ee.identity.noise.publicKey),
             url: `${base}/v1/e2ee`,
-            lanUrl:
-              lan === undefined ? undefined : `ws://${formatHost(lan.hostname)}:${lanServer?.port ?? lan.port}/v1/e2ee`,
+            lanUrls: e2ee.lanUrls,
           },
     stop() {
       e2ee?.slots.stop();
