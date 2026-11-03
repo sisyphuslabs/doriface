@@ -2,26 +2,15 @@ import { base64urlEncode, type SecureLink } from "@doriface/crypto";
 import type { DeviceStore } from "../state/devices.ts";
 import { REVOKED } from "./accept.ts";
 
-/** Live E2EE sessions by device key, so a revocation (in-process or by another process) closes them with 4401. */
+/** Live E2EE sessions by device key, so a revocation closes them with 4401. */
 export class LiveSessions {
   readonly #devices: DeviceStore;
   readonly #byKey = new Map<string, Set<SecureLink>>();
   readonly #log: (line: string) => void;
-  #stopWatch: (() => void) | undefined;
 
   constructor(devices: DeviceStore, log: (line: string) => void) {
     this.#devices = devices;
     this.#log = log;
-  }
-
-  /** Starts watching the devices file; call `stop` to end it. */
-  start(): void {
-    this.#stopWatch ??= this.#devices.watch(() => this.closeRevoked());
-  }
-
-  stop(): void {
-    this.#stopWatch?.();
-    this.#stopWatch = undefined;
   }
 
   add(session: SecureLink): void {

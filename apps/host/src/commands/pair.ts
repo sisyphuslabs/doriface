@@ -1,9 +1,10 @@
-import { buildPairingUrl, DEFAULT_RELAY_URL, fingerprintOf, PAIRING_TTL_MS } from "@doriface/crypto";
+import { buildPairingUrl, DEFAULT_RELAY_URL, fingerprintOf, formatPairingCode, PAIRING_TTL_MS } from "@doriface/crypto";
 import { parseArgs } from "node:util";
 import { renderUnicodeCompact } from "uqr";
+import { requestControl } from "../control.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
-import { PairingStore } from "../state/pairing.ts";
+import { type PendingPairing, PairingStore } from "../state/pairing.ts";
 
 export const DEFAULT_WEB_ORIGIN = "https://doriface.omo.dev";
 
@@ -12,10 +13,35 @@ export const PAIR_USAGE = `usage: doriface-host pair [options]
   --web-origin <url>  the web app that opens the link (default ${DEFAULT_WEB_ORIGIN})
   --relay <url>       the relay the device dials (default ${DEFAULT_RELAY_URL})
   --state-dir <dir>   the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
-  --no-qr             print only the link`;
+  --no-qr             print no QR code`;
 
-/** Creates a single-use pairing code (replacing any pending one) and prints the pairing link and its QR code. */
-export function pairCommand(args: readonly string[], out: (text: string) => void): void {
+function asPending(value: unknown): PendingPairing {
+  if (typeof value === "object" && value !== null && "code" in value && "expiresAt" in value) {
+    const { code, expiresAt } = value;
+    const failures = "failures" in value ? value.failures : undefined;
+    const slot = "slot" in value ? value.slot : undefined;
+    const knownSlot = slot === "pending" || slot === "registered" || slot === "unavailable";
+    if (typeof code === "string" && typeof expiresAt === "number" && typeof failures === "number" && knownSlot) {
+      return { code, expiresAt, failures, slot };
+    }
+  }
+  throw new Error("the running host sent a malformed pairing");
+}
+
+/** Asks the running host to open the pairing (it registers the relay slot first); without one, writes it directly. */
+async function openOffer(stateDir: string): Promise<PendingPairing> {
+  const answer = await requestControl(stateDir, { op: "pair" });
+  return answer === undefined ? new PairingStore(stateDir).offer() : asPending(answer);
+}
+
+const SLOT_NOTES = {
+  registered: "",
+  unavailable: "  (no relay slot: pair with the link or QR code)",
+  pending: "  (not registered with the relay yet: start doriface-host, or pair with the link or QR code)",
+} as const;
+
+/** Opens a single-use pairing (replacing any pending one) and prints its link, QR code, typed code and fingerprint. */
+export async function pairCommand(args: readonly string[], out: (text: string) => void): Promise<void> {
   const { values } = parseArgs({
     args: [...args],
     strict: true,
@@ -32,7 +58,7 @@ export function pairCommand(args: readonly string[], out: (text: string) => void
   if (!URL.canParse(values.relay)) throw new Error(`--relay wants a URL, got ${JSON.stringify(values.relay)}`);
   const stateDir = values["state-dir"] ?? defaultStateDir();
   const identity = loadHostIdentity(stateDir);
-  const offer = new PairingStore(stateDir).offer();
+  const offer = await openOffer(stateDir);
   const url = buildPairingUrl({
     webOrigin: values["web-origin"],
     hostId: identity.hostId,
@@ -41,15 +67,15 @@ export function pairCommand(args: readonly string[], out: (text: string) => void
     code: offer.code,
     relayUrl: values.relay,
   });
-  const minutes = PAIRING_TTL_MS / 60_000;
   const lines = [
-    `Open this link on the device you want to pair, or scan the code. It works once, for ${minutes} minutes.`,
+    `Open this link on the device you want to pair, scan the QR code, or type the code. It works once, for ${PAIRING_TTL_MS / 60_000} minutes.`,
     "",
     ...(values["no-qr"] ? [] : [renderUnicodeCompact(url, { ecc: "L", border: 2 }), ""]),
     url,
     "",
-    `host        ${identity.hostId}`,
+    `code        ${formatPairingCode(offer.code)}${SLOT_NOTES[offer.slot]}`,
     `fingerprint ${fingerprintOf(identity.noise.publicKey)}`,
+    `host        ${identity.hostId}`,
     `expires     ${new Date(offer.expiresAt).toISOString()}`,
   ];
   out(`${lines.join("\n")}\n`);
