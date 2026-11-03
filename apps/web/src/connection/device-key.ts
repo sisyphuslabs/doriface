@@ -73,14 +73,7 @@ async function generateWebCrypto(subtle: SubtleCrypto): Promise<StoredWebCrypto>
   return { kind: "webcrypto", privateKey: pair.privateKey, publicKey };
 }
 
-/**
- * Loads the device key, generating it on first use. The private half is a non-extractable
- * CryptoKey when WebCrypto has X25519, else 32 raw bytes; either survives in IndexedDB by structured clone.
- */
-export async function loadDeviceKey(
-  storage: KeyValueStore = deviceStore,
-  subtle: SubtleCrypto | null = globalThis.crypto?.subtle ?? null,
-): Promise<DeviceKey> {
+async function readOrCreate(storage: KeyValueStore, subtle: SubtleCrypto | null): Promise<DeviceKey> {
   const stored = await storage.get(KEY);
   if (isStored(stored))
     return stored.kind === "webcrypto" && subtle !== null ? fromWebCrypto(subtle, stored) : fromRaw(asRaw(stored));
@@ -92,6 +85,28 @@ export async function loadDeviceKey(
   const generated: StoredRaw = { kind: "raw", privateKey: x25519.utils.randomSecretKey() };
   await storage.put(KEY, generated);
   return fromRaw(generated);
+}
+
+const pending = new WeakMap<KeyValueStore, Promise<DeviceKey>>();
+const LOCK = "doriface-device-key";
+
+/**
+ * Loads the device key, generating it on first use. The private half is a non-extractable
+ * CryptoKey when WebCrypto has X25519, else 32 raw bytes; either survives in IndexedDB by structured clone.
+ * Concurrent first calls share one creation: per store in this page, and across tabs through the Web
+ * Locks API where it exists, re-reading the store inside the lock so a second tab gets the first's key.
+ */
+export function loadDeviceKey(
+  storage: KeyValueStore = deviceStore,
+  subtle: SubtleCrypto | null = globalThis.crypto?.subtle ?? null,
+): Promise<DeviceKey> {
+  const inFlight = pending.get(storage);
+  if (inFlight !== undefined) return inFlight;
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  const loading =
+    locks === undefined ? readOrCreate(storage, subtle) : locks.request(LOCK, () => readOrCreate(storage, subtle));
+  pending.set(storage, loading);
+  return loading;
 }
 
 function asRaw(stored: StoredWebCrypto | StoredRaw): StoredRaw {
