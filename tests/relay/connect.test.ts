@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { fingerprintOf, generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { tmpdir } from "node:os";
@@ -8,6 +8,7 @@ import { HELLO, rpcFrame } from "../../apps/host/src/testing/hc-session.ts";
 import { runConnect } from "./support/connect-cli.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { within } from "./support/watch.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 const decoder = new TextDecoder();
 /** A refusal must end the process well inside hc's 20 s dial deadline, never by it. */
@@ -22,7 +23,7 @@ function host(): RelayedHost {
   return relayed;
 }
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relayed = await startRelayedHost("relay-connect");
   await relayed.pair(phone, "phone");
 }, 120_000);

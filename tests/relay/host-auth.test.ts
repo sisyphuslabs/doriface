@@ -16,19 +16,20 @@ import {
   relayOriginOf,
   Uplink,
 } from "@doriface/relay-client";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { type Closed, Probe, socketFrom, testIp } from "./support/probe.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { startTestHost } from "./support/test-host.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 let relay: LocalRelay;
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relay = await startLocalRelay();
 }, 120_000);
 
-afterAll(() => relay.stop());
+afterAll(() => relay?.stop());
 
 afterEach(runDeferred);
 

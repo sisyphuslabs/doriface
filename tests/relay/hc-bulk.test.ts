@@ -1,10 +1,11 @@
 import type { HcConnection } from "@doriface/client";
 import { generateX25519 } from "@doriface/crypto";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { watchScreen } from "./support/watch.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 const phone = generateX25519();
 const MIB = 1024 * 1024;
@@ -16,7 +17,7 @@ function started(): { readonly hc: HcConnection; readonly dir: string } {
   return { hc: connection, dir: join(relayed.scratch, "work") };
 }
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relayed = await startRelayedHost("relay-bulk");
   mkdirSync(join(relayed.scratch, "work"));
   await relayed.pair(phone, "bulk");

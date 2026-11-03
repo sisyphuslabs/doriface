@@ -1,7 +1,7 @@
 import { HcConnection } from "@doriface/client";
 import { CloseCode, generateX25519, parsePairingUrl, type SecureLink, SecureLinkError } from "@doriface/crypto";
 import { lookupPairSlot } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { HELLO, rpcFrame } from "../../apps/host/src/testing/hc-session.ts";
 import { capturingSockets } from "./support/capture.ts";
 import { drainUntil, field, input, type ParsedFrame, replyTo, rpc } from "./support/hc-frames.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 const decoder = new TextDecoder();
 const scratch = mkdtempSync(join(tmpdir(), "relay-e2e-"));
@@ -35,7 +36,7 @@ function readerOf(link: SecureLink): ByteReader {
   return reader;
 }
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relayed = await startRelayedHost("relay-e2e", {
     wrapSockets: (base) => capturingSockets(captureFile, base),
   });
