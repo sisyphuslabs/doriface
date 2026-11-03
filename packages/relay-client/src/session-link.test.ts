@@ -21,7 +21,40 @@ function recordingLink(): { readonly link: SessionLink; readonly frames: Uint8Ar
 
 const typesOf = (frames: readonly Uint8Array[]): number[] => frames.map((frame) => decodeMux(frame).type);
 
+/** Two sessions back to back: each one's DATA reaches the other's reader, each one's CREDIT credits the other. */
+function backToBack(): { readonly a: SessionLink; readonly b: SessionLink; readonly sentByA: () => number } {
+  const ends: { a?: SessionLink; b?: SessionLink } = {};
+  let sentByA = 0;
+  const wire =
+    (from: "a" | "b") =>
+    (frame: Uint8Array<ArrayBuffer>): boolean => {
+      const other = from === "a" ? ends.b : ends.a;
+      const decoded = decodeMux(frame);
+      if (decoded.type === MuxType.Data) {
+        if (from === "a") sentByA += 1;
+        other?.deliver(decoded.payload);
+      }
+      if (decoded.type === MuxType.Credit) other?.credited(decoded.bytes);
+      return true;
+    };
+  const a = new SessionLink(1, undefined, { sendFrame: wire("a"), release: () => {} });
+  const b = new SessionLink(1, undefined, { sendFrame: wire("b"), release: () => {} });
+  Object.assign(ends, { a, b });
+  a.onData(() => {});
+  b.onData(() => {});
+  a.credited(0);
+  b.credited(0);
+  return { a, b, sentByA: () => sentByA };
+}
+
 describe("SessionLink", () => {
+  test("an uncredited residue below 64 KiB never wedges a later message bigger than the window minus it", () => {
+    const { a, sentByA } = backToBack();
+    void a.send(new Uint8Array(1));
+    void a.send(new Uint8Array(SESSION_WINDOW_BYTES));
+    expect(sentByA()).toBe(2);
+  });
+
   test("a write the uplink can no longer carry rejects instead of vanishing", async () => {
     const link = new SessionLink(1, undefined, { sendFrame: () => false, release: () => {} });
     await expect(link.send(new Uint8Array([1]))).rejects.toBeInstanceOf(LinkClosedError);
