@@ -20,11 +20,11 @@ describe("host identity", () => {
     expect(base32Decode(identity.hostId)).toEqual(new Uint8Array(digest.subarray(0, 16)));
   });
 
-  test("fingerprint is four groups of eight base32 characters of BLAKE2s(noiseStaticPub)", () => {
-    const digest = createHash("blake2s256").update(identity.noise.publicKey).digest();
+  test("fingerprint is the first 20 bytes of SHA-256(noiseStaticPub) as ten uppercase hex groups of four", () => {
+    const digest = createHash("sha256").update(identity.noise.publicKey).digest("hex").toUpperCase();
     const fingerprint = fingerprintOf(identity.noise.publicKey);
-    expect(fingerprint).toMatch(/^[a-z2-7]{8}( [a-z2-7]{8}){3}$/);
-    expect(base32Decode(fingerprint.replaceAll(" ", ""))).toEqual(new Uint8Array(digest.subarray(0, 20)));
+    expect(fingerprint).toMatch(/^[0-9A-F]{4}( [0-9A-F]{4}){9}$/);
+    expect(fingerprint.replaceAll(" ", "")).toBe(digest.slice(0, 40));
   });
 
   test("rebuilding from the secrets yields the same identity", () => {

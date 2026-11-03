@@ -1,9 +1,11 @@
 import packageJson from "../package.json" with { type: "json" };
 import { fingerprintOf } from "@doriface/crypto";
+import { listenControl } from "./control.ts";
 import { LiveSessions } from "./e2ee/sessions.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { formatHost, isLoopbackHost, type ListenAddress } from "./listen.ts";
+import { type PairingSlotRegistrar, PairingSlots } from "./pairing-slots.ts";
 import { DeviceStore } from "./state/devices.ts";
 import { loadHostIdentity } from "./state/host-keys.ts";
 import { PairingStore } from "./state/pairing.ts";
@@ -25,6 +27,8 @@ export interface HostOptions {
   readonly lanListen?: ListenAddress | undefined;
   /** For tests: messages per direction between rekeys. */
   readonly rekeyInterval?: number | undefined;
+  /** Registers typed-code pairing slots with the relay (PAIR_SLOT over the host uplink). */
+  readonly pairingSlots?: PairingSlotRegistrar | undefined;
   readonly log: (line: string) => void;
 }
 
@@ -75,7 +79,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
           fetch: gateway.lanApp.fetch,
           websocket: gateway.websocket,
         });
-  e2ee?.sessions.start();
+  e2ee?.slots.start();
+  const control =
+    options.stateDir === undefined || e2ee === undefined ? undefined : openControl(options.stateDir, e2ee, options.log);
   const boundPort = server.port ?? port;
   const base = `ws://${formatHost(hostname)}:${boundPort}`;
   let stopping: Promise<void> | undefined;
@@ -94,7 +100,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
               lan === undefined ? undefined : `ws://${formatHost(lan.hostname)}:${lanServer?.port ?? lan.port}/v1/e2ee`,
           },
     stop() {
-      e2ee?.sessions.stop();
+      e2ee?.slots.stop();
+      control?.stop(true);
       stopping ??= gateway
         .closeAll()
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
@@ -104,12 +111,26 @@ export async function startHost(options: HostOptions): Promise<Host> {
   };
 }
 
+function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>, log: (line: string) => void) {
+  try {
+    return listenControl(stateDir, async (request) => {
+      if (request.op === "devices-changed") return e2ee.sessions.closeRevoked();
+      return e2ee.slots.open();
+    });
+  } catch (error) {
+    log(`no control socket (pair and devices revoke will not reach this host): ${String(error)}`);
+    return undefined;
+  }
+}
+
 function e2eeDeps(stateDir: string, options: HostOptions) {
   const devices = new DeviceStore(stateDir);
+  const pairing = new PairingStore(stateDir);
   return {
     identity: loadHostIdentity(stateDir),
     devices,
-    pairing: new PairingStore(stateDir),
+    pairing,
+    slots: new PairingSlots(pairing, options.pairingSlots, options.log),
     sessions: new LiveSessions(devices, options.log),
     rekeyInterval: options.rekeyInterval,
     log: options.log,

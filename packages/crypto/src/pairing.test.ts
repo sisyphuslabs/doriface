@@ -7,53 +7,79 @@ import {
   decodePairingHello,
   DEFAULT_RELAY_URL,
   encodePairingHello,
+  formatPairingCode,
+  MAX_PAIRING_FAILURES,
+  normalizePairingCode,
+  PAIRING_ALPHABET,
   PAIRING_TTL_MS,
-  pairingCodeBytes,
   pairingPsk,
-  PairingSlot,
+  pairingSlotOf,
+  PairingGuard,
   parsePairingUrl,
 } from "./pairing.ts";
 
 const identity = generateHostIdentity();
 
 describe("pairing code", () => {
-  test("is 26 base32 characters of 16 random bytes and expires after 10 minutes", () => {
+  test("is 8 Crockford base32 characters, a 3-character slot then the secret, expiring after 10 minutes", () => {
     const offer = createPairingOffer(1_000);
-    expect(offer.code).toMatch(/^[a-z2-7]{26}$/);
-    expect(pairingCodeBytes(offer.code).byteLength).toBe(16);
+    expect(offer.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/);
+    expect(pairingSlotOf(offer.code)).toBe(offer.code.slice(0, 3));
+    expect(formatPairingCode(offer.code)).toBe(`${offer.code.slice(0, 4)} ${offer.code.slice(4)}`);
     expect(offer.expiresAt).toBe(1_000 + PAIRING_TTL_MS);
-    expect(createPairingOffer().code).not.toBe(offer.code);
   });
 
-  test("psk is HKDF-SHA256(code bytes, empty salt, 'doriface pair v1', 32)", () => {
+  test("draws every alphabet character", () => {
+    const seen = new Set(Array.from({ length: 200 }, () => createPairingOffer().code).join(""));
+    expect([...seen].toSorted().join("")).toBe(PAIRING_ALPHABET);
+  });
+
+  test("psk is HKDF-SHA256(UTF-8 of the 8 characters, empty salt, 'doriface pair v1', 32)", () => {
     const { code } = createPairingOffer();
-    const expected = new Uint8Array(
-      hkdfSync("sha256", pairingCodeBytes(code), new Uint8Array(0), "doriface pair v1", 32),
-    );
+    const expected = new Uint8Array(hkdfSync("sha256", code, new Uint8Array(0), "doriface pair v1", 32));
     expect(pairingPsk(code)).toEqual(expected);
   });
 
-  test.each(["", "abc", "a".repeat(27), "1".repeat(26)])("rejects code %p", (bad) => {
+  test.each([
+    ["3fa9 4c0e", "3FA94C0E"],
+    ["3FA9-4C0E", "3FA94C0E"],
+    ["oil1 abcd", "0111ABCD"],
+  ])("a typed %p reads as %p", (typed, code) => {
+    expect(normalizePairingCode(typed)).toBe(code);
+    expect(pairingPsk(typed)).toEqual(pairingPsk(code));
+  });
+
+  test.each(["", "ABC", "ABCDEFGHJ", "ABCD EFGU", "ABCD!EFG"])("rejects code %p", (bad) => {
     expect(() => pairingPsk(bad)).toThrow();
   });
 });
 
-describe("PairingSlot", () => {
-  test("yields the psk once; a release reopens it, a burn ends it", () => {
-    const slot = new PairingSlot(createPairingOffer(0));
-    expect(slot.claim(1)).toEqual(pairingPsk(slot.offer.code));
-    expect(slot.claim(1)).toBeUndefined();
-    slot.release();
-    expect(slot.claim(1)).toBeDefined();
-    slot.burn();
-    slot.release();
-    expect([slot.state, slot.claim(1)]).toEqual(["used", undefined]);
+describe("PairingGuard", () => {
+  test("yields the psk once at a time; success uses it up", () => {
+    const guard = new PairingGuard(createPairingOffer(0));
+    expect(guard.claim(1)).toEqual(pairingPsk(guard.offer.code));
+    expect(guard.claim(1)).toBeUndefined();
+    guard.use();
+    expect([guard.state, guard.claim(1)]).toEqual(["used", undefined]);
+  });
+
+  test(`burns the code on failure number ${MAX_PAIRING_FAILURES}`, () => {
+    const guard = new PairingGuard(createPairingOffer(0));
+    for (let i = 1; i < MAX_PAIRING_FAILURES; i++) {
+      expect(guard.claim(1)).toBeDefined();
+      guard.fail();
+      expect([guard.state, guard.failures]).toEqual(["open", i]);
+    }
+    guard.claim(1);
+    guard.fail();
+    expect([guard.state, guard.claim(1)]).toEqual(["burned", undefined]);
+    expect(new PairingGuard(guard.offer, MAX_PAIRING_FAILURES).state).toBe("burned");
   });
 
   test("never yields after expiry", () => {
-    const slot = new PairingSlot(createPairingOffer(0));
-    expect(slot.claim(PAIRING_TTL_MS)).toBeUndefined();
-    expect(slot.state).toBe("open");
+    const guard = new PairingGuard(createPairingOffer(0));
+    expect(guard.claim(PAIRING_TTL_MS)).toBeUndefined();
+    expect(guard.state).toBe("open");
   });
 });
 

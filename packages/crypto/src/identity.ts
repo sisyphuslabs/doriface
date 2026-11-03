@@ -1,5 +1,4 @@
 import { ed25519, x25519 } from "@noble/curves/ed25519.js";
-import { blake2s } from "@noble/hashes/blake2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { base32Encode, concatBytes, utf8 } from "./encoding.ts";
 
@@ -30,10 +29,10 @@ export const ed25519FromSecret = (secretKey: Uint8Array): KeyPair => ({
 /** base32 of the first 16 bytes of SHA-256(signPub): 26 characters. */
 export const hostIdOf = (signPub: Uint8Array): string => base32Encode(sha256(signPub).subarray(0, 16));
 
-/** base32 of the first 20 bytes of BLAKE2s(noiseStaticPub), as four groups of eight characters. */
+/** The first 20 bytes of SHA-256(noiseStaticPub), uppercase hex, as ten groups of four (`3FA9 4C0E ...`). */
 export function fingerprintOf(noiseStaticPub: Uint8Array): string {
-  const text = base32Encode(blake2s(noiseStaticPub).subarray(0, 20));
-  return [0, 8, 16, 24].map((start) => text.slice(start, start + 8)).join(" ");
+  const hex = sha256(noiseStaticPub).subarray(0, 20).toHex().toUpperCase();
+  return Array.from({ length: 10 }, (_, i) => hex.slice(i * 4, i * 4 + 4)).join(" ");
 }
 
 export function hostIdentityFromSecrets(signSecret: Uint8Array, noiseSecret: Uint8Array): HostIdentity {
