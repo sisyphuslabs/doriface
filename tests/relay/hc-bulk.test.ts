@@ -17,7 +17,7 @@ function started(): { readonly hc: HcConnection; readonly dir: string } {
 }
 
 beforeAll(async () => {
-  relayed = await startRelayedHost("doriface-relay-bulk");
+  relayed = await startRelayedHost("relay-bulk");
   mkdirSync(join(relayed.scratch, "work"));
   await relayed.pair(phone, "bulk");
   connection = await relayed.connect(phone);

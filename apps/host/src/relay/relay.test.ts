@@ -83,7 +83,7 @@ async function pairOffer(): Promise<{ readonly code: string; readonly linkSecret
 
 beforeAll(async () => {
   relay = new FakeRelay();
-  session = createHcSession("doriface-relay-uplink");
+  session = createHcSession("relay-uplink");
   devices.add(phone.publicKey, "phone");
   host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
