@@ -41,15 +41,19 @@ export function FontFamilyList({ families, missing = [], onRemove, onAdd, classN
               </span>
               {index === 0 ? <span className="shrink-0 text-xs text-muted-foreground">Primary</span> : null}
               {absent ? <span className="shrink-0 text-xs text-muted-foreground">Not installed</span> : null}
-              <IconButton label={`Remove ${family}`} icon={<X />} onClick={() => onRemove?.(family)} />
+              {onRemove === undefined ? null : (
+                <IconButton label={`Remove ${family}`} icon={<X />} onClick={() => onRemove(family)} />
+              )}
             </li>
           );
         })}
       </ol>
-      <Button variant="ghost" size="sm" onClick={onAdd} className="self-start">
-        <Plus />
-        Add fallback
-      </Button>
+      {onAdd === undefined ? null : (
+        <Button variant="ghost" size="sm" onClick={onAdd} className="self-start">
+          <Plus />
+          Add fallback
+        </Button>
+      )}
     </div>
   );
 }
