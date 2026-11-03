@@ -66,6 +66,12 @@ export class HostMesh {
     return offer;
   }
 
+  /** Opens a device offer, which replaces any mesh offer: that offer's pending joins expire with it. */
+  pairDevice(): Promise<PendingPairing> {
+    this.pending.expireAll();
+    return this.#options.slots.open(false);
+  }
+
   /** Serves a session on the mesh stream: a join on a mesh offer, or a member's sync session for the sync hook. */
   serve(secure: SecureLink): void {
     if (secure.kind === SessionKind.Session) return this.#options.sync?.(secure);
@@ -102,7 +108,7 @@ export class HostMesh {
 
   /** The session a join ran on stays open as a sync session, registered so a revoke closes it. */
   #keep(secure: SecureLink): void {
-    this.#options.sessions.add(secure);
+    if (!this.#options.sessions.add(secure)) return;
     this.#options.log("mesh: keeping the join's session for sync");
     this.#options.sync?.(secure);
   }

@@ -73,7 +73,10 @@ function sendWelcome(lines: MeshLines, records: readonly Signed[], meshId: strin
 function admit(deps: InviteDeps, meshId: string, inviter: string, card: CardBody, signed: Signed): readonly Signed[] {
   return deps.mesh.transact((tx) => {
     const view = tx.view();
-    if (view.members.has(card.signPub)) return tx.records;
+    if (view.members.has(card.signPub)) {
+      if (view.noise.get(card.signPub) !== card.noisePub) throw new JoinRefused(ANOTHER_KEY);
+      return tx.records;
+    }
     if (view.members.size >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
     tx.sign(deps.identity, (n, prev) => ({
       v: 2,
@@ -91,16 +94,29 @@ function admit(deps: InviteDeps, meshId: string, inviter: string, card: CardBody
   });
 }
 
-/** Section 4.3: the inviting member's decision, or the session's end, which drops the pending join. */
+/**
+ * Section 4.3: the inviting member's decision. A `refused` line from the joiner, or the session's end, drops the
+ * pending join instead, and so does a session that ended before an automatic approval.
+ */
 async function decision(lines: MeshLines, deps: InviteDeps, join: PendingJoin): Promise<void> {
-  const left = lines.ended.then((error) => ({ left: error }));
+  const left = lines.next().then(
+    (line) => ({ left: line.t === "refused" ? `the joiner gave up: ${line.reason}` : `unexpected ${line.t} line` }),
+    (error: unknown) => ({ left: `the session closed before the join was decided: ${messageOf(error)}` }),
+  );
   const decided = await Promise.race([deps.pending.ask(join), left]);
-  if (typeof decided === "object") {
+  const closed = lines.closed;
+  if (typeof decided === "object" || closed !== undefined) {
     deps.pending.expire(join.nonce);
-    throw new JoinRefused(`the session closed before the join was decided: ${decided.left.message}`);
+    const reason = typeof decided === "object" ? decided.left : messageOf(closed);
+    throw new JoinRefused(closed === undefined ? reason : `the session closed before the join was decided: ${reason}`);
   }
   if (decided !== "approved") throw new JoinRefused(`the join was ${decided} on the inviting member`);
 }
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const ANOTHER_KEY =
+  "this host is a member with another Noise key, or over the member cap: rekey it, or revoke and re-admit it";
 
 /**
  * The inviting member's side of a join (sections 4.3 and 4.4), on a session the mesh offer admitted: offer, card
@@ -113,15 +129,16 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
     const offer = { mesh: meshId, inviter: base64urlEncode(deps.identity.sign.publicKey), nonce: nonce() };
     lines.send({ t: "offer", ...offer });
     const reply = await byDeadline(lines.next(), deps.expiresAt, "the offer expired before the card arrived");
-    lines.expect();
+    lines.expect("refused");
     if (reply.t !== "card") throw new JoinRefused(`expected a card, got ${reply.t}`);
     const card = checkCard(reply, offer, peerStatic);
     const index = deps.mesh.authorizeIndex();
-    if (index?.isMember(card.signPub) === true) {
+    if (index?.member(card.noisePub)?.signPub === card.signPub) {
       sendWelcome(lines, deps.mesh.read()?.records ?? [], meshId);
       lines.detach();
       return card;
     }
+    if (index?.isMember(card.signPub) === true) throw new JoinRefused(ANOTHER_KEY);
     if ((index?.memberCount ?? 0) >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
     const fingerprint = fingerprintOf(base64urlDecode(card.noisePub));
     const join = { nonce: offer.nonce, name: card.name, hostId: card.hostId, fingerprint, expiresAt: deps.expiresAt };

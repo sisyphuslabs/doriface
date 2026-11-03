@@ -186,7 +186,7 @@ function openControl(stateDir: string, e2ee: ReturnType<typeof e2eeDeps>) {
       case "mesh-changed":
         return e2ee.sessions.closeRevoked();
       case "pair":
-        return pendingToWire(await e2ee.slots.open());
+        return pendingToWire(await e2ee.hostMesh.pairDevice());
       case "mesh-pair":
         return pendingToWire(await e2ee.hostMesh.pair(request.auto));
       case "mesh-pending":

@@ -25,14 +25,14 @@ afterEach(() => {
 
 const log = (): void => {};
 
-function hostMesh(sync?: (session: SecureLink) => void) {
+function hostMesh(sync?: (session: SecureLink) => void, Sessions = LiveSessions) {
   const dir = mkdtempSync(join(tmpdir(), "dh-host-mesh-"));
   dirs.push(dir);
   const m = machine("alpha");
   const mesh = new MeshStore(dir, { log });
   const slots = new PairingSlots(new PairingStore(dir, log), m.identity.noise.publicKey, undefined, log);
   stops.push(() => slots.stop());
-  const sessions = new LiveSessions(new DeviceStore(dir), log, mesh);
+  const sessions = new Sessions(new DeviceStore(dir), log, mesh);
   const create = (): HostMesh =>
     new HostMesh({
       stateDir: dir,
@@ -141,5 +141,41 @@ describe("the running host's mesh offers", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(synced).toEqual([served]);
     expect(inviterEnd.closeCode).toBeUndefined();
+  });
+
+  test("a session that closes as it is registered is not handed to the sync hook", async () => {
+    class ClosingSessions extends LiveSessions {
+      override add(session: SecureLink): boolean {
+        session.close(CloseCode.UnknownDevice, "device revoked");
+        return false;
+      }
+    }
+    const synced: SecureLink[] = [];
+    const { m, mesh, create } = hostMesh((session) => void synced.push(session), ClosingSessions);
+    mesh.found(m.identity, { name: "alpha", hcId: "core" });
+    const host = create();
+    await host.pair(true);
+    const b = side("beta");
+    const [inviterEnd, joinerEnd] = memoryLinkPair();
+    host.serve(pairLink(inviterEnd, b.m.identity.noise.publicKey));
+    const dialed = { hostId: m.identity.hostId, noisePub: m.identity.noise.publicKey };
+    const ctx = { identity: b.m.identity, mesh: b.mesh, own: { name: "beta", hcId: "core-b" }, dialed, log };
+    await runJoiner(new MeshLines(joinerEnd, JOINER_EXPECTS), { ...ctx, deadline: Date.now() + 60_000 });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(inviterEnd.closeCode).toBe(CloseCode.UnknownDevice);
+    expect(synced).toEqual([]);
+  });
+
+  test("opening a device offer expires the pending joins of the mesh offer it replaces", async () => {
+    const host = hostMesh().create();
+    const asked = host.pending.ask({
+      nonce: "old",
+      name: "beta",
+      hostId: "h",
+      fingerprint: "f",
+      expiresAt: Date.now() + 60_000,
+    });
+    await host.pairDevice();
+    expect(await asked).toBe("expired");
   });
 });
