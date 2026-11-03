@@ -2,39 +2,65 @@
 
 An end-to-end encrypted web, PWA and desktop face for [herdr-core](https://github.com/herdrdev/herdr-core).
 
-doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted; by default it travels through a public Cloudflare relay at `relay-doriface.omo.dev`, which only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org).
+doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted with Noise, and by default it travels through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
 
-> Status: early development. The pieces below land as separate pull requests into `dev`.
+| Workspace (night, 1440)                                             | Workspace (day, 1440)                                           |
+| ------------------------------------------------------------------- | --------------------------------------------------------------- |
+| ![Workspace, night theme](docs/design/app/workspace-1440-night.png) | ![Workspace, day theme](docs/design/app/workspace-1440-day.png) |
+
+## Status
+
+| Piece                                         | State                                                                                                                              |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Host gateway, byte-for-byte `hc` passthrough  | works                                                                                                                              |
+| Web client and installable PWA                | works on the same machine as the host                                                                                              |
+| Desktop app ("Use this computer")             | works: starts the host and `hc` locally and attaches terminals                                                                     |
+| Terminal rendering with libghostty            | works (Ghostty v1.4.0)                                                                                                             |
+| Public relay `relay-doriface.omo.dev`         | deployed                                                                                                                           |
+| Pairing a device and reaching a host remotely | in progress: end-to-end encryption and CPace-based pairing are landing ([#17](https://github.com/sisyphuslabs/doriface/issues/17)) |
+
+## How it fits together
+
+```
+browser / PWA / desktop ──┐                         ┌── doriface-host ── hc connect ── herdr-core
+                          ├─ Noise (end-to-end) ────┤
+     relay-doriface.omo.dev (sees ciphertext only) ─┘   or directly on your LAN
+```
+
+The host never parses what `hc` says; it pipes the stream. The client SDK speaks herdr-core's protocol itself, so a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire format every package is built against is the [transport contract](docs/transport.md).
 
 ## Layout
 
-| Path                | What it is                                         |
-| ------------------- | -------------------------------------------------- |
-| `packages/protocol` | herdr-core wire codec (frames, JSON-RPC types)     |
-| `packages/crypto`   | pairing, key exchange and encrypted records        |
-| `packages/client`   | client SDK for web, desktop and future native apps |
-| `packages/ui`       | design system: tokens and components               |
-| `apps/host`         | Bun + Hono gateway that runs beside `hc`           |
-| `apps/relay`        | Cloudflare Workers + Durable Objects relay         |
-| `apps/web`          | React web client and installable PWA               |
-| `apps/desktop`      | Electron shell                                     |
-
-## Design
-
-The design system lives in [DESIGN.md](DESIGN.md): herdr-compatible themes, tokens, the Base UI component set in `packages/ui`, and a brief for every screen. `bun run --filter @doriface/ui showcase` opens the primitives and mockups.
-
-| Workspace (dark, 1440)                                            | Phone (light, 390)                                                 |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------ |
-| ![Workspace shell, dark](docs/design/mockups/shell-dark-1440.png) | ![Phone terminal, light](docs/design/mockups/mobile-light-390.png) |
+| Path                    | What it is                                                                  |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `packages/protocol`     | herdr-core wire codec: frames and JSON-RPC types                            |
+| `packages/client`       | client SDK for web, desktop and future native apps                          |
+| `packages/relay-client` | relay uplink and session client                                             |
+| `packages/ghostty-wasm` | libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with provenance  |
+| `packages/ui`           | design system: tokens, themes and components                                |
+| `apps/host`             | `doriface-host`, the Bun + Hono gateway that runs beside `hc`               |
+| `apps/relay`            | Cloudflare Workers + Durable Objects relay ([README](apps/relay/README.md)) |
+| `apps/web`              | React web client and installable PWA                                        |
+| `apps/desktop`          | Electron shell                                                              |
 
 ## Development
 
-Requires [Bun](https://bun.sh) 1.4.4 or newer.
+Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on `PATH` for the integration and end-to-end tests.
 
 ```sh
 bun install
-bun run check   # typecheck, lint, format check, tests
+bun run check                         # typecheck, lint, format check, API codegen check, tests
+bun run --cwd apps/host start         # the host gateway on 127.0.0.1:7766
+bun run --cwd apps/web dev            # the web client
+bun run --cwd apps/desktop start      # the desktop app
+bun run --cwd packages/ui showcase    # every component and screen mockup
 ```
+
+`bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`. Self-hosting the relay is `bun run --cwd apps/relay deploy` with your own Cloudflare account and hostname; see its README.
+
+## Design
+
+The design system lives in [DESIGN.md](DESIGN.md): herdr-compatible themes, tokens, the component set in `packages/ui`, the accessibility rules every theme is tested against, and a brief for every screen. Screen mockups are in [docs/design/mockups](docs/design/mockups), and captures of the real app in [docs/design/app](docs/design/app).
 
 ## License
 
