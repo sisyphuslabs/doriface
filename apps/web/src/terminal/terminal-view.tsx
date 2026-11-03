@@ -9,7 +9,6 @@ import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
-import { settleFocusOnReady } from "./focus-guard.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useTerminalActions } from "./use-terminal-actions.ts";
@@ -39,8 +38,6 @@ export function TerminalView(props: TerminalViewProps) {
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
-  // What held focus just before the renderer mounted, which focuses itself as it starts.
-  const focusBefore = useRef<Element | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -48,11 +45,7 @@ export function TerminalView(props: TerminalViewProps) {
     terminalConfigStore.loaded
       .then(() => loadGhosttyCore({ scrollbackLimit: rendererOptions(terminalConfigStore.config).scrollbackBytes }))
       .then(
-        (loaded) => {
-          if (!live) return loaded.dispose();
-          focusBefore.current = document.activeElement;
-          return setCore(loaded);
-        },
+        (loaded) => (live ? setCore(loaded) : loaded.dispose()),
         (cause: unknown) => setError(`The terminal renderer failed to load: ${String(cause)}`),
       );
     return () => {
@@ -111,7 +104,8 @@ export function TerminalView(props: TerminalViewProps) {
             if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
           attached.onClose(() => onClosed?.(address));
-          if (focused) settleFocusOnReady(document, ready.element, focusBefore.current, () => ready.focus());
+          // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
+          if (focused) ready.focus();
           return attached;
         },
         (cause: unknown) => setError(`Could not open ${address}: ${String(cause)}`),
