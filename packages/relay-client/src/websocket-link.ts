@@ -1,3 +1,4 @@
+import { AckCounter, keepAlive } from "./flow-control.ts";
 import { CloseSignal, Inbox } from "./inbox.ts";
 import {
   type ByteLink,
@@ -9,22 +10,30 @@ import {
 } from "./link.ts";
 import { RELAY_MESSAGE_CAP } from "./limits.ts";
 import { isOpen } from "./socket.ts";
-import { CloseCode } from "./wire/index.ts";
+import { CloseCode, PING_INTERVAL_MS, PONG } from "./wire/index.ts";
 
-/** A binary WebSocket as a ByteLink: one message in, one chunk out. A non-normal close carries a RelayCloseError. */
+/**
+ * A binary relay WebSocket as a ByteLink: one message in, one chunk out. It acks what it receives and pings the relay
+ * so the relay neither stalls nor reaps it. A non-normal close carries a RelayCloseError.
+ */
 export class WebSocketLink implements ByteLink {
   readonly #ws: WebSocket;
   readonly #inbox: Inbox;
   readonly #closed = new CloseSignal();
+  readonly #acks = new AckCounter();
   #closeCode: number | undefined;
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, pingIntervalMs = PING_INTERVAL_MS) {
     this.#ws = ws;
     ws.binaryType = "arraybuffer";
     this.#inbox = new Inbox(() => this.#shut(CloseCode.InternalError, "data listener failed"));
+    keepAlive(ws, pingIntervalMs);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
-      if (event.data instanceof ArrayBuffer) this.#inbox.push(new Uint8Array(event.data));
-      else this.#shut(CloseCode.UnsupportedData, "binary messages only");
+      if (event.data === PONG) return;
+      if (!(event.data instanceof ArrayBuffer)) return this.#shut(CloseCode.UnsupportedData, "binary messages only");
+      const ack = this.#acks.ackFor(event.data.byteLength);
+      if (ack !== undefined && isOpen(ws)) ws.send(ack);
+      this.#inbox.push(new Uint8Array(event.data));
     });
     ws.addEventListener("close", (event: CloseEvent) => this.#finish(event.code, event.reason));
   }

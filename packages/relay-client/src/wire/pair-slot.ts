@@ -2,8 +2,8 @@ import { MUX_HEADER_BYTES, MuxType, muxHeader } from "./mux.ts";
 import { PAIR_SLOT_LENGTH, PAIR_SLOT_PATTERN } from "./pair-code.ts";
 
 /**
- * PAIR_SLOT payloads. Host -> relay: `slot (3 ASCII) || noiseStaticPub (32)`; the relay knows signPub from the
- * challenge and needs noiseStaticPub for `GET /v1/pair/<slot>`. Relay -> host: `slot (3 ASCII) || status u16 LE`.
+ * PAIR_SLOT payloads (contract v1.2 C8). Host -> relay: `slot (3 ASCII) || noiseStaticPub (32)`, or empty to clear
+ * the host's slot; the relay knows signPub from the challenge. Relay -> host: `slot (3 ASCII) || status u16 LE`.
  */
 export const NOISE_STATIC_PUB_BYTES = 32;
 export const PairSlotStatus = { Registered: 200, Taken: 409 } as const;
@@ -29,6 +29,10 @@ export function encodePairSlotRequest(slot: string, noiseStaticPub: Uint8Array):
   const out = slotFrame(slot, NOISE_STATIC_PUB_BYTES);
   out.set(noiseStaticPub, MUX_HEADER_BYTES + PAIR_SLOT_LENGTH);
   return out;
+}
+
+export function encodePairSlotClear(): Uint8Array<ArrayBuffer> {
+  return muxHeader(MuxType.PairSlot, 0, 0);
 }
 
 export function decodePairSlotRequest(

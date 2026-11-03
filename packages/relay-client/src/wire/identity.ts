@@ -34,14 +34,25 @@ export async function hostIdOf(signPub: Uint8Array<ArrayBuffer>): Promise<string
   return base32(digest.subarray(0, 16));
 }
 
-/** The bytes a host signs: `"doriface-relay-v1" || hostId || challenge`, with hostId as its ASCII characters. */
-export function authMessage(hostId: string, challenge: Uint8Array): Uint8Array<ArrayBuffer> {
-  const context = encoder.encode(AUTH_CONTEXT);
-  const id = encoder.encode(hostId);
-  const out = new Uint8Array(context.byteLength + id.byteLength + challenge.byteLength);
-  out.set(context, 0);
-  out.set(id, context.byteLength);
-  out.set(challenge, context.byteLength + id.byteLength);
+/**
+ * The relay origin both ends sign over (contract v1.2 C4): `wss://host[:port]` of the URL the host dialed, with the
+ * default port omitted. `http(s)` URLs map to `ws(s)`, so a host and a relay on plain HTTP agree too.
+ */
+export function relayOriginOf(url: string): string {
+  const parsed = new URL(url);
+  const secure = parsed.protocol === "https:" || parsed.protocol === "wss:";
+  if (!secure && parsed.protocol !== "http:" && parsed.protocol !== "ws:") {
+    throw new Error(`relay URL must be http(s) or ws(s): ${url}`);
+  }
+  return `${secure ? "wss" : "ws"}://${parsed.host}`;
+}
+
+/** The bytes a host signs: `"doriface-relay-v1" || relayOrigin || hostId || challenge`, strings as ASCII. */
+export function authMessage(relayOrigin: string, hostId: string, challenge: Uint8Array): Uint8Array<ArrayBuffer> {
+  const prefix = encoder.encode(`${AUTH_CONTEXT}${relayOrigin}${hostId}`);
+  const out = new Uint8Array(prefix.byteLength + challenge.byteLength);
+  out.set(prefix, 0);
+  out.set(challenge, prefix.byteLength);
   return out;
 }
 
