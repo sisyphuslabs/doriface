@@ -119,9 +119,12 @@ export class Room extends DurableObject<RoomEnv> {
     const challenge = crypto.getRandomValues(new Uint8Array(CHALLENGE_BYTES));
     const openedAt = Date.now();
     attach(server, { role: "host", hostId, relayOrigin, challenge, state: "challenged", sent: 0, acked: 0, openedAt });
-    this.#authenticating.begin(server, () => closeIfOpen(server, CloseCode.RelayAuthFailed, "relay auth timed out"));
+    const { authMs, idleMs } = timeoutsOf(this.env);
+    this.#authenticating.begin(server, authMs, () =>
+      closeIfOpen(server, CloseCode.RelayAuthFailed, "relay auth timed out"),
+    );
     sendControl(server, challenge);
-    await alarmBy(this.ctx, openedAt + timeoutsOf(this.env).idleMs);
+    await alarmBy(this.ctx, openedAt + idleMs);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -129,8 +132,8 @@ export class Room extends DurableObject<RoomEnv> {
   async #settledHost(): Promise<WebSocket | undefined> {
     const host = onlineHost(this.ctx);
     if (host !== undefined || this.#authenticating.size === 0) return host;
-    await this.#authenticating.next();
-    return this.#settledHost();
+    await this.#authenticating.allPendingNow();
+    return onlineHost(this.ctx);
   }
 
   /** Admits a session as pending (contract v1.2 C1); it counts against the 32 only once the host sends DATA. */
