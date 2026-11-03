@@ -1,6 +1,8 @@
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
-import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
+import { execFileSync } from "node:child_process";
+import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { type HcSocket, routeHcSocket } from "./hc-socket.ts";
+import { readSavedEnv } from "./saved-env.ts";
 
 /** Pages start with loopback dev settings pointing at the e2e host. */
 export const test = base.extend({
@@ -20,6 +22,17 @@ export const test = base.extend({
 
 export { expect } from "@playwright/test";
 
+/** How many live terminals the e2e core holds, this machine's and the added machine's, as hc lists them. */
+function liveOnCore(): number {
+  const { hc, env } = readSavedEnv(E2E_HOST_ENV);
+  const listed: unknown = JSON.parse(
+    execFileSync(hc, ["ls", "--json"], { env: { ...process.env, ...env }, encoding: "utf8" }),
+  );
+  const terminals = typeof listed === "object" && listed !== null ? Reflect.get(listed, "terminals") : undefined;
+  if (!Array.isArray(terminals)) throw new Error("hc ls printed no terminal list");
+  return terminals.length;
+}
+
 /** "4 terminals", optionally followed by " · 1 needs you". */
 const TERMINAL_COUNT = /^\d+ terminals?\b/;
 
@@ -28,8 +41,9 @@ export async function terminalCount(
   page: Page,
 ): Promise<{ readonly before: number; readonly grown: () => Promise<void> }> {
   const count = page.getByRole("contentinfo").getByText(TERMINAL_COUNT);
-  await expect(count).toBeVisible({ timeout: 20_000 });
-  const before = Number.parseInt((await count.textContent()) ?? "0", 10);
+  // The bar reads 0 before the first terminal.list answers (#81), so the baseline is the core's own count.
+  const before = liveOnCore();
+  await expect(count).toHaveText(new RegExp(`^${before} terminals?\\b`), { timeout: 20_000 });
   const next = new RegExp(`^${before + 1} terminals?\\b`);
   return { before, grown: () => expect(count).toHaveText(next, { timeout: 15_000 }) };
 }
