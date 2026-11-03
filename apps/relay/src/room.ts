@@ -210,8 +210,8 @@ export class Room extends DurableObject<RoomEnv> {
       if (error instanceof MuxError) return host.close(CloseCode.RelayProtocolError, error.message);
       throw error;
     }
-    if (frame.type === MuxType.Open || frame.type === MuxType.PairSlotAck) {
-      return host.close(CloseCode.RelayProtocolError, "OPEN and PAIR_SLOT_ACK go relay to host only");
+    if (frame.type === MuxType.Open || frame.type === MuxType.PairSlotAck || frame.type === MuxType.Credit) {
+      return host.close(CloseCode.RelayProtocolError, "OPEN, PAIR_SLOT_ACK and CREDIT go relay to host only");
     }
     if (frame.type === MuxType.PairSlot)
       return handlePairSlot(this.env, this.ctx.storage, host, attachment, frame.payload);
