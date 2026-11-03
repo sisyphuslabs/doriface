@@ -1,12 +1,15 @@
-import { IconButton, SidebarSection, cn } from "@doriface/ui";
+import { Button, IconButton, Notice, SidebarSection, cn } from "@doriface/ui";
 import { Monitor, Plus, Server } from "lucide-react";
 import { type MachineEntry, stateLabel } from "./machines.ts";
+import type { RunFailure } from "./start-on.ts";
 
 export interface MachineListProps {
   readonly entries: readonly MachineEntry[];
   readonly activeMachine: string | undefined;
   readonly onOpen: (address: string) => void;
   readonly onNewOn: (machine: string) => void;
+  readonly failure?: RunFailure | undefined;
+  readonly onDismiss?: () => void;
   readonly className?: string;
 }
 
@@ -17,7 +20,15 @@ const STATE_TONE: Readonly<Record<string, string>> = {
 };
 
 /** Every machine this core reaches: this one, then the ones `hc machine add` added, with state and terminals. */
-export function MachineList({ entries, activeMachine, onOpen, onNewOn, className }: MachineListProps) {
+export function MachineList({
+  entries,
+  activeMachine,
+  onOpen,
+  onNewOn,
+  failure,
+  onDismiss,
+  className,
+}: MachineListProps) {
   return (
     <SidebarSection title="Machines" count={entries.length} {...(className === undefined ? {} : { className })}>
       {entries.map((machine) => {
@@ -60,6 +71,20 @@ export function MachineList({ entries, activeMachine, onOpen, onNewOn, className
           </div>
         );
       })}
+      {failure === undefined ? null : (
+        <Notice
+          tone="error"
+          className="mx-1 mt-1"
+          title={`No new terminal on ${failure.machine}`}
+          actions={
+            <Button variant="ghost" size="sm" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          }
+        >
+          {failure.message}
+        </Notice>
+      )}
     </SidebarSection>
   );
 }

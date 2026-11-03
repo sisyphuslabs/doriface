@@ -6,6 +6,7 @@ import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
 import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
+import { startOn, type RunFailure } from "./start-on.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { useTabs } from "./use-tabs.ts";
@@ -27,13 +28,32 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPalette((shown) => !shown);
     return true;
   });
-  const { entries } = useMachines(connection, terminals);
-  const newTerminal = (on?: string): void => {
-    void connection.call("terminal.run", on === undefined ? {} : { on }).then((started) => {
-      tabs.select(started.address);
-      setPhoneOpen(started.address);
+  const { entries, refresh } = useMachines(connection, terminals);
+  const [failure, setFailure] = useState<RunFailure | undefined>(undefined);
+  const opened = (address: string): void => {
+    tabs.select(address);
+    setPhoneOpen(address);
+  };
+  const newTerminal = (): void => {
+    void connection.call("terminal.run", {}).then((started) => {
+      opened(started.address);
       return started;
     });
+  };
+  const newTerminalOn = (machine: string): void => {
+    setFailure(undefined);
+    startOn((params) => connection.call("terminal.run", params), machine).then(
+      (started) => {
+        if (started.ok) {
+          opened(started.address);
+          return started;
+        }
+        setFailure(started.failure);
+        refresh();
+        return started;
+      },
+      (error: unknown) => setFailure({ machine, kind: "connection", message: String(error) }),
+    );
   };
   const openTerminal = (address: string): void => {
     tabs.select(address);
@@ -41,7 +61,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   };
   const onPalette = (): void => setPalette(true);
 
-  const machines = { entries, newTerminalOn: newTerminal };
+  const machines = { entries, newTerminalOn, failure, dismissFailure: () => setFailure(undefined) };
   return (
     <MachinesContext value={machines}>
       {narrow ? (

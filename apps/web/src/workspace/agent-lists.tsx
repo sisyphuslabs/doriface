@@ -53,6 +53,8 @@ export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: A
           activeMachine={activeMachine}
           onOpen={onOpen}
           onNewOn={machines.newTerminalOn}
+          failure={machines.failure}
+          onDismiss={machines.dismissFailure}
           {...(agentsFirst ? { className: "order-last" } : {})}
         />
       ) : null}
