@@ -8,14 +8,20 @@ import { lazy, Suspense } from "react";
 
 const Workspace = lazy(() => import("../workspace/workspace.tsx").then((module) => ({ default: module.Workspace })));
 
-/** The workspace once connected; otherwise what is happening and the next step. */
+/** The workspace once connected (and while it reconnects); otherwise what is happening and the next step. */
 export function WorkspaceRoute() {
   const state = useConnection();
   const online = useOnline();
-  if (state.phase === "open") {
+  const shown =
+    state.phase === "open"
+      ? state.connection
+      : state.phase === "connecting" || state.phase === "failed"
+        ? state.stale
+        : null;
+  if (shown !== null) {
     return (
       <Suspense fallback={<div className="h-dvh bg-background" aria-busy="true" />}>
-        <Workspace connection={state.connection} />
+        <Workspace connection={shown} />
       </Suspense>
     );
   }
