@@ -6,9 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { appArgs, appDir, packagedExecutable } from "./launch.ts";
-
-const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
+import { appArgs, launchOptions, packagedExecutable } from "./launch.ts";
 
 const signPub = new Uint8Array(32).map((_, index) => (index * 37 + 11) % 256);
 const linkSecret = new Uint8Array(32).fill(7);
@@ -38,9 +36,8 @@ test.beforeAll(async () => {
     Object.entries({ ...process.env, ...hc.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
   scratch = { hc, profile, env };
-  const args = instanceArgs(profile);
   launched = await electron.launch({
-    ...(packagedExecutable === undefined ? { args } : { executablePath: attachAfterFirstLoad, args }),
+    ...launchOptions([`--user-data-dir=${profile}`]),
     env,
   });
 });

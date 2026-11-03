@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TRAFFIC_LIGHTS } from "../src/config/window.ts";
 import { scratchHcSession } from "./hc-session.ts";
-import { appArgs, packagedExecutable as executablePath } from "./launch.ts";
+import { launchOptions } from "./launch.ts";
 
 test.skip(process.platform !== "darwin", "the hidden-inset titlebar and its window buttons exist only on macOS");
 
@@ -33,8 +33,7 @@ test.beforeAll(async () => {
   );
   const args = [`--user-data-dir=${profile}`];
   launched = await electron.launch({
-    ...(executablePath === undefined ? {} : { executablePath }),
-    args: appArgs(args),
+    ...launchOptions(args),
     env,
   });
 });
