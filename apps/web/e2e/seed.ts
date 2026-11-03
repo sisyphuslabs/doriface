@@ -1,0 +1,34 @@
+// Demo terminals for screenshot captures: a plain shell and three agents reporting OSC 7501 status.
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+const agent = (state: string, msg: string, lines: readonly string[]): string[] => [
+  "sh",
+  "-c",
+  `printf '\\033]7501;state=${state}:msg=${btoa(msg)}\\033\\\\'; printf '%s\\n' ${lines.map((line) => `'${line}'`).join(" ")}; exec sleep 3600`,
+];
+
+const SEEDS: readonly { readonly name: string; readonly space: string; readonly argv: readonly string[] }[] = [
+  { name: "shell", space: "doriface", argv: ["env", "PS1=$ ", "bash", "--norc", "--noprofile", "-i"] },
+  {
+    name: "review",
+    space: "doriface",
+    argv: agent("working", "Reviewing the relay PR", ["Reading apps/relay/src/session.ts", "Checking close codes"]),
+  },
+  {
+    name: "deploy",
+    space: "website",
+    argv: agent("blocked", "Approve the production deploy?", ["Build passed", "Waiting for approval"]),
+  },
+  { name: "tests", space: "website", argv: agent("done", "All 128 tests passed", ["128 pass", "0 fail"]) },
+];
+
+export async function seed(hc: string, env: Record<string, string | undefined>, root: string): Promise<void> {
+  const runs = SEEDS.map(async ({ name, space, argv }) => {
+    const cwd = join(root, space);
+    mkdirSync(cwd, { recursive: true });
+    const run = Bun.spawn([hc, "run", "--bg", "--name", name, "--", ...argv], { env, cwd, stdout: "ignore" });
+    if ((await run.exited) !== 0) throw new Error(`hc run ${name} failed`);
+  });
+  await Promise.all(runs);
+}
