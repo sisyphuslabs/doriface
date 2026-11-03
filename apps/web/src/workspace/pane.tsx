@@ -7,6 +7,7 @@ import { useActionKeys } from "../keys/use-action-keys.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { agentStatus, machineOf, spaceName, terminalTitle } from "./model.ts";
+import { SessionMenu } from "./session-menu.tsx";
 
 export interface PaneProps {
   readonly connection: HcConnection;
@@ -53,6 +54,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
         <span title={where} className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
           {where}
         </span>
+        <SessionMenu address={terminal.address} />
       </header>
       {/* A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh. */}
       <TerminalView

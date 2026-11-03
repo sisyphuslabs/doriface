@@ -13,7 +13,7 @@ import { AgentLists } from "./agent-lists.tsx";
 import { agentStatus, terminalTitle } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { RovingLists } from "./roving-lists.tsx";
-import { usePhoneActions } from "./use-app-actions.ts";
+import { usePhoneActions, type SessionVerb } from "./use-app-actions.ts";
 
 export interface PhoneShellProps {
   readonly connection: HcConnection;
@@ -23,11 +23,13 @@ export interface PhoneShellProps {
   readonly onBack: () => void;
   readonly onNew: () => void;
   readonly onPalette: () => void;
+  readonly onSession: SessionVerb;
 }
 
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
-export function PhoneShell({ connection, terminals, open, onOpen, onBack, onNew, onPalette }: PhoneShellProps) {
-  usePhoneActions(onNew);
+export function PhoneShell(props: PhoneShellProps) {
+  const { connection, terminals, open, onOpen, onBack, onNew, onPalette, onSession } = props;
+  usePhoneActions(onNew, onSession);
   const terminal = terminals.find((entry) => entry.address === open);
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
