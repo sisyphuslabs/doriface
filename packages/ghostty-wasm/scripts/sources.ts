@@ -20,9 +20,12 @@ const COMMIT = /^[0-9a-f]{40}$/;
 /** Unpinned refs resolve through the GitHub API; their archive digest is recorded, not checked. */
 export async function resolveGhostty(ref: string): Promise<GhosttyRevision> {
   if (ref === GHOSTTY.tag || ref.toLowerCase() === GHOSTTY.commit) return GHOSTTY;
-  const response = await fetch(`https://api.github.com/repos/${GHOSTTY.repository}/commits/${ref}`, {
-    headers: { accept: "application/vnd.github.sha" },
-  });
+  const response = await fetch(
+    `https://api.github.com/repos/${GHOSTTY.repository}/commits/${encodeURIComponent(ref)}`,
+    {
+      headers: { accept: "application/vnd.github.sha" },
+    },
+  );
   const commit = (await response.text()).trim();
   if (!response.ok || !COMMIT.test(commit)) throw new BuildStepError("resolve", `cannot resolve ghostty ref ${ref}`);
   if (commit === GHOSTTY.commit) return GHOSTTY;
