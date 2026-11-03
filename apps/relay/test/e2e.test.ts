@@ -1,11 +1,17 @@
-import { bridge, HcPipe } from "@doriface/host";
+import { HcConnection } from "@doriface/client";
 import {
-  connectRelayClient,
-  ed25519Signer,
-  generateSigningKey,
-  Uplink,
-  type WebSocketLink,
-} from "@doriface/relay-client";
+  CloseCode,
+  generateX25519,
+  type KeyPair,
+  type PairingLink,
+  parsePairingUrl,
+  rawStaticKey,
+  type SecureLink,
+  secureLink,
+  SecureLinkError,
+} from "@doriface/crypto";
+import { type Host, startHost } from "@doriface/host";
+import { connectRelayClient, lookupPairSlot, pairSlotOf } from "@doriface/relay-client";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,75 +21,115 @@ import { createHcSession, HELLO, type HcSession, rpcFrame } from "../../host/src
 import { capturingSockets } from "./support/capture.ts";
 import { drainUntil, field, input, type ParsedFrame, replyTo, rpc } from "./support/hc-frames.ts";
 import { socketFrom, testIp } from "./support/probe.ts";
-import { ENCRYPTED } from "./support/record-layer.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 
+const CLI = join(import.meta.dir, "..", "..", "host", "src", "cli.ts");
 const decoder = new TextDecoder();
 const scratch = mkdtempSync(join(tmpdir(), "relay-e2e-"));
+const stateDir = join(scratch, "host-state");
 const captureFile = join(scratch, "relay-observed.bin");
+const ip = testIp();
+const sockets = capturingSockets(captureFile, socketFrom(ip));
+const phone = generateX25519();
 const logs: string[] = [];
+const connected = Promise.withResolvers<void>();
 let relay: LocalRelay | undefined;
-let hcSession: HcSession | undefined;
-let uplink: Uplink | undefined;
-let relayClient: WebSocketLink | undefined;
-const reader = new ByteReader();
+let hc: HcSession | undefined;
+let host: Host | undefined;
+let paired: { readonly hostId: string; readonly noiseStaticPub: Uint8Array; readonly lookedUp: Uint8Array };
 
-/** What beforeAll set up; the tests only run once all of it exists. */
-function started(): { readonly client: WebSocketLink; readonly session: HcSession } {
-  if (relayClient === undefined || hcSession === undefined) {
-    throw new Error("the relay end-to-end setup did not finish");
-  }
-  return { client: relayClient, session: hcSession };
+function started(): { readonly relayUrl: string; readonly session: HcSession } {
+  if (relay === undefined || hc === undefined || host === undefined) throw new Error("the e2e setup did not finish");
+  return { relayUrl: relay.url, session: hc };
+}
+
+async function pairOffer(relayUrl: string): Promise<{ readonly link: PairingLink; readonly code: string }> {
+  const args = ["pair", "--no-qr", "--web-origin", "https://web.example", "--relay", relayUrl, "--state-dir", stateDir];
+  const proc = Bun.spawn([process.execPath, CLI, ...args], { stdout: "pipe", stderr: "pipe" });
+  const stdout = await new Response(proc.stdout).text();
+  const url = stdout.split("\n").find((line) => line.startsWith("https://web.example/pair#"));
+  const code = /^code\s+(\S{4}) (\S{4})/m.exec(stdout);
+  if ((await proc.exited) !== 0 || url === undefined || code === null) throw new Error(`pair failed: ${stdout}`);
+  return { link: parsePairingUrl(url), code: `${code[1]}${code[2]}` };
+}
+
+async function dial(key: KeyPair, pairing?: { readonly code: string }): Promise<SecureLink> {
+  const { relayUrl } = started();
+  const pairSlot = pairing === undefined ? undefined : pairSlotOf(pairing.code);
+  const link = await connectRelayClient({
+    relayUrl,
+    hostId: paired.hostId,
+    createSocket: sockets.client,
+    ...(pairSlot === undefined ? {} : { pairSlot }),
+  });
+  return secureLink(link, {
+    role: "initiator",
+    hostId: paired.hostId,
+    staticKey: rawStaticKey(key),
+    remoteStatic: paired.noiseStaticPub,
+    pairing: pairing === undefined ? undefined : { mode: "code", code: pairing.code, name: "relay e2e" },
+  });
+}
+
+const fetchFrom = (url: string): Promise<Response> => fetch(url, { headers: { "cf-connecting-ip": ip } });
+
+function readerOf(link: SecureLink): ByteReader {
+  const reader = new ByteReader();
+  link.onData((bytes) => reader.push(bytes));
+  link.onClose(() => reader.end());
+  return reader;
 }
 
 beforeAll(async () => {
-  relay = await startLocalRelay();
-  const hc = createHcSession("doriface-relay-e2e");
-  hcSession = hc;
-  const ip = testIp();
-  const sockets = capturingSockets(captureFile, socketFrom(ip));
-  const answered = Promise.withResolvers<void>();
-  uplink = await Uplink.start({
-    relayUrl: relay.url,
-    signer: ed25519Signer(generateSigningKey()),
-    createSocket: sockets.host,
-    onState: (state) => {
-      if (state.state === "answered") answered.resolve();
-    },
-    onSession: (link) => {
-      const pipe = new HcPipe({
-        hc: hc.hc,
-        session: hc.name,
-        env: hc.env,
-        log: (line) => logs.push(line),
-      });
-      void bridge(link, pipe, (error) => logs.push(`bridge: ${String(error)}`));
+  const localRelay = await startLocalRelay();
+  relay = localRelay;
+  const session = createHcSession("doriface-relay-e2e");
+  hc = session;
+  host = await startHost({
+    listen: { hostname: "127.0.0.1", port: 0 },
+    token: "relay-e2e-token-relay-e2e-token-relay-e2e-tok",
+    hc: session.hc,
+    session: session.name,
+    env: session.env,
+    stateDir,
+    relay: { url: localRelay.url, createSocket: sockets.host },
+    log: (line) => {
+      logs.push(line);
+      if (line.startsWith("relay: connected")) connected.resolve();
     },
   });
-  await answered.promise;
-  const link = await connectRelayClient({ relayUrl: relay.url, hostId: uplink.hostId, createSocket: sockets.client });
-  relayClient = link;
-  link.onData((bytes) => reader.push(bytes));
-  link.onClose(() => reader.end());
+  await connected.promise;
+  const { link, code } = await pairOffer(localRelay.url);
+  const record = await lookupPairSlot({ relayUrl: localRelay.url, code, fetch: fetchFrom });
+  if (record === undefined) throw new Error("the relay has no host on the code's slot");
+  paired = { hostId: record.hostId, noiseStaticPub: record.noiseStaticPub, lookedUp: link.noiseStaticPub };
+  const pairing = await HcConnection.open(await dial(phone, { code }));
+  pairing.close();
 }, 120_000);
 
 afterAll(async () => {
-  // Bridge and hc pipe diagnostics, so a failure above comes with the host side's own account.
-  if (logs.length > 0) console.log(`host-side log:\n${logs.join("\n")}`);
-  relayClient?.close();
-  uplink?.stop();
-  await hcSession?.dispose();
+  if (logs.length > 0) console.log(`host log:\n${logs.join("\n")}`);
+  await host?.stop();
+  await hc?.dispose();
   await relay?.stop();
   rmSync(scratch, { recursive: true, force: true });
 });
 
-describe("client -> relay -> host uplink -> hc", () => {
+describe("web-style client -> relay -> doriface-host uplink -> hc, end to end encrypted", () => {
+  test("the typed code's slot lookup names the host the pairing link names, and CPace paired the device", () => {
+    expect(paired.noiseStaticPub).toEqual(paired.lookedUp);
+    expect(logs).toContain('paired device "relay e2e"');
+  });
+
   test("hello and terminal.list replies are byte-identical to a direct hc connect", async () => {
-    const { client, session } = started();
-    client.send(HELLO);
+    const { session } = started();
+    const link = await dial(phone);
+    const reader = readerOf(link);
+    link.send(HELLO);
     const helloViaRelay = await reader.line();
-    client.send(rpcFrame(1, "terminal.list"));
+    link.send(rpcFrame(1, "terminal.list"));
     const listViaRelay = await reader.frame();
+    link.close();
 
     const direct = session.connect();
     await direct.write(HELLO);
@@ -96,35 +142,51 @@ describe("client -> relay -> host uplink -> hc", () => {
     expect(JSON.parse(decoder.decode(helloViaRelay)).result.framed).toBe(true);
     expect(helloViaRelay).toEqual(helloDirect);
     expect(listViaRelay).toEqual(listDirect);
-    console.log(
-      `via relay, byte-identical: hello ${helloViaRelay.byteLength} B, terminal.list ${listViaRelay.byteLength} B`,
-    );
   }, 30_000);
 
-  test("typing 'echo doriface-ok' into an attached shell round-trips; the relay sees ciphertext only with crypto", async () => {
-    const { client } = started();
+  test("the client SDK runs server.status and terminal.list through the relay", async () => {
+    const connection = await HcConnection.open(await dial(phone));
+    const [status, terminals] = await Promise.all([connection.call("server.status"), connection.call("terminal.list")]);
+    connection.close();
+    expect(typeof status).toBe("object");
+    expect(Array.isArray(field(terminals, "terminals"))).toBe(true);
+  }, 30_000);
+
+  test("typing 'echo doriface-ok' round-trips while the relay forwards only ciphertext", async () => {
+    const link = await dial(phone);
+    const reader = readerOf(link);
     let channel = -1;
     let screen = "";
     const onTerminal = (frame: ParsedFrame): void => {
       if (frame.channel === channel) screen += decoder.decode(frame.payload, { stream: true });
     };
     const printedOk = (): boolean => screen.split(/\r?\n/).some((line) => line.trim() === "doriface-ok");
-
-    client.send(rpc(2, "terminal.run", { argv: ["/bin/sh"], cwd: scratch, env: { PS1: "$ ", HOME: scratch } }));
+    link.send(HELLO);
+    await reader.line();
+    link.send(rpc(2, "terminal.run", { argv: ["/bin/sh"], cwd: scratch, env: { PS1: "$ ", HOME: scratch } }));
     const address = field(await replyTo(reader, 2, onTerminal), "address");
     if (typeof address !== "string") throw new Error("terminal.run returned no address");
-    client.send(rpc(3, "terminal.attach", { terminal: address, cols: 100, rows: 30 }));
+    link.send(rpc(3, "terminal.attach", { terminal: address, cols: 100, rows: 30 }));
     const attached = field(await replyTo(reader, 3, onTerminal), "channel");
     if (typeof attached !== "number") throw new Error("terminal.attach returned no channel");
     channel = attached;
-    client.send(input(channel, "echo doriface-ok\r"));
+    link.send(input(channel, "echo doriface-ok\r"));
     await drainUntil(reader, printedOk, onTerminal);
-    client.send(rpc(4, "terminal.kill", { terminal: address }));
+    link.send(rpc(4, "terminal.kill", { terminal: address }));
     expect(field(await replyTo(reader, 4, onTerminal), "state")).toBe("finished");
+    link.close();
 
-    // LEAD RE-RUN after @doriface/crypto merges: with ENCRYPTED true this must find no 'doriface-ok' in the capture.
     const observed = readFileSync(captureFile).toString("latin1");
-    console.log(`relay observed ${observed.length} payload bytes; encrypted=${ENCRYPTED}`);
-    expect(observed.includes("doriface-ok")).toBe(!ENCRYPTED);
+    expect(observed.length).toBeGreaterThan(0);
+    expect(observed.includes("doriface-ok")).toBe(false);
+    expect(observed.includes("echo")).toBe(false);
+  }, 30_000);
+
+  test("a device the host never paired is refused with 4401 through the relay", async () => {
+    const error = await dial(generateX25519()).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error instanceof SecureLinkError && error.code).toBe(CloseCode.UnknownDevice);
   }, 30_000);
 });

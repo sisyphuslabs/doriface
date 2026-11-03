@@ -15,6 +15,12 @@
       "path": "../../../packages/protocol"
     },
     {
+      "path": "../../../packages/crypto"
+    },
+    {
+      "path": "../../../packages/client"
+    },
+    {
       "path": "../../host"
     },
     {
