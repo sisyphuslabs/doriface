@@ -104,3 +104,15 @@ test("New tab while reconnecting says it could not open one instead of doing not
   await expect(page.getByText(/try again once it is back/)).toBeVisible();
   socket.restore();
 });
+
+test("the reconnect label counts down to the next attempt", async ({ page }) => {
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  await socket.drop(true);
+  // Refused attempts back off 0.5, 1, 2, then 5 s; the 5 s wait must read 5 s and then 4 s.
+  const status = page.getByRole("status").filter({ hasText: "Reconnecting" });
+  await expect(status).toHaveText("Reconnecting in 5 s", { timeout: 15_000 });
+  await expect(status).toHaveText("Reconnecting in 4 s", { timeout: 3_000 });
+  socket.restore();
+});
