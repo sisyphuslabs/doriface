@@ -15,6 +15,9 @@ export function PaletteScreen() {
             role="dialog"
             aria-modal
             aria-label="Command palette"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setOpen(false);
+            }}
             className="absolute inset-x-0 top-0 flex justify-center px-3 pt-3 md:pt-[12vh]"
           >
             <CommandPalette commands={COMMANDS} defaultQuery="" onCancel={() => setOpen(false)} />
