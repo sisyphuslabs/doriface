@@ -7,9 +7,12 @@ import type { PairingStore, PendingPairing } from "./state/pairing.ts";
  * only the link or QR code pairs.
  */
 export interface PairingSlotRegistrar {
-  /** Registers the slot; "collision" when the relay answers 409 because another host holds it. */
-  register(slot: string): Promise<"registered" | "collision">;
-  /** The offer behind the slot ended: paired, expired or replaced. */
+  /**
+   * Registers the slot with this host's Noise static key, sent as `encodePairSlot(slot, noiseStaticPub)`;
+   * "collision" when the relay answers 409 because another host holds it.
+   */
+  register(slot: string, noiseStaticPub: Uint8Array): Promise<"registered" | "collision">;
+  /** The offer behind the slot ended (paired, expired or replaced): send the empty PAIR_SLOT (`PAIR_SLOT_CLEAR`). */
   release?(slot: string): void;
 }
 
@@ -19,13 +22,20 @@ const MAX_REDRAWS = 8;
 export class PairingSlots {
   readonly #store: PairingStore;
   readonly #registrar: PairingSlotRegistrar | undefined;
+  readonly #noiseStaticPub: Uint8Array;
   readonly #log: (line: string) => void;
   #registered: { readonly code: string; readonly timer: ReturnType<typeof setTimeout> } | undefined;
   #running: Promise<void> = Promise.resolve();
   #stopWatch: (() => void) | undefined;
 
-  constructor(store: PairingStore, registrar: PairingSlotRegistrar | undefined, log: (line: string) => void) {
+  constructor(
+    store: PairingStore,
+    noiseStaticPub: Uint8Array,
+    registrar: PairingSlotRegistrar | undefined,
+    log: (line: string) => void,
+  ) {
     this.#store = store;
+    this.#noiseStaticPub = noiseStaticPub;
     this.#registrar = registrar;
     this.#log = log;
   }
@@ -69,7 +79,7 @@ export class PairingSlots {
 
   async #register(registrar: PairingSlotRegistrar, pending: PendingPairing, redraws: number): Promise<void> {
     if (redraws >= MAX_REDRAWS) return this.#store.setSlot(pending.code, "unavailable");
-    const answer = await registrar.register(pairingSlotOf(pending.code));
+    const answer = await registrar.register(pairingSlotOf(pending.code), this.#noiseStaticPub);
     if (answer === "registered") {
       const timer = setTimeout(() => this.sync(), Math.max(0, pending.expiresAt - Date.now()));
       this.#registered = { code: pending.code, timer };
