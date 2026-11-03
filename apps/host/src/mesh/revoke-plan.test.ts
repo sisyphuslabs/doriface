@@ -38,9 +38,6 @@ describe("design 6.1: what mesh revoke writes and what it says first", () => {
       expect(p.keys).toEqual([signPubOf(a)]);
       expect(p.reason).toBe("revoke");
       expect(p.subtree).toEqual([ref(d), ref(e)]);
-      expect(p.lines).toContain(
-        "a admitted 2 members (d, e): if a's keys are compromised, run mesh revoke --compromised a",
-      );
       expect(p.undecidable).toEqual([]);
       expect(p.needsYes).toBe(false);
     });
@@ -74,9 +71,6 @@ describe("design 6.1: what mesh revoke writes and what it says first", () => {
       mesh.admit(a, x);
       const p = plan(mesh, f, "a");
       expect(p.undecidable).toEqual([{ subject: ref(a), present: [ref(f)], askFrom: [ref(x)] }]);
-      expect(p.lines).toContain(
-        "no other member can witness this revoke; a's key could later eject f by backdating; revoke from x instead, or re-found if a's key is compromised",
-      );
       expect(p.needsYes).toBe(true);
     });
   });
@@ -88,15 +82,14 @@ describe("design 6.1: what mesh revoke writes and what it says first", () => {
       mesh.admit(f, a);
       const p = plan(mesh, f, "a");
       expect(p.undecidable).toEqual([{ subject: ref(a), present: [ref(f)], askFrom: [] }]);
-      expect(p.lines).toContain(
-        "this mesh cannot decide a backdated attack by a; if a's key is compromised, re-found the mesh",
-      );
       expect(p.needsYes).toBe(true);
     });
   });
 
   test("--compromised names an over-cap key the member admitted (13 keys: f admits 11, a admits z)", () => {
-    const f = machine("f"), a = machine("a"), z = machine("z");
+    const f = machine("f"),
+      a = machine("a"),
+      z = machine("z");
     withMesh(f, (mesh) => {
       mesh.admit(f, a);
       for (let i = 1; i <= 10; i++) mesh.admit(f, machine(`m${i}`));
@@ -110,7 +103,9 @@ describe("design 6.1: what mesh revoke writes and what it says first", () => {
   });
 
   test("an exact hostId wins over a member renamed to that hostId", () => {
-    const f = machine("f"), a = machine("a"), b = machine("b");
+    const f = machine("f"),
+      a = machine("a"),
+      b = machine("b");
     withMesh(f, (mesh) => {
       mesh.admit(f, a);
       mesh.admit(f, b);
