@@ -3,8 +3,9 @@ import { ByteQueue, type DataHandler, type Link } from "../link.ts";
 import type { WsLink } from "../ws-link.ts";
 
 /**
- * A server WebSocket as the crypto layer's ByteLink. `send` is fire-and-forget there, so the latest socket write
- * stays reachable through `flushed`, which is how the host keeps waiting for Bun's drain before reading more.
+ * A server WebSocket as the crypto layer's ByteLink. `send` is fire-and-forget there, so the socket writes stay
+ * reachable through `flushed`, which settles once every write so far has; that is how the host waits for Bun's drain
+ * before reading more.
  */
 export class WsByteLink<T> implements ByteLink {
   readonly #ws: WsLink<T>;
@@ -16,8 +17,9 @@ export class WsByteLink<T> implements ByteLink {
   }
 
   send(bytes: Uint8Array): void {
-    this.#pending = this.#ws.send(bytes);
-    this.#pending.catch(() => this.#ws.close(1011, "send failed"));
+    const sent = this.#ws.send(bytes);
+    sent.catch(() => this.#ws.close(1011, "send failed"));
+    this.#pending = Promise.all([this.#pending, sent]).then(() => undefined);
   }
 
   flushed(): Promise<void> {
