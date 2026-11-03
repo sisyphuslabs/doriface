@@ -19,19 +19,24 @@ export interface KeybindingRowProps {
 
 /**
  * Listens for the next key combination; a plain Escape cancels, a modified one is recorded. It takes focus
- * while it listens, so the keyboard user stays at the row instead of on the page body.
+ * while it listens, so the keyboard user stays at the row instead of on the page body. Tab and Shift+Tab are
+ * how a keyboard user leaves, so they move focus on and end the recording without binding; a chord with
+ * Ctrl, Alt or Cmd on Tab is still recorded.
  */
 function Recorder({
   onRecord,
   onCancel,
+  onLeave,
 }: {
   readonly onRecord: (trigger: string) => void;
   readonly onCancel: () => void;
+  readonly onLeave: () => void;
 }) {
   const self = useRef<HTMLSpanElement>(null);
   useEffect(() => self.current?.focus(), []);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) return;
       event.preventDefault();
       event.stopPropagation();
       const modified = event.ctrlKey || event.altKey || event.shiftKey || event.metaKey;
@@ -48,6 +53,10 @@ function Recorder({
       role="status"
       data-captures-keys
       tabIndex={-1}
+      onBlur={() => {
+        // Switching windows blurs it too; the recorder gets focus back with the window, so it keeps listening.
+        if (document.hasFocus()) onLeave();
+      }}
       className="inline-flex h-(--control) items-center rounded-md border border-ring px-2.5 text-sm text-foreground"
     >
       Press keys…
@@ -68,7 +77,7 @@ export function KeybindingRow({
   const [recording, setRecording] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const recordButton = useRef<HTMLButtonElement>(null);
-  // Set when recording or the conflict prompt ends by the keyboard user's choice: focus goes back to the row.
+  // Set when recording or the conflict prompt ends by the user's choice (not by leaving): focus goes back to the row.
   const returnFocus = useRef(false);
   useEffect(() => {
     if (recording || pending !== null || !returnFocus.current) return;
@@ -142,7 +151,7 @@ export function KeybindingRow({
             </span>
           ))}
           {recording ? (
-            <Recorder onRecord={record} onCancel={finish} />
+            <Recorder onRecord={record} onCancel={finish} onLeave={() => setRecording(false)} />
           ) : (
             <IconButton
               ref={recordButton}
