@@ -49,10 +49,8 @@ export function ShortcutField({
           aria-label={state === "idle" ? `${action}: ${keys.join(" ")}. Record a new shortcut` : `${action}: recording`}
           onClick={state === "idle" ? onRecord : undefined}
           className={cn(
-            "flex h-(--control-sm) items-center rounded-md border outline-none focus-visible:outline-2 focus-visible:outline-ring",
-            state === "idle"
-              ? "border-input px-1.5 hover:bg-hover"
-              : "min-w-32 gap-1.5 border-ring bg-surface px-2 text-sm text-foreground",
+            "flex h-(--control-sm) min-w-32 items-center justify-center gap-1.5 rounded-md border px-2 text-sm outline-none focus-visible:outline-2 focus-visible:outline-ring",
+            state === "idle" ? "border-input hover:bg-hover" : "border-ring bg-surface text-foreground",
           )}
         >
           {state === "idle" ? <Kbd keys={keys} persistent /> : null}
