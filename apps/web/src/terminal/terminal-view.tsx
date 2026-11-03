@@ -46,6 +46,7 @@ export function TerminalView(props: TerminalViewProps) {
   const [core, setCore] = useState<GhosttyCore | null>(null);
   const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
   const toasts = useToastManager();
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
@@ -65,7 +66,14 @@ export function TerminalView(props: TerminalViewProps) {
     };
   }, []);
 
-  useEffect(() => () => void stream.current?.close(), []);
+  const unmounted = useRef(false);
+  useEffect(
+    () => () => {
+      unmounted.current = true;
+      void stream.current?.close();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (focused) handle.current?.focus();
@@ -108,6 +116,22 @@ export function TerminalView(props: TerminalViewProps) {
     isFocused.current = focused;
   }, [focused]);
 
+  /** The core ended the stream, or refused a reattach, with the program not known to be over: ask it what is left. */
+  const settle = (ready: WTerm, failed: string | null): void => {
+    void connection.call("terminal.get", { terminal: address }).then(
+      (terminal) => {
+        // A program that ended while the connection was down sent no CLOSE: its tab closes as that CLOSE would have.
+        if (terminal.state !== "live")
+          return failed !== null && !attachedBefore.current ? setError(failed) : onEnd?.(address, "finished");
+        // Lost and waiting for its new shell; the restarted program's pid gives it a new view (see pid).
+        if (terminal.pid === null || terminal.pid === undefined) return setRestarting(true);
+        if (terminal.pid !== program.current) return undefined;
+        return failed === null ? attach(ready) : setError(failed);
+      },
+      () => (connection.closed ? undefined : onEnd?.(address, "finished")),
+    );
+  };
+
   const attach = (ready: WTerm): void => {
     setWt(ready);
     attachedTo.current = connection;
@@ -121,6 +145,7 @@ export function TerminalView(props: TerminalViewProps) {
       .attach({ terminal: address, cols, rows, history: HISTORY_LINES, display, ...resumed }, { autoCredit: false })
       .then(
         (attached) => {
+          if (unmounted.current) return void attached.close();
           // The program restarted while the line was down: what was typed for it must not reach the new one.
           if (attachedBefore.current && attached.terminal.pid !== program.current) {
             void attached.close();
@@ -147,7 +172,9 @@ export function TerminalView(props: TerminalViewProps) {
           });
           attached.onClose((close) => {
             if (stream.current === attached) stream.current = null;
-            onEnd?.(address, terminalEnd(close));
+            const end = terminalEnd(close);
+            onEnd?.(address, end);
+            if (end === "lost") settle(ready, null);
           });
           for (const data of pending.current.splice(0)) attached.write(data);
           // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
@@ -156,14 +183,8 @@ export function TerminalView(props: TerminalViewProps) {
         },
         (cause: unknown) => {
           // The connection dropped mid-attach: the next one attaches again (below).
-          if (connection.closed) return;
-          const message = `Could not open ${address}: ${String(cause)}`;
-          if (!attachedBefore.current) return setError(message);
-          // A program that ended while the connection was down sent no CLOSE; its tab closes as that CLOSE would have.
-          void connection.call("terminal.get", { terminal: address }).then(
-            (terminal) => (terminal.state === "live" ? setError(message) : onEnd?.(address, "finished")),
-            () => (connection.closed ? undefined : onEnd?.(address, "finished")),
-          );
+          if (connection.closed || unmounted.current) return;
+          settle(ready, `Could not open ${address}: ${String(cause)}`);
         },
       );
   };
@@ -173,6 +194,13 @@ export function TerminalView(props: TerminalViewProps) {
   }, [wt, connection]);
 
   if (error !== null) return <p className="p-4 text-sm text-destructive">{error}</p>;
+  if (restarting) {
+    return (
+      <p role="status" className="p-4 text-sm text-muted-foreground">
+        The program in this terminal is restarting…
+      </p>
+    );
+  }
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
     <>
