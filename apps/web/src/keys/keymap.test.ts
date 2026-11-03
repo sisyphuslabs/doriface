@@ -19,6 +19,11 @@ describe("resolveKeymap", () => {
     expect(keymap.has("super+w")).toBe(false);
   });
 
+  test("⌘⇧P (ctrl+shift+p off macOS) opens the command palette by default", () => {
+    expect(resolveKeymap("mac", new Map()).get(normalizeTrigger("super+shift+p") ?? "")).toBe("app.palette");
+    expect(resolveKeymap("other", new Map()).get(normalizeTrigger("ctrl+shift+p") ?? "")).toBe("app.palette");
+  });
+
   test("a changed default never overwrites an override", () => {
     const overrides = withBinding("mac", new Map(), "super+t", "tab.close");
     const shipped = resolveKeymap("mac", new Map());
