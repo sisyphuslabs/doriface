@@ -17,8 +17,8 @@ import { loadDeviceKey } from "../state/known-hosts.ts";
 import { MeshStore } from "../state/mesh.ts";
 import { PairingStore } from "../state/pairing.ts";
 import { JoinRefused } from "./invite.ts";
-import { MeshLines } from "./lines.ts";
-import { runJoiner } from "./join.ts";
+import { JOINER_EXPECTS, MeshLines } from "./lines.ts";
+import { JOIN_DEADLINE_MS, runJoiner } from "./join.ts";
 
 export interface JoinOptions {
   readonly stateDir: string;
@@ -119,12 +119,13 @@ export async function joinMesh(options: JoinOptions): Promise<Joined> {
     pairing: inviter.pairing,
     stream: "mesh",
   });
-  const lines = new MeshLines(secure);
+  const deadline = Date.now() + JOIN_DEADLINE_MS;
+  const lines = new MeshLines(secure, JOINER_EXPECTS);
   const hasDevice = existsSync(join(options.stateDir, "device-key.json"));
   const devicePub = hasDevice ? base64urlEncode(loadDeviceKey(options.stateDir).publicKey) : undefined;
   const own = { name: options.name, hcId: options.hcId, ...(devicePub === undefined ? {} : { devicePub }) };
   const mesh = new MeshStore(options.stateDir, { log: options.log });
   const dialed = { hostId: inviter.hostId, noisePub: inviter.hostKey };
-  const meshId = await runJoiner(lines, { identity: options.identity, mesh, own, dialed, log: options.log });
+  const meshId = await runJoiner(lines, { identity: options.identity, mesh, own, dialed, deadline, log: options.log });
   return { meshId, hostId: inviter.hostId, secure, lines };
 }

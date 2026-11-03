@@ -1,0 +1,108 @@
+import { CloseCode, PAIRING_TTL_MS, SessionKind } from "@doriface/crypto";
+import { memoryLinkPair, type MemoryEnd } from "@doriface/crypto/testing";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { LiveSessions } from "../e2ee/sessions.ts";
+import { PairingSlots } from "../pairing-slots.ts";
+import { DeviceStore } from "../state/devices.ts";
+import { MeshStore } from "../state/mesh.ts";
+import { PairingStore } from "../state/pairing.ts";
+import { removeSides, side } from "../testing/join-harness.ts";
+import { machine } from "../testing/mesh-history.ts";
+import { HostMesh } from "./host-mesh.ts";
+import { runJoiner } from "./join.ts";
+import { JOINER_EXPECTS, MeshLines } from "./lines.ts";
+
+const dirs: string[] = [];
+const stops: (() => void)[] = [];
+afterEach(() => {
+  removeSides();
+  for (const stop of stops.splice(0)) stop();
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+const log = (): void => {};
+
+function hostMesh() {
+  const dir = mkdtempSync(join(tmpdir(), "dh-host-mesh-"));
+  dirs.push(dir);
+  const m = machine("alpha");
+  const mesh = new MeshStore(dir, { log });
+  const slots = new PairingSlots(new PairingStore(dir, log), m.identity.noise.publicKey, undefined, log);
+  stops.push(() => slots.stop());
+  const sessions = new LiveSessions(new DeviceStore(dir), log, mesh);
+  const create = (): HostMesh =>
+    new HostMesh({
+      stateDir: dir,
+      identity: m.identity,
+      mesh,
+      slots,
+      sessions,
+      hc: { hc: "hc" },
+      relay: { url: undefined },
+      log,
+    });
+  return { dir, m, mesh, sessions, create };
+}
+
+const pairLink = (end: MemoryEnd, remoteStatic: Uint8Array) =>
+  Object.assign(end, {
+    kind: SessionKind.PairLink,
+    remoteStatic,
+    handshakeHash: new Uint8Array(32),
+    peerName: "beta",
+    lanUrls: [],
+    stream: "mesh" as const,
+  });
+
+describe("the running host's mesh offers", () => {
+  test("opening a mesh offer expires the pending joins of the offer it replaces", async () => {
+    const host = hostMesh().create();
+    const asked = host.pending.ask({
+      nonce: "old",
+      name: "beta",
+      hostId: "h",
+      fingerprint: "f",
+      expiresAt: Date.now() + 60_000,
+    });
+    await host.pair(false);
+    expect(await asked).toBe("expired");
+    expect(host.pending.list()).toEqual([]);
+  });
+
+  test("an offer left in pairing.json before the host started still bounds the card step to its expiry", async () => {
+    const { dir, m, mesh, create } = hostMesh();
+    mesh.found(m.identity, { name: "alpha", hcId: "core" });
+    new PairingStore(dir).offer(Date.now() - PAIRING_TTL_MS + 100, true);
+    const [inviterEnd, joinerEnd] = memoryLinkPair();
+    create().serve(pairLink(inviterEnd, new Uint8Array(32)));
+    const joiner = new MeshLines(joinerEnd, JOINER_EXPECTS);
+    expect((await joiner.next()).t).toBe("offer");
+    const ended = await joiner.next().then(
+      () => "read",
+      (error: unknown) => String(error),
+    );
+    expect(ended).toContain("the offer expired before the card arrived");
+    expect(inviterEnd.closeCode).toBe(CloseCode.UnknownDevice);
+  });
+
+  test("the session a served join ran on is registered, so a revoke closes it", async () => {
+    const { dir, m, mesh, sessions, create } = hostMesh();
+    mesh.found(m.identity, { name: "alpha", hcId: "core" });
+    const host = create();
+    await host.pair(true);
+    const b = side("beta");
+    const [inviterEnd, joinerEnd] = memoryLinkPair();
+    host.serve(pairLink(inviterEnd, b.m.identity.noise.publicKey));
+    const dialed = { hostId: m.identity.hostId, noisePub: m.identity.noise.publicKey };
+    const ctx = { identity: b.m.identity, mesh: b.mesh, own: { name: "beta", hcId: "core-b" }, dialed, log };
+    await runJoiner(new MeshLines(joinerEnd, JOINER_EXPECTS), { ...ctx, deadline: Date.now() + 60_000 });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(inviterEnd.closeCode).toBeUndefined();
+    rmSync(join(dir, "mesh.json"));
+    sessions.closeRevoked();
+    expect(inviterEnd.closeCode).toBe(CloseCode.UnknownDevice);
+  });
+});

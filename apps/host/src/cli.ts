@@ -44,6 +44,7 @@ async function main(args: readonly string[]): Promise<void> {
   if (command === "fingerprint") return fingerprintCommand(rest, out);
   if (command === "connect") return connect(rest);
   if (command === "mesh") {
+    // Exits itself, as connect does: the relay socket a join opened would keep the process alive.
     await meshJoinCommand(rest, out, log);
     process.exit(0);
   }
