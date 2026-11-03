@@ -61,6 +61,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
       `refusing to listen on ${hostname}: the endpoint is plaintext; bind loopback or pass --unsafe-listen`,
     );
   }
+  if (options.lanListen !== undefined && options.stateDir === undefined) {
+    throw new Error("a LAN listener serves only /v1/e2ee, which needs a state dir");
+  }
   if (options.stateDir !== undefined && (await controlIsLive(options.stateDir))) {
     throw new Error(`another doriface-host is already running on ${options.stateDir}`);
   }
