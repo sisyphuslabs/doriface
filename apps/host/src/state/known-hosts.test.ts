@@ -1,6 +1,6 @@
-import { generateX25519 } from "@doriface/crypto";
+import { generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KnownHosts, loadDeviceKey } from "./known-hosts.ts";
@@ -43,4 +43,30 @@ describe("KnownHosts", () => {
     store.add({ hostId, hostKey: generateX25519().publicKey, relayUrl: "wss://two.example" });
     expect(new KnownHosts(dir).get(hostId)?.relayUrl).toBe("wss://two.example");
   });
+});
+
+const WORKER = join(import.meta.dir, "..", "testing", "known-hosts-worker.ts");
+
+describe("KnownHosts under the state lock", () => {
+  test("an add waits for the state lock another live process holds, and writes nothing while it is held", () => {
+    writeFileSync(join(dir, "state.lock"), `${process.pid} holder-token`);
+    const host = generateHostIdentity();
+    const store = new KnownHosts(dir, { lockTimeoutMs: 50 });
+    expect(() =>
+      store.add({ hostId: host.hostId, hostKey: host.noise.publicKey, relayUrl: "wss://r.example" }),
+    ).toThrow("locked");
+    expect(existsSync(join(dir, "known-hosts.json"))).toBe(false);
+  });
+
+  test("four processes pairing hosts at once lose no record", async () => {
+    const workers = ["a", "b", "c", "d"].map(() =>
+      Bun.spawn([process.execPath, WORKER, "add", dir, "15"], { stdout: "pipe", stderr: "pipe" }),
+    );
+    const outputs = await Promise.all(workers.map((worker) => new Response(worker.stdout).text()));
+    expect(await Promise.all(workers.map((worker) => worker.exited))).toEqual([0, 0, 0, 0]);
+    const added = outputs.flatMap((output) => output.trim().split("\n"));
+    const store = new KnownHosts(dir);
+    expect(added).toHaveLength(60);
+    expect(added.filter((hostId) => store.get(hostId) === undefined)).toEqual([]);
+  }, 30_000);
 });
