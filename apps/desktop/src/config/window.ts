@@ -4,6 +4,12 @@ import { VERSION_ARG, type DesktopPlatform } from "../shared/bridge.ts";
 /** herdr-app's traffic-light inset under a hidden-inset titlebar. */
 export const TRAFFIC_LIGHT_POSITION = { x: 12, y: 16 } as const;
 
+/**
+ * Under the hidden-inset titlebar the band above the traffic lights still has to move the window, whether or not
+ * the web app declares a titlebar region of its own.
+ */
+export const MAC_DRAG_BAND_CSS = `html::before { content: ""; position: fixed; inset: 0 0 auto 0; height: ${TRAFFIC_LIGHT_POSITION.y}px; -webkit-app-region: drag; z-index: 2147483647; }`;
+
 export function secureWebPreferences(preload: string, version: string): WebPreferences {
   return {
     preload,

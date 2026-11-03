@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { contentSecurityPolicy } from "../config/csp.ts";
 import { APP_ORIGIN, loopbackDevUrl } from "../config/origin.ts";
-import { secureWebPreferences, windowOptions } from "../config/window.ts";
+import { MAC_DRAG_BAND_CSS, secureWebPreferences, windowOptions } from "../config/window.ts";
 import { parsePlatform } from "../shared/bridge.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
 import { findHc, hostCommand, type HostContext } from "./host-command.ts";
@@ -44,6 +44,13 @@ function createWindow(): void {
   const window = new BrowserWindow(windowOptions(platform, webPreferences));
   mainWindow = window;
   window.once("ready-to-show", () => window.show());
+  if (platform === "darwin") {
+    window.webContents.on("dom-ready", () => {
+      window.webContents.insertCSS(MAC_DRAG_BAND_CSS).catch((error: unknown) => {
+        console.error(`could not add the titlebar drag band: ${String(error)}`);
+      });
+    });
+  }
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = undefined;
   });
