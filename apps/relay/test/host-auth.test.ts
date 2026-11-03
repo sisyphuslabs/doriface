@@ -97,6 +97,35 @@ describe("host challenge auth", () => {
     expect(await uplink.stopped).toBe(CloseCode.RelayAuthFailed);
   });
 
+  test("an uplink stopped while connecting closes its socket and never comes online", async () => {
+    const ip = testIp();
+    const sockets: WebSocket[] = [];
+    const sessions: unknown[] = [];
+    const uplink = await Uplink.start({
+      relayUrl: relay.url,
+      signer: ed25519Signer(generateSigningKey()),
+      createSocket: (url) => {
+        const ws = socketFrom(ip)(url);
+        sockets.push(ws);
+        return ws;
+      },
+      onSession: (session) => sessions.push(session),
+    });
+    uplink.stop();
+    const [ws] = sockets;
+    if (ws === undefined) throw new Error("the uplink opened no socket");
+    await new Promise((resolve) => ws.addEventListener("close", resolve, { once: true }));
+    const client = await connectRelayClient({
+      relayUrl: relay.url,
+      hostId: uplink.hostId,
+      createSocket: socketFrom(ip),
+    });
+    const closed = await new Promise<Error | undefined>((resolve) => client.onClose(resolve));
+    expect(closed instanceof RelayCloseError ? closed.code : closed).toBe(CloseCode.HostOffline);
+    expect(sockets).toHaveLength(1);
+    expect(sessions).toHaveLength(0);
+  });
+
   test("a newer uplink for the same host replaces the old one and ends its sessions", async () => {
     const ip = testIp();
     const first = await startTestHost(relay.url, ip);

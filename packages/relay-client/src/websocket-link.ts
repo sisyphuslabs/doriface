@@ -21,13 +21,14 @@ export class WebSocketLink implements ByteLink {
   readonly #inbox: Inbox;
   readonly #closed = new CloseSignal();
   readonly #acks = new AckCounter();
+  readonly #stopPings: () => void;
   #closeCode: number | undefined;
 
   constructor(ws: WebSocket, pingIntervalMs = PING_INTERVAL_MS) {
     this.#ws = ws;
     ws.binaryType = "arraybuffer";
     this.#inbox = new Inbox(() => this.#shut(CloseCode.InternalError, "data listener failed"));
-    keepAlive(ws, pingIntervalMs);
+    this.#stopPings = keepAlive(ws, pingIntervalMs);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
       if (!(event.data instanceof ArrayBuffer)) return this.#shut(CloseCode.UnsupportedData, "binary messages only");
@@ -70,6 +71,7 @@ export class WebSocketLink implements ByteLink {
 
   #finish(code: number, reason: string): void {
     if (this.#closed.fired) return;
+    this.#stopPings();
     this.#closeCode = code;
     this.#inbox.clear();
     this.#closed.fire(code === CloseCode.Normal ? undefined : new RelayCloseError(code, reason));

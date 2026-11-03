@@ -43,6 +43,7 @@ export interface UplinkOptions {
 
 /** Reconnecting cannot fix these: the key is wrong, or another uplink for this host took over. */
 const FINAL_CODES: ReadonlySet<number> = new Set([CloseCode.RelayAuthFailed, CloseCode.UplinkReplaced]);
+const CONNECTING = 0;
 /** An uplink that stayed up this long after answering starts the next backoff from the bottom again. */
 const STABLE_MS = 30_000;
 
@@ -58,6 +59,7 @@ export class Uplink {
   readonly #stop = Promise.withResolvers<number>();
   readonly #pairSlots = new PairSlotRequests();
   #socket: WebSocket | undefined;
+  #stopPings: (() => void) | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #attempt = 0;
   #answeredAt: number | undefined;
@@ -125,7 +127,7 @@ export class Uplink {
     this.#socket = ws;
     let challenged = false;
     const acks = new AckCounter();
-    keepAlive(ws, this.#options.pingIntervalMs ?? PING_INTERVAL_MS);
+    this.#stopPings = keepAlive(ws, this.#options.pingIntervalMs ?? PING_INTERVAL_MS);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
       if (!(event.data instanceof ArrayBuffer)) return ws.close(CloseCode.UnsupportedData, "binary messages only");
@@ -204,8 +206,10 @@ export class Uplink {
     clearTimeout(this.#timer);
     const ws = this.#socket;
     this.#socket = undefined;
+    this.#stopPings?.();
     this.#pairSlots.failAll("the uplink stopped");
-    if (ws !== undefined && isOpen(ws)) ws.close(CloseCode.Normal, "host stopping");
+    // A socket still connecting is closed too; otherwise it could authenticate after the stop.
+    if (ws !== undefined && (ws.readyState === CONNECTING || isOpen(ws))) ws.close(CloseCode.Normal, "host stopping");
     this.#options.onState?.({ state: "stopped", code });
     this.#stop.resolve(code);
     this.#endSessions(code);
