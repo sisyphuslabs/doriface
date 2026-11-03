@@ -174,7 +174,7 @@ export class Uplink {
     this.#options.onState?.({ state: "answered" });
   }
 
-  /** Handles one relay frame; a session's DATA is acked when that session consumes it, everything else now. */
+  /** Handles one relay frame; every frame is acked on arrival, and each session bounds its own backlog. */
   #frame(ws: WebSocket, bytes: Uint8Array, consumed: (bytes: number) => void): void {
     let frame;
     try {
@@ -183,9 +183,9 @@ export class Uplink {
       if (error instanceof MuxError) return closeSocket(ws, CloseCode.ProtocolError, error.message);
       throw error;
     }
+    consumed(bytes.byteLength);
     const session = this.#sessions.get(frame.sessionId);
     if (frame.type === MuxType.Data && session !== undefined) return session.deliver(frame.payload);
-    consumed(bytes.byteLength);
     if (frame.type === MuxType.PairSlotAck) {
       if (!this.#pairSlots.settle(frame.payload)) closeSocket(ws, CloseCode.RelayProtocolError, "bad PAIR_SLOT_ACK");
       return;
@@ -203,7 +203,6 @@ export class Uplink {
         return true;
       },
       release: (sessionId) => this.#sessions.delete(sessionId),
-      consumed,
     });
     this.#sessions.set(frame.sessionId, link);
     this.#options.onSession(link);

@@ -125,7 +125,7 @@ describe("backpressure (C3)", () => {
     host.probe.socket.close();
   });
 
-  test("an uplink acks a session's bytes only once the session's consumer has taken them", async () => {
+  test("an uplink acks a session's bytes on arrival, even while that session's consumer is busy", async () => {
     const ip = testIp();
     const acks = new AsyncQueue<string>();
     const arrivals = new AsyncQueue<number>();
@@ -171,9 +171,8 @@ describe("backpressure (C3)", () => {
       if ((await arrivals.take()) !== MUX_HEADER_BYTES + ACK_INTERVAL_BYTES) return dataArrived();
     };
     await dataArrived();
-    expect(acks.size).toBe(0);
-    consumed.resolve();
     expect(await acks.take()).toMatch(/^a:\d+$/);
+    consumed.resolve();
     client.close();
     uplink.stop();
   });
