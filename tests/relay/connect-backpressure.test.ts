@@ -1,6 +1,6 @@
 import { encodeFrame, FrameKind, RPC_CHANNEL } from "@doriface/protocol";
 import { ACK_INTERVAL_BYTES, type CreateSocket } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import { HELLO } from "../../apps/host/src/testing/hc-session.ts";
 import { runConnect } from "./support/connect-cli.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { within } from "./support/watch.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 const MIB = 1024 * 1024;
 const encoder = new TextEncoder();
@@ -18,7 +19,7 @@ const scratch = mkdtempSync(join(tmpdir(), "bp-"));
 const deviceState = join(scratch, "device");
 let relayed: RelayedHost | undefined;
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relayed = await startRelayedHost("relay-backpressure");
   const pairing = runConnect(deviceState, relayed.relayUrl, await relayed.pairingLink(), "--name", "slow");
   pairing.end();

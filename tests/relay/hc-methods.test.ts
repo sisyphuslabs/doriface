@@ -1,7 +1,7 @@
 import type { EventFeed, HcConnection } from "@doriface/client";
 import { encodeFrame, FrameKind, RPC_CHANNEL } from "@doriface/protocol";
 import { generateX25519 } from "@doriface/crypto";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ByteReader } from "../../apps/host/src/testing/byte-reader.ts";
@@ -9,6 +9,7 @@ import { HELLO } from "../../apps/host/src/testing/hc-session.ts";
 import { firstDifference, type RecordingLink, tapFor } from "./support/byte-tap.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { type EventWatch, watchEvents, watchScreen, within } from "./support/watch.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 const phone = generateX25519();
 let relayed: RelayedHost | undefined;
@@ -24,7 +25,7 @@ function started(): { readonly hc: HcConnection; readonly events: EventWatch; re
   return { hc: connection, events: watched, dir: join(relayed.scratch, "work") };
 }
 
-beforeAll(async () => {
+setUpOnce(async () => {
   relayed = await startRelayedHost("relay-methods");
   mkdirSync(join(relayed.scratch, "work"));
   await relayed.pair(phone, "methods");

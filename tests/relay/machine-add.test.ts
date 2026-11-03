@@ -1,6 +1,6 @@
 import { type EventFeed, HcConnection } from "@doriface/client";
 import { generateHostIdentity, generateX25519 } from "@doriface/crypto";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { createHcSession, type HcSession } from "../../apps/host/src/testing/hc-
 import { connectCommand, runConnect } from "./support/connect-cli.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { type EventWatch, watchEvents, watchScreen, within } from "./support/watch.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "madd-"));
 const deviceA = join(scratch, "device-a");
@@ -48,7 +49,7 @@ function openCore(session: HcSession): Promise<HcConnection> {
   return HcConnection.open(new ProcessLink(proc));
 }
 
-beforeAll(async () => {
+setUpOnce(async () => {
   machineB = await startRelayedHost("doriface-machine-b");
   mkdirSync(join(machineB.scratch, "work"));
   await machineB.pair(phone, "b's own client");
