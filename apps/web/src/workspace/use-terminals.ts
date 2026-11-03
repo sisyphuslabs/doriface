@@ -9,6 +9,12 @@ export interface TerminalsState {
   readonly error: string | null;
 }
 
+/** Hosts may answer terminal.list without machines; the answer is network data, so it is read defensively. */
+export function machineCount(list: object): number {
+  const machines: unknown = Reflect.get(list, "machines");
+  return Array.isArray(machines) ? machines.length : 0;
+}
+
 const EMPTY: TerminalsState = { terminals: [], machines: 0, error: null };
 
 /** terminal.list for the first picture and machine count, then events.subscribe keeps it live. */
@@ -30,7 +36,7 @@ export function useTerminals(connection: HcConnection | null): TerminalsState {
       if (!disposed) setState((prev) => ({ ...prev, error: String(cause) }));
     };
     connection.call("terminal.list").then((list) => {
-      machines = list.machines.length;
+      machines = machineCount(list);
       if (map.size === 0) map = new Map(list.terminals.map((terminal) => [terminal.address, terminal]));
       publish();
       return list;
