@@ -20,6 +20,13 @@ describe("source keys", () => {
     expect(sourceKey("::ffff:198.51.100.7")).toBe("198.51.100.7");
     expect(sourceKey("not an address")).toBe("not an address");
   });
+
+  test("a dotted IPv6 tail must be four decimal octets", () => {
+    for (const malformed of ["::1.2.3.", "::0x1.0x2.0x3.0x4", "::1.2.3.4.5", "::1.2.3.256", "::1e1.2.3.4"]) {
+      expect(sourceKey(malformed)).toBe(malformed);
+    }
+    expect(sourceKey("::1.2.3.4")).toBe("0:0:0:0::/64");
+  });
 });
 
 interface Pending {

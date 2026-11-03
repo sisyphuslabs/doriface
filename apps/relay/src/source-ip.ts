@@ -14,10 +14,10 @@ export function sourceKey(address: string): string {
 const HEXTET = /^[0-9a-f]{1,4}$/i;
 
 function ipv4Hextets(part: string): string[] | undefined {
-  const octets = part.split(".").map(Number);
-  if (octets.length !== 4 || !octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
-    return undefined;
-  }
+  const digits = part.split(".");
+  if (digits.length !== 4 || !digits.every((octet) => /^\d{1,3}$/.test(octet))) return undefined;
+  const octets = digits.map(Number);
+  if (!octets.every((octet) => octet <= 255)) return undefined;
   const [a = 0, b = 0, c = 0, d = 0] = octets;
   return [((a << 8) | b).toString(16), ((c << 8) | d).toString(16)];
 }
