@@ -1,9 +1,26 @@
 import type { Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { expect, test } from "./fixtures.ts";
-import { MACHINE_NAME } from "./machine.ts";
+import { MACHINE_ENV, MACHINE_NAME, MACHINE_SWITCH } from "./machine.ts";
+
+/** How long a machine's state may lag behind hc: one periodic re-read of machine.list plus slack. */
+const STATE_BOUND_MS = 25_000;
 
 const machineRow = (page: Page) => page.getByRole("button", { name: new RegExp(`^${MACHINE_NAME}\\b`) });
 const newOn = (page: Page) => page.getByRole("button", { name: `New terminal on ${MACHINE_NAME}` });
+
+/** Makes the next dial to the machine fail, then stops its core so the open line drops. */
+function switchOff(): void {
+  writeFileSync(MACHINE_SWITCH, "off");
+  const saved: unknown = JSON.parse(readFileSync(MACHINE_ENV, "utf8"));
+  if (typeof saved !== "object" || saved === null || !("hc" in saved) || !("env" in saved)) {
+    throw new Error("the e2e host saved no machine environment");
+  }
+  const { hc, env } = saved;
+  if (typeof hc !== "string" || typeof env !== "object" || env === null) throw new Error("bad machine environment");
+  execFileSync(hc, ["server", "stop"], { env: { ...process.env, ...env }, stdio: "ignore" });
+}
 
 test.describe("machines added with hc machine add", () => {
   test("New terminal on a machine starts its shell there and attaches it at machine/tN", async ({ page }) => {
@@ -19,5 +36,22 @@ test.describe("machines added with hc machine add", () => {
     await expect(focused).toContainText("on-build-box-42", { timeout: 15_000 });
     await page.keyboard.type("exit\r");
     await expect(machineRow(page)).toContainText(/connected\s*0/, { timeout: 15_000 });
+  });
+
+  test("a machine that goes offline with the page open reads unreachable and offers no new terminal", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/");
+    await expect(machineRow(page)).toContainText("connected", { timeout: 20_000 });
+    try {
+      switchOff();
+      await expect(machineRow(page)).toContainText("unreachable", { timeout: STATE_BOUND_MS });
+      await expect(newOn(page)).toBeDisabled();
+      expect(errors).toEqual([]);
+    } finally {
+      rmSync(MACHINE_SWITCH, { force: true });
+    }
   });
 });
