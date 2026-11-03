@@ -1,7 +1,7 @@
 import { join } from "node:path";
-import { ByteReader } from "../../../host/src/testing/byte-reader.ts";
+import { ByteReader } from "../../../apps/host/src/testing/byte-reader.ts";
 
-export const HOST_CLI = join(import.meta.dir, "..", "..", "..", "host", "src", "cli.ts");
+export const HOST_CLI = join(import.meta.dir, "..", "..", "..", "apps", "host", "src", "cli.ts");
 
 const quote = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
 

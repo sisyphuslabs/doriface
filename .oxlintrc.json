@@ -12,5 +12,5 @@
     "typescript/consistent-type-imports": "error",
     "import/no-cycle": "error"
   },
-  "ignorePatterns": ["**/dist/**", "**/types/**", "**/.wrangler/**"]
+  "ignorePatterns": ["**/dist/**", "**/types/**", "**/.wrangler/**", ".relay/**"]
 }
