@@ -10,7 +10,7 @@ const DOT: Readonly<Record<string, string>> = {
   error: "bg-status-blocked",
   warning: "bg-status-working",
   success: "bg-status-done",
-  info: "bg-ring",
+  info: "bg-muted-foreground",
 };
 
 /** Outcomes that are not visible in place. Bottom-right, popover tone, a level dot plus words. */
