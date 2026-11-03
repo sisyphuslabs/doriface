@@ -23,9 +23,9 @@ function describe(state: ConnectionState): string {
 
 function label(icon: ReactNode, text: string) {
   return (
-    <span className="flex items-center gap-2 [&_svg]:size-4 [&_svg]:text-muted-foreground">
+    <span className="flex items-center gap-2 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
       {icon}
-      {text}
+      <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
     </span>
   );
 }

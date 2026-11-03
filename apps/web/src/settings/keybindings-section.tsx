@@ -57,7 +57,9 @@ function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedKeybinds; r
             className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-2.5 py-1.5 last:border-b-0"
           >
             <span className="w-6 shrink-0 text-right text-2xs text-dim tabular-nums">{line.line}</span>
-            <span className="min-w-0 flex-1 truncate text-foreground">{line.text}</span>
+            <span title={line.text} className="min-w-0 flex-1 truncate text-foreground">
+              {line.text}
+            </span>
             <Badge tone={line.status === "applies" ? "done" : line.status === "invalid" ? "blocked" : "working"}>
               {line.status === "applies" ? "Applies" : line.status === "invalid" ? "Invalid" : "Unknown"}
             </Badge>

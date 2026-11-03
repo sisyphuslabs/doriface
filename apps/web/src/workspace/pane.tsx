@@ -25,6 +25,11 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onC
   const keys = useActionKeys(`tab.select:${index}`);
   // macOS writes shortcuts as joined glyphs (⌘1); elsewhere they read Ctrl+1.
   const shortcut = keys?.join(currentPlatform() === "mac" ? "" : "+");
+  const where = [
+    ...(machineOf(terminal.address) === undefined ? [] : [terminal.address]),
+    spaceName(terminal),
+    ...(shortcut === undefined ? [] : [shortcut]),
+  ].join(" · ");
   return (
     <section
       aria-label={`${title} terminal`}
@@ -40,11 +45,12 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onC
         )}
       >
         <SquareTerminal aria-hidden className="size-3.5 shrink-0" />
-        <h2 className="truncate font-medium">{title}</h2>
+        <h2 title={title} className="min-w-0 truncate font-medium">
+          {title}
+        </h2>
         <StatusChip status={agentStatus(terminal)} />
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-          {machineOf(terminal.address) === undefined ? "" : `${terminal.address} · `}
-          {shortcut === undefined ? spaceName(terminal) : `${spaceName(terminal)} · ${shortcut}`}
+        <span title={where} className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
+          {where}
         </span>
       </header>
       <TerminalView

@@ -67,7 +67,9 @@ export function TabBar({
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-ring"
               >
                 {tab.icon}
-                <span className="truncate">{tab.title}</span>
+                <span title={tab.title} className="truncate">
+                  {tab.title}
+                </span>
                 {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
               </button>
               <IconButton

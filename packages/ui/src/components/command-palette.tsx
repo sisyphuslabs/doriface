@@ -122,15 +122,22 @@ export function CommandPalette({
                         if (command.disabled !== true) onRun?.(command.id);
                       }}
                       className={cn(
-                        "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-base text-foreground [&_svg]:size-4 [&_svg]:text-muted-foreground",
+                        "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-base text-foreground [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground",
                         selected && "bg-selected",
                         command.disabled === true && "text-muted-foreground",
                       )}
                     >
                       {command.icon}
-                      <span className="min-w-0 flex-1 truncate">{command.label}</span>
+                      <span title={command.label} className="min-w-0 flex-1 truncate">
+                        {command.label}
+                      </span>
                       {command.hint === undefined ? null : (
-                        <span className="shrink-0 text-sm text-muted-foreground">{command.hint}</span>
+                        <span
+                          {...(typeof command.hint === "string" ? { title: command.hint } : {})}
+                          className="min-w-0 max-w-[40%] truncate text-sm text-muted-foreground"
+                        >
+                          {command.hint}
+                        </span>
                       )}
                       {command.status === undefined ? null : (
                         <span className="flex shrink-0 items-center gap-1.5 text-sm text-foreground">

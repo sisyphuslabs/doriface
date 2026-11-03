@@ -16,39 +16,63 @@ const agent = (state: string, msg: string, line: string): string[] => [
   `printf '\\033]7501;state=${state}:msg=${btoa(msg)}\\033\\\\'; printf '%s\\n' '${line}'; exec sleep 3600`,
 ];
 
+/** One demo terminal: `hc run` arguments before `--`, then its program. */
+export interface Seed {
+  readonly args: readonly string[];
+  readonly argv: readonly string[];
+}
+
+/** The machine a host adds: its name, where its switch and state live, and its demo terminals. */
+export interface MachineSpec {
+  readonly name: string;
+  readonly dir: string;
+  readonly seeds: readonly Seed[];
+}
+
+export const DEMO_MACHINE: MachineSpec = {
+  name: MACHINE_NAME,
+  dir: E2E_MACHINE_DIR,
+  seeds: [
+    { args: ["--name", "plan"], argv: agent("working", "terraform plan", "Refreshing state") },
+    { args: ["--name", "logs"], argv: ["env", "PS1=$ ", "sh"] },
+  ],
+};
+
 /** The `--via` command: refuses as the switch says, else runs hc's line against the second core. */
-function viaCommand(own: Readonly<Record<string, string>>): string {
+function viaCommand(own: Readonly<Record<string, string>>, spec: MachineSpec): string {
   const env = Object.entries(own)
     .map(([key, value]) => `${key}="${value}"`)
     .join(" ");
   const refusals = [
-    `m=$(cat "${MACHINE_SWITCH}" 2>/dev/null)`,
-    `[ "$m" = off ] && { echo "build-box is switched off" >&2; exit 1; }`,
+    `m=$(cat "${join(spec.dir, "switch")}" 2>/dev/null)`,
+    `[ "$m" = off ] && { echo "${spec.name} is switched off" >&2; exit 1; }`,
     `[ "$m" = login ] && { echo "Permission denied (publickey,password)." >&2; exit 255; }`,
   ];
   return `sh -c '${refusals.join("; ")}; exec env ${env} sh -c "$1"' sh`;
 }
 
-async function seed(hc: string, env: Readonly<Record<string, string | undefined>>, root: string): Promise<void> {
-  const cwd = join(root, "infra");
+/** Starts each seed with `hc run --bg` in `cwd`. */
+export async function runSeeds(
+  hc: string,
+  env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
+  seeds: readonly Seed[],
+): Promise<void> {
   mkdirSync(cwd, { recursive: true });
-  const seeds = [
-    { name: "plan", argv: agent("working", "terraform plan", "Refreshing state") },
-    { name: "logs", argv: ["env", "PS1=$ ", "sh"] },
-  ];
-  const runs = seeds.map(async ({ name, argv }) => {
-    const run = Bun.spawn([hc, "run", "--bg", "--name", name, "--", ...argv], { env, cwd, stdout: "ignore" });
-    if ((await run.exited) !== 0) throw new Error(`hc run ${name} on the second core failed`);
+  const runs = seeds.map(async ({ args, argv }) => {
+    const run = Bun.spawn([hc, "run", "--bg", ...args, "--", ...argv], { env, cwd, stdout: "ignore" });
+    if ((await run.exited) !== 0) throw new Error(`hc run ${args.join(" ")} failed`);
   });
   await Promise.all(runs);
 }
 
-/** Starts the second core (with demo terminals when `withSeeds`) and adds it; resolves with its stop. */
+/** Starts the second core (with its demo terminals when `withSeeds`) and adds it; resolves with its stop. */
 export async function addMachine(
   hc: string,
   env: Record<string, string | undefined>,
   root: string,
   withSeeds: boolean,
+  spec: MachineSpec = DEMO_MACHINE,
 ): Promise<() => Promise<void>> {
   const session = `web-e2e-b-${crypto.randomUUID().slice(0, 8)}`;
   const own = {
@@ -64,11 +88,11 @@ export async function addMachine(
     join(coreDir, "core.json"),
     JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: "build" }),
   );
-  rmSync(E2E_MACHINE_DIR, { recursive: true, force: true });
-  mkdirSync(E2E_MACHINE_DIR, { recursive: true });
+  rmSync(spec.dir, { recursive: true, force: true });
+  mkdirSync(spec.dir, { recursive: true });
   const there = { ...env, ...own };
   const stop = async (): Promise<void> => {
-    rmSync(E2E_MACHINE_DIR, { recursive: true, force: true });
+    rmSync(spec.dir, { recursive: true, force: true });
     const control = Bun.spawn([hc, "connect", "--session", session], { env: there, stdin: "pipe", stdout: "pipe" });
     control.stdin.write('{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n');
     await control.stdin.flush();
@@ -76,9 +100,9 @@ export async function addMachine(
     await control.exited;
   };
   try {
-    writeFileSync(MACHINE_ENV, JSON.stringify({ hc, env: own }));
-    if (withSeeds) await seed(hc, there, root);
-    const add = Bun.spawn([hc, "machine", "add", "--via", viaCommand(own), "--name", MACHINE_NAME], {
+    writeFileSync(join(spec.dir, "env.json"), JSON.stringify({ hc, env: own }));
+    if (withSeeds) await runSeeds(hc, there, join(root, "infra"), spec.seeds);
+    const add = Bun.spawn([hc, "machine", "add", "--via", viaCommand(own, spec), "--name", spec.name], {
       env,
       stdout: "ignore",
       stderr: "pipe",
