@@ -39,6 +39,7 @@ const host = Bun.spawn(
     session,
     "--token",
     E2E_TOKEN,
+    "--no-relay",
   ],
   { env, stdout: "inherit", stderr: "inherit" },
 );

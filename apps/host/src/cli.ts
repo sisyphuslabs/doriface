@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { parseArgs } from "node:util";
+import { DEFAULT_RELAY_URL } from "@doriface/crypto";
 import { assertValidToken, generateToken } from "./auth.ts";
 import { DEVICES_USAGE, devicesCommand } from "./commands/devices.ts";
 import { FINGERPRINT_USAGE, fingerprintCommand } from "./commands/fingerprint.ts";
@@ -21,6 +22,8 @@ const USAGE = `usage: doriface-host [options]
   --unsafe-listen       allow a non-loopback --listen (plaintext: anyone who can reach it gets a shell)
   --lan-listen <h:p>    also serve the end-to-end encrypted /v1/e2ee (only) here; any address is fine
   --state-dir <dir>     host keys and paired devices (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
+  --relay <url>         the relay this host keeps an encrypted-only uplink to (default ${DEFAULT_RELAY_URL})
+  --no-relay            keep no relay uplink: reach this host only directly
   -h, --help            show this help`;
 
 const log = (line: string): void => {
@@ -56,6 +59,8 @@ async function serve(args: readonly string[]): Promise<void> {
       "unsafe-listen": { type: "boolean", default: false },
       "lan-listen": { type: "string" },
       "state-dir": { type: "string" },
+      relay: { type: "string", default: DEFAULT_RELAY_URL },
+      "no-relay": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -63,6 +68,7 @@ async function serve(args: readonly string[]): Promise<void> {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
+  if (!URL.canParse(values.relay)) throw new Error(`--relay wants a URL, got ${JSON.stringify(values.relay)}`);
   const given = values.token ?? process.env["DORIFACE_HOST_TOKEN"] ?? "";
   const token = given === "" ? generateToken() : assertValidToken(given);
   const host = await startHost({
@@ -73,6 +79,7 @@ async function serve(args: readonly string[]): Promise<void> {
     unsafeListen: values["unsafe-listen"],
     lanListen: values["lan-listen"] === undefined ? undefined : parseListen(values["lan-listen"], "--lan-listen"),
     stateDir: values["state-dir"] ?? defaultStateDir(),
+    relay: values["no-relay"] ? undefined : { url: values.relay },
     log,
   });
   const session = values.session === undefined ? "" : `, session ${values.session}`;
@@ -82,6 +89,7 @@ async function serve(args: readonly string[]): Promise<void> {
     const lan = e2ee.lanUrls.length === 0 ? "" : ` and ${e2ee.lanUrls.join(", ")}`;
     log(`end-to-end encrypted at ${e2ee.url}${lan}; host ${e2ee.hostId}, fingerprint ${e2ee.fingerprint}`);
   }
+  if (host.relayUrl !== undefined) log(`reachable through the relay ${host.relayUrl}`);
   if (values["print-token"]) process.stdout.write(`${token}\n`);
   else if (given === "") log("generated a token; pass --print-token to see it");
 
