@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,8 @@ import { startHost } from "./host.ts";
 import { resolveHcBin } from "./testing/hc-session.ts";
 
 const CLI = join(import.meta.dir, "cli.ts");
+/** These tests spawn the CLI; a cold transpiler cache alone can take most of bun's 5 s default. */
+setDefaultTimeout(30_000);
 
 /** A port nobody listens on right now: bind it, read it, release it. */
 function freePort(): number {
