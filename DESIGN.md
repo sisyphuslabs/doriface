@@ -45,6 +45,9 @@ The theme input is a herdr-app terminal palette (background, foreground, selecti
 | `--status-{working,blocked,done,idle,unknown}`                  | status roles (3:1)                            | glyphs                                       |
 | `--status-*-text`                                               | status roles (4.5:1 on their 15% chip)        | chip labels, section headers                 |
 | `--term-fg`, `--term-bg`, `--term-cursor`, `--term-color-0..15` | terminal_foreground, background, cursor, ansi | libghostty via @wterm                        |
+| `--term-faint`                                                  | terminal_foreground at 50 % (AA-guarded)      | faint (SGR 2) text in TerminalPreview        |
+
+**Faint text.** Ghostty draws faint (SGR 2) text at `faint-opacity` 0.5. `--term-faint` is that mix of terminal foreground over terminal background, lifted by the AA guard until it reaches 4.5:1 (measured 4.55 Night, 4.52 Day, 4.51 Graphite, 4.54 Paper; `contrast.test.ts`), the same way Ghostty's `minimum-contrast` would.
 
 **AA guard.** Text roles are moved toward the ink colour in 1 % steps until they reach 4.5:1 against every surface they sit on (canvas, surface, chrome, popover, raised); control edges, focus ring and status glyphs until 3:1. Values that already pass are emitted unchanged, so herdr-app themes keep their colours wherever they are accessible. `contrast.test.ts` checks every built-in theme.
 
@@ -78,15 +81,15 @@ The theme input is a herdr-app terminal palette (background, foreground, selecti
 
 ## 3. Typography
 
-| Level | Desktop (fine pointer) | Coarse pointer | Weight  | Usage                                |
-| ----- | ---------------------- | -------------- | ------- | ------------------------------------ |
-| 2xl   | 28 px                  | 28 px          | 600     | screen title (pairing, empty boards) |
-| xl    | 20 px                  | 22 px          | 600     | phone screen title                   |
-| lg    | 16 px                  | 18 px          | 600     | dialog title, section title          |
-| base  | 14 px                  | 17 px          | 400     | body, controls, palette rows         |
-| sm    | 13 px                  | 15 px          | 400/500 | sidebar rows, secondary text, tabs   |
-| xs    | 12 px                  | 13 px          | 500     | section labels, status bar, captions |
-| 2xs   | 11 px                  | 12 px          | 600     | chips, badges, kbd                   |
+| Level | Desktop (fine pointer) | Coarse pointer | Weight  | Usage                                                |
+| ----- | ---------------------- | -------------- | ------- | ---------------------------------------------------- |
+| 2xl   | 28 px                  | 28 px          | 600     | screen title (pairing, empty boards)                 |
+| xl    | 20 px                  | 22 px          | 600     | phone screen title, settings section title from `md` |
+| lg    | 16 px                  | 18 px          | 600     | dialog title, section title (phones)                 |
+| base  | 14 px                  | 17 px          | 400     | body, controls, palette rows                         |
+| sm    | 13 px                  | 15 px          | 400/500 | sidebar rows, secondary text, tabs                   |
+| xs    | 12 px                  | 13 px          | 500     | section labels, status bar, captions                 |
+| 2xs   | 11 px                  | 12 px          | 600     | chips, badges, kbd                                   |
 
 - UI: system stack (`-apple-system`, SF Pro on Apple per HIG; Segoe UI Variable; system-ui). Terminal and code: JetBrains Mono Variable, self-hosted via @fontsource-variable, ligatures off (herdr-app default).
 - Body is 17 px on coarse pointers (HIG: 17 pt body on iPhone, secondary not below 15 pt). Desktop body 14 px; 13 px rows follow herdr-app's density and stay secondary-level text.
@@ -133,8 +136,8 @@ Every interactive primitive: hover, pressed, focus-visible (2 px `--ring` outlin
 | SpaceRow                               |                                 | selected                                                                    | folder, name, most urgent status (idle draws the ring too), tab count                                                                                                                                                                                      |
 | SidebarSection                         |                                 | title tone, count                                                           | status-coloured headers                                                                                                                                                                                                                                    |
 | CommandPalette                         | combobox + listbox              | groups, hints, `status`, keys, `onCancel`                                   | arrows move, Enter runs, Escape closes (host); agents show glyph + state; coarse pointers get a Cancel button                                                                                                                                              |
-| EmptyState                             |                                 | icon, title, description, actions; `size` panel / screen                    | says what happened and the next step; `screen` uses the 2xl title                                                                                                                                                                                          |
-| Notice                                 |                                 | info, warning, error                                                        | inline, next to what it affects; warning is neutral (raised + hairline) so amber keeps meaning working                                                                                                                                                     |
+| EmptyState                             |                                 | icon, title, description, actions; `size` panel / screen                    | says what happened and the next step; the icon sits bare above the title (no tile); `screen` uses the 2xl title                                                                                                                                            |
+| Notice                                 |                                 | info, warning, error                                                        | inline, next to what it affects; warning is neutral (raised tint, no frame) so amber keeps meaning working                                                                                                                                                 |
 | Skeleton, Spinner                      |                                 |                                                                             | placeholder at once; spinner only for waits past ~1 s                                                                                                                                                                                                      |
 | StatusBar, StatusBarItem               |                                 |                                                                             | where you are left, how to act right                                                                                                                                                                                                                       |
 | TerminalPreview                        |                                 | ANSI spans                                                                  | static stand-in for the live libghostty terminal, same `--term-*` vars                                                                                                                                                                                     |
@@ -207,6 +210,17 @@ Target WCAG 2.2 AA.
 | 3.3.2 Labels                                   | visible labels on fields; icon buttons require `label`                              | Field, IconButton                                    |
 | State-stable controls                          | states change colour/opacity/0.97 scale only, never size                            | Button, AgentRow                                     |
 | 2.3.3 Animation from interactions              | reduced-motion path in base.css                                                     | base.css                                             |
+
+### Detect findings
+
+The rendered lint (frontend detect, chrome backend, 11 showcase routes x Day/Night x 1440/390, `reflow: false`) reports 0 errors. Two warnings remain and are false positives; nothing is waived with `data-detect-ignore`.
+
+| Rule              | Where                       | Why it is a false positive                                                                                                                                                                                                                       |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| organic-clip-path | primitives, open popover    | the polygon is Base UI's internal popover backdrop: a full-viewport rectangle with a rectangular hole cut around the trigger. Simple geometry generated by the library, not an approximated organic contour.                                     |
+| text-occlusion    | palette (64 hits per theme) | every hit pairs a node of the open palette (`role=dialog`, `aria-modal`) or its backdrop with shell text underneath. A modal over the dimmed workspace is the screen's purpose (section 4, imposter pattern); no hit involves two in-flow nodes. |
+
+Overflow at 390 is checked on the 390 captures because the detector's reflow probe throws in this version.
 
 ### Accepted Debt
 
