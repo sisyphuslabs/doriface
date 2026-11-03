@@ -8,6 +8,7 @@ import { connectionStore } from "./connection/store.ts";
 import { closeDesktopWindow, desktopBridge, onDesktopNavigate, setDesktopBackground } from "./desktop/bridge.ts";
 import { bootConnection } from "./desktop/local-host.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
+import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
 import { setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { router } from "./router.tsx";
@@ -31,6 +32,10 @@ if (desktopBridge() !== null) {
   appearanceStore.subscribe(paintWindow);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintWindow);
 }
+// Leaving the pair route forgets the link; coming back without one asks for a link or code again.
+router.subscribe("onResolved", ({ toLocation }) => {
+  if (toLocation.pathname !== PAIR_PATH) pairingLink.set(null);
+});
 if (import.meta.env.DEV) void import("./dev-tools.ts");
 
 const container = document.getElementById("root");
