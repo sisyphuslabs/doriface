@@ -1,5 +1,8 @@
 import { expect, terminalCount, test } from "./fixtures.ts";
 
+// The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
+test.use({ serviceWorkers: "block" });
+
 test("rebinding New tab makes the new shortcut open a tab", async ({ page }) => {
   await page.goto("/settings");
   await page
