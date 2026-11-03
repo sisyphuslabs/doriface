@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { expect, test } from "bun:test";
-import { followTerminals, type KeyedTabs, NO_TABS } from "./tab-follow.ts";
+import { followTerminals, type KeyedTabs, NO_TABS, selectTab } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 const terminal = (address: string): Terminal => ({
@@ -57,4 +57,24 @@ test("a tab that comes back in the same read another one leaves in still lets th
   for (const listed of [2, 3]) tabs = followTerminals(tabs, [terminal("x/t1")], two, listed);
   expect(tabs.open.map((key) => tabAddress(key, two))).toEqual(["x/t1"]);
   expect(tabs.active === null ? null : tabAddress(tabs.active, two)).toBe("x/t1");
+});
+
+test("a New tab the feed does not list yet waits for it through a machine.list read, then opens focused", () => {
+  const ids = machineIds([]);
+  const [kept, started] = [tabKey("t1", ids), tabKey("t2", ids)];
+  let tabs: KeyedTabs = followTerminals({ ...NO_TABS, open: [kept], active: kept }, [terminal("t1")], ids, 1);
+  tabs = selectTab(tabs, started, false);
+  tabs = followTerminals(tabs, [terminal("t1")], ids, 2);
+  expect([tabs.open, tabs.active]).toEqual([[kept], kept]);
+  tabs = followTerminals(tabs, [terminal("t1"), terminal("t2")], ids, 2);
+  expect([tabs.open, tabs.active]).toEqual([[kept, started], started]);
+});
+
+test("a selected terminal the feed already lists opens at once, and a later selection replaces a waiting one", () => {
+  const ids = machineIds([]);
+  const [two, three] = [tabKey("t2", ids), tabKey("t3", ids)];
+  let tabs = selectTab(selectTab(NO_TABS, three, false), two, true);
+  expect([tabs.open, tabs.active]).toEqual([[two], two]);
+  tabs = followTerminals(tabs, [terminal("t2"), terminal("t3")], ids, 1);
+  expect([tabs.open, tabs.active]).toEqual([[two], two]);
 });

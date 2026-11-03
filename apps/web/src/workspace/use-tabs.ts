@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { followTerminals, type KeyedTabs, NO_TABS } from "./tab-follow.ts";
+import { followTerminals, type KeyedTabs, NO_TABS, selectTab } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 export interface TabsState {
@@ -48,17 +48,11 @@ export function useTabs(
     setState((prev) => followTerminals(prev, terminals, ids, listed));
   }, [terminals, ids, listed]);
 
+  // What the feed lists now: New tab selects a terminal hc has started that the feed may not list yet.
+  const listedNow = useMemo(() => new Set((terminals ?? []).map((terminal) => terminal.address)), [terminals]);
   const select = useCallback(
-    (address: string) => {
-      const key = tabKey(address, ids);
-      setState((prev) => ({
-        ...prev,
-        open: prev.open.includes(key) ? prev.open : [...prev.open, key],
-        active: key,
-        split: prev.split === key ? null : prev.split,
-      }));
-    },
-    [ids],
+    (address: string) => setState((prev) => selectTab(prev, tabKey(address, ids), listedNow.has(address))),
+    [ids, listedNow],
   );
 
   const close = useCallback(
