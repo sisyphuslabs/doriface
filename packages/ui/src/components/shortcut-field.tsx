@@ -86,7 +86,7 @@ export function ShortcutField({
         <div role="alert" className="flex flex-col items-end gap-2 text-right sm:max-w-80">
           <p className="flex items-start gap-1.5 text-sm text-foreground">
             <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-            <span className="text-pretty">Already used by {conflictWith}. Move it here?</span>
+            <span className="text-pretty">Already used by {conflictWith ?? "another action"}. Move it here?</span>
           </p>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={onCancel}>
