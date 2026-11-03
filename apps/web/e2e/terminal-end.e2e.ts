@@ -122,3 +122,24 @@ test("a reconnect inside a kept program's restart shows it restarting, not an er
   await expect(restarted).toContainText("back-42", { timeout: 15_000 });
   expect(await page.evaluate(() => Reflect.get(window, "attachErrors"))).toEqual([]);
 });
+
+test("a kept program that ends while its view waits for the restart closes its tab", async ({ page }) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  const terminal = await openNewTerminal(page);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+  const tabsBefore = await tabs.count();
+  hc(["keep", address]);
+
+  await terminal.getByRole("textbox").focus();
+  await page.keyboard.type("kill -9 $$");
+  await page.keyboard.press("Enter");
+  const restarting = page.getByText("The program in this terminal is restarting");
+  await expect(restarting).toBeVisible({ timeout: 15_000 });
+  // Ended inside the restart grace: no restarted program will ever replace this view.
+  hc(["kill", address]);
+
+  await expect(tabs).toHaveCount(tabsBefore - 1, { timeout: 15_000 });
+  await expect(restarting).toHaveCount(0);
+});

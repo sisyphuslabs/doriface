@@ -62,6 +62,7 @@ export function Pane({ connection, terminal, focused, index, split, onFocus, onE
         connection={connection}
         address={terminal.address}
         pid={terminal.pid ?? null}
+        live={terminal.state === "live"}
         focused={focused}
         label={`${title} output`}
         onEnd={onEnd}
