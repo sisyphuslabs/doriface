@@ -19,8 +19,11 @@ const REASONS: Readonly<Record<OfferSecret["mode"], Readonly<Record<number, stri
     [CloseCode.CryptoFailure]: `This pairing link doesn't match this host. ${AGAIN}`,
     [CloseCode.UnknownDevice]: `The host refused this link: it was used already or replaced. ${AGAIN}`,
     [CloseCode.HostOffline]: "The host is not connected to the relay. Start doriface-host and try again.",
+    [CloseCode.RateLimited]: "Too many attempts from this network. Wait a few minutes and try again.",
   },
 };
+
+const UNREACHABLE = "The relay cannot be reached. Check the network and try again.";
 
 export class PairingFailedError extends Error {
   override readonly name = "PairingFailedError";
@@ -48,6 +51,9 @@ export async function pairWithHost(offer: PairingOffer, name: string, deps: Rela
     relayUrl: offer.relayUrl,
     hostId: offer.hostId,
     ...(secret.mode === "code" ? { pairSlot: slotOf(secret.code) } : {}),
+  }).catch((error: unknown) => {
+    const reason = pairingFailureReason(secret.mode, error instanceof Error ? closeCodeOf(error) : undefined);
+    throw new PairingFailedError(reason ?? UNREACHABLE, { cause: error });
   });
   const staticKey = await deviceKeyFor(link, deps);
   try {
