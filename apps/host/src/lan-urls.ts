@@ -17,22 +17,30 @@ function canonicalIpv6(hostname: string): string | undefined {
 
 const isLinkLocal = (ipv6: string): boolean => /^fe[89ab]/i.test(ipv6);
 
-/** This machine's non-internal addresses, IPv4 first (link-local IPv6 needs a zone id, so it is left out). */
-function interfaceAddresses(): string[] {
-  const addresses = Object.values(networkInterfaces()).flatMap((entries) => entries ?? []);
+export interface InterfaceAddress {
+  readonly address: string;
+  readonly family: "IPv4" | "IPv6";
+  readonly internal: boolean;
+}
+
+const systemAddresses = (): readonly InterfaceAddress[] =>
+  Object.values(networkInterfaces()).flatMap((entries) => entries ?? []);
+
+/**
+ * The non-internal addresses a wildcard bind is reachable on, IPv4 first; link-local IPv6 needs a zone id, so it is
+ * left out. `0.0.0.0` listens on IPv4 only; `::` is a dual-stack bind, so it takes both families.
+ */
+function wildcardHosts(addresses: readonly InterfaceAddress[], families: readonly string[]): string[] {
   const usable = addresses.filter((entry) => !entry.internal && !isLinkLocal(entry.address));
-  return [
-    ...usable.filter((entry) => entry.family === "IPv4"),
-    ...usable.filter((entry) => entry.family === "IPv6"),
-  ].map((entry) => entry.address);
+  return families.flatMap((family) => usable.filter((entry) => entry.family === family).map((entry) => entry.address));
 }
 
 /** The addresses a client can dial for this bind: every interface for a wildcard, the literal itself, or none. */
-function dialableHosts(hostname: string): string[] {
-  if (isIpv4(hostname)) return hostname === "0.0.0.0" ? interfaceAddresses() : [hostname];
+function dialableHosts(hostname: string, addresses: readonly InterfaceAddress[]): string[] {
+  if (isIpv4(hostname)) return hostname === "0.0.0.0" ? wildcardHosts(addresses, ["IPv4"]) : [hostname];
   const ipv6 = canonicalIpv6(hostname);
   if (ipv6 === undefined || isLinkLocal(ipv6)) return [];
-  return ipv6 === "::" ? interfaceAddresses() : [ipv6];
+  return ipv6 === "::" ? wildcardHosts(addresses, ["IPv4", "IPv6"]) : [ipv6];
 }
 
 /**
@@ -40,6 +48,10 @@ function dialableHosts(hostname: string): string[] {
  * interface address for a wildcard bind, nothing for a hostname (clients never resolve names on this path) or for a
  * link-local address (it needs a zone id). The list is cut to what fits message 2's 256-byte reply line.
  */
-export function lanUrlsFor(hostname: string, port: number): readonly string[] {
-  return fitLanUrls(dialableHosts(hostname).map((host) => `ws://${formatHost(host)}:${port}/v1/e2ee`));
+export function lanUrlsFor(
+  hostname: string,
+  port: number,
+  addresses: readonly InterfaceAddress[] = systemAddresses(),
+): readonly string[] {
+  return fitLanUrls(dialableHosts(hostname, addresses).map((host) => `ws://${formatHost(host)}:${port}/v1/e2ee`));
 }
