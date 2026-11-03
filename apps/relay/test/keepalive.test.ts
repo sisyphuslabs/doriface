@@ -116,6 +116,7 @@ describe("keepalive and reaping (C1, C6)", () => {
     const pinging = await connect(host, ip, FAST_PING_MS);
     await activate(pinging);
     const stray = new Probe(`${relay.url.replace("http", "ws")}/v1/host/${host.uplink.hostId}`, ip);
+    defer(() => stray.socket.close());
     await stray.next();
     // Opened after the stray socket, so its reaping proves the reaper has passed the stray socket's deadline.
     const quiet = await connect(host, ip, NO_PING_MS);

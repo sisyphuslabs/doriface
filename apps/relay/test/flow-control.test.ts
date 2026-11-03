@@ -182,6 +182,7 @@ describe("backpressure (C3)", () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip);
     const client = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
+    defer(() => client.close());
     // Challenge and OPEN, then DATA frames that leave the uplink 2 bytes short of the 4 MiB window.
     const sentSoFar = CHALLENGE_BYTES + MUX_HEADER_BYTES;
     const full = times(3).map(() => MAX_SESSION_SEND_BYTES);
@@ -194,6 +195,7 @@ describe("backpressure (C3)", () => {
     };
     await delivered(4);
     const second = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
+    defer(() => second.close());
     expect((await host.probe.closed).code).toBe(CloseCode.IdleTimeout);
     client.close();
     second.close();
