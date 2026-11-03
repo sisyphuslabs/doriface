@@ -46,8 +46,11 @@ describe("control socket", () => {
   test("a live socket is reported as live, a stale or missing one is not", async () => {
     expect(await controlIsLive(dir)).toBe(false);
     const listener = listenControl(dir, () => Promise.resolve(undefined));
-    expect(await controlIsLive(dir)).toBe(true);
-    listener.stop();
+    try {
+      expect(await controlIsLive(dir)).toBe(true);
+    } finally {
+      listener.stop();
+    }
     expect(await controlIsLive(dir)).toBe(false);
   });
 });
