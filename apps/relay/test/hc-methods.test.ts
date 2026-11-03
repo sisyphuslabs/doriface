@@ -154,6 +154,48 @@ describe("every hc method family, client SDK -> Noise IK -> relay -> doriface-ho
     expect(names).toEqual(expect.arrayContaining([...hc.hello.methods]));
   }, 30_000);
 
+  test("server.status names the core hello named, and templates.list answers", async () => {
+    const { hc } = started();
+    const status = await hc.call("server.status");
+    expect([status.core.id, status.version]).toEqual([hc.hello.core.id, hc.hello.version]);
+    expect(status.pid).toBeGreaterThan(0);
+    expect(status.live).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray((await hc.call("templates.list")).templates)).toBe(true);
+  }, 30_000);
+
+  test("terminal.keep marks a terminal kept, and its keep event follows", async () => {
+    const { hc, events, dir } = started();
+    const run = await hc.call("terminal.run", { argv: ["/bin/sh"], cwd: dir });
+    expect((await hc.call("terminal.keep", { terminal: run.address, keep: true })).keep).toBe(true);
+    expect((await events.next("keep", run.address)).data).toEqual({ keep: true });
+    await hc.call("terminal.kill", { terminal: run.address });
+  }, 30_000);
+
+  test("terminal.interrupt presses ctrl+c, and the program's INT trap ends it with exit 0", async () => {
+    const { hc, events, dir } = started();
+    const script = "trap 'echo interrupted; exit 0' INT; echo armed; while :; do sleep 1; done";
+    const run = await hc.call("terminal.run", { argv: ["/bin/sh", "-c", script], cwd: dir });
+    const screen = watchScreen(await hc.attach({ terminal: run.address, cols: 80, rows: 24 }));
+    await screen.contains("armed");
+    const interrupted = await hc.call("terminal.interrupt", { terminal: run.address, timeout: 1 });
+    expect(interrupted.key).toBe("ctrl+c");
+    expect((await events.next("finished", run.address)).data).toMatchObject({ exit_code: 0 });
+    expect((await hc.call("terminal.read", { terminal: run.address })).text).toContain("interrupted");
+  }, 30_000);
+
+  test("terminal.put writes bytes into a file beside a live terminal", async () => {
+    const { hc, dir } = started();
+    const run = await hc.call("terminal.run", { argv: ["/bin/sh"], cwd: dir });
+    const put = await hc.call("terminal.put", {
+      terminal: run.address,
+      name: "pasted.txt",
+      data: Buffer.from("put-through-relay").toString("base64"),
+    });
+    expect([put.bytes, put.path.endsWith("pasted.txt")]).toEqual([17, true]);
+    expect(readFileSync(put.path, "utf8")).toBe("put-through-relay");
+    await hc.call("terminal.kill", { terminal: run.address });
+  }, 30_000);
+
   test("hello and replies that do not change are byte-identical through the relay and from a direct hc connect", async () => {
     if (relayed === undefined) throw new Error("setup failed");
     const link = await relayed.dial(phone);
