@@ -55,6 +55,9 @@ describe("pairing fragment", () => {
     ["a short noise key", { k: b64url(new Uint8Array(31)) }],
     ["a 42-character link secret", { p: "A".repeat(42) }],
     ["a 44-character link secret", { p: "A".repeat(44) }],
+    ["a 45-character link secret", { p: "A".repeat(45) }],
+    ["a 45-character noise key", { k: "A".repeat(45) }],
+    ["a 45-character signing key", { s: "A".repeat(45) }],
     ["a non-WebSocket relay", { r: "https://relay.example" }],
   ])("rejects %s", (_name, overrides) => {
     expect(parsePairingFragment(fragment(overrides)).ok).toBe(false);
