@@ -9,8 +9,9 @@ export interface Admittee {
 }
 
 /**
- * The pending session to evict when the pending cap is full: the oldest one from the source IP that holds the most
- * pending sessions, so one source flooding pending sockets only ever displaces its own.
+ * The pending session to evict when the pending cap is full: the oldest one from the source that holds the most
+ * pending sessions. A flooding source therefore loses its own sessions first; another source displaces it only while
+ * the flooder still holds more pending sessions than anyone else.
  */
 export function evictionVictim<T>(pending: readonly T[], admittee: (session: T) => Admittee): T | undefined {
   const perIp = new Map<string, T[]>();
