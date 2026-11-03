@@ -38,9 +38,7 @@ export function SpaceRow({ space, selected = false, onSelect, className }: Space
       {space.machine === undefined ? null : (
         <span className="shrink-0 text-2xs text-muted-foreground">{space.machine}</span>
       )}
-      {space.attention === undefined || space.attention === "idle" ? null : (
-        <StatusIndicator status={space.attention} className="size-3" />
-      )}
+      {space.attention === undefined ? null : <StatusIndicator status={space.attention} className="size-3" />}
       <span
         data-numeric
         aria-label={`${space.tabs} tabs`}

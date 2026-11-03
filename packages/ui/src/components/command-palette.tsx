@@ -1,8 +1,10 @@
 import { Search } from "lucide-react";
 import { useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
+import { Button } from "./button.tsx";
 import { Kbd } from "./kbd.tsx";
 import { overlaySurface } from "./overlay.ts";
+import { STATUS_LABEL, StatusIndicator, type AgentStatus } from "./status.tsx";
 
 export interface Command {
   readonly id: string;
@@ -10,8 +12,10 @@ export interface Command {
   readonly group: string;
   readonly icon?: ReactNode;
   readonly keys?: readonly string[];
-  /** Right-aligned context, e.g. the machine or the agent state. */
+  /** Right-aligned secondary context, e.g. the machine. */
   readonly hint?: ReactNode;
+  /** An agent's state, shown as its glyph and word after the hint. */
+  readonly status?: AgentStatus;
 }
 
 export interface CommandPaletteProps {
@@ -19,6 +23,8 @@ export interface CommandPaletteProps {
   readonly placeholder?: string;
   readonly defaultQuery?: string;
   readonly onRun?: (id: string) => void;
+  /** Closes the palette; touch layouts show it as a Cancel button instead of the esc hint. */
+  readonly onCancel?: () => void;
   readonly className?: string;
 }
 
@@ -36,6 +42,7 @@ export function CommandPalette({
   placeholder = "Type a command or agent",
   defaultQuery = "",
   onRun,
+  onCancel,
   className,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState(defaultQuery);
@@ -75,6 +82,9 @@ export function CommandPalette({
           className="h-12 min-w-0 flex-1 bg-transparent text-lg text-foreground outline-none placeholder:text-muted-foreground"
         />
         <Kbd keys={["esc"]} />
+        <Button variant="ghost" size="sm" onClick={onCancel} className="-mr-2 hidden coarse:inline-flex">
+          Cancel
+        </Button>
       </div>
       <div
         id={listId}
@@ -110,6 +120,12 @@ export function CommandPalette({
                       <span className="min-w-0 flex-1 truncate">{command.label}</span>
                       {command.hint === undefined ? null : (
                         <span className="shrink-0 text-sm text-muted-foreground">{command.hint}</span>
+                      )}
+                      {command.status === undefined ? null : (
+                        <span className="flex shrink-0 items-center gap-1.5 text-sm text-foreground">
+                          <StatusIndicator status={command.status} decorative className="size-3" />
+                          {STATUS_LABEL[command.status]}
+                        </span>
                       )}
                       {command.keys === undefined ? null : <Kbd keys={command.keys} />}
                     </div>

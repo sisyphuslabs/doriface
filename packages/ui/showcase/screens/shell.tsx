@@ -39,7 +39,7 @@ export function AgentLists({
   const spaces = (
     <SidebarSection title="Spaces" count={SPACES.length} className={agentsFirst ? "order-last" : ""}>
       {SPACES.map((space) => (
-        <SpaceRow key={space.id} space={space} selected={space.id === "api"} />
+        <SpaceRow key={space.id} space={space} selected={!agentsFirst && space.id === "api"} />
       ))}
     </SidebarSection>
   );
@@ -85,11 +85,12 @@ function Pane(props: {
       <header
         className={cn(
           "flex h-(--pane-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm",
-          props.focused === true ? "bg-raised text-foreground" : "text-muted-foreground",
+          props.focused === true ? "bg-selected text-foreground" : "text-muted-foreground",
         )}
       >
         <SquareTerminal aria-hidden className="size-3.5 shrink-0" />
-        <h2 className="truncate font-medium">{props.title}</h2>
+        <h2 className={cn("truncate", props.focused === true ? "font-semibold" : "font-medium")}>{props.title}</h2>
+        {props.focused === true ? <span className="sr-only">(focused)</span> : null}
         <StatusChip status={props.status} />
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">{props.meta}</span>
       </header>
@@ -154,7 +155,7 @@ export function WorkspaceBody() {
 export function CompactHome({ className }: { readonly className?: string }) {
   return (
     <div className={cn("flex h-full min-h-0 min-w-0 flex-col bg-sidebar", className)}>
-      <header className="flex h-12 shrink-0 items-center gap-1 px-4 pt-[env(safe-area-inset-top)]">
+      <header className="box-content flex h-12 shrink-0 items-center gap-1 px-4 pt-(--safe-top)">
         <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
         <IconButton label="Search" icon={<Search />} size="md" />
         <IconButton label="Settings" icon={<Settings />} size="md" />
@@ -162,7 +163,10 @@ export function CompactHome({ className }: { readonly className?: string }) {
       <ScrollArea slot="agents-list" className="flex-1">
         <AgentLists agentsFirst />
       </ScrollArea>
-      <StatusBar start={<StatusBarItem icon={<Monitor aria-hidden />}>studio · relay</StatusBarItem>} />
+      <StatusBar
+        start={<StatusBarItem icon={<Monitor aria-hidden />}>studio · relay</StatusBarItem>}
+        className="box-content pb-(--safe-bottom)"
+      />
     </div>
   );
 }
