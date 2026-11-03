@@ -2,16 +2,22 @@ import {
   authMessage,
   CloseCode,
   connectRelayClient,
+  CROCKFORD_ALPHABET,
+  decodeMux,
+  decodePairSlotAck,
   ed25519Signer,
   encodeAuthAnswer,
+  encodePairSlotRequest,
   generateSigningKey,
   hostIdOf,
+  MuxType,
+  PairSlotAckStatus,
   RelayCloseError,
   relayOriginOf,
   Uplink,
 } from "@doriface/relay-client";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { runDeferred } from "./support/cleanup.ts";
+import { defer, runDeferred } from "./support/cleanup.ts";
 import { type Closed, Probe, socketFrom, testIp } from "./support/probe.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { startTestHost } from "./support/test-host.ts";
@@ -86,6 +92,25 @@ describe("host challenge auth", () => {
       ),
     );
     expect(closed.code).toBe(CloseCode.RelayAuthFailed);
+  });
+
+  test("a PAIR_SLOT sent right behind the answer waits for verification instead of failing auth", async () => {
+    const signer = ed25519Signer(generateSigningKey());
+    const hostId = await hostIdOf(signer.publicKey);
+    const probe = new Probe(hostUrl(hostId), testIp());
+    defer(() => probe.socket.close());
+    const challenge = await probe.next();
+    const signature = await signer.sign(authMessage(relayOriginOf(hostUrl(hostId)), hostId, challenge));
+    const slot = [...crypto.getRandomValues(new Uint8Array(3))]
+      .map((byte) => CROCKFORD_ALPHABET.charAt(byte & 31))
+      .join("");
+    probe.socket.send(encodeAuthAnswer(signer.publicKey, signature));
+    probe.socket.send(encodePairSlotRequest(slot, new Uint8Array(32).fill(5)));
+    const reply = decodeMux(await probe.next());
+    expect(reply.type === MuxType.PairSlotAck && decodePairSlotAck(reply.payload)).toEqual({
+      slot,
+      status: PairSlotAckStatus.Registered,
+    });
   });
 
   test("an uplink stops for good on 4403", async () => {
