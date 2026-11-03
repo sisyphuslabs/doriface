@@ -4,6 +4,8 @@ import { E2E_HOST_PORT } from "./config.ts";
 /** The page's hc WebSocket, routed through the spec so it can lag like the relay and drop like a relay blip. */
 export interface HcSocket {
   readonly opened: () => number;
+  /** Reconnects refused while down: one or more means the page has noticed the drop. */
+  readonly refused: () => number;
   /** Holds every later frame from the host `ms`, in order, as a relay round trip does. */
   readonly delay: (ms: number) => void;
   /** Closes every open connection; while `down` is true the page's reconnects are refused. */
@@ -16,10 +18,12 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   const live = new Set<WebSocketRoute>();
   let down = false;
   let opened = 0;
+  let refused = 0;
   let delay = 0;
   let lastDue = 0;
   await page.routeWebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, (socket) => {
     if (down) {
+      refused += 1;
       void socket.close({ code: 1011, reason: "host unreachable" });
       return;
     }
@@ -34,6 +38,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   });
   return {
     opened: () => opened,
+    refused: () => refused,
     delay: (ms) => void (delay = ms),
     drop: async (stayDown) => {
       down = stayDown;

@@ -1,13 +1,13 @@
-import type { TerminalStream } from "@doriface/client";
 import type { WTerm } from "@wterm/react";
-import type { RefObject } from "react";
 import { sendBytes } from "../keys/actions.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
+import type { TerminalInput } from "./terminal-view.tsx";
 
-export function useTerminalActions(wt: WTerm | null, stream: RefObject<TerminalStream | null>, focused: boolean): void {
+/** `send` is the view's input path, so bound keys queue through a reconnect in order with typed input. */
+export function useTerminalActions(wt: WTerm | null, send: (data: TerminalInput) => void, focused: boolean): void {
   useActionHandler("terminal", (action) => {
     if (wt === null || !focused) return false;
-    if (action.startsWith("send:")) return (stream.current?.write(sendBytes(action)), true);
+    if (action.startsWith("send:")) return (send(sendBytes(action)), true);
     const view = wt.element;
     switch (action) {
       case "terminal.copy": {
@@ -24,7 +24,7 @@ export function useTerminalActions(wt: WTerm | null, stream: RefObject<TerminalS
         void wt.selectAll();
         return true;
       case "terminal.clear":
-        stream.current?.write("\u000c");
+        send("\u000c");
         return true;
       case "terminal.scroll:top":
         view.scrollTo({ top: 0 });
