@@ -121,6 +121,29 @@ describe("secureLink failures", () => {
     await settledError(pair.responder);
   });
 
+  test("without the client's key confirmation the host never surfaces a session, so IK early bytes stay unread", async () => {
+    const [clientEnd, hostEnd] = memoryLinkPair();
+    let forwarded = 0;
+    clientEnd.tap = (bytes) => (forwarded++ === 0 ? [bytes] : []);
+    const responder = secureLink(hostEnd, {
+      role: "responder",
+      hostId: host.hostId,
+      staticKey: rawStaticKey(host.noise),
+      timeoutMs: 50,
+      authorize: () => ({ accept: true }),
+    });
+    const initiator = secureLink(clientEnd, {
+      role: "initiator",
+      hostId: host.hostId,
+      staticKey: rawStaticKey(device),
+      remoteStatic: host.noise.publicKey,
+      early: Uint8Array.of(1, 2, 3),
+    });
+    await initiator;
+    expect((await settledError(responder)).code).toBe(CloseCode.IdleTimeout);
+    expect(forwarded).toBe(2);
+  });
+
   test("a silent peer times out with 4408", async () => {
     const [, hostEnd] = memoryLinkPair();
     const responder = secureLink(hostEnd, {
