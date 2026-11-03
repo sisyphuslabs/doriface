@@ -19,6 +19,7 @@
   }
 
   body {
+    background: var(--background);
     font-size: var(--type-base);
     line-height: 1.5;
     min-height: 100dvh;
