@@ -49,7 +49,15 @@ export class Wire {
       link.onData((chunk) => this.#receive(chunk)),
       link.onClose((error) => this.#shutdown(error ?? new HcConnectionClosedError("link closed"))),
     ];
-    link.send(utf8.encode(HELLO_REQUEST_LINE));
+  }
+
+  /** Sends the hello line. A link that refuses it closes the wire, which rejects `hello` with the cause. */
+  start(): void {
+    try {
+      this.sendBytes(utf8.encode(HELLO_REQUEST_LINE));
+    } catch (error) {
+      if (!(error instanceof HcConnectionClosedError)) throw error;
+    }
   }
 
   get isClosed(): boolean {
@@ -67,7 +75,13 @@ export class Wire {
   /** Sends bytes that already form whole frames. */
   sendBytes(bytes: Uint8Array): void {
     if (this.#closeState !== undefined) throw new HcConnectionClosedError("connection is closed");
-    this.#link.send(bytes);
+    try {
+      this.#link.send(bytes);
+    } catch (error) {
+      const failure = error instanceof Error ? error : new HcConnectionClosedError(String(error));
+      this.close(failure);
+      throw new HcConnectionClosedError("the link refused a write", { cause: failure });
+    }
   }
 
   sendRpc(text: string): void {

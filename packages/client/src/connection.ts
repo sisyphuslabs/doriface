@@ -83,6 +83,7 @@ export class HcConnection {
     const wire = new Wire(link);
     const timeoutMs = options.handshakeTimeoutMs ?? DEFAULT_HANDSHAKE_TIMEOUT_MS;
     try {
+      wire.start();
       const hello = await raceDeadline(
         wire.hello,
         { timeoutMs, signal: options.signal },
@@ -138,17 +139,30 @@ export class HcConnection {
       if (!isResultOf(method, result)) throw new HcProtocolError(`${method} replied with a non-object result`);
       return adopt(result);
     });
-    this.#wire.sendRpc(encodeRequest(id, method, params));
+    try {
+      this.#wire.sendRpc(encodeRequest(id, method, params));
+    } catch (error) {
+      if (this.#wire.isClosed) return promise;
+      this.#wire.calls.forget(id);
+      return Promise.reject(error);
+    }
     const timeoutMs = options.timeoutMs ?? this.#callTimeoutMs;
     return raceDeadline(
       promise,
       { timeoutMs, signal },
       () => new HcTimeoutError(method, timeoutMs ?? 0),
-      () => {
-        this.#wire.calls.forget(id);
-        if (!this.#wire.isClosed) this.#wire.sendRpc(encodeNotification("$/cancelRequest", { id }));
-      },
+      () => this.#cancel(id),
     );
+  }
+
+  #cancel(id: number): void {
+    this.#wire.calls.forget(id);
+    if (this.#wire.isClosed) return;
+    try {
+      this.#wire.sendRpc(encodeNotification("$/cancelRequest", { id }));
+    } catch (error) {
+      if (!(error instanceof HcConnectionClosedError)) throw error;
+    }
   }
 
   get closed(): boolean {

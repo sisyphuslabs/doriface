@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { HcRpcError } from "@doriface/protocol";
 import { HcConnection } from "./connection.ts";
+import type { ByteLink } from "./link.ts";
 import { HcConnectionClosedError, HcTimeoutError } from "./errors.ts";
 import { FakeCore } from "./testing/fake-core.ts";
 import {
@@ -22,6 +23,41 @@ async function opened(core: FakeCore, callTimeoutMs?: number): Promise<HcConnect
 }
 
 const decode = (payload: Uint8Array) => new TextDecoder().decode(payload);
+
+/** Forwards to a real link until `refuseAfter` more writes, then throws like a dead socket. */
+class RefusingLink implements ByteLink {
+  refuseAfter = Number.POSITIVE_INFINITY;
+  readonly #inner: ByteLink;
+
+  constructor(inner: ByteLink) {
+    this.#inner = inner;
+  }
+
+  send(chunk: Uint8Array): void {
+    if (this.refuseAfter <= 0) throw new Error("socket write failed");
+    this.refuseAfter -= 1;
+    this.#inner.send(chunk);
+  }
+
+  onData(listener: (chunk: Uint8Array) => void) {
+    return this.#inner.onData(listener);
+  }
+
+  onClose(listener: (error: Error | undefined) => void) {
+    return this.#inner.onClose(listener);
+  }
+
+  close(): void {
+    this.#inner.close();
+  }
+}
+
+async function openedOver(core: FakeCore, link: ByteLink, callTimeoutMs?: number): Promise<HcConnection> {
+  const connection = HcConnection.open(link, callTimeoutMs === undefined ? {} : { callTimeoutMs });
+  await core.waitHello();
+  core.push(`${HELLO_REPLY_LINE}\n`);
+  return connection;
+}
 
 describe("HcConnection.call", () => {
   test("resolves the first reply at every chunk boundary after the hello", async () => {
@@ -117,6 +153,31 @@ describe("HcConnection.call", () => {
       true,
     ]);
     await expect(connection.call("server.status")).rejects.toThrow(HcConnectionClosedError);
+  });
+
+  test("a link that refuses the hello rejects open with the link's error", async () => {
+    const link = new RefusingLink(new FakeCore().client);
+    link.refuseAfter = 0;
+    await expect(HcConnection.open(link)).rejects.toThrow("socket write failed");
+  });
+
+  test("a refused write rejects the call and closes the connection", async () => {
+    const core = new FakeCore();
+    const link = new RefusingLink(core.client);
+    const connection = await openedOver(core, link);
+    link.refuseAfter = 0;
+    const status = connection.call("server.status");
+    await expect(status).rejects.toThrow("socket write failed");
+    expect(connection.closed).toBe(true);
+  });
+
+  test("a timed-out call still rejects with HcTimeoutError when its cancel cannot be sent", async () => {
+    const core = new FakeCore();
+    const link = new RefusingLink(core.client);
+    const connection = await openedOver(core, link, 20);
+    link.refuseAfter = 1;
+    await expect(connection.call("server.status")).rejects.toThrow(HcTimeoutError);
+    expect(connection.closed).toBe(true);
   });
 
   test("closes a stream whose attach reply came after the call gave up", async () => {

@@ -3,9 +3,13 @@ export interface Deadline {
   readonly signal?: AbortSignal | undefined;
 }
 
+/** setTimeout fires at once for delays above this, so longer deadlines are capped to it. */
+const MAX_TIMER_MS = 2_147_483_647;
+
 /**
- * Settles with `promise` unless the timeout or the abort signal comes first; then `onExpire`
- * runs once and the result rejects with the timeout error or the signal's reason.
+ * Settles with `promise` unless the timeout or the abort signal comes first; then the result
+ * rejects with the timeout error or the signal's reason, and `onExpire` runs once afterwards.
+ * A non-finite `timeoutMs` means no timeout.
  */
 export function raceDeadline<T>(
   promise: Promise<T>,
@@ -14,7 +18,8 @@ export function raceDeadline<T>(
   onExpire: () => void = () => {},
 ): Promise<T> {
   const { timeoutMs, signal } = deadline;
-  if (timeoutMs === undefined && signal === undefined) return promise;
+  const timed = timeoutMs !== undefined && Number.isFinite(timeoutMs);
+  if (!timed && signal === undefined) return promise;
   return new Promise<T>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
@@ -27,16 +32,10 @@ export function raceDeadline<T>(
     };
     const expire = (reason: unknown) => {
       if (!finish()) return;
-      onExpire();
       reject(reason);
+      onExpire();
     };
     const onAbort = () => expire(signal?.reason);
-    if (signal?.aborted === true) {
-      expire(signal.reason);
-      return;
-    }
-    signal?.addEventListener("abort", onAbort, { once: true });
-    if (timeoutMs !== undefined) timer = setTimeout(() => expire(timeoutError()), timeoutMs);
     void settleFrom(
       promise,
       (value) => {
@@ -46,6 +45,12 @@ export function raceDeadline<T>(
         if (finish()) reject(error);
       },
     );
+    if (signal?.aborted === true) {
+      expire(signal.reason);
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (timed) timer = setTimeout(() => expire(timeoutError()), Math.min(Math.max(timeoutMs, 0), MAX_TIMER_MS));
   });
 }
 
