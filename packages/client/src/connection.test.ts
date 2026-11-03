@@ -80,6 +80,17 @@ describe("HcConnection hello", () => {
     expect([error.kind, error.hint]).toEqual(["usage", "use a shorter HC_SESSION (or socket in the config)"]);
   });
 
+  test.each([
+    ["a newer generation with a changed shape", '{"id":0,"jsonrpc":"2.0","result":{"generation":2}}', "generation 2"],
+    ["a core without its id", HELLO_REPLY_LINE.replace(/"core":\{[^}]*\}/, '"core":{}'), "not a HelloResult"],
+  ])("rejects %s", async (_name, reply, message) => {
+    const core = new FakeCore();
+    const opening = HcConnection.open(core.client);
+    await core.waitHello();
+    core.push(`${reply}\n`);
+    await expect(opening).rejects.toThrow(message);
+  });
+
   test("rejects a core that stayed in plain mode", async () => {
     const core = new FakeCore();
     const opening = HcConnection.open(core.client);

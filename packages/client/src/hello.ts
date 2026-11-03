@@ -54,10 +54,11 @@ function helloFromLine(line: string): HelloResult | undefined {
   if ((message.kind !== "success" && message.kind !== "failure") || message.id !== HELLO_ID) return undefined;
   if (message.kind === "failure") throw new HcRpcError(message.error);
   const result = message.result;
-  if (!isHelloResult(result)) throw new HcHandshakeError("hello reply is not a HelloResult");
-  if (result.generation !== GENERATION) {
-    throw new HcHandshakeError(`core speaks protocol generation ${result.generation}, this client ${GENERATION}`);
+  const generation = isJsonObject(result) ? result["generation"] : undefined;
+  if (generation !== GENERATION) {
+    throw new HcHandshakeError(`core speaks protocol generation ${String(generation)}, this client ${GENERATION}`);
   }
+  if (!isHelloResult(result)) throw new HcHandshakeError("hello reply is not a HelloResult");
   if (!result.framed) throw new HcHandshakeError("core did not switch to framed mode");
   return result;
 }
@@ -76,6 +77,10 @@ function startupError(line: string): HcRpcError | undefined {
   return new HcRpcError({ code: -32000, message: error["message"], data: error });
 }
 
+function isCoreInfo(value: unknown): boolean {
+  return isJsonObject(value) && typeof value["id"] === "string" && typeof value["name"] === "string";
+}
+
 function isHelloResult(value: unknown): value is HelloResult {
   if (!isJsonObject(value)) return false;
   const features = value["features"];
@@ -83,7 +88,7 @@ function isHelloResult(value: unknown): value is HelloResult {
   return (
     typeof value["generation"] === "number" &&
     typeof value["version"] === "string" &&
-    isJsonObject(value["core"]) &&
+    isCoreInfo(value["core"]) &&
     typeof value["framed"] === "boolean" &&
     Array.isArray(features) &&
     features.every((feature) => typeof feature === "string") &&
