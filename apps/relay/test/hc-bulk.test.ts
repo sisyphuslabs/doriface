@@ -51,4 +51,22 @@ describe("frames and streams far past one relay message, through the relay", () 
     expect([hc.closed, stream.state]).toEqual([false, "open"]);
     await hc.call("terminal.kill", { terminal: run.address });
   }, 60_000);
+
+  test("6 MiB up and 20 MiB down at the same time both finish: credit never waits on itself", async () => {
+    const { hc, dir } = started();
+    const run = await hc.call("terminal.run", { argv: ["/bin/sh"], cwd: dir, env: { PS1: "$ ", HOME: dir } });
+    const screen = watchScreen(await hc.attach({ terminal: run.address, cols: 120, rows: 40 }));
+    const content = `${"z".repeat(63)}\n`.repeat((6 * MIB) / 64);
+    const upload = hc.call("file.write", {
+      path: join(dir, "both.txt"),
+      data: Buffer.from(content).toString("base64"),
+    });
+    await hc.call("terminal.send", {
+      terminal: run.address,
+      text: "head -c 20971520 /dev/zero | tr '\\0' 'y'; echo; echo both-$((6 * 7))",
+    });
+    const [written] = await Promise.all([upload, within(screen.line("both-42"), "the line after 20 MiB", 50_000)]);
+    expect(written.bytes).toBe(content.length);
+    await hc.call("terminal.kill", { terminal: run.address });
+  }, 60_000);
 });
