@@ -27,13 +27,14 @@ export class WebSocketLink implements ByteLink {
   constructor(ws: WebSocket, pingIntervalMs = PING_INTERVAL_MS) {
     this.#ws = ws;
     ws.binaryType = "arraybuffer";
-    this.#inbox = new Inbox((error) => this.#shut(CloseCode.InternalError, "data listener failed", error));
+    this.#inbox = new Inbox(
+      (error) => this.#shut(CloseCode.InternalError, "data listener failed", error),
+      (chunk) => this.#consumed(chunk.byteLength),
+    );
     this.#stopPings = keepAlive(ws, pingIntervalMs);
     ws.addEventListener("message", (event: MessageEvent<unknown>) => {
       if (event.data === PONG) return;
       if (!(event.data instanceof ArrayBuffer)) return this.#shut(CloseCode.UnsupportedData, "binary messages only");
-      const ack = this.#acks.ackFor(event.data.byteLength);
-      if (ack !== undefined && isOpen(ws)) ws.send(ack);
       this.#inbox.push(new Uint8Array(event.data));
     });
     ws.addEventListener("close", (event: CloseEvent) => this.#finish(event.code, event.reason));
@@ -62,6 +63,12 @@ export class WebSocketLink implements ByteLink {
 
   close(): void {
     this.#shut(CloseCode.Normal, "");
+  }
+
+  /** Acks once listeners took the bytes, so a slow consumer slows the sender instead of growing the inbox. */
+  #consumed(bytes: number): void {
+    const ack = this.#acks.ackFor(bytes);
+    if (ack !== undefined && isOpen(this.#ws)) this.#ws.send(ack);
   }
 
   #shut(code: number, reason: string, cause?: unknown): void {
