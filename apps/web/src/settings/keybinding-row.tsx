@@ -1,6 +1,6 @@
 import { Badge, Button, IconButton, Kbd, SettingRow } from "@doriface/ui";
 import { Plus, RotateCcw, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { actionFor, displayActionId, type ActionDef } from "../keys/actions.ts";
 import type { Keymap } from "../keys/defaults.ts";
 import { triggerFromEvent, triggerKeys, type Platform } from "../keys/trigger.ts";
@@ -17,7 +17,10 @@ export interface KeybindingRowProps {
   readonly disabled: boolean;
 }
 
-/** Listens for the next key combination; a plain Escape cancels, a modified one is recorded. */
+/**
+ * Listens for the next key combination; a plain Escape cancels, a modified one is recorded. It takes focus
+ * while it listens, so the keyboard user stays at the row instead of on the page body.
+ */
 function Recorder({
   onRecord,
   onCancel,
@@ -25,6 +28,8 @@ function Recorder({
   readonly onRecord: (trigger: string) => void;
   readonly onCancel: () => void;
 }) {
+  const self = useRef<HTMLSpanElement>(null);
+  useEffect(() => self.current?.focus(), []);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       event.preventDefault();
@@ -39,8 +44,10 @@ function Recorder({
   }, [onRecord, onCancel]);
   return (
     <span
+      ref={self}
       role="status"
       data-captures-keys
+      tabIndex={-1}
       className="inline-flex h-(--control) items-center rounded-md border border-ring px-2.5 text-sm text-foreground"
     >
       Press keys…
@@ -60,11 +67,24 @@ export function KeybindingRow({
 }: KeybindingRowProps) {
   const [recording, setRecording] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
+  const recordButton = useRef<HTMLButtonElement>(null);
+  // Set when recording or the conflict prompt ends by the keyboard user's choice: focus goes back to the row.
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (recording || pending !== null || !returnFocus.current) return;
+    returnFocus.current = false;
+    // Shown as keyboard focus: Chrome does not count a modified chord (the one just recorded) as keyboard input.
+    recordButton.current?.focus({ focusVisible: true });
+  }, [recording, pending]);
   const triggers = [...keymap].filter(([, bound]) => bound === action.id).map(([trigger]) => trigger);
   const conflict = pending === null ? undefined : keymap.get(pending);
   const conflictLabel = conflict === undefined ? null : (actionFor(conflict)?.label ?? conflict);
-  const record = (trigger: string): void => {
+  const finish = (): void => {
+    returnFocus.current = true;
     setRecording(false);
+  };
+  const record = (trigger: string): void => {
+    finish();
     if (keymap.get(trigger) === action.id) return;
     if (keymap.has(trigger)) setPending(trigger);
     else onBind(trigger);
@@ -89,12 +109,20 @@ export function KeybindingRow({
               variant="primary"
               onClick={() => {
                 onBind(pending);
+                returnFocus.current = true;
                 setPending(null);
               }}
             >
               Replace
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                returnFocus.current = true;
+                setPending(null);
+              }}
+            >
               Keep
             </Button>
           </span>
@@ -114,9 +142,10 @@ export function KeybindingRow({
             </span>
           ))}
           {recording ? (
-            <Recorder onRecord={record} onCancel={() => setRecording(false)} />
+            <Recorder onRecord={record} onCancel={finish} />
           ) : (
             <IconButton
+              ref={recordButton}
               label={`Record a shortcut for ${action.label}`}
               disabled={disabled}
               icon={<Plus />}
