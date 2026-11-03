@@ -1,7 +1,7 @@
 import { CloseCode, connectRelayClient, type SessionLink, type WebSocketLink } from "@doriface/relay-client";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { closedWith, received } from "./support/links.ts";
-import { socketFrom, testIp } from "./support/probe.ts";
+import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { startRawHost } from "./support/raw-host.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { startTestHost, type TestHost } from "./support/test-host.ts";
@@ -91,6 +91,22 @@ describe("keepalive and reaping (C1, C6)", () => {
     await activate(quiet);
     expect(await closedWith(quiet.client)).toBe(CloseCode.IdleTimeout);
     expect(await closedWith(quiet.session)).toBe(CloseCode.IdleTimeout);
+    expect(pinging.client.closeCode).toBeUndefined();
+    expect(await roundTrips(pinging)).toBe(true);
+    host.uplink.stop();
+  });
+
+  test("reaping an uplink that never authenticated leaves the online host's sessions alone", async () => {
+    const ip = testIp();
+    const host = await startTestHost(relay.url, ip, { pingIntervalMs: FAST_PING_MS });
+    const pinging = await connect(host, ip, FAST_PING_MS);
+    await activate(pinging);
+    const stray = new Probe(`${relay.url.replace("http", "ws")}/v1/host/${host.uplink.hostId}`, ip);
+    await stray.next();
+    // Opened after the stray socket, so its reaping proves the reaper has passed the stray socket's deadline.
+    const quiet = await connect(host, ip, NO_PING_MS);
+    await activate(quiet);
+    expect(await closedWith(quiet.client)).toBe(CloseCode.IdleTimeout);
     expect(pinging.client.closeCode).toBeUndefined();
     expect(await roundTrips(pinging)).toBe(true);
     host.uplink.stop();
