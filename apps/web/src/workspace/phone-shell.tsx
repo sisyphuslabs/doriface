@@ -12,7 +12,7 @@ import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx"
 import { AgentLists } from "./agent-lists.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
-import { agentStatus, machineOf, terminalTitle, UNREACHABLE } from "./model.ts";
+import { agentStatus, machineOf, spaceName, terminalTitle, UNREACHABLE } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
@@ -104,6 +104,7 @@ function PhoneTerminal(props: {
   };
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
+  const where = machine === undefined ? spaceName(terminal) : `${machine} · ${spaceName(terminal)}`;
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">
@@ -112,11 +113,16 @@ function PhoneTerminal(props: {
         className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
       >
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 title={title} className="min-w-0 truncate text-base font-semibold text-foreground">
-            {title}
-          </h1>
-          <StatusChip status={agentStatus(terminal)} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 title={title} className="min-w-0 truncate text-base leading-tight font-semibold text-foreground">
+              {title}
+            </h1>
+            <StatusChip status={agentStatus(terminal)} />
+          </div>
+          <p title={where} className="truncate text-xs leading-tight text-muted-foreground">
+            {where}
+          </p>
         </div>
       </header>
       {terminal.state === UNREACHABLE && machine !== undefined ? (
