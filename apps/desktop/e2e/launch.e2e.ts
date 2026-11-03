@@ -26,7 +26,7 @@ test.beforeAll(async () => {
   const session = scratchHcSession();
   hc = session;
   launched = await electron.launch({
-    ...(executablePath === undefined ? { args: appArgs() } : { executablePath: attachAfterFirstLoad, args: [] }),
+    ...(executablePath === undefined ? { args: appArgs() } : { executablePath: attachAfterFirstLoad, args: appArgs() }),
     env: launchEnv(session),
   });
 });
