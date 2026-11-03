@@ -1,9 +1,29 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 
+/** Another modal still open once this overlay is gone, such as the terminal's paste dialog. */
+const OPEN_MODAL = '[role="dialog"][aria-modal="true"], [role="alertdialog"]';
+const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+
 function isUsable(element: Element | null): element is HTMLElement {
   return (
-    element instanceof HTMLElement && element.isConnected && element !== document.body && element.checkVisibility()
+    element instanceof HTMLElement &&
+    element.isConnected &&
+    element !== document.body &&
+    element.checkVisibility() &&
+    // Never into a subtree a modal has hidden or made inert: keys typed there would go behind it.
+    element.closest('[aria-hidden="true"], [inert]') === null
   );
+}
+
+/** Where focus goes back: into a modal that is still open first, otherwise the terminal, then the opener. */
+function restoreTargets(opener: Element | null): (Element | null)[] {
+  const modal = [...document.querySelectorAll(OPEN_MODAL)].at(-1);
+  if (modal !== undefined) return [modal.contains(opener) ? opener : null, ...modal.querySelectorAll(FOCUSABLE)];
+  return [
+    document.querySelector('[data-focused="true"] [data-terminal] textarea'),
+    ...document.querySelectorAll("[data-terminal] textarea"),
+    opener,
+  ];
 }
 
 /**
@@ -26,13 +46,7 @@ export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: s
     return () => {
       document.removeEventListener("focusin", keep);
       if (!dismissed.current) return;
-      // The focused pane's terminal first, then any shown one (the phone), then what opened the overlay.
-      const candidates = [
-        document.querySelector('[data-focused="true"] [data-terminal] textarea'),
-        ...document.querySelectorAll("[data-terminal] textarea"),
-        opener,
-      ];
-      candidates.find(isUsable)?.focus();
+      restoreTargets(opener).find(isUsable)?.focus();
     };
   }, [root, selector]);
   return useCallback(() => {
