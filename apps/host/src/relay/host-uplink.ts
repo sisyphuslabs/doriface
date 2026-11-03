@@ -20,6 +20,8 @@ export interface UplinkHandlers {
   readonly onSession: (session: SessionLink) => void;
   /** The relay took this uplink's challenge answer; it holds no pairing slot for this host yet. */
   readonly onConnected: () => void;
+  /** The uplink stopped for good with a final close (4403, 4409); it will not reconnect. */
+  readonly onFinalClose?: () => void;
 }
 
 const FINAL_REASONS: Readonly<Record<number, string>> = {
@@ -46,6 +48,7 @@ export class HostUplink implements PairingSlotRegistrar {
       onState: (state) => {
         this.#report(state);
         if (state.state === "answered") handlers.onConnected();
+        if (state.state === "stopped" && state.code !== 1000) handlers.onFinalClose?.();
       },
       ...(createSocket === undefined ? {} : { createSocket }),
     });

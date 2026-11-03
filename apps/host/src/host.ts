@@ -110,6 +110,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
         });
     },
     onConnected: () => e2ee?.slots.relayConnected(),
+    onFinalClose: () => e2ee?.slots.relayGone(),
   });
   let server: ReturnType<typeof Bun.serve>;
   try {
