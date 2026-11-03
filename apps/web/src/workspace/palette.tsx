@@ -1,12 +1,13 @@
 import type { Terminal } from "@doriface/protocol";
 import { CommandPalette } from "@doriface/ui";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { resolveKeymap } from "../keys/keymap.ts";
 import { useOverrides } from "../keys/keymap-store.ts";
 import { runAction } from "../keys/dispatcher.ts";
 import { currentPlatform } from "../keys/trigger.ts";
 import { choiceOf, paletteCommands } from "./palette-commands.ts";
+import { useOverlayFocus } from "./use-overlay-focus.ts";
 
 export interface PaletteProps {
   readonly terminals: readonly Terminal[];
@@ -26,7 +27,7 @@ export function Palette({ terminals, host, route, actions, onOpenTerminal, onClo
     return paletteCommands({ terminals, host, route, actions, platform, keymap: resolveKeymap(platform, overrides) });
   }, [terminals, host, route, actions, overrides]);
   const frame = useRef<HTMLDivElement>(null);
-  useEffect(() => frame.current?.querySelector<HTMLInputElement>('[role="combobox"]')?.focus(), []);
+  useOverlayFocus(frame, '[role="combobox"]');
   const run = (id: string): void => {
     const choice = choiceOf(id);
     // An action nobody took leaves the palette open on its row instead of closing on nothing.

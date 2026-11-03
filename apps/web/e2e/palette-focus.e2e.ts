@@ -1,4 +1,4 @@
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -29,4 +29,43 @@ test("a terminal that becomes ready under the open palette does not take its foc
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Command palette" })).toBeHidden();
   await expect(terminal).not.toContainText("qqmarker");
+});
+
+test("the open palette keeps keyboard input while a terminal starts and waits for its attach reply", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  const core = Promise.withResolvers<void>();
+  await page.route("**/*.wasm", async (route) => {
+    await core.promise;
+    await route.continue();
+  });
+  const held: (string | Buffer)[] = [];
+  const state = { holding: false, toPage: (_message: string | Buffer): void => undefined };
+  await page.routeWebSocket("**/v1/hc", (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    state.toPage = (message) => ws.send(message);
+    server.onMessage((message) => (state.holding ? held.push(message) : ws.send(message)));
+  });
+  await page.reload();
+  await terminalCount(page);
+  const combobox = page.getByRole("combobox", { name: "Command" });
+  await page.getByRole("button", { name: "Command palette" }).first().click();
+  await expect(combobox).toBeFocused();
+
+  state.holding = true;
+  core.resolve();
+  await expect(page.locator('[data-focused="true"] [data-terminal]').getByRole("textbox")).toBeAttached({
+    timeout: 15_000,
+  });
+  await page.keyboard.type("abc");
+  await expect(combobox).toBeFocused();
+  await expect(combobox).toHaveValue("abc");
+
+  state.holding = false;
+  for (const message of held.splice(0)) state.toPage(message);
+  await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 15_000 });
+  await expect(combobox).toHaveValue("abc");
 });
