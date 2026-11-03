@@ -2,7 +2,11 @@ import { expect, test } from "./fixtures.ts";
 
 test("font-size and cursor-style apply to an open terminal", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "New terminal" }).click();
+  await page
+    .getByRole("button", { name: "New tab" })
+    .or(page.getByRole("button", { name: "New terminal" }))
+    .first()
+    .click();
   const terminal = page.locator(".wterm").first();
   await expect(terminal).toContainText("$", { timeout: 20_000 });
   const fontSize = () => terminal.evaluate((el) => getComputedStyle(el).getPropertyValue("--term-font-size").trim());

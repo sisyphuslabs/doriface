@@ -15,6 +15,7 @@
     "@doriface/ghostty-wasm": "workspace:*",
     "@doriface/protocol": "workspace:*",
     "@doriface/ui": "workspace:*",
+    "@noble/curves": "2.0.1",
     "@noble/hashes": "2.4.0",
     "@tanstack/react-router": "1.170.46",
     "@wterm/dom": "0.5.8",

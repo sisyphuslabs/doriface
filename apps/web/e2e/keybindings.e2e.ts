@@ -13,7 +13,12 @@ test("rebinding New tab makes the new shortcut open a tab", async ({ page }) => 
   await expect(page.getByText("Changed")).toBeVisible();
 
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "New terminal" })).toBeVisible({ timeout: 20_000 });
+  await expect(
+    page
+      .getByRole("button", { name: "New tab" })
+      .or(page.getByRole("button", { name: "New terminal" }))
+      .first(),
+  ).toBeVisible({ timeout: 20_000 });
   const tabs = page.getByRole("tab");
   const before = await tabs.count();
   await page.keyboard.press("Control+Alt+N");

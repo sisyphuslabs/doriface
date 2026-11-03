@@ -1,0 +1,100 @@
+import { x25519 } from "@noble/curves/ed25519.js";
+import { deviceStore, type KeyValueStore } from "../storage/idb.ts";
+
+/** The device's X25519 static key: its public half plus the DH the Noise handshake needs. */
+export interface DeviceKey {
+  readonly publicKey: Uint8Array;
+  readonly kind: "webcrypto" | "raw";
+  dh(peerPublic: Uint8Array): Promise<Uint8Array>;
+}
+
+const KEY = "device-key";
+const ALGORITHM = { name: "X25519" } as const;
+
+type StoredWebCrypto = { readonly kind: "webcrypto"; readonly privateKey: CryptoKey; readonly publicKey: Uint8Array };
+type StoredRaw = { readonly kind: "raw"; readonly privateKey: Uint8Array };
+
+function isStored(value: unknown): value is StoredWebCrypto | StoredRaw {
+  if (typeof value !== "object" || value === null) return false;
+  const kind: unknown = Reflect.get(value, "kind");
+  const privateKey: unknown = Reflect.get(value, "privateKey");
+  if (kind === "raw") return privateKey instanceof Uint8Array && privateKey.length === 32;
+  return (
+    kind === "webcrypto" && privateKey instanceof CryptoKey && Reflect.get(value, "publicKey") instanceof Uint8Array
+  );
+}
+
+function isKeyPair(value: CryptoKey | CryptoKeyPair): value is CryptoKeyPair {
+  return "privateKey" in value && "publicKey" in value;
+}
+
+async function importPeer(subtle: SubtleCrypto, peerPublic: Uint8Array): Promise<CryptoKey> {
+  return subtle.importKey("raw", Uint8Array.from(peerPublic), ALGORITHM, false, []);
+}
+
+async function fromWebCrypto(subtle: SubtleCrypto, stored: StoredWebCrypto): Promise<DeviceKey> {
+  return {
+    publicKey: stored.publicKey,
+    kind: "webcrypto",
+    dh: async (peerPublic) =>
+      new Uint8Array(
+        await subtle.deriveBits(
+          { name: "X25519", public: await importPeer(subtle, peerPublic) },
+          stored.privateKey,
+          256,
+        ),
+      ),
+  };
+}
+
+function fromRaw(stored: StoredRaw): DeviceKey {
+  return {
+    publicKey: x25519.getPublicKey(stored.privateKey),
+    kind: "raw",
+    dh: async (peerPublic) => x25519.getSharedSecret(stored.privateKey, peerPublic),
+  };
+}
+
+/** True when this browser can generate and derive with X25519 CryptoKeys. */
+export async function webCryptoX25519(subtle: SubtleCrypto | null): Promise<boolean> {
+  if (subtle === null) return false;
+  try {
+    const pair = await subtle.generateKey(ALGORITHM, false, ["deriveBits"]);
+    return isKeyPair(pair);
+  } catch {
+    return false;
+  }
+}
+
+async function generateWebCrypto(subtle: SubtleCrypto): Promise<StoredWebCrypto> {
+  const pair = await subtle.generateKey(ALGORITHM, false, ["deriveBits"]);
+  if (!isKeyPair(pair)) throw new Error("X25519 generateKey returned no key pair");
+  const publicKey = new Uint8Array(await subtle.exportKey("raw", pair.publicKey));
+  return { kind: "webcrypto", privateKey: pair.privateKey, publicKey };
+}
+
+/**
+ * Loads the device key, generating it on first use. The private half is a non-extractable
+ * CryptoKey when WebCrypto has X25519, else 32 raw bytes; either survives in IndexedDB by structured clone.
+ */
+export async function loadDeviceKey(
+  storage: KeyValueStore = deviceStore,
+  subtle: SubtleCrypto | null = globalThis.crypto?.subtle ?? null,
+): Promise<DeviceKey> {
+  const stored = await storage.get(KEY);
+  if (isStored(stored))
+    return stored.kind === "webcrypto" && subtle !== null ? fromWebCrypto(subtle, stored) : fromRaw(asRaw(stored));
+  if (subtle !== null && (await webCryptoX25519(subtle))) {
+    const generated = await generateWebCrypto(subtle);
+    await storage.put(KEY, generated);
+    return fromWebCrypto(subtle, generated);
+  }
+  const generated: StoredRaw = { kind: "raw", privateKey: x25519.utils.randomSecretKey() };
+  await storage.put(KEY, generated);
+  return fromRaw(generated);
+}
+
+function asRaw(stored: StoredWebCrypto | StoredRaw): StoredRaw {
+  if (stored.kind === "raw") return stored;
+  throw new Error("the stored device key needs WebCrypto X25519, which this browser no longer offers");
+}

@@ -5,6 +5,7 @@ export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 60_000,
+  workers: 1,
   forbidOnly: Boolean(process.env["CI"]),
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: `http://127.0.0.1:${E2E_WEB_PORT}`, trace: "retain-on-failure" },
