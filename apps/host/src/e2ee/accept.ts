@@ -22,7 +22,8 @@ export interface E2eeDeps {
 
 /**
  * Runs the responder handshake on a fresh `/v1/e2ee` socket. IK admits only stored devices (4401 otherwise); IKpsk2
- * claims the pending pairing code and, once the client confirmed the keys, stores the device and burns the code.
+ * claims the pending pairing code and, once the client confirmed the keys, burns the code and stores the device. A
+ * failed attempt leaves the code open: codes end only on success or expiry, and the relay bounds guesses per slot.
  */
 export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promise<SecureLink | undefined> {
   let claim: PairingClaim | undefined;
@@ -49,7 +50,6 @@ export async function acceptE2ee<T>(link: WsByteLink<T>, deps: E2eeDeps): Promis
       rekeyInterval: deps.rekeyInterval,
     });
   } catch (error) {
-    claim?.settle(false);
     deps.log(`e2ee handshake refused: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
@@ -80,7 +80,7 @@ export function admitPairing(
   clientStatic: Uint8Array,
   name: string,
 ): Admission {
-  if (!claim.settle(true))
+  if (!claim.complete())
     return { ok: false, code: CloseCode.UnknownDevice, reason: "the pairing code was already used" };
   try {
     devices.add(clientStatic, name);

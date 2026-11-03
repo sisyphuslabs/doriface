@@ -18,11 +18,10 @@ export const PAIR_USAGE = `usage: doriface-host pair [options]
 function asPending(value: unknown): PendingPairing {
   if (typeof value === "object" && value !== null && "code" in value && "expiresAt" in value) {
     const { code, expiresAt } = value;
-    const failures = "failures" in value ? value.failures : undefined;
     const slot = "slot" in value ? value.slot : undefined;
     const knownSlot = slot === "pending" || slot === "registered" || slot === "unavailable";
-    if (typeof code === "string" && typeof expiresAt === "number" && typeof failures === "number" && knownSlot) {
-      return { code, expiresAt, failures, slot };
+    if (typeof code === "string" && typeof expiresAt === "number" && knownSlot) {
+      return { code, expiresAt, slot };
     }
   }
   throw new Error("the running host sent a malformed pairing");

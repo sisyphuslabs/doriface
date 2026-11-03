@@ -29,7 +29,6 @@ export {
   encodePairingHello,
   formatPairingCode,
   generatePairingCode,
-  MAX_PAIRING_FAILURES,
   normalizePairingCode,
   PAIRING_ALPHABET,
   PAIRING_CODE_LENGTH,
