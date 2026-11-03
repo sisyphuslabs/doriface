@@ -27,9 +27,13 @@ export const memberRef = (view: View, key: string, cardNames?: ReadonlyMap<strin
   name: view.name.get(key) ?? cardNames?.get(key) ?? hostIdOfKey(key),
 });
 
-/** The admitted key a member reference (its mesh name or hostId) names in `view`. */
+/**
+ * The admitted key a member reference names in `view`: an exact hostId first, then a mesh name, so a member renamed
+ * to another member's hostId cannot redirect a revoke of that host.
+ */
 export const findMember = (view: View, ref: string): string | undefined =>
-  admittedKeys(view).find((key) => view.name.get(key) === ref || hostIdOfKey(key) === ref);
+  admittedKeys(view).find((key) => hostIdOfKey(key) === ref) ??
+  admittedKeys(view).find((key) => view.name.get(key) === ref);
 
 const names = (refs: readonly MemberRef[]): string => refs.map((ref) => ref.name).join(", ");
 
