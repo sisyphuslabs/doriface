@@ -8,6 +8,8 @@ describe("resetsCursor", () => {
     ["\u001b[ q", true],
     ["\u001b[0 q", true],
     ["prompt$ \u001b[0 q", true],
+    ["\u0018\u001b[!p\u001b[?2026l", true],
+    ["\u001bc", true],
     ["\u001b[5 q", false],
     ["\u001b[2 q", false],
     ["plain text q", false],
