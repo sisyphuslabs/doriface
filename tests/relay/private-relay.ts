@@ -7,9 +7,9 @@
  *   bun run relay:test    fetch, then run the relay suites
  *   bun run relay:dev     fetch, then serve the relay locally with wrangler dev
  *
- * `RELAY_REPO` names that repository as `owner/name`; it is cloned over HTTPS with your git credentials (CI reads it
- * from a repository variable and gives git a read-only token through a credential helper). `DORIFACE_RELAY_REPO`
- * overrides the whole clone URL instead, e.g. for SSH.
+ * `RELAY_REPO` names that repository as `owner/name`; it is cloned over HTTPS with your git credentials. CI reads it
+ * from a repository secret, so the log masks it, and gives git a read-only token through a credential helper.
+ * `DORIFACE_RELAY_REPO` overrides the whole clone URL instead, e.g. for SSH.
  * `DORIFACE_RELAY_DIR` points at a relay checkout of your own instead, which is used as it is and never moved.
  */
 import { lstatSync, readdirSync, realpathSync } from "node:fs";
