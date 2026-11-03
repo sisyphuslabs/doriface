@@ -31,6 +31,16 @@ That is the target design. Today the web client and the desktop app reach the ho
 
 The host never parses what `hc` says; it pipes the stream. The client SDK speaks herdr-core's protocol itself, so a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire format every package is built against is the [transport contract](docs/transport.md).
 
+## Other machines through the relay
+
+`hc machine add` reaches other machines over ssh, or over any command given with `--via` that pipes `hc connect`. `doriface-host connect` is that command for a machine running `doriface-host`: it pipes stdin and stdout to that host's `hc connect`, end-to-end encrypted through the relay, so the machine needs no ssh and no open port.
+
+```sh
+doriface-host pair                                         # on machine B: prints a link and a code
+doriface-host connect '<link or code>' < /dev/null         # on machine A, once: pairs A as a device of B
+hc machine add --via 'doriface-host connect <B hostId>' --name b   # on A: B's terminals appear as b/t1, ...
+```
+
 ## Layout
 
 | Path                    | What it is                                                                  |
