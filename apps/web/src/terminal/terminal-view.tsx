@@ -99,6 +99,10 @@ export function TerminalView(props: TerminalViewProps) {
   useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
+  const isFocused = useRef(focused);
+  useEffect(() => {
+    isFocused.current = focused;
+  }, [focused]);
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
@@ -114,6 +118,9 @@ export function TerminalView(props: TerminalViewProps) {
       .then(
         (attached) => {
           stream.current = attached;
+          // The view in use was the active viewer before the drop; a FOCUS frame makes it active again, so the core
+          // applies its size now. Unfocused views stay deferred until they are focused (onFocus), as resumed intends.
+          if (attachedBefore.current && isFocused.current) attached.focus(true);
           // A fit while the attach was in flight had no stream to resize.
           if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
           // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
@@ -132,7 +139,7 @@ export function TerminalView(props: TerminalViewProps) {
           });
           for (const data of pending.current.splice(0)) attached.write(data);
           // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
-          if (focused) ready.focus();
+          if (isFocused.current) ready.focus();
           return attached;
         },
         (cause: unknown) => {
