@@ -1,3 +1,4 @@
+export { CPACE_SUITE } from "./cpace.ts";
 export { base32Decode, base32Encode, base64urlDecode, base64urlEncode, bytesEqual, concatBytes } from "./encoding.ts";
 export {
   ed25519FromSecret,
