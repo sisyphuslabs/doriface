@@ -41,6 +41,26 @@ describe("startHost", () => {
   });
 });
 
+describe("a second host", () => {
+  test("refuses to start on a state dir a running host serves", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "dh-twice-"));
+    const options = {
+      listen: { hostname: "127.0.0.1", port: 0 },
+      token: generateToken(),
+      hc: resolveHcBin(),
+      stateDir,
+      log: () => {},
+    };
+    const first = await startHost(options);
+    try {
+      expect(startHost(options)).rejects.toThrow("already running");
+    } finally {
+      await first.stop();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("cli", () => {
   test("devices list escapes control characters in names it did not write", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "dh-cli-"));
