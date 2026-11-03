@@ -44,6 +44,7 @@ export interface UplinkOptions {
 /** Reconnecting cannot fix these: the key is wrong, or another uplink for this host took over. */
 const FINAL_CODES: ReadonlySet<number> = new Set([CloseCode.RelayAuthFailed, CloseCode.UplinkReplaced]);
 const CONNECTING = 0;
+const PAIR_SLOT_REPLY_TIMEOUT_MS = 10_000;
 /** An uplink that stayed up this long after answering starts the next backoff from the bottom again. */
 const STABLE_MS = 30_000;
 
@@ -64,6 +65,7 @@ export class Uplink {
   #attempt = 0;
   #answeredAt: number | undefined;
   #pairSlot: string | undefined;
+  #pairSlotQueue: Promise<void> = Promise.resolve();
   #done = false;
 
   private constructor(hostId: string, options: UplinkOptions) {
@@ -84,25 +86,40 @@ export class Uplink {
    * Registers a pairing slot (the typed code's first 3 characters) so a client with only the code can find this
    * host. "taken" means another host holds the slot: draw a new code. Rejects if the uplink is not connected.
    */
-  async registerPairSlot(slot: string, noiseStaticPub: Uint8Array): Promise<PairSlotResult> {
-    const ws = this.#connected();
+  registerPairSlot(slot: string, noiseStaticPub: Uint8Array): Promise<PairSlotResult> {
     const frame = encodePairSlotRequest(slot, noiseStaticPub);
-    const result = this.#pairSlots.wait(slot);
-    ws.send(frame);
-    const outcome = await result;
-    if (outcome === "registered") this.#pairSlot = slot;
-    return outcome;
+    return this.#onePairSlotRequest(async () => {
+      const outcome = await this.#pairSlotRequest(slot, frame);
+      if (outcome === "registered") this.#pairSlot = slot;
+      return outcome;
+    });
   }
 
   /** Releases the slot this host registered last (an empty PAIR_SLOT), e.g. once pairing succeeded or expired. */
-  async clearPairSlot(): Promise<void> {
+  clearPairSlot(): Promise<void> {
+    return this.#onePairSlotRequest(async () => {
+      const slot = this.#pairSlot;
+      if (slot === undefined) return;
+      await this.#pairSlotRequest(slot, encodePairSlotClear());
+      this.#pairSlot = undefined;
+    });
+  }
+
+  /** Runs PAIR_SLOT operations one at a time, so each reply answers the request that is actually waiting. */
+  #onePairSlotRequest<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.#pairSlotQueue.then(operation);
+    this.#pairSlotQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  #pairSlotRequest(slot: string, frame: Uint8Array<ArrayBuffer>): Promise<PairSlotResult> {
     const ws = this.#connected();
-    const slot = this.#pairSlot;
-    if (slot === undefined) return;
-    const released = this.#pairSlots.wait(slot);
-    ws.send(encodePairSlotClear());
-    await released;
-    this.#pairSlot = undefined;
+    const reply = this.#pairSlots.wait(slot, PAIR_SLOT_REPLY_TIMEOUT_MS);
+    ws.send(frame);
+    return reply;
   }
 
   #connected(): WebSocket {
