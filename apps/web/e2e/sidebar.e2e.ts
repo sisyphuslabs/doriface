@@ -127,9 +127,17 @@ async function expectRowsKeepFloors(
     }),
   );
 
-  const there = spaces.getByRole("button").filter({ hasText: SHARED_SPACE }).filter({ hasText: LONG_MACHINE });
-  await expect(there.getByTitle(SHARED_SPACE, { exact: true })).toHaveText(SHARED_SPACE);
-  await expect(there.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+  // A space on the long-named machine keeps five characters of its name before the machine's.
+  await Promise.all(
+    [SHARED_SPACE, KOREAN_SPACE].map(async (name) => {
+      const there = spaces.getByRole("button").filter({ hasText: name }).filter({ hasText: LONG_MACHINE });
+      const named = there.getByTitle(name, { exact: true });
+      await expect(named).toHaveText(name);
+      await expect(there.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+      const { visible, total } = await visibleCharacters(named, name);
+      expect(visible, `the space "${name}" keeps five characters`).toBeGreaterThanOrEqual(Math.min(5, total));
+    }),
+  );
 }
 
 /** Waits two frames, so a ResizeObserver has reported and any refit has been laid out. */
