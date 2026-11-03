@@ -40,7 +40,7 @@ export interface UplinkOptions {
   readonly createSocket?: CreateSocket;
   readonly random?: () => number;
   readonly pingIntervalMs?: number;
-  /** Ask the relay for session credit (contract v1.3); default true. */
+  /** Ask the relay for session credit (contract v1.4); default true. */
   readonly credit?: boolean;
 }
 
