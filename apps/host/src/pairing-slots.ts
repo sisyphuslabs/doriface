@@ -13,7 +13,7 @@ export interface PairingSlotRegistrar {
    */
   register(slot: string, noiseStaticPub: Uint8Array): Promise<"registered" | "collision">;
   /** The offer behind the slot ended (paired, expired or replaced): send the empty PAIR_SLOT (`PAIR_SLOT_CLEAR`). */
-  release?(slot: string): void;
+  release(slot: string): void;
 }
 
 const MAX_REDRAWS = 8;
@@ -94,7 +94,7 @@ export class PairingSlots {
     const slot = pairingSlotOf(pending.code);
     const answer = await registrar.register(slot, this.#noiseStaticPub);
     if (this.#stopped) {
-      if (answer === "registered") registrar.release?.(slot);
+      if (answer === "registered") registrar.release(slot);
       return;
     }
     if (answer === "registered") {
@@ -123,6 +123,6 @@ export class PairingSlots {
     const registered = this.#registered;
     if (registered === undefined) return;
     this.#registered = undefined;
-    this.#registrar?.release?.(pairingSlotOf(registered));
+    this.#registrar?.release(pairingSlotOf(registered));
   }
 }
