@@ -44,3 +44,17 @@ test("a removed remote terminal drops its tab once machine.list has been read ag
   const reread = followTerminals(gone, [terminal("t9")], before, 2);
   expect(reread.open.map((key) => tabAddress(key, before))).toEqual(["t9"]);
 });
+
+test("a tab that comes back in the same read another one leaves in still lets the other one drop", () => {
+  const two = machineIds([
+    { ...machine("x"), id: "mx" },
+    { ...machine("y"), id: "my" },
+  ]);
+  const [a, b] = [tabKey("x/t1", two), tabKey("y/t1", two)];
+  let tabs: KeyedTabs = { ...NO_TABS, open: [a, b], active: b };
+  tabs = followTerminals(tabs, [terminal("y/t1")], two, 1);
+  tabs = followTerminals(tabs, [terminal("x/t1")], two, 1);
+  for (const listed of [2, 3]) tabs = followTerminals(tabs, [terminal("x/t1")], two, listed);
+  expect(tabs.open.map((key) => tabAddress(key, two))).toEqual(["x/t1"]);
+  expect(tabs.active === null ? null : tabAddress(tabs.active, two)).toBe("x/t1");
+});

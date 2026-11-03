@@ -14,6 +14,9 @@ export const NO_TABS: KeyedTabs = { open: [], active: null, split: null, missing
 const sameList = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((entry, index) => entry === b[index]);
 
+const sameWaits = (a: ReadonlyMap<string, number>, b: ReadonlyMap<string, number>): boolean =>
+  a.size === b.size && [...a].every(([key, at]) => b.get(key) === at);
+
 /**
  * Open tabs follow live terminals. A local tab drops when its terminal goes. A tab on an added machine waits for the
  * next machine.list read before it drops: renaming a machine removes `old/t7` and creates `new/t7`, and only the list
@@ -44,6 +47,6 @@ export function followTerminals(
   const kept = was(prev.split);
   const split = kept !== null && kept !== active ? kept : null;
   const same =
-    sameList(open, prev.open) && active === prev.active && split === prev.split && missing.size === prev.missing.size;
+    sameList(open, prev.open) && active === prev.active && split === prev.split && sameWaits(missing, prev.missing);
   return same ? prev : { open, active, split, missing };
 }
