@@ -3,27 +3,49 @@ import { decodePairSlotReply, PairSlotStatus } from "./wire/index.ts";
 
 export type PairSlotResult = "registered" | "taken";
 
-/** PAIR_SLOT requests the uplink sent, waiting for the relay's 200 or 409, one per slot. */
-export class PairSlotRequests {
-  readonly #waiting = new Map<string, PromiseWithResolvers<PairSlotResult>>();
+interface Waiter {
+  readonly resolvers: PromiseWithResolvers<PairSlotResult>;
+  readonly timer: ReturnType<typeof setTimeout>;
+}
 
-  wait(slot: string): Promise<PairSlotResult> {
-    const pending = this.#waiting.get(slot) ?? Promise.withResolvers<PairSlotResult>();
-    this.#waiting.set(slot, pending);
-    return pending.promise;
+/**
+ * PAIR_SLOT requests the uplink sent, waiting for the relay's 200 or 409. At most one request per slot waits at a
+ * time, and one without a reply in `timeoutMs` is dropped, so a lost reply never blocks later requests.
+ */
+export class PairSlotRequests {
+  readonly #waiting = new Map<string, Waiter>();
+
+  wait(slot: string, timeoutMs: number): Promise<PairSlotResult> {
+    if (this.#waiting.has(slot)) {
+      return Promise.reject(new Error(`a PAIR_SLOT request for ${slot} is already waiting for the relay`));
+    }
+    const resolvers = Promise.withResolvers<PairSlotResult>();
+    const timer = setTimeout(() => {
+      this.#waiting.delete(slot);
+      resolvers.reject(new Error(`no PAIR_SLOT reply for ${slot} within ${timeoutMs} ms`));
+    }, timeoutMs);
+    this.#waiting.set(slot, { resolvers, timer });
+    return resolvers.promise;
   }
 
   /** Settles the request a reply answers; false when the reply is malformed. */
   settle(payload: Uint8Array): boolean {
     const reply = decodePairSlotReply(payload);
     if (reply === undefined) return false;
-    this.#waiting.get(reply.slot)?.resolve(reply.status === PairSlotStatus.Registered ? "registered" : "taken");
+    const waiter = this.#waiting.get(reply.slot);
     this.#waiting.delete(reply.slot);
+    if (waiter !== undefined) {
+      clearTimeout(waiter.timer);
+      waiter.resolvers.resolve(reply.status === PairSlotStatus.Registered ? "registered" : "taken");
+    }
     return true;
   }
 
   failAll(reason: string): void {
-    for (const pending of this.#waiting.values()) pending.reject(new LinkClosedError(reason));
+    for (const { resolvers, timer } of this.#waiting.values()) {
+      clearTimeout(timer);
+      resolvers.reject(new LinkClosedError(reason));
+    }
     this.#waiting.clear();
   }
 }
