@@ -193,6 +193,28 @@ describe("mesh-rename (design 7.4, 7.5)", () => {
 });
 
 describe("mesh-leave (design 6.5)", () => {
+  test("a push that rejects counts as no confirmation, and leaving still completes", async () => {
+    const a = machine("a"),
+      f = machine("f");
+    const it = bench(a);
+    it.mesh.admit(a, f);
+    it.ready();
+    const logs: string[] = [];
+    const hooks: MeshHooks = {
+      ...IDLE_MESH_HOOKS,
+      push: () => Promise.reject(new Error("no session")),
+      left: () => Promise.reject(new Error("no core")),
+    };
+    const leaving = new MeshCommands({ ...it.commands.deps, hooks, log: (line) => void logs.push(line) });
+    expect(await leaving.leave()).toMatchObject({
+      signed: true,
+      confirmed: [],
+      revokeCommand: "doriface-host mesh revoke a",
+    });
+    expect(existsSync(join(it.dir, "mesh.json"))).toBe(false);
+    expect(logs.filter((line) => line.startsWith("mesh:"))).toHaveLength(2);
+  });
+
   test("signs a self-revoke, pushes it before deleting mesh.json, and reports who confirmed", async () => {
     const a = machine("a"),
       f = machine("f"),
