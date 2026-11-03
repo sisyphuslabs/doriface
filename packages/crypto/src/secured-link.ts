@@ -2,6 +2,9 @@ import type { Pattern } from "./noise/handshake.ts";
 import { type ByteLink, CloseCode, closeCodeOf, Listeners, SecureLinkError, type Unsubscribe } from "./link.ts";
 import type { Transport } from "./transport.ts";
 
+/** Unread plaintext a session holds for a listener before it closes with 4408 instead of buffering more. */
+export const MAX_HELD_BYTES = 4 * 1024 * 1024;
+
 export interface SessionInfo {
   readonly pattern: Pattern;
   readonly remoteStatic: Uint8Array;
@@ -17,7 +20,8 @@ export interface SecureLink extends ByteLink, SessionInfo {}
 
 /**
  * The established session. Data that arrives before the first `onData` listener is held and handed to it, so no
- * byte is lost between the handshake resolving and the caller subscribing.
+ * byte is lost between the handshake resolving and the caller subscribing. Every chunk passes through that queue, so
+ * a record that arrives while a listener runs is delivered after the chunks already waiting.
  */
 export class SecuredLink implements SecureLink {
   readonly pattern: Pattern;
@@ -30,6 +34,8 @@ export class SecuredLink implements SecureLink {
   readonly #data = new Listeners<Uint8Array>();
   readonly #close = new Listeners<Error | undefined>();
   readonly #held: Uint8Array[] = [];
+  #heldBytes = 0;
+  #draining = false;
   #closed = false;
   #closeError: Error | undefined;
 
@@ -54,7 +60,7 @@ export class SecuredLink implements SecureLink {
 
   onData(listener: (bytes: Uint8Array) => void): Unsubscribe {
     const unsubscribe = this.#data.add(listener);
-    for (const chunk of this.#held.splice(0)) this.#data.emit(chunk);
+    this.#drain();
     return unsubscribe;
   }
 
@@ -78,7 +84,7 @@ export class SecuredLink implements SecureLink {
 
   /** Hands bytes that arrived inside the handshake (IK early data) to the first data listener. */
   hold(bytes: Uint8Array): void {
-    if (bytes.byteLength > 0) this.#held.push(bytes);
+    this.#enqueue(bytes);
   }
 
   /** Feeds one record from the underlying link; any failure closes the link with 4400. */
@@ -91,9 +97,8 @@ export class SecuredLink implements SecureLink {
       this.fail(new SecureLinkError(CloseCode.CryptoFailure, "record failed authentication", { cause: error }));
       return;
     }
-    if (plaintext.byteLength === 0) return;
-    if (this.#data.size === 0) this.#held.push(plaintext);
-    else this.#data.emit(plaintext);
+    this.#enqueue(plaintext);
+    this.#drain();
   }
 
   /** Records the failure first, so a link that reports its close synchronously cannot replace it. */
@@ -112,6 +117,30 @@ export class SecuredLink implements SecureLink {
         ? error
         : new SecureLinkError(code, error.message, { cause: error });
     this.#held.length = 0;
+    this.#heldBytes = 0;
     this.#close.emit(this.#closeError);
+  }
+
+  #enqueue(bytes: Uint8Array): void {
+    if (this.#closed || bytes.byteLength === 0) return;
+    this.#held.push(bytes);
+    this.#heldBytes += bytes.byteLength;
+    if (this.#heldBytes > MAX_HELD_BYTES) this.fail(new SecureLinkError(CloseCode.IdleTimeout, "too much unread data"));
+  }
+
+  /** Emits held chunks in order; a listener that closes the link stops the rest. */
+  #drain(): void {
+    if (this.#draining) return;
+    this.#draining = true;
+    try {
+      while (!this.#closed && this.#data.size > 0) {
+        const chunk = this.#held.shift();
+        if (chunk === undefined) break;
+        this.#heldBytes -= chunk.byteLength;
+        this.#data.emit(chunk);
+      }
+    } finally {
+      this.#draining = false;
+    }
   }
 }
