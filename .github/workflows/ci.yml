@@ -130,4 +130,6 @@ jobs:
         working-directory: apps/desktop
         env:
           DORIFACE_E2E_EXECUTABLE: ${{ github.workspace }}/apps/desktop/dist/release/linux-unpacked/doriface
+          # Electron's own stdout/stderr, so a launch that never connects says why.
+          DEBUG: pw:browser
         run: xvfb-run --auto-servernum bun run test:e2e
