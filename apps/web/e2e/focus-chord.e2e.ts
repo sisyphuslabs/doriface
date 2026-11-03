@@ -4,7 +4,7 @@ import { expect, openNewTerminal, test } from "./fixtures.ts";
 test.use({ serviceWorkers: "block" });
 
 /** The default binding of layout.focus:sidebar, as Playwright names it on this platform. */
-const FOCUS_CHORD = "ControlOrMeta+Shift+E";
+const FOCUS_CHORD = "ControlOrMeta+Shift+S";
 
 const focusIsIn = (page: Page, selector: string) =>
   page.evaluate((within) => document.activeElement?.closest(within) !== null, selector);
