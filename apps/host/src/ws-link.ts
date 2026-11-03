@@ -23,6 +23,7 @@ export class WsLink<T> implements Link {
   #idle: ReturnType<typeof setTimeout> | undefined;
   /** While the host itself holds reads back, the peer's pings go unread, so the idle deadline waits too. */
   #readsPaused = false;
+  #pongWaits = false;
   #drain: PromiseWithResolvers<void> | undefined;
   #closed = false;
 
@@ -52,12 +53,13 @@ export class WsLink<T> implements Link {
       this.#inbox.push(message);
     } else if (message === "ping" && this.#idleMs !== undefined) {
       this.#touch();
-      this.#ws.send("pong");
+      this.#pong();
     } else this.close(1003, "binary frames only");
   }
 
   /** Bun's `drain` callback: the socket can take more data. */
   drained(): void {
+    this.#pongWaits = false;
     const drain = this.#drain;
     this.#drain = undefined;
     drain?.resolve();
@@ -91,6 +93,15 @@ export class WsLink<T> implements Link {
     if (this.#closed) return;
     this.#finish();
     this.#ws.close(code, reason);
+  }
+
+  /**
+   * Answers a ping unless the socket is backpressured: a peer that never reads its replies cannot make the host buffer
+   * more pongs. Replies resume after the next drain.
+   */
+  #pong(): void {
+    if (this.#drain !== undefined || this.#pongWaits) return;
+    if (this.#ws.send("pong") === -1) this.#pongWaits = true;
   }
 
   /** Restarts the idle deadline: anything received keeps the socket alive. */
