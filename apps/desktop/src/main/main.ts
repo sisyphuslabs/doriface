@@ -86,8 +86,11 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => {
     if (platform !== "darwin") app.quit();
   });
-  app.whenReady().then(ready, (error: unknown) => {
-    console.error(`doriface failed to start: ${String(error)}`);
-    app.exit(1);
-  });
+  app
+    .whenReady()
+    .then(ready)
+    .catch((error: unknown) => {
+      console.error(`doriface failed to start: ${String(error)}`);
+      app.exit(1);
+    });
 }
