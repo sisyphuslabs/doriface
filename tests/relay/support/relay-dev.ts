@@ -23,12 +23,12 @@ export interface LocalRelay {
 }
 
 export interface LocalRelayOptions {
-  /** For tests of this helper: picks each attempt's HTTP port, instead of a free one. */
-  readonly pickPort?: () => number;
+  /** For tests of this helper: picks each attempt's HTTP port, given the helper's own free-port picker. */
+  readonly pickPort?: (pickFree: () => number) => number;
 }
 
 /** wrangler dev failed to bind the HTTP port this attempt picked: another process took it after the pick. */
-class BindRace extends Error {
+export class BindRace extends Error {
   readonly port: number;
 
   constructor(port: number, output: string) {
@@ -88,10 +88,10 @@ export async function startLocalRelay(
   vars: Readonly<Record<string, string>> = {},
   options: LocalRelayOptions = {},
 ): Promise<LocalRelay> {
-  const pickPort = options.pickPort ?? freePort;
+  const pickPort = options.pickPort ?? ((pickFree) => pickFree());
   const attempt = async (number: number, races: string): Promise<LocalRelay> => {
     try {
-      return await startOnce(pickPort(), vars, races);
+      return await startOnce(pickPort(freePort), vars, races);
     } catch (error) {
       if (!(error instanceof BindRace) || number === START_ATTEMPTS) throw error;
       const race = `[relay-dev] 127.0.0.1:${error.port} was taken before wrangler dev bound it; retrying on a fresh port\n`;
