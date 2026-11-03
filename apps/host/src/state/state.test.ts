@@ -63,11 +63,12 @@ function deadPid(): number {
 }
 
 describe("state lock", () => {
-  test("a writer holding the lock makes a revoke wait and then give up", () => {
+  test("a writer holding the lock makes an add or a revoke wait and then give up", () => {
     const devices = new DeviceStore(dir, { lockTimeoutMs: 50 });
     devices.add(generateX25519().publicKey, "phone");
     writeFileSync(join(dir, "state.lock"), String(process.ppid));
     expect(() => devices.revoke(devices.list()[0]?.clientStaticPub ?? "")).toThrow("locked");
+    expect(() => devices.add(generateX25519().publicKey, "laptop")).toThrow("locked");
     expect(devices.list()).toHaveLength(1);
   });
 
