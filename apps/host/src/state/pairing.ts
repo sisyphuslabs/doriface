@@ -1,49 +1,72 @@
-import { createPairingOffer, type PairingOffer, PairingGuard } from "@doriface/crypto";
+import {
+  base64urlDecode,
+  base64urlEncode,
+  CloseCode,
+  createPairingOffer,
+  type HostPairingSecret,
+  PAIRING_CODE_ATTEMPTS,
+  type PairingOffer,
+  PairingGuard,
+  pairingSlotOf,
+} from "@doriface/crypto";
 import { join } from "node:path";
 import { ensureStateDir, isRecord, readJson, removeFile, stringField, writePrivateJson } from "./files.ts";
 import { withStateLock } from "./lock.ts";
 
 const FILE = "pairing.json";
+const VERSION = 3;
 
 /** Where the typed code's relay slot stands: `pending` until the running host's uplink answers. */
 export type SlotStatus = "pending" | "registered" | "unavailable";
 
 export interface PendingPairing extends PairingOffer {
   readonly slot: SlotStatus;
+  /** Typed-code attempts the host has answered for this offer; at {@link PAIRING_CODE_ATTEMPTS} the code is retired. */
+  readonly codeAttempts: number;
 }
 
+export const codeRetired = (pending: PendingPairing): boolean => pending.codeAttempts >= PAIRING_CODE_ATTEMPTS;
+
+/** A claim on the live offer: the secret the handshake finishes with, and the step that burns the offer on success. */
 export interface PairingClaim {
-  readonly psk: Uint8Array;
+  readonly secret: HostPairingSecret;
+  /** This claim's reservation used the code's last attempt; the code is retired from now on. */
+  readonly retiredCode: boolean;
   /**
-   * The handshake completed: burns the code and returns whether this was its first success. It runs before the caller
-   * stores the device, so a crash or a failed store can never leave the code usable. A failed handshake settles
-   * nothing; a code ends only on success or expiry.
+   * The handshake completed: burns the whole offer (code and link secret) and returns whether this was its first
+   * success before expiry. It runs before the caller stores the device, so a crash or a failed store can never leave
+   * the offer usable.
    */
   complete(now?: number): boolean;
 }
 
+export type ClaimRefusal = { readonly refused: number; readonly reason: string };
+
 /**
  * The one pending pairing offer (pairing.json, 0600). `doriface-host pair` writes it, replacing any earlier one; the
- * running host claims it per IKpsk2 handshake, registers its relay slot, and deletes it once used or expired.
+ * running host claims it per pairing handshake, registers its relay slot, and deletes it once used or expired. Every
+ * read-modify-write runs under the state lock, so a typed-code reservation and a new `pair` never overwrite each other.
  */
 export class PairingStore {
   readonly #dir: string;
   readonly #path: string;
+  readonly #log: (line: string) => void;
   #guard: PairingGuard | undefined;
   readonly #listeners = new Set<() => void>();
 
-  constructor(stateDir: string) {
+  constructor(stateDir: string, log: (line: string) => void = () => {}) {
     this.#dir = ensureStateDir(stateDir);
     this.#path = join(this.#dir, FILE);
+    this.#log = log;
   }
 
   offer(now = Date.now()): PendingPairing {
-    const pending = { ...createPairingOffer(now), slot: "pending" as const };
+    const pending = { ...createPairingOffer(now), slot: "pending" as const, codeAttempts: 0 };
     withStateLock(this.#dir, () => this.#write(pending));
     return pending;
   }
 
-  /** Replaces the code of the pending offer after a relay slot collision; keeps its expiry. */
+  /** Replaces the code of the pending offer after a relay slot collision; keeps its expiry, link secret and count. */
   redraw(code: string): PendingPairing | undefined {
     return withStateLock(this.#dir, () => {
       const current = this.read();
@@ -61,62 +84,110 @@ export class PairingStore {
     });
   }
 
-  claim(now = Date.now()): PairingClaim | undefined {
-    const pending = this.read();
-    if (pending === undefined) return undefined;
-    if (this.#guard?.offer.code !== pending.code) this.#guard = new PairingGuard(pending);
-    const guard = this.#guard;
-    const psk = guard.claim(now);
-    if (psk === undefined) {
-      if (guard.state === "expired") this.#removeIf(pending.code);
-      return undefined;
-    }
-    return {
-      psk,
-      complete: (at = Date.now()) =>
-        withStateLock(this.#dir, () => {
-          const first = guard.use(at);
-          if (first || guard.state === "expired") this.#removeIfHeld(pending.code);
-          return first;
-        }),
-    };
+  /**
+   * Reserves one typed-code attempt on the session's relay slot, durably, before the host answers it: re-reads the
+   * offer under the lock, requires it live, on `openSlot` and not retired, then writes the incremented count. A
+   * failed write throws, so the caller answers nothing.
+   */
+  claimCode(openSlot: string, now = Date.now()): PairingClaim | ClaimRefusal {
+    return withStateLock(this.#dir, () => {
+      const pending = this.#live(now, (expired) => this.#removeIfHeld(expired));
+      if ("refused" in pending) return pending;
+      if (pairingSlotOf(pending.code) !== openSlot) {
+        return { refused: CloseCode.UnknownDevice, reason: "the session's slot is not the offer's" };
+      }
+      if (codeRetired(pending)) return { refused: CloseCode.RateLimited, reason: "the typed code is retired" };
+      const reserved = { ...pending, codeAttempts: pending.codeAttempts + 1 };
+      this.#write(reserved);
+      return this.#claim(reserved, { mode: "code", code: reserved.code }, codeRetired(reserved));
+    });
+  }
+
+  /** Claims the live offer's link secret; link attempts are not counted (the secret has 256 bits). */
+  claimLink(now = Date.now()): PairingClaim | ClaimRefusal {
+    const pending = this.#live(now, (expired) => this.#removeIf(expired));
+    if ("refused" in pending) return pending;
+    return this.#claim(pending, { mode: "link", linkSecret: pending.linkSecret }, false);
   }
 
   /** Deletes the offer once it expired, so its relay slot is released. */
   expire(now = Date.now()): void {
     const pending = this.read();
-    if (pending !== undefined && now >= pending.expiresAt) this.#removeIf(pending.code);
+    if (pending !== undefined && now >= pending.expiresAt) this.#removeIf(pending);
   }
 
   read(): PendingPairing | undefined {
     const value = readJson(this.#path);
     if (value === undefined) return undefined;
-    if (!isRecord(value) || value["version"] !== 2) throw new Error(`${FILE}: unsupported format`);
+    if (isRecord(value) && value["version"] === 2) {
+      removeFile(this.#path);
+      this.#log("pairing offer from an older doriface-host discarded; run doriface-host pair again");
+      return undefined;
+    }
+    if (!isRecord(value) || value["version"] !== VERSION) throw new Error(`${FILE}: unsupported format`);
     const expiresAt = Date.parse(stringField(value, "expiresAt", FILE));
     const slot = value["slot"];
-    if (Number.isNaN(expiresAt)) throw new Error(`${FILE}: malformed`);
+    const codeAttempts = value["codeAttempts"];
+    const linkSecret = base64urlDecode(stringField(value, "linkSecret", FILE));
+    if (Number.isNaN(expiresAt) || !Number.isSafeInteger(codeAttempts) || typeof codeAttempts !== "number") {
+      throw new Error(`${FILE}: malformed`);
+    }
     if (slot !== "pending" && slot !== "registered" && slot !== "unavailable") throw new Error(`${FILE}: bad slot`);
-    return { code: stringField(value, "code", FILE), expiresAt, slot };
+    if (linkSecret.byteLength !== 32) throw new Error(`${FILE}: bad link secret`);
+    return { code: stringField(value, "code", FILE), linkSecret, expiresAt, slot, codeAttempts };
   }
 
-  /** Reports every change this store makes (a pairing used up or burned, a code redrawn). */
+  /** Reports every change this store makes (a pairing used up or burned, a code redrawn, an attempt reserved). */
   onChange(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
 
+  /** The live offer, or why there is none; `remove` deletes an expired one (with or without the lock held). */
+  #live(now: number, remove: (expired: PendingPairing) => void): PendingPairing | ClaimRefusal {
+    const pending = this.read();
+    if (pending === undefined) return { refused: CloseCode.UnknownDevice, reason: "no pairing is pending" };
+    if (now >= pending.expiresAt) {
+      remove(pending);
+      return { refused: CloseCode.UnknownDevice, reason: "the pairing offer expired" };
+    }
+    return pending;
+  }
+
+  #claim(pending: PendingPairing, secret: HostPairingSecret, retiredCode: boolean): PairingClaim {
+    if (this.#guard?.offer.linkSecret.toHex() !== pending.linkSecret.toHex()) this.#guard = new PairingGuard(pending);
+    const guard = this.#guard;
+    return {
+      secret,
+      retiredCode,
+      complete: (at = Date.now()) =>
+        withStateLock(this.#dir, () => {
+          const first = guard.use(at);
+          if (first || guard.state === "expired") this.#removeIfHeld(pending);
+          return first;
+        }),
+    };
+  }
+
   #write(pending: PendingPairing): void {
-    writePrivateJson(this.#path, { version: 2, ...pending, expiresAt: new Date(pending.expiresAt).toISOString() });
+    writePrivateJson(this.#path, {
+      version: VERSION,
+      code: pending.code,
+      linkSecret: base64urlEncode(pending.linkSecret),
+      expiresAt: new Date(pending.expiresAt).toISOString(),
+      slot: pending.slot,
+      codeAttempts: pending.codeAttempts,
+    });
     this.#changed();
   }
 
-  #removeIf(code: string): void {
-    withStateLock(this.#dir, () => this.#removeIfHeld(code));
+  #removeIf(offer: PendingPairing): void {
+    withStateLock(this.#dir, () => this.#removeIfHeld(offer));
   }
 
-  /** Removes the offer if it still holds `code` (a newer `pair` may have replaced it); the caller holds the lock. */
-  #removeIfHeld(code: string): void {
-    if (this.read()?.code !== code) return;
+  /** Removes the offer if the file still holds it (a newer `pair` may have replaced it); the caller holds the lock. */
+  #removeIfHeld(offer: PendingPairing): void {
+    if (this.read()?.linkSecret.toHex() !== offer.linkSecret.toHex()) return;
     removeFile(this.#path);
     this.#changed();
   }
