@@ -68,8 +68,9 @@ test("keys typed offline for a kept program that is lost and restarted meanwhile
   await page.keyboard.type(`echo misdeliv-$((5*5)) > '${misdelivered}'`);
   await page.keyboard.press("Enter");
   process.kill(shellPid, "SIGKILL");
+  // Right after the kill the core still reports the killed pid; the restart is the pid changing, then a new one.
+  await expect.poll(() => pidOf(address), { timeout: 30_000 }).not.toBe(shellPid);
   await expect.poll(() => pidOf(address), { timeout: 30_000 }).not.toBeNull();
-  expect(pidOf(address)).not.toBe(shellPid);
   socket.restore();
   await expect(page.getByText("Typed input was not sent because the program restarted")).toBeVisible({
     timeout: 20_000,
@@ -144,6 +145,8 @@ test("when the restarted program's view arrives before the old view's reattach, 
   await page.keyboard.type(`echo misdeliv-$((5*5)) > '${misdelivered}'`);
   await page.keyboard.press("Enter");
   process.kill(shellPid, "SIGKILL");
+  // Right after the kill the core still reports the killed pid; the restart is the pid changing, then a new one.
+  await expect.poll(() => pidOf(address), { timeout: 30_000 }).not.toBe(shellPid);
   await expect.poll(() => pidOf(address), { timeout: 30_000 }).not.toBeNull();
 
   // Held attaches force the order: the terminal list (with the new pid) replaces the old view before any reply.
