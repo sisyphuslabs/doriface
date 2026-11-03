@@ -19,7 +19,8 @@ import { isolatedGitEnv } from "./git-env.ts";
 const SCRIPT = join(import.meta.dir, "..", "relay", "private-relay.ts");
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "relay-fetch-")));
 const SECRET_NAMES = ["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"];
-// Each row spawns bun, git and an install; on a loaded host one took 4.9 s, so the 5 s default passes by luck.
+// Each row spawns bun, git and an install; on a loaded host one took 4.9 s, so the 5 s default passes by luck. Removing
+// every row's checkout afterwards gets the same budget.
 const ROW_TIMEOUT_MS = 60_000;
 const gitEnv = isolatedGitEnv(scratch);
 
@@ -58,7 +59,7 @@ beforeAll(async () => {
   standInRev = await git(standIn, "rev-parse", "HEAD");
 });
 
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+afterAll(() => rmSync(scratch, { recursive: true, force: true }), ROW_TIMEOUT_MS);
 
 async function publicCheckout(name: string): Promise<string> {
   const parent = join(scratch, name);
