@@ -3,6 +3,11 @@ import type { Subprocess } from "bun";
 const TERM_GRACE_MS = 5_000;
 const KILL_GRACE_MS = 2_000;
 const POLL_MS = 25;
+const INTERRUPTS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+
+/** Groups started and not yet stopped. A group of its own no longer gets the signals that end this process. */
+const liveGroups = new Set<number>();
+let interruptsHooked = false;
 
 function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
@@ -40,6 +45,34 @@ async function goneBy(pgid: number, deadline: number): Promise<boolean> {
 
 const goneWithin = (pgid: number, ms: number): Promise<boolean> => goneBy(pgid, performance.now() + ms);
 
+function killLiveGroups(): void {
+  for (const pgid of liveGroups) signalGroup(pgid, "SIGKILL");
+}
+
+/**
+ * When this process exits, or ends on SIGINT, SIGTERM or SIGHUP before `stopProcessGroup` ran, every live group gets
+ * SIGKILL. On a signal the groups are awaited (bounded) and the signal raised again, its listener gone, so the process
+ * ends the way the signal asks and only after its groups did.
+ */
+function hookInterrupts(): void {
+  if (interruptsHooked) return;
+  interruptsHooked = true;
+  process.once("exit", killLiveGroups);
+  for (const signal of INTERRUPTS) {
+    process.once(signal, async () => {
+      killLiveGroups();
+      await Promise.all([...liveGroups].map((pgid) => goneWithin(pgid, KILL_GRACE_MS)));
+      process.kill(process.pid, signal);
+    });
+  }
+}
+
+/** Registers `leader`'s group, spawned with `detached: true`, to be killed if this process ends before it is stopped. */
+export function adoptProcessGroup(leader: Subprocess): void {
+  liveGroups.add(leader.pid);
+  hookInterrupts();
+}
+
 /**
  * Ends `leader`, spawned with `detached: true` so that it leads a process group of its own, together with every
  * process it started in that group: SIGTERM, then SIGKILL if the group outlives the grace period. Resolves once the
@@ -55,5 +88,6 @@ export async function stopProcessGroup(leader: Subprocess): Promise<void> {
       throw new Error(`process group ${pgid} outlived SIGKILL by ${KILL_GRACE_MS} ms`);
     }
   }
+  liveGroups.delete(pgid);
   await leader.exited;
 }

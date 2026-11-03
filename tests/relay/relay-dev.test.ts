@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { liveAmong, liveDescendants } from "./support/processes.ts";
 import { BindRace, type LocalRelayOptions, startLocalRelay } from "./support/relay-dev.ts";
@@ -68,6 +69,22 @@ describe("startLocalRelay", () => {
     const started = await liveDescendants(process.pid);
     expect(started.length).toBeGreaterThanOrEqual(3);
     await relay.stop();
+    expect(await liveAmong(started)).toEqual([]);
+  }, 120_000);
+
+  test("a process ended by a signal takes the relay it started down with it", async () => {
+    const proc = Bun.spawn([process.execPath, join(import.meta.dir, "fixtures", "relay-until-signal.ts")], {
+      stdout: "pipe",
+      stderr: "inherit",
+    });
+    defer(() => proc.kill("SIGKILL"));
+    const reader = proc.stdout.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("ready\n");
+    const started = await liveDescendants(proc.pid);
+    expect(started.length).toBeGreaterThanOrEqual(3);
+    proc.kill("SIGTERM");
+    await proc.exited;
+    expect(proc.signalCode).toBe("SIGTERM");
     expect(await liveAmong(started)).toEqual([]);
   }, 120_000);
 });

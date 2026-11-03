@@ -1,7 +1,8 @@
 interface ProcessRow {
   readonly pid: number;
   readonly ppid: number;
-  readonly zombie: boolean;
+  /** A zombie (Z), dead (Linux X), or one the kernel is tearing down (macOS flag E, a parenthesized name in `ps`). */
+  readonly ended: boolean;
 }
 
 /** One `ps` snapshot of every process, without the `ps` that took it. */
@@ -12,13 +13,13 @@ async function snapshot(): Promise<ProcessRow[]> {
   return text.split("\n").flatMap((line) => {
     const [pid, ppid, stat] = line.trim().split(/\s+/);
     if (pid === undefined || ppid === undefined || stat === undefined || pid === String(ps.pid)) return [];
-    return [{ pid: Number(pid), ppid: Number(ppid), zombie: stat.startsWith("Z") }];
+    return [{ pid: Number(pid), ppid: Number(ppid), ended: /^[ZX]/.test(stat) || stat.includes("E") }];
   });
 }
 
-/** Live (not zombie) processes descending from `root`, `root` excluded. */
+/** Live (not ended) processes descending from `root`, `root` excluded. */
 export async function liveDescendants(root: number): Promise<number[]> {
-  const rows = (await snapshot()).filter((row) => !row.zombie);
+  const rows = (await snapshot()).filter((row) => !row.ended);
   const found: number[] = [];
   const visit = (parent: number): void => {
     for (const row of rows.filter((candidate) => candidate.ppid === parent)) {
@@ -30,8 +31,8 @@ export async function liveDescendants(root: number): Promise<number[]> {
   return found;
 }
 
-/** Which of `pids` are still live (not zombie) processes. */
+/** Which of `pids` are still live (not ended) processes. */
 export async function liveAmong(pids: readonly number[]): Promise<number[]> {
-  const live = new Set((await snapshot()).filter((row) => !row.zombie).map((row) => row.pid));
+  const live = new Set((await snapshot()).filter((row) => !row.ended).map((row) => row.pid));
   return pids.filter((pid) => live.has(pid));
 }
