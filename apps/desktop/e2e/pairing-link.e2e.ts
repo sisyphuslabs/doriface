@@ -133,6 +133,33 @@ test("a doriface://pair link from open-url (macOS) pairs in the one window", asy
   });
 });
 
+test("a pairing link opened as a new window (modifier-click, target=_blank, window.open) pairs in the one window", async () => {
+  const page = await appPage();
+  const placeLink = (target: string): Promise<void> =>
+    page.evaluate(
+      ({ href, opensIn }) => {
+        const anchor = document.createElement("a");
+        anchor.id = "pairing-link";
+        anchor.href = href;
+        anchor.target = opensIn;
+        anchor.textContent = "pair";
+        anchor.style.cssText = "position:fixed;top:40px;left:40px;z-index:2147483647;padding:8px";
+        document.body.append(anchor);
+      },
+      { href: PAIR_URL, opensIn: target },
+    );
+  const newWindowModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await expectPairedInApp(page, async () => {
+    await placeLink("");
+    await page.locator("#pairing-link").click({ modifiers: [newWindowModifier] });
+  });
+  await expectPairedInApp(page, async () => {
+    await placeLink("_blank");
+    await page.locator("#pairing-link").click();
+  });
+  await expectPairedInApp(page, () => page.evaluate((url) => void window.open(url, "_blank"), PAIR_URL));
+});
+
 test("a pairing link clicked in the app pairs in the app; other links still go to the browser", async () => {
   const page = await appPage();
   await running().evaluate(({ shell }) => {

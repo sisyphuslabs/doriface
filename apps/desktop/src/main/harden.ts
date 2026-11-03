@@ -3,7 +3,7 @@ import { allowedExternal } from "../config/external.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import { isGrantable } from "../config/permissions.ts";
 import { routeWindowOpen } from "../config/window-open.ts";
-import { openInAppLink } from "./deep-link.ts";
+import { openInAppLink, openPairingLink } from "./deep-link.ts";
 
 /** Opens a URL that already passed the allowlist in the system browser. */
 const openExternal = (url: string): void => {
@@ -33,6 +33,7 @@ export function hardenContents(contents: WebContents, origin: string, navigate: 
   contents.setWindowOpenHandler(({ url }) => {
     const route = routeWindowOpen(url, origin);
     if (route.kind === "navigate") navigate(route.path);
+    else if (route.kind === "pair") openPairingLink(route.fragment);
     else if (route.kind === "browser") openExternal(route.url);
     return { action: "deny" };
   });
