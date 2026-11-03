@@ -82,7 +82,7 @@ export function KeybindingRow({
           <span className="font-mono text-xs">{action.id}</span>
         ) : (
           <span className="flex flex-wrap items-center gap-2 text-foreground">
-            <Kbd keys={triggerKeys(pending, platform)} /> is {conflictLabel}.
+            <Kbd keys={triggerKeys(pending, platform)} persistent /> is {conflictLabel}.
             <Button
               size="sm"
               variant="primary"
@@ -103,7 +103,7 @@ export function KeybindingRow({
         <span className="flex flex-wrap items-center gap-1">
           {triggers.map((trigger) => (
             <span key={trigger} className="inline-flex items-center gap-0.5">
-              <Kbd keys={triggerKeys(trigger, platform)} />
+              <Kbd keys={triggerKeys(trigger, platform)} persistent />
               <IconButton
                 label={`Remove ${trigger} from ${action.label}`}
                 disabled={disabled}
