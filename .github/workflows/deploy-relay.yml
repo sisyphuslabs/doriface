@@ -22,7 +22,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -32,7 +32,21 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+      # The same gate as CI's Check job: a commit that fails typecheck, lint, format or tests never deploys.
+      - name: Install herdr-core
+        env:
+          HC_URL: https://releases.herdr.dev/core/0.1.17/herdr-core-linux-x86_64.tar.gz
+          HC_SHA256: 82ec44043f6894bfdb716b979b87cda43fd7fa46b0104e7b7bd93e64d1a9b877
+        run: |
+          mkdir -p "$RUNNER_TEMP/hc"
+          curl -fsSL "$HC_URL" -o "$RUNNER_TEMP/hc.tar.gz"
+          echo "$HC_SHA256  $RUNNER_TEMP/hc.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/hc.tar.gz" -C "$RUNNER_TEMP/hc" herdr-core
+          ln -s herdr-core "$RUNNER_TEMP/hc/hc"
+          echo "$RUNNER_TEMP/hc" >> "$GITHUB_PATH"
+          echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
       - run: bun install --frozen-lockfile
+      - run: bun run check
       - name: wrangler deploy
         working-directory: apps/relay
         env:
