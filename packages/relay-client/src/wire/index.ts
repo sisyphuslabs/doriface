@@ -44,11 +44,12 @@ export {
   pairSlotOf,
 } from "./pair-code.ts";
 export {
-  decodePairSlotReply,
+  decodePairSlotAck,
   decodePairSlotRequest,
   encodePairSlotClear,
-  encodePairSlotReply,
+  encodePairSlotAck,
   encodePairSlotRequest,
   NOISE_STATIC_PUB_BYTES,
-  PairSlotStatus,
+  PairSlotAckStatus,
+  slotOf,
 } from "./pair-slot.ts";

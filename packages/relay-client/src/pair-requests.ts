@@ -1,5 +1,5 @@
 import { LinkClosedError } from "./link.ts";
-import { decodePairSlotReply, PairSlotStatus } from "./wire/index.ts";
+import { decodePairSlotAck, PairSlotAckStatus } from "./wire/index.ts";
 
 export type PairSlotResult = "registered" | "taken";
 
@@ -9,7 +9,7 @@ interface Waiter {
 }
 
 /**
- * PAIR_SLOT requests the uplink sent, waiting for the relay's 200 or 409. At most one request per slot waits at a
+ * PAIR_SLOT requests the uplink sent, waiting for the relay's PAIR_SLOT_ACK. At most one request per slot waits at a
  * time, and one without a reply in `timeoutMs` is dropped, so a lost reply never blocks later requests.
  */
 export class PairSlotRequests {
@@ -28,15 +28,18 @@ export class PairSlotRequests {
     return resolvers.promise;
   }
 
-  /** Settles the request a reply answers; false when the reply is malformed. */
+  /** Settles the request a PAIR_SLOT_ACK payload answers; false when the ack itself is malformed. */
   settle(payload: Uint8Array): boolean {
-    const reply = decodePairSlotReply(payload);
-    if (reply === undefined) return false;
-    const waiter = this.#waiting.get(reply.slot);
-    this.#waiting.delete(reply.slot);
-    if (waiter !== undefined) {
-      clearTimeout(waiter.timer);
-      waiter.resolvers.resolve(reply.status === PairSlotStatus.Registered ? "registered" : "taken");
+    const ack = decodePairSlotAck(payload);
+    if (ack === undefined) return false;
+    const waiter = this.#waiting.get(ack.slot);
+    this.#waiting.delete(ack.slot);
+    if (waiter === undefined) return true;
+    clearTimeout(waiter.timer);
+    if (ack.status === PairSlotAckStatus.Malformed) {
+      waiter.resolvers.reject(new Error(`the relay refused the PAIR_SLOT request for ${ack.slot} as malformed`));
+    } else {
+      waiter.resolvers.resolve(ack.status === PairSlotAckStatus.Registered ? "registered" : "taken");
     }
     return true;
   }

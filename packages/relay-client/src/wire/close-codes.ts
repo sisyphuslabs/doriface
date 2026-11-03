@@ -8,9 +8,12 @@ export const CloseCode = {
   InternalError: 1011,
   CryptoFailure: 4400,
   UnknownDevice: 4401,
+  RelayProtocolError: 4402,
   RelayAuthFailed: 4403,
   HostOffline: 4404,
   IdleTimeout: 4408,
+  /** A pairing session named a slot that is not registered to this host (expired or never opened). */
+  PairSlotUnknown: 4410,
   /** The relay accepted a newer authenticated uplink for the same hostId. */
   UplinkReplaced: 4409,
   RateLimited: 4429,

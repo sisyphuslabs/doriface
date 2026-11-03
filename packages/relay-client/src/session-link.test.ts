@@ -4,13 +4,13 @@ import { SessionLink } from "./session-link.ts";
 
 describe("SessionLink", () => {
   test("a write the uplink can no longer carry rejects instead of vanishing", async () => {
-    const link = new SessionLink(1, { sendFrame: () => false, release: () => {}, consumed: () => {} });
+    const link = new SessionLink(1, undefined, { sendFrame: () => false, release: () => {}, consumed: () => {} });
     await expect(link.send(new Uint8Array([1]))).rejects.toBeInstanceOf(LinkClosedError);
   });
 
   test("a write the uplink carried resolves with the DATA frame sent", async () => {
     const frames: Uint8Array[] = [];
-    const link = new SessionLink(1, {
+    const link = new SessionLink(1, undefined, {
       sendFrame: (frame) => frames.push(frame) > 0,
       release: () => {},
       consumed: () => {},

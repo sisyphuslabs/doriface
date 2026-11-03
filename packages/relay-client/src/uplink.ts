@@ -184,15 +184,17 @@ export class Uplink {
     const session = this.#sessions.get(frame.sessionId);
     if (frame.type === MuxType.Data && session !== undefined) return session.deliver(frame.payload);
     consumed(bytes.byteLength);
-    if (frame.type === MuxType.PairSlot) {
-      if (!this.#pairSlots.settle(frame.payload)) closeSocket(ws, CloseCode.ProtocolError, "bad PAIR_SLOT reply");
+    if (frame.type === MuxType.PairSlotAck) {
+      if (!this.#pairSlots.settle(frame.payload)) closeSocket(ws, CloseCode.RelayProtocolError, "bad PAIR_SLOT_ACK");
       return;
     }
+    if (frame.type === MuxType.PairSlot)
+      return closeSocket(ws, CloseCode.RelayProtocolError, "PAIR_SLOT is host to relay");
     if (frame.type === MuxType.Data) return;
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
     if (session !== undefined)
       return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
-    const link = new SessionLink(frame.sessionId, {
+    const link = new SessionLink(frame.sessionId, frame.pairSlot, {
       sendFrame: (out) => {
         if (!isOpen(ws)) return false;
         ws.send(out);

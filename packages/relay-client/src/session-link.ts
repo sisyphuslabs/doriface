@@ -22,12 +22,15 @@ export interface SessionTransport {
 /** One client session as the host sees it: DATA frames on the uplink, demultiplexed by sessionId. */
 export class SessionLink implements ByteLink {
   readonly sessionId: number;
+  /** The slot of an IKpsk2 pairing session (the client dialed `?pair=<slot>`); undefined for an ordinary session. */
+  readonly pairSlot: string | undefined;
   readonly #transport: SessionTransport;
   readonly #inbox: Inbox;
   readonly #closed = new CloseSignal();
 
-  constructor(sessionId: number, transport: SessionTransport) {
+  constructor(sessionId: number, pairSlot: string | undefined, transport: SessionTransport) {
     this.sessionId = sessionId;
+    this.pairSlot = pairSlot;
     this.#transport = transport;
     this.#inbox = new Inbox(
       (error) => this.#end(error instanceof Error ? error : new Error(String(error)), true),
