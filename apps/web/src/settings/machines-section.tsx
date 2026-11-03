@@ -1,9 +1,10 @@
 import type { HcConnection } from "@doriface/client";
 import type { MachineView, Terminal } from "@doriface/protocol";
-import { Notice, SettingRow, cn } from "@doriface/ui";
-import { Monitor, Server } from "lucide-react";
-import type { ReactNode } from "react";
+import { Button, Notice, SettingRow, cn } from "@doriface/ui";
+import { Monitor, Plus, Server } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { useConnection } from "../connection/store.ts";
+import { AddMachineDialog } from "../workspace/add-machine-dialog.tsx";
 import { machineCause } from "../workspace/machine-cause.ts";
 import { RetryButton } from "../workspace/retry-button.tsx";
 import { formatAge } from "../workspace/model.ts";
@@ -67,6 +68,7 @@ function AddedMachine(props: { view: MachineView; now: number; onRetry: () => Pr
 function MachineRows({ connection }: { readonly connection: HcConnection }) {
   const { views, retry, listError } = useMachines(connection, NO_TERMINALS);
   const now = useNow();
+  const [adding, setAdding] = useState(false);
   return (
     <div className="flex flex-col gap-3">
       <ul aria-label="Machines" className="flex flex-col divide-y divide-border">
@@ -87,11 +89,13 @@ function MachineRows({ connection }: { readonly connection: HcConnection }) {
           {listError}
         </Notice>
       )}
-      <p className="text-sm text-pretty text-muted-foreground">
-        To add one, run <code className="font-mono text-xs text-foreground">hc machine add</code> on this machine with
-        an ssh target, or with <code className="font-mono text-xs text-foreground">--via</code> and a doriface-host
-        connect command for a machine behind the relay.
-      </p>
+      <div>
+        <Button onClick={() => setAdding(true)}>
+          <Plus aria-hidden />
+          Add a machine
+        </Button>
+      </div>
+      <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }
