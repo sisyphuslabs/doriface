@@ -16,6 +16,7 @@ test("off macOS the status bar and sidebar show the palette shortcut as Ctrl Shi
     .locator("kbd > span");
   await expect(hint).toHaveText(["Ctrl", "Shift", "P"]);
 
+  await page.mouse.move(0, 0);
   await page.getByRole("complementary", { name: "Workspace" }).getByRole("button", { name: "Command palette" }).hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "Command palette" }).locator("kbd > span");
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "P"]);
@@ -31,6 +32,9 @@ test("off macOS the tab bar and pane headers show Ctrl shortcuts", async ({ page
   await expect(page.locator('[data-focused="true"] header')).toContainText("Ctrl+1");
   await expect(page.locator('[data-focused="true"] header')).not.toContainText("⌘");
   await expect(terminal).toBeVisible();
+  // openNewTerminal clicked this button and left the pointer on it; a click closes the tooltip and
+  // hovering in place sends no new pointerenter, so move off first.
+  await page.mouse.move(0, 0);
   await page.getByRole("button", { name: "New tab" }).hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "New tab" }).locator("kbd > span");
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "T"]);
