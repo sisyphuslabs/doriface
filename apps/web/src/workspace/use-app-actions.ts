@@ -28,6 +28,11 @@ function zoom(delta: number | null): void {
   void terminalConfigStore.update((current) => zoomedConfig(current, delta));
 }
 
+/** Whether selecting the address does anything: a null target or the active tab leaves the key unhandled. */
+export function shouldSelect(address: string | null, active: string | null): address is string {
+  return address !== null && address !== active;
+}
+
 export function neighbour(list: readonly string[], current: string | null, step: 1 | -1): string | null {
   if (list.length === 0) return null;
   const index = current === null ? -1 : list.indexOf(current);
@@ -41,7 +46,7 @@ export function useAppActions({ terminals, tabs, onNew, onToggleSidebar }: AppAc
     const live = terminals.filter((terminal) => terminal.state === "live").map((terminal) => terminal.address);
     const select = (address: string | null): boolean => {
       // Nothing to do leaves the key to the terminal (alt+up in a shell with one tab open).
-      if (address === null || address === tabs.active) return false;
+      if (!shouldSelect(address, tabs.active)) return false;
       tabs.select(address);
       return true;
     };
