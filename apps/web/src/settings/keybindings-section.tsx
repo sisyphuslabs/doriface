@@ -1,4 +1,5 @@
 import { Badge, Button, Dialog, Input, Notice } from "@doriface/ui";
+import { asSentence } from "../storage/sentence.ts";
 import { useMemo, useState } from "react";
 import { ACTIONS, actionFor, type ActionDef, type Scope } from "../keys/actions.ts";
 import { keymapStore, useKeymapError, useOverrides } from "../keys/keymap-store.ts";
@@ -101,7 +102,7 @@ export function KeybindingsSection() {
       {storageError === null ? null : (
         <Notice tone="error" title="Keybindings could not be read from this browser's storage">
           Changes are not saved, so the stored keybindings stay as they are. Reload the page to try again.{" "}
-          {storageError.message}
+          {asSentence(storageError.message)}
         </Notice>
       )}
       <div className="flex flex-wrap items-center gap-2">
