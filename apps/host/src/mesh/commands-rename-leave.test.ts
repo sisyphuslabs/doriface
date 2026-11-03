@@ -56,7 +56,7 @@ describe("mesh-rename (design 7.4, 7.5)", () => {
 });
 
 describe("mesh-leave (design 6.5)", () => {
-  test("a push that rejects counts as no confirmation, and leaving still completes", async () => {
+  test("a push that fails counts as no confirmation, and leaving still completes", async () => {
     const a = machine("a"),
       f = machine("f");
     const it = commandBench(a);
@@ -65,7 +65,10 @@ describe("mesh-leave (design 6.5)", () => {
     const logs: string[] = [];
     const hooks: MeshHooks = {
       ...IDLE_MESH_HOOKS,
-      push: () => Promise.reject(new Error("no session")),
+      push: () => {
+        throw new Error("no session");
+      },
+      confirmations: () => Promise.reject(new Error("no session")),
       left: () => Promise.reject(new Error("no core")),
     };
     const leaving = new MeshCommands({ ...it.commands.deps, hooks, log: (line) => void logs.push(line) });

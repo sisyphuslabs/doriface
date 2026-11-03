@@ -14,19 +14,22 @@ export interface MeshLiveFacts {
 
 /**
  * The running parts of the mesh that the commands and the status reach through the host: joins (PR 4), sync and the
- * dial policy (PR 5), and the reconciler with its lines (PR 6). The host owns one; until those parts are wired into
- * it, it holds `IDLE_MESH_HOOKS`, which reaches no member.
+ * dial policy (PR 5), and the reconciler with its lines (PR 6). The host builds them from its sync (`syncHooks`);
+ * `IDLE_MESH_HOOKS` reaches no member.
  */
 export interface MeshHooks {
-  /** Pushes records this host signed (section 5.3); resolves with the signPubs of the members that confirmed. */
-  push(records: readonly Signed[], withinMs: number): Promise<readonly string[]>;
+  /** Pushes records this host signed through its store to every member owed them (section 5.3). */
+  push(records: readonly Signed[]): void;
+  /** Within `withinMs`, the signPubs of the members owed this host's records that confirmed them (section 6.5). */
+  confirmations(withinMs: number): Promise<readonly string[]>;
   /** After `mesh leave` deleted mesh.json: removes this host's mesh machines (section 6.5). */
   left(): Promise<void>;
   live(): MeshLiveFacts;
 }
 
 export const IDLE_MESH_HOOKS: MeshHooks = {
-  push: () => Promise.resolve([]),
+  push: () => undefined,
+  confirmations: () => Promise.resolve([]),
   left: () => Promise.resolve(),
   live: () => ({
     pending: [],

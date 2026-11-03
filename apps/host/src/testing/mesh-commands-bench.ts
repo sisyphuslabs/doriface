@@ -47,8 +47,8 @@ export function commandBench(
     push: (records) => {
       pushed.push(records);
       storedAtPush.push(existsSync(join(dir, "mesh.json")));
-      return Promise.resolve(confirm(records));
     },
+    confirmations: () => Promise.resolve(confirm(pushed.at(-1) ?? [])),
   };
   const commands = new MeshCommands({
     store: mesh.store,
