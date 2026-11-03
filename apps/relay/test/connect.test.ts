@@ -125,6 +125,24 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     expect((await run.stderr()).trim().split("\n").at(-1)).toContain("no host is pairing with this code");
   }, 30_000);
 
+  test("a pinned key that is not the live host's is refused with 4400 before any byte reaches hc", async () => {
+    const wrongKey = join(scratch, "wrong-key");
+    new KnownHosts(wrongKey).add({
+      hostId: host().hostId,
+      hostKey: generateX25519().publicKey,
+      relayUrl: host().relayUrl,
+    });
+    const run = runConnect(wrongKey, host().relayUrl, host().hostId);
+    await run.write(HELLO);
+    expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
+    expect((await run.stderr()).trim().split("\n").at(-1)).toMatch(/its key may not match .*\(4400\)$/);
+    const leftover = await run.reader.line().then(
+      () => "a line",
+      (error: unknown) => String(error),
+    );
+    expect(leftover).toContain("stream ended with 0 unparsed bytes");
+  }, 30_000);
+
   test("a host this machine never paired fails fast with one clear last line and exit 1", async () => {
     const run = runConnect(join(scratch, "stranger"), host().relayUrl, host().hostId);
     expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
