@@ -2,6 +2,7 @@ import { Badge, Button, Dialog } from "@doriface/ui";
 import { useState } from "react";
 import { terminalConfigStore } from "../ghostty/config-store.ts";
 import { mergeConfig, parseGhosttyConfig, type LineStatus, type ParsedConfig } from "../ghostty/parse.ts";
+import { download } from "./download.ts";
 import { serializeGhosttyConfig } from "../ghostty/serialize.ts";
 
 const STATUS: Readonly<
@@ -67,15 +68,6 @@ export function ImportPreview({ parsed, onClose }: { readonly parsed: ParsedConf
       </ul>
     </Dialog>
   );
-}
-
-function download(name: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 /** Choose a Ghostty config file to preview, or download the current settings as one. */
