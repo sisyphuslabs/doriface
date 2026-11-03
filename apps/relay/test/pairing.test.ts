@@ -6,7 +6,8 @@ import {
   lookupPairSlot,
   PairLookupError,
 } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { runDeferred } from "./support/cleanup.ts";
 import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
@@ -20,6 +21,8 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => relay.stop());
+
+afterEach(runDeferred);
 
 function randomSlot(): string {
   return [...crypto.getRandomValues(new Uint8Array(3))].map((byte) => CROCKFORD_ALPHABET[byte % 32]).join("");

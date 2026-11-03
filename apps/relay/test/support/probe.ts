@@ -6,10 +6,13 @@ export interface Closed {
   readonly reason: string;
 }
 
-/** A fresh documentation-range address per caller, so each test has its own rate-limit bucket. */
+let issued = 0;
+
+/** A fresh TEST-NET-2 or TEST-NET-3 (RFC 5737) address per caller, so each test has its own rate-limit bucket. */
 export function testIp(): string {
-  const [a = 0, b = 0] = crypto.getRandomValues(new Uint8Array(2));
-  return `198.51.${a}.${b}`;
+  const index = issued % 508;
+  issued += 1;
+  return index < 254 ? `198.51.100.${index + 1}` : `203.0.113.${index - 253}`;
 }
 
 /** Bun's WebSocket with the client IP the relay rate-limits on; Cloudflare's edge sets this header in production. */

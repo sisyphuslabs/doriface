@@ -5,7 +5,8 @@ import {
   type SessionLink,
   type WebSocketLink,
 } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { runDeferred } from "./support/cleanup.ts";
 import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { inOrder, times } from "./support/sequential.ts";
@@ -19,6 +20,8 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => relay.stop());
+
+afterEach(runDeferred);
 
 const clientUrl = (hostId: string): string => `${relay.url.replace("http", "ws")}/v1/client/${hostId}`;
 

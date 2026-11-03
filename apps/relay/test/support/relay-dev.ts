@@ -21,6 +21,16 @@ function freePort(): number {
   return port;
 }
 
+/** Runs `spawn`; if it throws, the scratch directory made for it is removed before the error propagates. */
+async function removingOnFailure<T>(scratch: string, spawn: () => T): Promise<T> {
+  try {
+    return spawn();
+  } catch (error) {
+    await rm(scratch, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 /**
  * Runs the relay under workerd with `wrangler dev` on random ports, with wrangler's state, config and logs in a
  * scratch directory. Requires Node 22+ on PATH (wrangler's own requirement). `vars` become `--var` overrides, e.g.
@@ -31,36 +41,38 @@ export async function startLocalRelay(vars: Readonly<Record<string, string>> = {
   const wrangler = join(RELAY_DIR, "node_modules", ".bin", "wrangler");
   const port = String(freePort());
   const inspector = String(freePort());
-  const proc = Bun.spawn(
-    [
-      wrangler,
-      "dev",
-      "--ip",
-      "127.0.0.1",
-      "--port",
-      port,
-      "--inspector-port",
-      inspector,
-      // Without this, wrangler rewrites request URLs to the production route, and the relay origin hosts sign over
-      // would not match the address they dialed.
-      "--local-upstream",
-      `127.0.0.1:${port}`,
-      "--persist-to",
-      join(scratch, "state"),
-      ...Object.entries(vars).flatMap(([name, value]) => ["--var", `${name}:${value}`]),
-    ],
-    {
-      cwd: RELAY_DIR,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      env: {
-        ...process.env,
-        WRANGLER_SEND_METRICS: "false",
-        XDG_CONFIG_HOME: join(scratch, "config"),
-        WRANGLER_LOG_PATH: join(scratch, "logs"),
+  const proc = await removingOnFailure(scratch, () =>
+    Bun.spawn(
+      [
+        wrangler,
+        "dev",
+        "--ip",
+        "127.0.0.1",
+        "--port",
+        port,
+        "--inspector-port",
+        inspector,
+        // Without this, wrangler rewrites request URLs to the production route, and the relay origin hosts sign over
+        // would not match the address they dialed.
+        "--local-upstream",
+        `127.0.0.1:${port}`,
+        "--persist-to",
+        join(scratch, "state"),
+        ...Object.entries(vars).flatMap(([name, value]) => ["--var", `${name}:${value}`]),
+      ],
+      {
+        cwd: RELAY_DIR,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          ...process.env,
+          WRANGLER_SEND_METRICS: "false",
+          XDG_CONFIG_HOME: join(scratch, "config"),
+          WRANGLER_LOG_PATH: join(scratch, "logs"),
+        },
       },
-    },
+    ),
   );
   let output = "";
   const ready = Promise.withResolvers<string>();

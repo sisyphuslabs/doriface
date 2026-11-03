@@ -8,9 +8,12 @@ export function received(link: SessionLink | WebSocketLink): AsyncQueue<Uint8Arr
   return queue;
 }
 
-function closeCodeOf(error: Error | undefined): number | undefined {
-  return error instanceof RelayCloseError ? error.code : error === undefined ? CloseCode.Normal : undefined;
-}
-
-export const closedWith = (link: SessionLink | WebSocketLink): Promise<number | undefined> =>
-  new Promise((resolve) => link.onClose((error) => resolve(closeCodeOf(error))));
+/** The link's close code; any failure other than a relay close rejects with that error so the test shows it. */
+export const closedWith = (link: SessionLink | WebSocketLink): Promise<number> =>
+  new Promise((resolve, reject) =>
+    link.onClose((error) => {
+      if (error === undefined) resolve(CloseCode.Normal);
+      else if (error instanceof RelayCloseError) resolve(error.code);
+      else reject(error);
+    }),
+  );

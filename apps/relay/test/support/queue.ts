@@ -1,17 +1,17 @@
 /** Items pushed by callbacks, taken in order by tests. `take` rejects once the queue is ended and empty. */
 export class AsyncQueue<T> {
-  readonly #items: T[] = [];
+  readonly #items: { readonly value: T }[] = [];
+  readonly #waiters: (() => void)[] = [];
   #ended: Error | undefined;
-  #wake: (() => void) | undefined;
 
-  push(item: T): void {
-    this.#items.push(item);
-    this.#notify();
+  push(value: T): void {
+    this.#items.push({ value });
+    this.#waiters.shift()?.();
   }
 
   end(error: Error): void {
     this.#ended ??= error;
-    this.#notify();
+    for (const wake of this.#waiters.splice(0)) wake();
   }
 
   get size(): number {
@@ -19,17 +19,10 @@ export class AsyncQueue<T> {
   }
 
   async take(): Promise<T> {
-    if (this.#items.length > 0) return this.#items.splice(0, 1)[0] ?? this.take();
+    const item = this.#items.shift();
+    if (item !== undefined) return item.value;
     if (this.#ended !== undefined) throw this.#ended;
-    await new Promise<void>((resolve) => {
-      this.#wake = resolve;
-    });
+    await new Promise<void>((resolve) => this.#waiters.push(resolve));
     return this.take();
-  }
-
-  #notify(): void {
-    const wake = this.#wake;
-    this.#wake = undefined;
-    wake?.();
   }
 }

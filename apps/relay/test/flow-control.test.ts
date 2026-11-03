@@ -15,7 +15,8 @@ import {
   type SessionLink,
   type WebSocketLink,
 } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { defer, runDeferred } from "./support/cleanup.ts";
 import { closedWith, received } from "./support/links.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { AsyncQueue } from "./support/queue.ts";
@@ -32,6 +33,8 @@ beforeAll(async () => {
 
 afterAll(() => relay.stop());
 
+afterEach(runDeferred);
+
 const clientUrl = (hostId: string): string => `${relay.url.replace("http", "ws")}/v1/client/${hostId}`;
 
 /** A client session where the client has sent one frame, as every real Noise initiator does first. */
@@ -41,6 +44,7 @@ async function openSession(host: TestHost, ip: string): Promise<{ client: WebSoc
     hostId: host.uplink.hostId,
     createSocket: socketFrom(ip),
   });
+  defer(() => client.close());
   const session = await host.sessions.take();
   const first = received(session);
   client.send(new Uint8Array([1]));
@@ -126,10 +130,14 @@ describe("backpressure (C3)", () => {
     const acks = new AsyncQueue<string>();
     const arrivals = new AsyncQueue<number>();
     const sessions = new AsyncQueue<SessionLink>();
+    const answered = Promise.withResolvers<void>();
     const uplink = await Uplink.start({
       relayUrl: relay.url,
       signer: ed25519Signer(generateSigningKey()),
       onSession: (session) => sessions.push(session),
+      onState: (state) => {
+        if (state.state === "answered") answered.resolve();
+      },
       createSocket: (url) => {
         const ws = socketFrom(ip)(url);
         const send = ws.send.bind(ws);
@@ -146,11 +154,15 @@ describe("backpressure (C3)", () => {
         return ws;
       },
     });
+    defer(() => uplink.stop());
+    // A client that arrives before the uplink has answered finds the host offline.
+    await answered.promise;
     const client = await connectRelayClient({
       relayUrl: relay.url,
       hostId: uplink.hostId,
       createSocket: socketFrom(ip),
     });
+    defer(() => client.close());
     const session = await sessions.take();
     const consumed = Promise.withResolvers<void>();
     session.onData(() => consumed.promise);

@@ -10,7 +10,8 @@ import {
   relayOriginOf,
   Uplink,
 } from "@doriface/relay-client";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { runDeferred } from "./support/cleanup.ts";
 import { type Closed, Probe, socketFrom, testIp } from "./support/probe.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
 import { startTestHost } from "./support/test-host.ts";
@@ -22,6 +23,8 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(() => relay.stop());
+
+afterEach(runDeferred);
 
 const hostUrl = (hostId: string): string => `${relay.url.replace("http", "ws")}/v1/host/${hostId}`;
 
