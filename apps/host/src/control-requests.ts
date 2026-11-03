@@ -6,7 +6,16 @@ export type ControlRequest =
   | { readonly op: "devices-changed" }
   | { readonly op: "mesh-changed" }
   | { readonly op: "mesh-status" }
-  | { readonly op: "mesh-revoke"; readonly member: string; readonly compromised: boolean; readonly yes: boolean }
+  | {
+      readonly op: "mesh-revoke";
+      readonly member: string;
+      readonly compromised: boolean;
+      readonly yes: boolean;
+      /** Return the plan and write nothing (design 6.1: the CLI shows it before anything is written). */
+      readonly preview?: boolean | undefined;
+      /** The subjects' hostIds the preview showed; a plan that names others since is refused. */
+      readonly expect?: readonly string[] | undefined;
+    }
   | { readonly op: "mesh-rename"; readonly member: string; readonly name: string }
   | { readonly op: "mesh-leave" }
   | { readonly op: "mesh-pair"; readonly auto: boolean }
@@ -23,6 +32,12 @@ export type ControlRequest =
 
 const optionalString = (value: unknown): string | undefined => {
   if (value === undefined || typeof value === "string") return value;
+  throw new Error("malformed control request");
+};
+
+const optionalStrings = (value: unknown): readonly string[] | undefined => {
+  if (value === undefined) return undefined;
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) return value;
   throw new Error("malformed control request");
 };
 
@@ -53,6 +68,8 @@ export function parseRequest(line: string): ControlRequest {
         member: field(get("member"), isString),
         compromised: get("compromised") === true,
         yes: get("yes") === true,
+        preview: get("preview") === true,
+        expect: optionalStrings(get("expect")),
       };
     case "mesh-rename":
       return { op: "mesh-rename", member: field(get("member"), isString), name: field(get("name"), isString) };
