@@ -99,11 +99,17 @@ export function useLayout(
       const visited = (history.current.get(key) ?? []).filter((id) => id !== pane);
       history.current.set(key, [...visited, pane].slice(-HISTORY));
     }
-    setView((prev) => ({
-      ...prev,
-      active: key,
-      focused: pane === null ? prev.focused : { ...prev.focused, [key]: pane },
-    }));
+    setView((prev) => {
+      // Focus leaving a zoomed pane shows every pane again, as herdr-app and Ghostty unzoom on a focus move or a split,
+      // so focus never sits on a pane the zoom hides and a close never acts on one out of view.
+      const { [key]: inTab, ...others } = prev.zoomed;
+      return {
+        ...prev,
+        active: key,
+        focused: pane === null ? prev.focused : { ...prev.focused, [key]: pane },
+        zoomed: pane === null || inTab === undefined || inTab === pane ? prev.zoomed : others,
+      };
+    });
   }, []);
 
   const addTab = useCallback(
