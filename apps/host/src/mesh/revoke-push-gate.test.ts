@@ -48,3 +48,25 @@ describe("the revoke push to a member that just went offline (section 5.3)", () 
     expect(took).toBeLessThanOrEqual(GOSSIP_TIMINGS.revokedLastMs + 1_000);
   });
 });
+
+describe("a held revoke push that meets a dial gate (sections 5.3 and 8.2)", () => {
+  test("is retried when the gate's probe is due, ahead of the hc lines waiting for the budget", async () => {
+    const { clock, mesh, a, b } = pair();
+    mesh.offline("b");
+    const revoke = revokeOf(a, b);
+    await clock.advance(GOSSIP_TIMINGS.revokedLastMs + 1);
+    const gate = a.policy.gate(b.member.signPub);
+    expect(gate?.misses).toBe(1);
+    await clock.advance(10_000);
+    mesh.online("b");
+    const lines = Array.from({ length: 24 }, (_, index) => a.policy.acquire(`line-${index}`, "line"));
+    await settle();
+    const dueAt = gate?.nextAt ?? 0;
+    const firstWindow = clock.now() + 60_000;
+    expect(dueAt).toBeLessThan(firstWindow);
+    await clock.until(holds(b, revoke), firstWindow - clock.now() + 1_000);
+    expect(clock.now()).toBeLessThanOrEqual(firstWindow + 1_000);
+    await clock.advance(120_000);
+    expect((await Promise.all(lines)).every((grant) => grant.ok)).toBe(true);
+  });
+});

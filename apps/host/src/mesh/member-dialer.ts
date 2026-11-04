@@ -38,7 +38,11 @@ export class MemberDialer {
   async #dial(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
     const { policy } = this.#options;
     const grant = await policy.acquire(member.signPub, purpose);
-    if (!grant.ok) return false;
+    if (!grant.ok) {
+      const next = "nextInMs" in grant ? `, next try in ${Math.ceil(grant.nextInMs / 1000)} s` : "";
+      this.#options.log(`mesh: ${purpose} to ${member.name} waits (${grant.reason}${next})`);
+      return false;
+    }
     if (this.#options.flushOpen(member.signPub)) {
       policy.release();
       return true;
