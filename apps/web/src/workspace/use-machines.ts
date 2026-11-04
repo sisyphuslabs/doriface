@@ -7,6 +7,11 @@ import { withReach } from "./reach.ts";
 
 export interface Machines {
   readonly entries: readonly MachineEntry[];
+  /**
+   * The first terminal list and the first machine.list answer (or its failure) are in. Until then the sidebar draws no
+   * lists, so nothing it draws is pushed aside when they arrive.
+   */
+  readonly ready: boolean;
   /** Starts a shell on that machine (`terminal.run` with `on`) and opens it at its `machine/tN` address. */
   readonly newTerminalOn: (machine: string) => void;
   /** New terminal with these run parameters; with no `on`, on this machine. */
@@ -23,6 +28,7 @@ export interface Machines {
 
 export const MachinesContext = createContext<Machines>({
   entries: [],
+  ready: true,
   newTerminalOn: () => {},
   start: () => {},
   listError: undefined,
