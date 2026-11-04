@@ -92,3 +92,26 @@ export async function openNewTerminalBehindLatency(
   link.delay(ms);
   return { terminal: await openNewTerminal(page), link };
 }
+
+type Box = NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
+
+/**
+ * The element's box once it is laid out: read before its first layout, boundingBox() is null and a measure reads 0.
+ * Any non-empty box counts as laid out, a 1x1 visually hidden element's included: this proves layout, not visibility.
+ */
+export async function laidOutBox(locator: Locator): Promise<Box> {
+  let last: Box | null = null;
+  try {
+    await expect
+      .poll(async () => {
+        last = await locator.boundingBox();
+        return last !== null && last.width > 0 && last.height > 0;
+      })
+      .toBe(true);
+  } catch (error) {
+    throw new Error(`${String(locator)} has no laid-out box (last: ${JSON.stringify(last)})`, { cause: error });
+  }
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error(`${String(locator)} lost its box right after it was laid out`);
+  return box;
+}
