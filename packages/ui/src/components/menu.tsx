@@ -1,7 +1,14 @@
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { Check } from "lucide-react";
-import type { ComponentProps, ReactElement, ReactNode, RefObject, SyntheticEvent } from "react";
+import {
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+  type SyntheticEvent,
+  useRef,
+} from "react";
 import { cn } from "../lib/cn.ts";
 import { Kbd } from "./kbd.tsx";
 import { overlaySurface } from "./overlay.ts";
@@ -17,12 +24,25 @@ export interface MenuProps {
   readonly fixedSide?: boolean;
 }
 
+/**
+ * A popup never grows past the room the viewport leaves it: it is capped at the positioner's available height and
+ * scrolls inside. Fixed positioning measures that room against the visual viewport, so a phone's soft keyboard counts.
+ */
+const bounded = "max-h-(--available-height) overflow-y-auto overscroll-contain";
+
+/** Brings the item marked `aria-current` (the session open now) into view inside an opened menu. */
+function revealCurrent(popup: HTMLElement | null): void {
+  popup?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+}
+
 export function Menu(props: MenuProps) {
   const { trigger, children, align = "start", className, defaultOpen, onOpenChange, fixedSide = false } = props;
+  const popup = useRef<HTMLDivElement | null>(null);
   return (
     <BaseMenu.Root
       {...(defaultOpen === undefined ? {} : { defaultOpen })}
       {...(onOpenChange === undefined ? {} : { onOpenChange: (open: boolean) => onOpenChange(open) })}
+      onOpenChangeComplete={(open) => open && revealCurrent(popup.current)}
     >
       <BaseMenu.Trigger render={trigger} />
       <BaseMenu.Portal>
@@ -30,8 +50,11 @@ export function Menu(props: MenuProps) {
           {...(fixedSide ? { collisionAvoidance: { side: "none" } } : {})}
           align={align}
           sideOffset={6}
+          positionMethod="fixed"
         >
-          <BaseMenu.Popup className={cn(overlaySurface, "min-w-48 p-1", className)}>{children}</BaseMenu.Popup>
+          <BaseMenu.Popup ref={popup} className={cn(overlaySurface, "min-w-48 p-1", bounded, className)}>
+            {children}
+          </BaseMenu.Popup>
         </BaseMenu.Positioner>
       </BaseMenu.Portal>
     </BaseMenu.Root>
@@ -66,10 +89,10 @@ export function ContextMenu({ trigger, children, open, onOpenChange, finalFocus 
     >
       <BaseContextMenu.Trigger render={trigger} />
       <BaseContextMenu.Portal>
-        <BaseContextMenu.Positioner>
+        <BaseContextMenu.Positioner positionMethod="fixed">
           <BaseContextMenu.Popup
             {...(finalFocus === undefined ? {} : { finalFocus })}
-            className={cn(overlaySurface, "min-w-48 p-1")}
+            className={cn(overlaySurface, "min-w-48 p-1", bounded)}
           >
             {children}
           </BaseContextMenu.Popup>
