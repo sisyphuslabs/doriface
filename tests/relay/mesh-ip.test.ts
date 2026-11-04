@@ -23,6 +23,7 @@ const CONVERGE_MS = 120_000 + 20_000;
 /** Design 8.2: after a relay restart every line is back within 120 s in general (60 s when uplinks return in 5 s). */
 const RESTART_MS = 120_000;
 const RATE_LIMITED = 4429;
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 const REMAINING = ["a", "b", "c", "d", "e", "f", "g"] as const;
 let mesh: Mesh | undefined;
 
@@ -33,14 +34,35 @@ const running = (): Mesh => {
 
 const closeCodes = (hosts: Mesh): readonly number[] => hosts.hosts.flatMap((host) => host.tap?.closeCodes() ?? []);
 
-/**
- * A host's dial budget is halved only when a dial of its own is refused with 4429 (dial-policy.ts `report`), so no
- * 4429 on any socket the relay closed toward a host, and no host logging a rate limit, means every host kept its full
- * 12 per 60 s budget.
- */
-function expectFullBudgets(hosts: Mesh): void {
+/** No socket the relay closed toward any host carried 4429. */
+function expectNoRateLimit(hosts: Mesh): void {
   expect(closeCodes(hosts).filter((code) => code === RATE_LIMITED)).toEqual([]);
-  expect(hosts.hosts.flatMap((host) => host.logs.filter((line) => line.includes("(4429)")))).toEqual([]);
+}
+
+/**
+ * Every named host reports its live dial budget unhalved (`budget.halvedUntil` is null in `mesh status --json`), so
+ * each still has its full 12 dials per 60 s (section 8.2).
+ */
+async function expectFullBudgets(hosts: Mesh, names: readonly string[]): Promise<void> {
+  const halved = await Promise.all(
+    names.map(async (name) => {
+      const run = await hosts.host(name).cli("mesh", "status", "--json");
+      const parsed: unknown = run.exit === 0 ? JSON.parse(run.stdout) : undefined;
+      const budget = isRecord(parsed) ? parsed["budget"] : undefined;
+      if (!isRecord(budget)) throw new Error(`mesh status --json on ${name} has no budget: ${run.stderr}${run.stdout}`);
+      return [name, budget["halvedUntil"]] as const;
+    }),
+  );
+  expect(halved).toEqual(names.map((name) => [name, null] as const));
+}
+
+/** The most proven upgrades the relay logged inside any 60 s: above 60 is more than the old per-address limit. */
+function provenPeakPerMinute(hosts: Mesh): number {
+  const times = hosts.relay?.provenAt() ?? [];
+  return times.reduce((peak, start, index) => {
+    const inWindow = times.slice(index).filter((time) => time - start < 60_000).length;
+    return Math.max(peak, inWindow);
+  }, 0);
 }
 
 const provenUpgrades = (hosts: Mesh): number =>
@@ -82,8 +104,9 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
         .catch(async (error: unknown) => {
           throw new Error(`${error instanceof Error ? error.message : String(error)}; ${await report()}`);
         });
-      expectFullBudgets(hosts);
-      expect(provenUpgrades(hosts)).toBeGreaterThan(60);
+      expectNoRateLimit(hosts);
+      await expectFullBudgets(hosts, NAMES);
+      expect(provenPeakPerMinute(hosts)).toBeGreaterThan(60);
     },
     CONVERGE_MS + 60_000,
   );
@@ -92,7 +115,8 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
     const hosts = running();
     expect((await hosts.host("a").cli("mesh", "revoke", "--compromised", "h", "--yes")).exit).toBe(0);
     await untilGone(hosts, REMAINING, ["h"]);
-    expectFullBudgets(hosts);
+    expectNoRateLimit(hosts);
+    await expectFullBudgets(hosts, REMAINING);
   }, 180_000);
 
   test(
@@ -108,7 +132,8 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
         async () => (await connectedCounts(hosts, REMAINING)).every((count) => count === REMAINING.length - 1),
         RESTART_MS,
       );
-      expectFullBudgets(hosts);
+      expectNoRateLimit(hosts);
+      await expectFullBudgets(hosts, REMAINING);
       expect(provenUpgrades(hosts)).toBeGreaterThan(provenBefore);
     },
     RESTART_MS + 120_000,

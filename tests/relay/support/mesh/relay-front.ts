@@ -22,6 +22,8 @@ export interface MeshRelay {
   readonly pid: number;
   tapFor(): Tap;
   output(): string;
+  /** When each proven upgrade's log line (`"ev":"proven"`) arrived, in ms: the peak per 60 s is countable from it. */
+  provenAt(): readonly number[];
   stop(): Promise<void>;
   /** Restarts the relay in place: same port, same persisted Durable Object state (design E-RELAY, E-IP). */
   restart(): Promise<void>;
@@ -70,6 +72,14 @@ export async function startMeshRelay(): Promise<MeshRelay> {
   writeFileSync(config, routeFreeConfig(dir));
   const port = freePort();
   let output = "";
+  let scanned = 0;
+  const provenAt: number[] = [];
+  const scan = (): void => {
+    for (let end = output.indexOf("\n", scanned); end >= 0; end = output.indexOf("\n", scanned)) {
+      if (output.slice(scanned, end).includes('"ev":"proven"')) provenAt.push(Date.now());
+      scanned = end + 1;
+    }
+  };
   const launch = (): Launched => {
     const proc = Bun.spawn(
       [
@@ -108,6 +118,7 @@ export async function startMeshRelay(): Promise<MeshRelay> {
       const decoder = new TextDecoder();
       for await (const chunk of stream) {
         output += decoder.decode(chunk, { stream: true });
+        scan();
         const url = READY.exec(output.slice(from))?.[1];
         if (url !== undefined) ready.resolve(url);
       }
@@ -139,6 +150,7 @@ export async function startMeshRelay(): Promise<MeshRelay> {
         return current.proc.pid;
       },
       output: () => output,
+      provenAt: () => provenAt,
       stop,
       async restart() {
         await stopLaunch(current);
