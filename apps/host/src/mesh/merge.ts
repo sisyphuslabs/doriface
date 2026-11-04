@@ -26,7 +26,27 @@ export interface MergeDeps {
    * 10.1): below it this host signs no record of its own. A merge holds its automatic ack back below it too
    * (`ackHeld`), and the ack is signed once no claim stands.
    */
-  readonly counterFloor?: { readonly n: number; readonly peer: string };
+  readonly counterFloor?: CounterFloor;
+}
+
+/** A peer's standing claim on this host's counter (section 10.1): its `n`, and the peer's name for messages. */
+export interface CounterFloor {
+  readonly n: number;
+  readonly peer: string;
+}
+
+/**
+ * Refuses a record of this host's own while a claim stands above its counter (section 10.1), whichever path signs it:
+ * `appendOwn` and the operator's `mesh rename`, `mesh revoke` and `mesh leave` alike.
+ */
+export function checkFloor(records: readonly Signed[], self: string, floor: CounterFloor | undefined): void {
+  const own = ownN(records, self);
+  if (floor !== undefined && own < floor.n) {
+    throw new CounterBehindError(
+      `${floor.peer} holds counter ${floor.n} of this host's key, here ${own}: syncing before signing; ` +
+        "run it again once those records arrive (a claim that brings none of them lapses within 30 s)",
+    );
+  }
 }
 
 export interface Refusal {
@@ -166,20 +186,18 @@ export function mergeBatch(deps: MergeDeps, batch: readonly Signed[], ackOwed = 
       },
     };
   });
-  if (result.counterBehind) deps.store.catchUp(deps.identity);
+  // This host's own records that arrived (a restored backup's) move its counter now, not at the next ack attempt, so an
+  // operator command signs above them as soon as no claim stands.
+  const self = selfOf(deps);
+  const ownArrived = result.added.some((record) => record !== result.ack && parseRecord(record)?.by === self);
+  if (result.counterBehind || ownArrived) deps.store.catchUp(deps.identity);
   return result;
 }
 
 /** Signs one record of this host's own (a revoke, a leave, a rename) in a transaction, after fitting its heads. */
 export function appendOwn(deps: MergeDeps, draft: RecordDraft): MergeResult {
   return deps.store.transact((tx) => {
-    const own = ownN(tx.records, selfOf(deps));
-    const floor = deps.counterFloor;
-    if (floor !== undefined && own < floor.n) {
-      throw new CounterBehindError(
-        `${floor.peer} holds counter ${floor.n} of this host's key, here ${own}: syncing before signing`,
-      );
-    }
+    checkFloor(tx.records, selfOf(deps), deps.counterFloor);
     const before = tx.records.length;
     if (!fitHeads(deps, tx, draft)) throw new Error(`mesh log full (${MAX_RECORDS})`);
     tx.sign(deps.identity, (n, prev) => bodyOf(deps, n, prev, draft));
