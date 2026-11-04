@@ -16,6 +16,7 @@ import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import {
   buildTabs,
   findTerminal,
+  keepTransient,
   localOf,
   looseKey,
   pick,
@@ -137,16 +138,34 @@ export function useLayout(
     [show],
   );
 
+  /** The first live terminal shown alone, written to its own machine's layout, or kept on this screen when it takes none. */
+  const keepApart = useCallback(
+    (tab: LayoutTab): void => {
+      const own = layoutOf(tab.machine);
+      const address = tab.panes[0]?.address ?? "";
+      if (own === undefined || own.readOnly !== null) {
+        return setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
+      }
+      const kept = written(tab);
+      void own.edit((doc) =>
+        addDocTab(doc, { id: spaceOf(doc) ?? freshId("spc"), folder: "" }, { id: kept.id, name: "", root: kept.root }),
+      );
+    },
+    [layoutOf],
+  );
+
   const addTab = useCallback(
     (address: string): void => {
       const machine = machineOf(address) ?? null;
       const layout = layoutOf(machine);
+      const writable = layout !== undefined && layout.readOnly === null;
+      const fate = keepTransient(active, address, writable);
+      if (fate === "apart" && active !== null) keepApart(active);
       if (layout === undefined || layout.readOnly !== null) return keepHere(address);
       const id = freshId("tb");
       const pane = freshId("p");
       const tab: JsonObject = { id, name: "", root: rootOf(id, [terminalBlock(pane, localOf(address))]) };
-      const before = active?.transient === true && active.machine === machine && active.panes[0]?.address !== address;
-      const kept = before && active !== null ? written(active) : null;
+      const kept = fate === "with-new" && active !== null ? written(active) : null;
       const near = active !== null && !active.transient && active.machine === machine ? active.space : null;
       void layout.edit((doc) => {
         const space = { id: near ?? spaceOf(doc) ?? freshId("spc"), folder: "" };
@@ -155,7 +174,7 @@ export function useLayout(
       });
       show(tabKey(layout.machineId, id), pane);
     },
-    [active, keepHere, layoutOf, show],
+    [active, keepApart, keepHere, layoutOf, show],
   );
 
   const openTerminal = useCallback(

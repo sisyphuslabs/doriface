@@ -46,11 +46,15 @@ for (const width of ["1440", "390"] as const) {
         );
         if (shot.storageFails === true) await context.addInitScript({ content: BROKEN_STORAGE });
         const page = await context.newPage();
-        await shot.run(page, width);
-        await page.mouse.move(0, 0);
-        await page.evaluate(() => document.fonts.ready);
-        await page.screenshot({ path: join(OUT, `${shot.name}-${width}-${theme}.png`), animations: "disabled" });
-        await context.close();
+        try {
+          await shot.run(page, width);
+          await page.mouse.move(0, 0);
+          await page.evaluate(() => document.fonts.ready);
+          await page.screenshot({ path: join(OUT, `${shot.name}-${width}-${theme}.png`), animations: "disabled" });
+        } finally {
+          shot.cleanup?.();
+          await context.close();
+        }
       });
     }
   }

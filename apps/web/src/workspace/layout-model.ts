@@ -107,6 +107,22 @@ export function pick(tabs: readonly LayoutTab[], view: View): Picked {
   return { active, focused, zoomed: active.panes.some((pane) => pane.id === zoomed) ? (zoomed ?? null) : null };
 }
 
+/**
+ * What a new tab for `address` does with the tab in view when no document holds that tab (`transient`). One of the new
+ * tab's machine goes beside it in the same write (`with-new`) when that layout takes edits. The first live terminal
+ * shown alone goes to its own machine's layout (`apart`) otherwise, as buildTabs stops showing it once any document
+ * holds a tab; a loose tab stays as it is.
+ */
+export function keepTransient(
+  active: LayoutTab | null,
+  address: string,
+  writable: boolean,
+): "with-new" | "apart" | null {
+  if (active === null || !active.transient || active.panes[0]?.address === address) return null;
+  if (writable && active.machine === (machineOf(address) ?? null)) return "with-new";
+  return active.key === TRANSIENT ? "apart" : null;
+}
+
 export function findTerminal(tabs: readonly LayoutTab[], address: string): { tab: LayoutTab; pane: LayoutPane } | null {
   for (const tab of tabs) {
     const pane = tab.panes.find((each) => each.address === address);
