@@ -112,3 +112,68 @@ test("two clients racing on one prompt: exactly one answer reaches the agent, th
   expect(agent.records()).toHaveLength(1);
   await fast.close();
 });
+
+test("a link that drops between the claim and the key press shows the failure, presses nothing, and Try again answers", async ({
+  page,
+}) => {
+  ask();
+  const link = await routeHcSocket(page);
+  await page.goto("/");
+  await openAsking(page);
+  // The claim reaches the core; the re-read of the screen is held, then the link drops under it.
+  link.hold("terminal.read");
+  const claims = () => link.sent().filter((frame) => frame.includes('"method":"doc.set"')).length;
+  await banner(page)
+    .getByRole("button", { name: /^Allow/ })
+    .click();
+  await expect.poll(claims, { timeout: 10_000 }).toBeGreaterThan(0);
+  await expect.poll(() => link.sent().some((frame) => frame.includes('"method":"terminal.read"'))).toBe(true);
+  const sockets = link.opened();
+  await link.drop(true);
+  link.hold();
+  await expect(banner(page)).toContainText("The answer did not go through.", { timeout: 15_000 });
+  await expect(banner(page)).not.toContainText("Allowed");
+  expect(agent.keys()).toEqual([]);
+
+  link.restore();
+  await expect.poll(link.opened, { timeout: 20_000 }).toBeGreaterThan(sockets);
+  await banner(page).getByRole("button", { name: "Try again" }).click();
+  await expect(banner(page)).toContainText("from this device", { timeout: 15_000 });
+  await expect.poll(agent.keys, { timeout: 10_000 }).toEqual(["1"]);
+  expect(agent.records()).toMatchObject([{ answer: "allow", outcome: "sent", by: expect.stringContaining("Chrome") }]);
+});
+
+test("the prompt is announced: the pane's live region is there, empty, before the banner's text is written into it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("contentinfo")).toContainText(/\d+ terminals?/, { timeout: 20_000 });
+  // Every live region's text from the moment it is inserted, in order.
+  await page.evaluate(() => {
+    const seen = new Map<Element, string[]>();
+    Reflect.set(window, "__approvalLive", seen);
+    const note = () => {
+      for (const region of document.querySelectorAll("[data-approval-live]")) {
+        const texts = seen.get(region) ?? [];
+        const text = region.textContent ?? "";
+        if (texts.at(-1) !== text || texts.length === 0) texts.push(text);
+        seen.set(region, texts);
+      }
+    };
+    new MutationObserver(note).observe(document.body, { subtree: true, childList: true, characterData: true });
+    note();
+  });
+  ask();
+  await openAsking(page);
+  const history = () =>
+    page.evaluate((address) => {
+      const seen: unknown = Reflect.get(window, "__approvalLive");
+      if (!(seen instanceof Map)) return [];
+      const region = document.querySelector(`[data-approval-live="${address}"]`);
+      const texts: unknown = region === null ? undefined : seen.get(region);
+      return Array.isArray(texts) ? texts.map(String) : [];
+    }, agent.address);
+  await expect.poll(history, { timeout: 10_000 }).toContainEqual(expect.stringContaining("Claude Code wants to run"));
+  expect((await history())[0]).toBe("");
+  await expect(page.locator(`[data-approval-live="${agent.address}"]`)).toHaveAttribute("aria-live", "polite");
+});

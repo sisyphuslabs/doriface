@@ -1,6 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import {
   answerApproval,
+  CLAIM_TTL_MS,
   type ApprovalAnswer,
   type ApprovalCore,
   type ApprovalMark,
@@ -18,6 +19,8 @@ import { thisAnswerer } from "./answerer.ts";
 export interface ApprovalView {
   readonly mark: ApprovalMark;
   readonly state: ApprovalBannerState;
+  /** While another device holds the prompt: when its claim expires and this one may answer. */
+  readonly retryAtMs?: number;
 }
 
 export interface Approval extends ApprovalView {
@@ -78,7 +81,8 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
 
   useEffect(() => {
     const shown = current.current;
-    if (shown === undefined || shown.state.kind !== "waiting" || showsPrompt(shown.mark, terminal)) return;
+    const open = shown !== undefined && ["waiting", "failed", "elsewhere"].includes(shown.state.kind);
+    if (shown === undefined || !open || showsPrompt(shown.mark, terminal)) return;
     let live = true;
     const resolve = async () => {
       // A failed read means no attribution to show: the banner goes, as if it had been answered in the terminal.
@@ -94,6 +98,16 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
   }, [core, terminal]);
 
   useEffect(() => {
+    if (view?.state.kind !== "elsewhere" || view.retryAtMs === undefined) return;
+    const back = { mark: view.mark, state: { kind: "waiting" } } as const;
+    const timer = setTimeout(
+      () => setView((now) => (now === view ? back : now)),
+      Math.max(0, view.retryAtMs - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [view]);
+
+  useEffect(() => {
     if (view?.state.kind !== "answered") return;
     const timer = setTimeout(() => setView((now) => (now === view ? undefined : now)), ANSWERED_MS);
     return () => clearTimeout(timer);
@@ -103,17 +117,19 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
   return {
     ...view,
     answer: (answer) => {
-      if (view.state.kind !== "waiting") return;
+      if (view.state.kind !== "waiting" && view.state.kind !== "failed") return;
       const { mark } = view;
       setView({ mark, state: { kind: "sending", answer } });
       const self = thisAnswerer();
       const send = async () => {
         try {
           const result = await answerApproval(core, mark, answer, self, Date.now());
-          setView({ mark, state: stateAfterAnswer(result, answer, self) });
+          const state = stateAfterAnswer(result, answer, self);
+          const retryAtMs = result.kind === "lost" ? result.record.atMs + CLAIM_TTL_MS : undefined;
+          setView(retryAtMs === undefined ? { mark, state } : { mark, state, retryAtMs });
         } catch {
-          // Nothing was confirmed sent (the connection dropped mid-answer): back to waiting, so it can be tried again.
-          setView({ mark, state: { kind: "waiting" } });
+          // The claim itself did not get through (a dropped connection): nothing was sent; offer it again.
+          setView({ mark, state: { kind: "failed", answer } });
         }
       };
       void send();

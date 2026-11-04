@@ -19,13 +19,17 @@ export interface ApprovalPrompt {
 
 /**
  * waiting: answerable. sending: the host is checking the prompt is still on the live screen, then pressing the key.
- * stale: the prompt went away before the key was pressed, so nothing was sent. answered: resolved here or elsewhere.
+ * stale: the prompt went away before the key was pressed, so nothing was sent. answered: a key was delivered, here or
+ * elsewhere. failed: the answer broke off (a dropped connection) and no key is known to have been pressed. elsewhere:
+ * another device holds the prompt and is answering it now.
  */
 export type ApprovalBannerState =
   | { readonly kind: "waiting" }
   | { readonly kind: "sending"; readonly answer: ApprovalAnswer }
   | { readonly kind: "stale" }
-  | { readonly kind: "answered"; readonly answer: ApprovalAnswer; readonly where: string };
+  | { readonly kind: "answered"; readonly answer: ApprovalAnswer; readonly where: string }
+  | { readonly kind: "failed"; readonly answer: ApprovalAnswer }
+  | { readonly kind: "elsewhere"; readonly where: string };
 
 export interface ApprovalBannerProps {
   readonly prompt: ApprovalPrompt;
@@ -38,6 +42,28 @@ export interface ApprovalBannerProps {
 const ANSWER_LABEL = { allow: "Allow", deny: "Deny" } as const;
 const ANSWERED_LABEL = { allow: "Allowed", deny: "Denied" } as const;
 
+/**
+ * What a screen reader should hear for a state. The banner draws no live region of its own: the surface that pins it
+ * keeps one polite region mounted (empty) for as long as the terminal is shown and writes this text into it, so a
+ * prompt appearing, and each change after it, is announced.
+ */
+export function approvalAnnouncement(prompt: ApprovalPrompt, state: ApprovalBannerState): string {
+  switch (state.kind) {
+    case "waiting":
+      return `${prompt.agent} ${prompt.asks}: ${prompt.command}. Allow or Deny.`;
+    case "sending":
+      return `Checking the prompt is still on screen, then pressing ${prompt.keys[state.answer]}.`;
+    case "stale":
+      return "The prompt went away. Nothing was sent.";
+    case "answered":
+      return `${ANSWERED_LABEL[state.answer]}: ${prompt.command}, ${state.where}.`;
+    case "failed":
+      return "The answer did not go through. Nothing was confirmed sent.";
+    case "elsewhere":
+      return `${state.where}.`;
+  }
+}
+
 const frame =
   "flex flex-col gap-2 rounded-lg border border-border bg-popover px-3 py-2.5 text-sm text-popover-foreground shadow-overlay coarse:gap-3 coarse:p-3";
 
@@ -45,11 +71,7 @@ const frame =
 export function ApprovalBanner({ prompt, state, onAnswer, onDismiss, className }: ApprovalBannerProps) {
   if (state.kind === "answered") {
     return (
-      <section
-        role="status"
-        aria-label={`${prompt.agent} prompt`}
-        className={cn(frame, "flex-row items-center gap-2.5", className)}
-      >
+      <section aria-label={`${prompt.agent} prompt`} className={cn(frame, "flex-row items-center gap-2.5", className)}>
         <Check aria-hidden className="size-4 shrink-0 text-foreground" />
         <p className="min-w-0 flex-1 truncate">
           <span className="font-semibold text-foreground">{ANSWERED_LABEL[state.answer]}</span>
@@ -60,9 +82,43 @@ export function ApprovalBanner({ prompt, state, onAnswer, onDismiss, className }
     );
   }
 
+  if (state.kind === "elsewhere") {
+    return (
+      <section aria-label={`${prompt.agent} prompt`} className={cn(frame, "flex-row items-center gap-2.5", className)}>
+        <StatusIndicator status="working" />
+        <p className="min-w-0 flex-1 truncate text-muted-foreground">
+          <span className="font-semibold text-foreground">{state.where}</span>
+          <span className="ml-2 font-mono text-xs">{prompt.command}</span>
+        </p>
+      </section>
+    );
+  }
+
+  if (state.kind === "failed") {
+    return (
+      <section aria-label={`${prompt.agent} prompt`} className={cn(frame, className)}>
+        <div className="flex items-start gap-2.5">
+          <CircleSlash aria-hidden className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            <span className="font-semibold text-foreground">The answer did not go through.</span> Nothing was confirmed
+            sent; {prompt.agent} is still asking.
+          </p>
+          <div className="-my-1 flex shrink-0 gap-2">
+            <Button variant="ghost" size="sm" onClick={onDismiss}>
+              Dismiss
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => onAnswer?.(state.answer)}>
+              Try again
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (state.kind === "stale") {
     return (
-      <section role="status" aria-label={`${prompt.agent} prompt`} className={cn(frame, className)}>
+      <section aria-label={`${prompt.agent} prompt`} className={cn(frame, className)}>
         <div className="flex items-start gap-2.5">
           <CircleSlash aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 text-muted-foreground">
@@ -114,7 +170,7 @@ export function ApprovalBanner({ prompt, state, onAnswer, onDismiss, className }
         {answerButton("allow")}
       </div>
       {sending === undefined ? null : (
-        <p aria-live="polite" className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Checking the prompt is still on screen, then pressing {prompt.keys[sending]}…
         </p>
       )}

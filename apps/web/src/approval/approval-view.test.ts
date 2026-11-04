@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ApprovalRecord } from "@doriface/protocol";
+import type { AnswerResult, ApprovalRecord } from "@doriface/protocol";
 import { showsPrompt, stateAfterAnswer, stateAfterPrompt } from "./approval-view.ts";
 
 const self = { by: "Chrome on macOS", client: "tab-a" };
@@ -37,6 +37,43 @@ describe("the banner after an answer", () => {
 
   test("a prompt that went away before the key was pressed is stale", () => {
     expect(stateAfterAnswer({ kind: "stale" }, "allow", self)).toEqual({ kind: "stale" });
+  });
+});
+
+describe("the banner never says Allowed without a delivered key", () => {
+  test("a failure after the claim shows the failure, with the answer to try again", () => {
+    expect(stateAfterAnswer({ kind: "failed", reason: "terminal.read: closed" }, "allow", self)).toEqual({
+      kind: "failed",
+      answer: "allow",
+    });
+  });
+
+  test("losing to a claim still in flight says where it is being answered, not that it was", () => {
+    expect(stateAfterAnswer({ kind: "lost", record: { ...phone, outcome: "claimed" } }, "allow", self)).toEqual({
+      kind: "elsewhere",
+      where: "Being answered on another device (Safari on iOS)",
+    });
+  });
+
+  test.each(["claimed", "failed", "stale"] as const)(
+    "a %s record is not shown as answered once the agent moves on",
+    (outcome) => {
+      expect(stateAfterPrompt({ ...phone, outcome }, self)).toBeUndefined();
+    },
+  );
+
+  const results: readonly (readonly [string, AnswerResult])[] = [
+    ["sent", { kind: "sent" }],
+    ["stale", { kind: "stale" }],
+    ["failed", { kind: "failed", reason: "x" }],
+    ...(["claimed", "sent", "stale", "failed"] as const).map(
+      (outcome) => [`lost to ${outcome}`, { kind: "lost", record: { ...phone, outcome } }] as const,
+    ),
+  ];
+  test.each(results)("answered only when a key was delivered: %s", (_, result) => {
+    const state = stateAfterAnswer(result, "allow", self);
+    const delivered = result.kind === "sent" || (result.kind === "lost" && result.record.outcome === "sent");
+    expect(state.kind === "answered").toBe(delivered);
   });
 });
 

@@ -19,19 +19,33 @@ export function stateAfterAnswer(result: AnswerResult, answer: ApprovalAnswer, s
       return { kind: "answered", answer, where: answeredWhere(self, self) };
     case "stale":
       return { kind: "stale" };
+    case "failed":
+      return { kind: "failed", answer };
     case "lost":
-      return result.record.outcome === "stale"
-        ? { kind: "stale" }
-        : { kind: "answered", answer: result.record.answer, where: answeredWhere(result.record, self) };
+      return stateAfterLoss(result.record, self);
+  }
+}
+
+/** Another client holds the prompt: answered only once its record says the key was delivered. */
+function stateAfterLoss(record: ApprovalRecord, self: Answerer): ApprovalBannerState {
+  switch (record.outcome) {
+    case "sent":
+      return { kind: "answered", answer: record.answer, where: answeredWhere(record, self) };
+    case "claimed":
+      return { kind: "elsewhere", where: `Being answered on another device (${record.by})` };
+    case "stale":
+    case "failed":
+      return { kind: "stale" };
   }
 }
 
 /**
  * The banner once the agent moved past the prompt this client was showing: answered, with who answered it, when a client
- * recorded an answer; nothing when none did (it was answered or cancelled in the terminal, which shows that itself).
+ * recorded a delivered key; nothing otherwise (it was answered or cancelled in the terminal, which shows that itself; a
+ * claim that never delivered a key is not an answer).
  */
 export function stateAfterPrompt(record: ApprovalRecord | undefined, self: Answerer): ApprovalBannerState | undefined {
-  if (record === undefined || record.outcome === "stale") return undefined;
+  if (record?.outcome !== "sent") return undefined;
   return { kind: "answered", answer: record.answer, where: answeredWhere(record, self) };
 }
 
