@@ -1,5 +1,5 @@
 import { devices, type Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -44,16 +44,15 @@ for (const width of [390, 320]) {
     // Every text row ends inside the header, and the header ends before the terminal's first row begins.
     const headerBox = await bar.boundingBox();
     const bottom = (headerBox?.y ?? 0) + (headerBox?.height ?? 0);
-    const rows = await Promise.all(
-      [bar.getByRole("heading", { level: 1 }), bar.locator("p")].map((row) => row.boundingBox()),
-    );
-    for (const box of rows) expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(bottom + 0.5);
-    const firstRow = await page.locator("[data-terminal] .term-row").first().boundingBox();
-    expect(firstRow?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
+    const rows = await Promise.all([bar.getByRole("heading", { level: 1 }), bar.locator("p")].map(laidOutBox));
+    for (const box of rows) expect(box.y + box.height).toBeLessThanOrEqual(bottom + 0.5);
+    // The terminal can hold its prompt text before it lays out its first row, so wait for that row's box.
+    const firstRow = await laidOutBox(page.locator("[data-terminal] .term-row").first());
+    expect(firstRow.y).toBeGreaterThanOrEqual(bottom - 0.5);
 
     // The session actions stay a full touch target.
-    const actions = await bar.getByRole("button", { name: /^Session actions for / }).boundingBox();
-    expect(actions?.width).toBeGreaterThanOrEqual(44);
-    expect(actions?.height).toBeGreaterThanOrEqual(44);
+    const actions = await laidOutBox(bar.getByRole("button", { name: /^Session actions for / }));
+    expect(actions.width).toBeGreaterThanOrEqual(44);
+    expect(actions.height).toBeGreaterThanOrEqual(44);
   });
 }
