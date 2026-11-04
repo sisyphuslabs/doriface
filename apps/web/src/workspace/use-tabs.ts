@@ -109,18 +109,13 @@ export function useTabs(
     [ids],
   );
 
-  const latest = useRef(state);
-  latest.current = state;
   const move = useCallback(
     (address: string, to: number) => {
-      // `to` counts the tabs `open` lists; a tab whose machine is not listed yet holds its place without one.
-      const moved = (prev: KeyedTabs): KeyedTabs => {
+      setState((prev) => {
+        // `to` counts the tabs `open` lists; a tab whose machine is not listed yet holds its place without one.
         const target = prev.open.filter((key) => tabAddress(key, ids) !== undefined)[to];
         return target === undefined ? prev : moveTab(prev, tabKey(address, ids), prev.open.indexOf(target));
-      };
-      // Only a move that changes the order is announced.
-      if (moved(latest.current) === latest.current) return;
-      setState(moved);
+      });
       setLastMove((prev) => ({ address, count: (prev?.count ?? 0) + 1 }));
     },
     [ids],
