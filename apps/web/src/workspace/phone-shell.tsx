@@ -57,7 +57,7 @@ export function PhoneShell(props: PhoneShellProps) {
           ) : null}
           {empty && onlyThisMachine(machines.entries) ? null : (
             <RovingLists>
-              <AgentLists terminals={terminals} active={null} onOpen={onOpen} agentsFirst />
+              <AgentLists terminals={terminals} active={null} onOpen={onOpen} />
             </RovingLists>
           )}
         </ScrollArea>

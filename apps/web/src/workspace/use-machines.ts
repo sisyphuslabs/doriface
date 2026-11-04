@@ -1,5 +1,5 @@
 import type { HcConnection } from "@doriface/client";
-import type { MachineView, Terminal } from "@doriface/protocol";
+import type { MachineView, Terminal, TerminalRunParams } from "@doriface/protocol";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { machineEntries, machineKey, orderMachines, type MachineEntry } from "./machines.ts";
 import type { Session } from "./model.ts";
@@ -9,6 +9,8 @@ export interface Machines {
   readonly entries: readonly MachineEntry[];
   /** Starts a shell on that machine (`terminal.run` with `on`) and opens it at its `machine/tN` address. */
   readonly newTerminalOn: (machine: string) => void;
+  /** New terminal with these run parameters; with no `on`, on this machine. */
+  readonly start: (params: TerminalRunParams) => void;
   /** Why the last machine.list failed, until one succeeds. */
   readonly listError: string | undefined;
   /** Shows how to add a machine (the pairing commands). */
@@ -22,6 +24,7 @@ export interface Machines {
 export const MachinesContext = createContext<Machines>({
   entries: [],
   newTerminalOn: () => {},
+  start: () => {},
   listError: undefined,
   openAddMachine: () => {},
   views: [],

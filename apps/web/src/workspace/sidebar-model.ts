@@ -1,0 +1,112 @@
+import type { Agent, AvatarColor, Space } from "@doriface/ui";
+import { AVATAR_COLORS } from "@doriface/ui";
+import type { MachineEntry } from "./machines.ts";
+import { groupAgents, type Session } from "./model.ts";
+
+/** herdr-app's pin label: a pinned terminal carries it, so the pin lives in hc and follows the terminal everywhere. */
+export const PIN_LABEL = "herdr.pinned";
+
+export const isPinned = (terminal: Session): boolean => (terminal.labels[PIN_LABEL] ?? "") !== "";
+
+export type AgentSort = "status" | "space";
+
+export interface AgentGroup {
+  readonly key: string;
+  readonly title: string;
+  /** Text colour class for the title: the status inks for the status groups. */
+  readonly tone?: string;
+  /** Needs you's rows use the "!" mark, since the header already says it. */
+  readonly compactBlocked: boolean;
+  readonly agents: readonly Agent[];
+}
+
+const STATUS_GROUPS = [
+  { key: "blocked", title: "Needs you", tone: "text-status-blocked-text" },
+  { key: "working", title: "Working", tone: "text-status-working-text" },
+  { key: "idle", title: "Idle" },
+  { key: "done", title: "Done", tone: "text-status-done-text" },
+  { key: "offline", title: "Offline" },
+] as const;
+
+const RANK: Readonly<Record<string, number>> = { blocked: 0, working: 1, idle: 2, done: 3, unknown: 4 };
+
+/**
+ * The agents list, pinned agents first in their own group, then by status (Needs you, Working, Idle, Done, Offline)
+ * or by space (each space's agents most urgent first). Empty groups are left out.
+ */
+export function agentGroups(terminals: readonly Session[], nowMs: number, sort: AgentSort): AgentGroup[] {
+  const pinnedIds = new Set(terminals.filter(isPinned).map((terminal) => terminal.address));
+  const groups = groupAgents(terminals, nowMs);
+  const all = STATUS_GROUPS.flatMap(({ key }) => groups[key]);
+  for (const agent of all) if (pinnedIds.has(agent.id)) Object.assign(agent, { pinned: true });
+  const pinned = all.filter((agent) => agent.pinned === true);
+  const rest = all.filter((agent) => agent.pinned !== true);
+  const head: AgentGroup[] =
+    pinned.length === 0 ? [] : [{ key: "pinned", title: "Pinned", compactBlocked: false, agents: pinned }];
+  if (sort === "status") {
+    return [
+      ...head,
+      ...STATUS_GROUPS.flatMap((group) => {
+        const agents = rest.filter((agent) => groups[group.key].some((one) => one.id === agent.id));
+        return agents.length === 0 ? [] : [{ ...group, compactBlocked: group.key === "blocked", agents }];
+      }),
+    ];
+  }
+  const bySpace = new Map<string, Agent[]>();
+  for (const agent of rest) {
+    const terminal = terminals.find((one) => one.address === agent.id);
+    const space = terminal?.labels["space"] ?? agent.detail ?? "";
+    const title = agent.machine === undefined ? space : `${space} · ${agent.machine}`;
+    bySpace.set(title, [...(bySpace.get(title) ?? []), agent]);
+  }
+  return [
+    ...head,
+    ...[...bySpace].map(([title, agents]) => ({
+      key: `space:${title}`,
+      title,
+      compactBlocked: false,
+      agents: agents.toSorted((a, b) => (RANK[a.status] ?? 4) - (RANK[b.status] ?? 4)),
+    })),
+  ];
+}
+
+/**
+ * Each space keeps the colour it was given; a new one takes the least used colour (the first in AVATAR_COLORS on a
+ * tie), and colours of spaces that are gone are dropped. Returns the same object when nothing changed.
+ */
+export function assignColors(
+  saved: Readonly<Record<string, AvatarColor>>,
+  ids: readonly string[],
+): Readonly<Record<string, AvatarColor>> {
+  const present = new Set(ids);
+  const kept: Record<string, AvatarColor> = {};
+  for (const [id, color] of Object.entries(saved)) if (present.has(id)) kept[id] = color;
+  let changed = Object.keys(kept).length !== Object.keys(saved).length;
+  for (const id of ids) {
+    if (kept[id] !== undefined) continue;
+    const uses = (color: AvatarColor): number => Object.values(kept).filter((one) => one === color).length;
+    kept[id] = AVATAR_COLORS.reduce((best, color) => (uses(color) < uses(best) ? color : best));
+    changed = true;
+  }
+  return changed ? kept : saved;
+}
+
+export interface MachineGroup {
+  readonly machine: MachineEntry;
+  readonly spaces: readonly Space[];
+}
+
+/**
+ * Spaces under their machine, in the machines' own order (this one first, then as the person ordered them), once more
+ * than one machine is known; with one machine there is nothing to group and this returns undefined.
+ */
+export function machineGroups(
+  machines: readonly MachineEntry[],
+  spaces: readonly Space[],
+): readonly MachineGroup[] | undefined {
+  if (machines.length < 2) return undefined;
+  return machines.map((machine) => ({
+    machine,
+    spaces: spaces.filter((space) => (space.machine ?? undefined) === (machine.local ? undefined : machine.name)),
+  }));
+}
