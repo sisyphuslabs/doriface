@@ -23,6 +23,8 @@ function tooltipOf(tab: WorkspaceTab): string {
 export interface TabBarProps {
   readonly tabs: readonly WorkspaceTab[];
   readonly activeId: string;
+  /** The tab shown beside the active one in a split: a hairline pill, not the raised one. */
+  readonly shownId?: string;
   readonly onSelect?: (id: string) => void;
   readonly onClose?: (id: string) => void;
   readonly onNew?: () => void;
@@ -38,6 +40,7 @@ export interface TabBarProps {
 export function TabBar({
   tabs,
   activeId,
+  shownId,
   onSelect,
   onClose,
   onNew,
@@ -58,14 +61,16 @@ export function TabBar({
       <div role="tablist" aria-label="Tabs" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {tabs.map((tab) => {
           const active = tab.id === activeId;
+          const shown = !active && tab.id === shownId;
           return (
             <div
               key={tab.id}
+              data-shown={shown}
               className={cn(
                 "group flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem]",
-                active
-                  ? "border-border bg-raised text-foreground"
-                  : "border-transparent text-muted-foreground hover:bg-hover",
+                active && "border-border bg-raised text-foreground",
+                shown && "border-border text-foreground hover:bg-hover",
+                !active && !shown && "border-transparent text-muted-foreground hover:bg-hover",
               )}
             >
               <button
