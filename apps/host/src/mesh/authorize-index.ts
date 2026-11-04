@@ -26,6 +26,12 @@ export interface RevokedEntry {
   readonly keys: readonly string[];
 }
 
+/** A signing key and the Noise and device keys its effective cards name: what may contest a key (#90, R2). */
+export interface NamingEntry {
+  readonly signPub: string;
+  readonly keys: readonly string[];
+}
+
 /** What `authorize` needs from one generation of `mesh.json`, persisted with it so a handshake never evaluates. */
 export interface IndexData {
   readonly generation: number;
@@ -34,6 +40,11 @@ export interface IndexData {
   readonly revoked: readonly RevokedEntry[];
   /** Every other Noise or device key a current member's cards ever named: refused and cleaned like a revoked key. */
   readonly superseded: readonly string[];
+  /**
+   * For every current, over-cap and revoked member, the keys its effective cards name. Only these contest a key: a
+   * card the view ignores (void under R1, or signed after its signer's revoke) names nothing here.
+   */
+  readonly named: readonly NamingEntry[];
 }
 
 const cardOfRecord = (record: Signed): CardBody | undefined => {
@@ -53,6 +64,9 @@ const cardsBySigner = (records: readonly Signed[], eff: ReadonlySet<string> | un
   return cards;
 };
 
+const keysOf = (card: CardBody): string[] =>
+  card.devicePub === undefined ? [card.noisePub] : [card.noisePub, card.devicePub];
+
 const entryOf = (card: CardBody, noisePub: string, name: string): MemberEntry => ({
   signPub: card.signPub,
   hostId: card.hostId,
@@ -66,7 +80,8 @@ const entryOf = (card: CardBody, noisePub: string, name: string): MemberEntry =>
  * Derives the index from the records and their view. A member's core id, device key and hostId come from its
  * governing admission's card (a later re-admit or rekey card cannot change them), its Noise key and name from the
  * view. Every other key a member's cards ever named is superseded. An over-cap key is refused on every effective
- * card it holds (stricter than its governing card alone), and a revoked key on every card it ever had.
+ * card it holds (stricter than its governing card alone), and a revoked key on every card it ever had. What contests
+ * a key (`named`) comes from effective cards only, so a record the view ignores cannot take a member's key away.
  */
 export function indexOf(records: readonly Signed[], view: View, generation: number): IndexData {
   const byHash = new Map(records.map((record) => [hashOf(record), record]));
@@ -84,23 +99,23 @@ export function indexOf(records: readonly Signed[], view: View, generation: numb
     const cards = everything.get(signPub) ?? [];
     const first = cards[0];
     if (first === undefined) return [];
-    const keys = cards.flatMap((card) =>
-      card.devicePub === undefined ? [card.noisePub] : [card.noisePub, card.devicePub],
-    );
-    return [{ signPub, hostId: first.hostId, keys: [...new Set(keys)] }];
+    return [{ signPub, hostId: first.hostId, keys: [...new Set(cards.flatMap(keysOf))] }];
   });
   const members = [...view.members].flatMap(member);
   const superseded = members.flatMap(({ signPub, noisePub, devicePub }) =>
-    (everything.get(signPub) ?? [])
-      .flatMap((card) => (card.devicePub === undefined ? [card.noisePub] : [card.noisePub, card.devicePub]))
-      .filter((key) => key !== noisePub && key !== devicePub),
+    (everything.get(signPub) ?? []).flatMap(keysOf).filter((key) => key !== noisePub && key !== devicePub),
   );
+  const named = [...new Set([...view.members, ...view.overCap, ...view.revoked])].flatMap((signPub): NamingEntry[] => {
+    const keys = (effective.get(signPub) ?? []).flatMap(keysOf);
+    return keys.length === 0 ? [] : [{ signPub, keys: [...new Set(keys)] }];
+  });
   return {
     generation,
     members,
     overCap: [...view.overCap].flatMap(overCap),
     revoked,
     superseded: [...new Set(superseded)],
+    named,
   };
 }
 
@@ -115,7 +130,7 @@ export class AuthorizeIndex {
   readonly #hcIds = new Set<string>();
   readonly #hostIds = new Set<string>();
   readonly #signPubs = new Set<string>();
-  /** The signing keys whose cards name each key; "" stands for a current member's superseded key (owner not kept). */
+  /** The signing keys whose effective cards name each key (current, over-cap and revoked members). */
   readonly #namedBy = new Map<string, Set<string>>();
 
   constructor(data: IndexData) {
@@ -148,20 +163,20 @@ export class AuthorizeIndex {
       name(entry.noisePub, entry.signPub);
       name(entry.devicePub, entry.signPub);
     }
-    for (const entry of data.revoked) for (const key of entry.keys) name(key, entry.signPub);
-    for (const key of data.superseded) name(key, "");
+    for (const entry of data.named) for (const key of entry.keys) name(key, entry.signPub);
   }
 
   /**
-   * The current, not over-cap member whose Noise key this is, when no other signing key names it (#90): a key that two
-   * members hold, that a revoked member's card named, or that is another member's superseded key authorizes nobody.
+   * The current, not over-cap member whose Noise key this is, when no other signing key's effective card names it
+   * (#90): a key that two members hold, that a revoked member's card named before its revoke, or that is another
+   * member's superseded key authorizes nobody. A void card, or one signed after its signer's revoke, contests nothing.
    */
   member(key: string): MemberEntry | undefined {
     const entry = this.#byNoise.get(key);
     return entry === undefined || this.namedByAnother(key, entry.signPub) ? undefined : entry;
   }
 
-  /** Whether a card of a signing key other than `signPub` names `key` (a member's, revoked or superseded key). */
+  /** Whether an effective card of a signing key other than `signPub` names `key` (a member's, revoked or superseded key). */
   namedByAnother(key: string, signPub: string): boolean {
     return [...(this.#namedBy.get(key) ?? [])].some((by) => by !== signPub);
   }
