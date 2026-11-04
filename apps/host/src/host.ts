@@ -1,5 +1,5 @@
 import packageJson from "../package.json" with { type: "json" };
-import { fingerprintOf, type HostIdentity, type SecureLink } from "@doriface/crypto";
+import { fingerprintOf, type HostIdentity } from "@doriface/crypto";
 import type { MeshStatus } from "@doriface/protocol";
 import type { CreateSocket } from "@doriface/relay-client";
 import { controlIsLive, listenControl } from "./control.ts";
@@ -14,14 +14,8 @@ import { RelaySessionWire } from "./relay/session-wire.ts";
 import { DeviceStore } from "./state/devices.ts";
 import { loadHostIdentity } from "./state/host-keys.ts";
 import { MeshStore } from "./state/mesh.ts";
-import { HostMesh } from "./mesh/host-mesh.ts";
-import { HostSync } from "./mesh/host-sync.ts";
-import { meshProgram } from "./mesh/program.ts";
-import { MeshCommands } from "./mesh/commands.ts";
 import type { MeshHooks } from "./mesh/host-hooks.ts";
-import { monotonicClock } from "./mesh/clock.ts";
-import { syncHooks } from "./mesh/sync-hooks.ts";
-import { storedMeshStatus } from "./mesh/status-store.ts";
+import { meshDeps } from "./mesh/host-deps.ts";
 import { PairingStore, pendingToWire } from "./state/pairing.ts";
 
 export const HOST_VERSION = packageJson.version;
@@ -249,22 +243,16 @@ function e2eeDeps(
   const lanUrls: string[] = [];
   const slots = new PairingSlots(pairing, identity.noise.publicKey, registrar, options.log);
   const sessions = new LiveSessions(devices, options.log, mesh);
-  const hc = { hc: options.hc, session: options.session, env: options.env };
-  const relay = { url: options.relay?.url, createSocket: options.relay?.createSocket };
-  const program = options.meshProgram ?? meshProgram(stateDir);
-  const closeRevoked = (): void => sessions.closeRevoked();
-  const sync = new HostSync({ identity, mesh, relay, hc, stateDir, program, closeRevoked, log: options.log });
-  sync.changed();
-  const hooks = options.meshHooks ?? syncHooks(sync, monotonicClock);
-  const hostMesh = new HostMesh({
+  const meshParts = meshDeps({
     stateDir,
     identity,
     mesh,
     slots,
     sessions,
-    hc,
-    relay,
-    sync: (session) => sync.adopt(session),
+    hc: { hc: options.hc, session: options.session, env: options.env },
+    relay: { url: options.relay?.url, createSocket: options.relay?.createSocket },
+    program: options.meshProgram,
+    hooks: options.meshHooks,
     log: options.log,
   });
   return {
@@ -275,19 +263,7 @@ function e2eeDeps(
     mesh,
     slots,
     sessions,
-    hostMesh,
-    sync,
-    meshStream: (secure: SecureLink) => hostMesh.serve(secure),
-    meshPresence: (secure: SecureLink) => sync.presence(secure),
-    meshCommands: new MeshCommands({
-      store: mesh,
-      stateDir,
-      identity,
-      closeRevoked: () => sessions.closeRevoked(),
-      hooks,
-      log: options.log,
-    }),
-    meshStatus: () => storedMeshStatus(mesh, identity, hooks),
+    ...meshParts,
     rekeyInterval: options.rekeyInterval,
     log: options.log,
   };
