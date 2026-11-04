@@ -1,3 +1,4 @@
+import { agentRow } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { hcOn } from "./machine-switch.ts";
 import { askHost, deliverPush, heldSubscriptions, serviceWorker, subscribedKey, tapNotification } from "./push.ts";
@@ -67,10 +68,7 @@ test("no notice about the pane this device shows; the other panes still send the
     });
   });
   await page.goto("/");
-  await page
-    .getByRole("button", { name: /^push-shown(?![\w-])/ })
-    .first()
-    .click();
+  await agentRow(page, "push-shown", false).click();
   await expect(page.locator(`[data-focused="true"] [data-terminal="${shown}"]`)).toBeVisible({ timeout: 15_000 });
   await held;
   const before = service.posted.length;
