@@ -17,14 +17,19 @@ import { bootConnection } from "./desktop/local-host.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
+import { captureNotice, listenForNotices } from "./push/notice-open.ts";
 import { setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { router } from "./router.tsx";
 
 applyAppearance(appearanceStore.value);
 // The desktop shell serves the app from its own app: scheme; an offline cache there only reloads the window,
 // so earlier desktop builds' workers and caches are removed instead.
-if (location.protocol === "https:" || location.protocol === "http:") registerSW({ immediate: true });
-else void removeServiceWorkers();
+if (location.protocol === "https:" || location.protocol === "http:") {
+  registerSW({ immediate: true });
+  // A tapped notification opens the app at /?notice=<id>, or reaches an open window as a message.
+  captureNotice();
+  listenForNotices(() => void router.navigate({ to: "/" }));
+} else void removeServiceWorkers();
 void bootConnection(desktopBridge(), connectionStore);
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
 function paintWindow(): void {

@@ -17,6 +17,8 @@ import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
+import { useNoticeOpen } from "../push/notice-open.ts";
+import { usePushPresence } from "../push/use-push-presence.ts";
 
 export interface WorkspaceProps {
   readonly connection: HcConnection;
@@ -55,10 +57,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     const active = terminals.find((terminal) => terminal.address === inView);
     runs.start(runParamsFor(active));
   };
-  const openTerminal = (address: string): void => {
-    tabs.select(address);
-    showOnPhone(address);
-  };
+  usePushPresence(inView);
+  useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
     if (inView === null) return false;
@@ -108,7 +108,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           host={connection.hello.core.name}
           route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
           actions={availableActions(narrow ? "phone" : "desktop", tabs, inView !== null)}
-          onOpenTerminal={openTerminal}
+          onOpenTerminal={opened}
           onClose={() => setPalette(false)}
         />
       ) : null}
