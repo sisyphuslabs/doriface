@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { lookupPairSlot, PairLookupError } from "@doriface/relay-client";
 import { join } from "node:path";
 import { HOST_NAMES, type Mesh, type Receipt, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
-import { isAlive } from "./support/mesh/processes.ts";
+import { isAlive, signalAll } from "./support/mesh/processes.ts";
 import { testIp } from "./support/probe.ts";
 import { inOrder } from "./support/sequential.ts";
 
@@ -127,7 +127,7 @@ describe("the harness ended by a signal", () => {
     await child.exited;
     const survivors = pids.filter(isAlive);
     // A red run leaves no core behind for the next file: whatever survived is ended before the assertion.
-    for (const pid of survivors) process.kill(pid, "SIGKILL");
+    signalAll(survivors, "SIGKILL");
     expect(survivors).toEqual([]);
   }, 180_000);
 });
