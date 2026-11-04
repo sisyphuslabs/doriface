@@ -1,7 +1,7 @@
 import type { HcConnection } from "@doriface/client";
-import { ExtraKeysBar, IconButton, ScrollArea, StatusBar, StatusBarItem, StatusChip } from "@doriface/ui";
+import { ExtraKeysBar, IconButton, ScrollArea, StatusBar, StatusBarItem } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, Monitor, Plus, Search, Settings } from "lucide-react";
+import { Monitor, Plus, Search, Settings } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { NEW_TAB } from "../keys/actions.ts";
@@ -14,12 +14,12 @@ import { VoiceDock } from "../voice/voice-dock.tsx";
 import { AgentLists } from "./agent-lists.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
-import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
+import { machineOf, type Session, terminalTitle } from "./model.ts";
+import { PhoneHeader } from "./phone-header.tsx";
 import { ConnectionLine, ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
 import { afterEnd } from "./session-actions.ts";
-import { SessionMenu } from "./session-menu.tsx";
 import { usePhoneActions, type SessionVerb } from "./use-app-actions.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -77,16 +77,27 @@ export function PhoneShell(props: PhoneShellProps) {
       </div>
     );
   }
-  return <PhoneTerminal connection={connection} terminal={terminal} onBack={onBack} dictate={dictate} />;
+  return (
+    <PhoneTerminal
+      connection={connection}
+      terminal={terminal}
+      terminals={terminals}
+      onBack={onBack}
+      onOpen={onOpen}
+      dictate={dictate}
+    />
+  );
 }
 
 function PhoneTerminal(props: {
   readonly connection: HcConnection;
   readonly terminal: Session;
+  readonly terminals: readonly Session[];
   readonly onBack: () => void;
+  readonly onOpen: (address: string) => void;
   readonly dictate: RefObject<(() => void) | null>;
 }) {
-  const { connection, terminal, onBack, dictate } = props;
+  const { connection, terminal, terminals, onBack, onOpen, dictate } = props;
   const send = useRef<((data: TerminalInput) => void) | null>(null);
   const voice = useDictation();
   const mic = useRef<HTMLButtonElement>(null);
@@ -113,7 +124,6 @@ function PhoneTerminal(props: {
   };
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
-  const where = machine === undefined ? spaceName(terminal) : `${machine} · ${spaceName(terminal)}`;
   const offline = terminal.offline === true && machine !== undefined;
   const { toggle } = voice;
   useEffect(() => {
@@ -125,25 +135,13 @@ function PhoneTerminal(props: {
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">
-      <header
-        data-titlebar
-        className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
-      >
-        <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex min-w-0 items-center gap-2">
-            <h1 title={title} className="min-w-0 truncate text-base leading-tight font-semibold text-foreground">
-              {title}
-            </h1>
-            <StatusChip status={agentStatus(terminal)} />
-          </div>
-          <p title={where} className="truncate text-xs leading-tight text-muted-foreground">
-            {where}
-          </p>
-        </div>
-        {offline ? null : <DictateButton voice={voice} target={title} ref={mic} />}
-        <SessionMenu address={terminal.address} title={title} placement="header" />
-      </header>
+      <PhoneHeader
+        terminal={terminal}
+        terminals={terminals}
+        onBack={onBack}
+        onOpen={onOpen}
+        action={offline ? null : <DictateButton voice={voice} target={title} ref={mic} />}
+      />
       <ConnectionLine />
       {offline ? (
         <MachineOffline machine={machine} />
