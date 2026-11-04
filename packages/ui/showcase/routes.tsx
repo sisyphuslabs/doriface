@@ -12,6 +12,7 @@ import {
   SettingsTerminalScreen,
 } from "./screens/settings.tsx";
 import { ShellScreen } from "./screens/shell.tsx";
+import { SidebarRecomposeScreen } from "./screens/sidebar-recompose.tsx";
 import { StatesScreen } from "./screens/states.tsx";
 import { VoiceScreen } from "./screens/voice.tsx";
 
@@ -27,6 +28,7 @@ export const ROUTES = [
   { id: "settings-keyboard", title: "Settings: keyboard", render: SettingsKeyboardScreen },
   { id: "mobile", title: "Phone", render: MobileScreen },
   { id: "mobile-agents", title: "Phone agents list", render: MobileAgentsScreen },
+  { id: "sidebar-recompose", title: "Sidebar recompose (#206)", render: SidebarRecomposeScreen },
   { id: "states", title: "Empty, offline and error states", render: StatesScreen },
   { id: "approval", title: "Permission banner", render: ApprovalScreen },
   { id: "voice", title: "Voice input", render: VoiceScreen },
