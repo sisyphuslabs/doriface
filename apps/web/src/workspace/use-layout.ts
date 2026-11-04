@@ -7,7 +7,6 @@ import {
   editTab,
   freshId,
   type Node,
-  removeTab,
   splitPane,
   tabsOf,
   terminalBlock,
@@ -28,7 +27,7 @@ import { machineOf } from "./model.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
 import { orderTabs, type TabMove } from "./tab-order.ts";
-import { useDropPane } from "./use-drop-pane.ts";
+import { useTabClose } from "./use-tab-close.ts";
 import { useTabMoves } from "./use-tab-moves.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
@@ -230,11 +229,11 @@ export function useLayout(
     [active, addTab, focused, keepHere, layoutOf, show, tabs, told],
   );
 
-  const dropFromDoc = useDropPane(tabs, layoutOf, setLoose);
+  const { dropPane: dropFromTab, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView);
   const dropPane = useCallback(
     (address: string): void => {
       const found = findTerminal(tabs, address);
-      dropFromDoc(address);
+      dropFromTab(address);
       if (found === null || found.tab.transient) return;
       // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there.
       const key = found.tab.key;
@@ -248,17 +247,7 @@ export function useLayout(
           prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev,
         );
     },
-    [dropFromDoc, tabs],
-  );
-
-  const closeTab = useCallback(
-    (key: string): void => {
-      const tab = tabs.find((each) => each.key === key);
-      if (tab === undefined) return;
-      if (tab.transient) return setLoose((prev) => prev.filter((address) => address !== tab.panes[0]?.address));
-      void layoutOf(tab.machine)?.edit((doc) => (doc === null ? null : removeTab(doc, tab.id)));
-    },
-    [layoutOf, tabs],
+    [dropFromTab, tabs],
   );
 
   const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
