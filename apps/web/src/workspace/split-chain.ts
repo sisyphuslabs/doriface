@@ -41,3 +41,25 @@ export class SplitChain {
     };
   }
 }
+
+/** One split as the workspace asks for it: the tab, the pane in focus there, and the pane named for it (or null). */
+export interface SplitRequest {
+  readonly tab: string;
+  readonly focused: string;
+  readonly source: string | null;
+}
+
+/**
+ * Starts a split's terminal (`start`, which calls back with its address or that it failed) and places it, once every
+ * earlier split in the tab has landed, off the pane the one before it makes (`split`: address, pane it comes off, and
+ * the new pane's id).
+ */
+export function chainedSplit(
+  chain: SplitChain,
+  request: SplitRequest,
+  start: (place: (address: string) => void, fail: () => void) => void,
+  split: (address: string, from: string, made: string) => void,
+): void {
+  const link = chain.next(request.tab, request.focused, request.source);
+  start((address) => link.place((from) => split(address, from, link.pane)), link.fail);
+}

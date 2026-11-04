@@ -21,7 +21,8 @@ import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 import { findTerminal } from "./layout-model.ts";
 import { useLayout, type PaneTarget } from "./use-layout.ts";
-import { SplitChain } from "./split-chain.ts";
+import { chainedSplit, SplitChain } from "./split-chain.ts";
+import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
 
@@ -47,6 +48,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
   const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed, told);
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, layout.dropPane);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
@@ -85,10 +87,12 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (tab === undefined || tab === null || tab.transient || focused === undefined) {
       return runs.start(runParamsFor(near), (address) => layout.split(axis, address, target));
     }
-    const link = splits.next(tab.key, focused, target?.pane ?? null);
-    const place = (address: string): void =>
-      link.place((pane) => layout.split(axis, address, { tab: tab.key, pane }, link.pane));
-    return runs.start(runParamsFor(near), place, link.fail);
+    return chainedSplit(
+      splits,
+      { tab: tab.key, focused, source: target?.pane ?? null },
+      (place, fail) => runs.start(runParamsFor(near), place, fail),
+      (address, pane, made) => layout.split(axis, address, { tab: tab.key, pane }, made),
+    );
   };
   const openTerminal = (address: string): void => {
     layout.openTerminal(address);
