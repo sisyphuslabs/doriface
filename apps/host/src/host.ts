@@ -18,6 +18,7 @@ import { MeshStore } from "./state/mesh.ts";
 import type { MeshHooks } from "./mesh/host-hooks.ts";
 import { meshDeps } from "./mesh/host-deps.ts";
 import { PairingStore, pendingToWire } from "./state/pairing.ts";
+import { type HostPush, startHostPush } from "./push/host-push.ts";
 
 export const HOST_VERSION = packageJson.version;
 
@@ -48,6 +49,8 @@ export interface HostOptions {
   readonly meshProgram?: string | undefined;
   /** The running mesh parts the mesh commands and status reach; defaults to this host's own sync (`syncHooks`). */
   readonly meshHooks?: MeshHooks | undefined;
+  /** For tests: origins of a private push service the host may post web push notices to, besides the browsers' own. */
+  readonly pushTestOrigins?: readonly string[] | undefined;
   readonly log: (line: string) => void;
 }
 
@@ -107,8 +110,20 @@ export async function startHost(options: HostOptions): Promise<Host> {
     stateDir === undefined || identity === undefined
       ? undefined
       : e2eeDeps(stateDir, identity, options.pairingSlots ?? uplink, options, proofs);
+  const push =
+    stateDir === undefined || e2ee === undefined
+      ? undefined
+      : await startHostPush({
+          stateDir,
+          hostId: e2ee.identity.hostId,
+          devices: e2ee.devices,
+          hc: { hc: options.hc, session: options.session, env: options.env },
+          extraOrigins: options.pushTestOrigins,
+          log: options.log,
+        });
   const gateway = createGateway({
     e2ee,
+    push: push?.serve,
     token: options.token,
     hostVersion: HOST_VERSION,
     hcVersion,
@@ -136,6 +151,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
   try {
     server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });
   } catch (error) {
+    push?.stop();
     await uplink?.stop();
     throw error;
   }
@@ -164,7 +180,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     control =
       options.stateDir === undefined || e2ee === undefined
         ? undefined
-        : openControl(options.stateDir, e2ee, options.meshStatus ?? e2ee.meshStatus);
+        : openControl(options.stateDir, e2ee, options.meshStatus ?? e2ee.meshStatus, push);
   } catch (error) {
     await Promise.all([server.stop(true), lanServer?.stop(true)]);
     throw new Error(`cannot open the control socket that devices revoke uses: ${String(error)}`, { cause: error });
@@ -188,6 +204,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
           },
     relayUrl: uplink === undefined ? undefined : options.relay?.url,
     stop() {
+      push?.stop();
       e2ee?.slots.stop();
       control?.stop();
       stopping ??= Promise.resolve(e2ee?.sync.stop())
@@ -205,13 +222,16 @@ function openControl(
   stateDir: string,
   e2ee: ReturnType<typeof e2eeDeps>,
   meshStatus: (() => MeshStatus | undefined) | undefined,
+  push: HostPush | undefined,
 ) {
   return listenControl(stateDir, async (request, closed) => {
     switch (request.op) {
       case "devices-changed":
+        push?.prune();
         return e2ee.sessions.closeRevoked();
       case "mesh-changed":
         e2ee.sync.changed();
+        push?.prune();
         return e2ee.sessions.closeRevoked();
       case "pair":
         return pendingToWire(await e2ee.hostMesh.pairDevice());

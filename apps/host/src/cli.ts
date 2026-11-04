@@ -30,6 +30,7 @@ const USAGE = `usage: doriface-host [options]
   --state-dir <dir>     host keys and paired devices (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --relay <url>         the relay this host keeps an encrypted-only uplink to (default ${DEFAULT_RELAY_URL})
   --no-relay            keep no relay uplink: reach this host only directly
+  --push-test-origin <origin>  for tests: also post web push notices to this push service origin
   -h, --help            show this help`;
 
 const log = (line: string): void => {
@@ -74,6 +75,12 @@ async function connect(args: readonly string[]): Promise<void> {
   process.exit(code);
 }
 
+/** An origin as `URL.origin` prints it, so the host compares it with an endpoint's exactly. */
+function pushOrigin(value: string): string {
+  if (!URL.canParse(value)) throw new Error(`--push-test-origin wants an origin, got ${JSON.stringify(value)}`);
+  return new URL(value).origin;
+}
+
 async function serve(args: readonly string[]): Promise<void> {
   const { values } = parseArgs({
     args: [...args],
@@ -90,6 +97,7 @@ async function serve(args: readonly string[]): Promise<void> {
       "state-dir": { type: "string" },
       relay: { type: "string", default: DEFAULT_RELAY_URL },
       "no-relay": { type: "boolean", default: false },
+      "push-test-origin": { type: "string", multiple: true },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -109,6 +117,7 @@ async function serve(args: readonly string[]): Promise<void> {
     lanListen: values["lan-listen"] === undefined ? undefined : parseListen(values["lan-listen"], "--lan-listen"),
     stateDir: values["state-dir"] ?? defaultStateDir(),
     relay: values["no-relay"] ? undefined : { url: values.relay },
+    pushTestOrigins: values["push-test-origin"]?.map(pushOrigin),
     log,
   });
   const session = values.session === undefined ? "" : `, session ${values.session}`;
