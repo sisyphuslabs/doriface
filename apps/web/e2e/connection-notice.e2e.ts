@@ -143,6 +143,30 @@ test.describe("phone", () => {
       await context.setOffline(false);
       await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
     });
+
+    for (const width of [390, 320]) {
+      test(`at ${width} px the offline line shows its whole sentence, wrapped, not cut off`, async ({
+        page,
+        context,
+      }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await routeLanToHost(page);
+        await openPhoneTerminal(page);
+        await context.setOffline(true);
+        const line = notice(page, OFFLINE);
+        await expect(line).toBeVisible({ timeout: 2_000 });
+        await expect(line).toHaveText("Offline. Reconnects when the network is back.");
+        // Every part of the line fits its box: nothing is clipped behind an ellipsis.
+        const clipped = await line.evaluate(
+          (el) => [el, ...el.querySelectorAll("*")].filter((node) => node.scrollWidth > node.clientWidth + 1).length,
+        );
+        expect(clipped).toBe(0);
+        const box = await line.boundingBox();
+        expect(box?.x).toBeGreaterThanOrEqual(0);
+        expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
+        await context.setOffline(false);
+      });
+    }
   });
 
   test("the phone terminal screen says it is reconnecting while the host link is down", async ({ page }) => {
