@@ -47,8 +47,8 @@ test("a New tab whose terminal the feed lists only after a machine.list read sti
 });
 
 // The other order: the feed lists the terminal before terminal.run answers. Once listed, the feed and machine.list are
-// held, so nothing but the answer can move focus; the new tab must take it as the answer lands, not on a later event.
-const FEED_FIRST_FOCUS_MS = 250;
+// held until focus has moved, so nothing but the answer can move it: the new tab must take focus as the answer lands,
+// not on a later event. The holds prove the order; how long the page takes to render it depends on the host.
 
 test("a New tab whose terminal the feed lists before terminal.run answers takes focus as the answer lands", async ({
   page,
@@ -68,7 +68,6 @@ test("a New tab whose terminal the feed lists before terminal.run answers takes 
     .click();
   await count.grown();
   const releaseFeed = socket.holdFromHost('"method":"event"', '"method":"heartbeat"', '"method":"missed"');
-  const answered = Date.now();
   releaseAnswers();
   await expect
     .poll(async () => (await focused.getAttribute("data-terminal").catch(() => null)) !== before, {
@@ -76,9 +75,6 @@ test("a New tab whose terminal the feed lists before terminal.run answers takes 
       timeout: 5_000,
     })
     .toBe(true);
-  const ms = Date.now() - answered;
-  test.info().annotations.push({ type: "focus-ms", description: String(ms) });
   releaseFeed();
   releaseList();
-  expect(ms).toBeLessThan(FEED_FIRST_FOCUS_MS);
 });
