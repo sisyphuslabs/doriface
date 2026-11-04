@@ -30,12 +30,17 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack 
   const [scope, setScope] = useState<HTMLDivElement | null>(null);
   const keyboard = useSoftKeyboard(scope);
   const [menu, setMenu] = useState(false);
+  // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
+  const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
+  // The view that showed its program had already ended; the keys have nothing to send to under it.
+  const [endedView, setEndedView] = useState<string | null>(null);
+  const ended = endedView === viewKey;
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   const host = hostPlatform(machine ?? connection.hello.core.name);
   const sticky = useStickyKeys(port, host);
   const offline = terminal.offline === true && machine !== undefined;
-  const keysOpen = keyboard.up || menu;
+  const keysOpen = !ended && (keyboard.up || menu);
 
   return (
     <div className="relative flex h-dvh min-h-0 flex-col bg-card">
@@ -50,8 +55,7 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack 
           <MachineOffline machine={machine} />
         ) : (
           <TerminalView
-            // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
-            key={`${terminal.address}#${terminal.pid ?? ""}`}
+            key={viewKey}
             connection={connection}
             address={terminal.address}
             pid={terminal.pid ?? null}
@@ -62,10 +66,13 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack 
             onPort={onPort}
             // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
             onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
+            // The header already has Back to agents; this one closes the ended session.
+            closeLabel="Close"
+            onEnded={() => setEndedView(viewKey)}
           />
         )}
       </div>
-      {offline ? null : (
+      {offline || ended ? null : (
         <PhoneKeys
           port={port}
           open={keysOpen}
