@@ -1,18 +1,20 @@
 import type { WTerm } from "@wterm/react";
 import { useEffect } from "react";
+import { mayTakeFocus } from "./may-take-focus.ts";
 
 /**
  * Dragging across the rows selects their text natively, and the browser moves focus to the page body
  * on the way, so keys typed next went nowhere. When a press that started here ends (wherever the
  * pointer is by then) with focus outside the terminal, focus goes back to its input and the selection
- * is put back, since focusing a textarea collapses the document selection into it.
+ * is put back, since focusing a textarea collapses the document selection into it. A modal that opened meanwhile (a
+ * question asked from the keyboard while the button was down) keeps the keyboard.
  */
 export function useFocusAfterSelect(wt: WTerm | null): void {
   useEffect(() => {
     if (wt === null) return undefined;
     const element = wt.element;
     const restore = (): void => {
-      if (element.contains(document.activeElement) || !element.isConnected) return;
+      if (element.contains(document.activeElement) || !element.isConnected || !mayTakeFocus(element)) return;
       const selection = document.getSelection();
       const range = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
       wt.focus();
