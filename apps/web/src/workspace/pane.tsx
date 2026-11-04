@@ -1,7 +1,8 @@
 import type { HcConnection } from "@doriface/client";
 import type { ReactNode } from "react";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
-import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx";
+import type { TerminalPort } from "../terminal/terminal-port.ts";
+import { TerminalView } from "../terminal/terminal-view.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 
@@ -14,7 +15,7 @@ export interface PaneProps {
   readonly onFocus: (address: string) => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
   /** The view's input path, for input from outside the pane (dictation); null once the view unmounts. */
-  readonly onSend?: (send: ((data: TerminalInput) => void) | null) => void;
+  readonly onPort: (port: TerminalPort | null) => void;
   /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
   readonly dock?: ReactNode;
 }
@@ -23,7 +24,7 @@ export interface PaneProps {
  * A terminal card with no title bar: its tab names it, the status bar says where it runs, and the tab strip
  * carries its session actions (each shown pane is its own tab, so a header would repeat the tab).
  */
-export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onSend, dock }: PaneProps) {
+export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onPort, dock }: PaneProps) {
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   return (
@@ -47,7 +48,7 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onS
           focused={focused}
           label={`${title} output`}
           onEnd={onEnd}
-          {...(onSend === undefined ? {} : { onSend })}
+          onPort={onPort}
         />
       )}
       {dock}

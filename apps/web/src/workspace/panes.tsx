@@ -43,7 +43,7 @@ export function Panes({ connection, terminals, open, active, split, onFocus, onE
               split={split !== null}
               onFocus={onFocus}
               onEnd={onEnd}
-              onSend={sends.onSend(address)}
+              onPort={sends.onPort(address)}
               dock={address === active ? dock : null}
             />
           </div>
