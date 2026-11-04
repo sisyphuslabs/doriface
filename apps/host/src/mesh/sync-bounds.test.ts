@@ -52,6 +52,15 @@ describe("what one sync session holds for a peer is bounded (abuse, section 5.2)
     expect(peerA.batchSizes).toEqual([]);
   });
 
+  test("a done starts the count again: 4096 records, done, then more records keep the session open", async () => {
+    const peerA = sessionAtB();
+    for (let line = 0; line < 4; line++) peerA.receive({ t: "records", records: junk(line * 1024, 1024) });
+    peerA.receive({ t: "done", mesh: peerA.meshId });
+    peerA.receive({ t: "records", records: junk(MAX_RECORDS, 1024) });
+    await peerA.settled();
+    expect(peerA.closedWith()).toBeUndefined();
+  });
+
   test("a peer claiming more than 4096 distinct heads is closed 4400", async () => {
     const peerA = sessionAtB();
     const hello = (claimed: readonly string[]): MeshLine => ({

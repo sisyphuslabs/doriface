@@ -2,6 +2,7 @@ import { type ByteLink, closeCodeOf } from "@doriface/crypto";
 import { DIAL_LIMITS, type DialPolicy } from "./dial-policy.ts";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshView } from "./mesh-view.ts";
+import { NoUplinkError } from "./no-uplink.ts";
 
 /** The bridge's refusal when no dial token freed in time; the reconciler re-adds on the budget's due, not a backoff. */
 export const BUDGET_REFUSAL = "waiting for the dial budget";
@@ -69,6 +70,10 @@ export class LineGrants {
       this.#register(member.signPub, link);
       return { ok: true, link };
     } catch (error) {
+      if (error instanceof NoUplinkError) {
+        policy.release(grant.chargedAt);
+        return { ok: false, code: 4404, reason: error.message };
+      }
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
       policy.report(member.signPub, code === 4429 ? 4429 : 4404);
       return {
