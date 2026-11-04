@@ -2,11 +2,14 @@ import { IconButton, Menu, MenuItem } from "@doriface/ui";
 import { Ellipsis, Pencil, Power } from "lucide-react";
 import { useAskSession } from "./session-context.ts";
 
-/** The pane header's actions on its session: rename it, or end its program. */
-export function SessionMenu({ address }: { readonly address: string }) {
+/** The tab strip's actions on the focused terminal's session: rename it, or end its program. */
+export function SessionMenu({ address, title }: { readonly address: string; readonly title: string }) {
   const ask = useAskSession();
   return (
-    <Menu align="end" trigger={<IconButton label="Session actions" icon={<Ellipsis />} className="size-6" />}>
+    <Menu
+      align="end"
+      trigger={<IconButton label={`Session actions for ${title}`} icon={<Ellipsis />} className="size-6" />}
+    >
       <MenuItem icon={<Pencil />} onClick={() => ask({ kind: "rename", address })}>
         Rename…
       </MenuItem>
