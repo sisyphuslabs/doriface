@@ -26,6 +26,9 @@ import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
+import { useNoticeOpen } from "../push/notice-open.ts";
+import { usePushPresence } from "../push/use-push-presence.ts";
+import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
 
 export interface WorkspaceProps {
   readonly connection: HcConnection;
@@ -95,10 +98,6 @@ export function Workspace({ connection }: WorkspaceProps) {
       (address, pane, made) => layout.split(axis, address, { tab: tab.key, pane }, made),
     );
   };
-  const openTerminal = (address: string): void => {
-    layout.openTerminal(address);
-    showOnPhone(address);
-  };
   const closeTab = (key: string): void => {
     const tab = layout.tabs.find((each) => each.key === key);
     const shown = tab?.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
@@ -114,6 +113,8 @@ export function Workspace({ connection }: WorkspaceProps) {
   const closing = layout.tabs.find((tab) => tab.key === closingTab);
   const phoneTab = phoneOpen === null ? null : findTerminal(layout.tabs, phoneOpen);
   const phonePanes = phoneTab?.tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
+  usePushPresence(inView);
+  useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
     if (inView === null) return false;
@@ -158,6 +159,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           />
         )}
       </SessionContext>
+      <PromptAnswerBanner />
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
       <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={layout.dropPane} />
       {closing === undefined ? null : (
@@ -178,7 +180,7 @@ export function Workspace({ connection }: WorkspaceProps) {
             keys: layout.tabs.map((tab) => tab.key),
             active: layout.active?.key ?? null,
           })}
-          onOpenTerminal={openTerminal}
+          onOpenTerminal={opened}
           onClose={() => setPalette(false)}
         />
       ) : null}
