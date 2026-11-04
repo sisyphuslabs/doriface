@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ApprovalRecord } from "@doriface/protocol";
-import { stateAfterAnswer, stateAfterPrompt } from "./approval-view.ts";
+import { showsPrompt, stateAfterAnswer, stateAfterPrompt } from "./approval-view.ts";
 
 const self = { by: "Chrome on macOS", client: "tab-a" };
 const phone: ApprovalRecord = {
@@ -50,5 +50,36 @@ describe("the banner once the agent moved on", () => {
 
   test("no record means it was answered in the terminal: the banner goes", () => {
     expect(stateAfterPrompt(undefined, self)).toBeUndefined();
+  });
+});
+
+describe("is the banner's prompt the one the terminal still reports", () => {
+  const blocked = { app: "claude-code", kind: "permission", state: "blocked" } as const;
+  const mark = { terminal: "t6", app: "claude-code", statusMs: 27_091, turn: 1 };
+  const session = (fields: { status_ms?: number | null; turn?: number; state?: string }) => ({
+    address: "t6",
+    argv: ["claude"],
+    cols: 80,
+    created_ms: 1,
+    cwd: "/work",
+    labels: {},
+    rows: 24,
+    screen: "exact",
+    state: "live",
+    status: { ...blocked, state: fields.state ?? "blocked" },
+    status_ms: fields.status_ms ?? null,
+    turn: fields.turn ?? 1,
+  });
+
+  test("a terminal the page learned from events has no status_ms, and still shows the same prompt", () => {
+    expect(showsPrompt(mark, session({ status_ms: null }))).toBe(true);
+  });
+
+  test("the next prompt comes with the next turn", () => {
+    expect(showsPrompt(mark, session({ turn: 2 }))).toBe(false);
+  });
+
+  test("once the agent leaves blocked the prompt is over", () => {
+    expect(showsPrompt(mark, session({ state: "working" }))).toBe(false);
   });
 });

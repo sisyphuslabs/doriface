@@ -9,13 +9,19 @@ test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 
 let agent: AskingAgent;
 let name: string;
+let started = false;
 
-test.beforeEach(() => {
+/** Starts this test's asking agent; every test ends it, started or not by then. */
+function ask(): void {
   name = `asks-${crypto.randomUUID().slice(0, 8)}`;
   agent = startAskingAgent(name);
-});
+  started = true;
+}
 
-test.afterEach(() => agent.end());
+test.afterEach(() => {
+  if (started) agent.end();
+  started = false;
+});
 
 const banner = (page: Page) => page.locator(`[data-approval="${agent.address}"]`);
 
@@ -29,6 +35,7 @@ async function openAsking(page: Page): Promise<void> {
 }
 
 test("Allow presses the agent's own key once, and the banner says it was answered from here", async ({ page }) => {
+  ask();
   await page.goto("/");
   await openAsking(page);
   await banner(page)
@@ -43,8 +50,11 @@ test("Allow presses the agent's own key once, and the banner says it was answere
   await expect(banner(page)).toHaveCount(0, { timeout: 10_000 });
 });
 
-test("Deny presses Esc, the agent's own decline", async ({ page }) => {
+test("Deny presses Esc, for an agent that starts asking while the page is open", async ({ page }) => {
+  // Known only from events, this terminal has no status_ms on the page (hc's status event carries none).
   await page.goto("/");
+  await expect(page.getByRole("contentinfo")).toContainText(/\d+ terminals?/, { timeout: 20_000 });
+  ask();
   await openAsking(page);
   await banner(page).getByRole("button", { name: /^Deny/ }).click();
   await expect(banner(page)).toContainText("Denied", { timeout: 10_000 });
@@ -53,6 +63,7 @@ test("Deny presses Esc, the agent's own decline", async ({ page }) => {
 });
 
 test("stale: answered in the terminal before the status caught up, so the banner sends nothing", async ({ page }) => {
+  ask();
   await page.goto("/");
   await openAsking(page);
   agent.typeInTerminal("x");
@@ -74,6 +85,7 @@ test("stale: answered in the terminal before the status caught up, so the banner
 test("two clients racing on one prompt: exactly one answer reaches the agent, the other says where it was answered", async ({
   page,
 }) => {
+  ask();
   const slow = page;
   const slowLink = await routeHcSocket(slow);
   await slow.goto("/");

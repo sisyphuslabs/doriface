@@ -12,7 +12,7 @@ import type { ApprovalBannerState } from "@doriface/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../workspace/model.ts";
 import { approvalCore } from "./approval-core.ts";
-import { stateAfterAnswer, stateAfterPrompt } from "./approval-view.ts";
+import { showsPrompt, stateAfterAnswer, stateAfterPrompt } from "./approval-view.ts";
 import { thisAnswerer } from "./answerer.ts";
 
 export interface ApprovalView {
@@ -49,9 +49,6 @@ async function readWhenDrawn(
   return (await readApproval(core, address)) ?? readWhenDrawn(core, address, signal, later);
 }
 
-const reports = (mark: ApprovalMark, terminal: Session): boolean =>
-  waitsOnApproval(terminal) && terminal.status_ms === mark.statusMs && (terminal.turn ?? 0) === mark.turn;
-
 /**
  * The permission prompt a terminal's agent waits on, as a banner: found from the agent's status (`blocked`,
  * `kind: permission`) plus its live screen, answered once across every client, and resolved when the agent moves on.
@@ -65,7 +62,7 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
 
   useEffect(() => {
     const shown = current.current;
-    if (!waiting || (shown !== undefined && reports(shown.mark, terminal))) return;
+    if (!waiting || (shown !== undefined && showsPrompt(shown.mark, terminal))) return;
     const abort = new AbortController();
     const show = async () => {
       try {
@@ -77,11 +74,11 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
     };
     void show();
     return () => abort.abort();
-  }, [core, terminal.address, waiting, terminal.status_ms, terminal.turn]);
+  }, [core, terminal.address, waiting, terminal.turn]);
 
   useEffect(() => {
     const shown = current.current;
-    if (shown === undefined || shown.state.kind !== "waiting" || reports(shown.mark, terminal)) return;
+    if (shown === undefined || shown.state.kind !== "waiting" || showsPrompt(shown.mark, terminal)) return;
     let live = true;
     const resolve = async () => {
       // A failed read means no attribution to show: the banner goes, as if it had been answered in the terminal.
