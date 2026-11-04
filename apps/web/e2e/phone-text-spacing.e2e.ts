@@ -51,9 +51,30 @@ for (const width of [390, 320]) {
     const firstRow = await page.locator("[data-terminal] .term-row").first().boundingBox();
     expect(firstRow?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
 
-    // The session actions stay a full touch target.
-    const actions = await bar.getByRole("button", { name: /^Session actions for / }).boundingBox();
-    expect(actions?.width).toBeGreaterThanOrEqual(44);
-    expect(actions?.height).toBeGreaterThanOrEqual(44);
+    // The tab position and the agent counts are never cut: each ends inside the header and inside the screen.
+    const parts = [bar.locator("[data-tab-position]"), bar.locator("[data-agent-counts]")];
+    await Promise.all(parts.map((part) => expect(part).toBeVisible()));
+    const placed = await Promise.all(
+      parts.map((part) =>
+        part.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          return { bottom: box.bottom, right: box.right, cut: el.scrollWidth > el.clientWidth + 1 };
+        }),
+      ),
+    );
+    for (const part of placed) {
+      expect(part.bottom).toBeLessThanOrEqual(bottom + 0.5);
+      expect(part.right).toBeLessThanOrEqual(width + 0.5);
+      expect(part.cut).toBe(false);
+    }
+
+    // The switch and the session actions stay full touch targets.
+    const targets = await Promise.all(
+      [/^Switch space or tab$/, /^Session actions for /].map((name) => bar.getByRole("button", { name }).boundingBox()),
+    );
+    for (const target of targets) {
+      expect(target?.width).toBeGreaterThanOrEqual(44);
+      expect(target?.height).toBeGreaterThanOrEqual(44);
+    }
   });
 }
