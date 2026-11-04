@@ -30,7 +30,7 @@ import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
-import { useTypeAhead } from "./use-type-ahead.ts";
+import { CATCHER_ATTRIBUTES, type DropReason, useTypeAhead } from "./use-type-ahead.ts";
 
 export interface WorkspaceProps {
   readonly connection: HcConnection;
@@ -79,7 +79,19 @@ export function Workspace({ connection }: WorkspaceProps) {
     [openInLayout, showOnPhone],
   );
   const [closingTab, setClosingTab] = useState<string | null>(null);
-  const typeAhead = useTypeAhead();
+  const notSent = useCallback(
+    (reason: DropReason) =>
+      toasts.add({
+        type: "error",
+        title: "What you typed was not sent",
+        description:
+          reason === "failed"
+            ? "The new terminal did not start, so the keys typed for it went nowhere."
+            : "The new terminal took too long to open, so the keys typed for it were dropped.",
+      }),
+    [toasts],
+  );
+  const typeAhead = useTypeAhead(notSent);
   const runs = useMachineRuns(connection, opened, refresh, typeAhead);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   const inViewTerminal = terminals.find((terminal) => terminal.address === inView);
@@ -160,6 +172,7 @@ export function Workspace({ connection }: WorkspaceProps) {
       <PromptAnswerBanner />
       <textarea
         ref={typeAhead.catcher}
+        {...CATCHER_ATTRIBUTES}
         aria-label="New terminal starting: what you type goes to it"
         tabIndex={-1}
         className="sr-only"
