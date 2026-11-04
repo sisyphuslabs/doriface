@@ -12,6 +12,7 @@ const TEXT_SPACING = `
 `;
 
 const header = (page: Page) => page.getByRole("banner");
+const ACTION = "Header action";
 
 async function openPhoneTerminal(page: Page): Promise<void> {
   await page.goto("/");
@@ -21,60 +22,86 @@ async function openPhoneTerminal(page: Page): Promise<void> {
   await expect(header(page).getByRole("button", { name: "Back to agents" })).toBeVisible();
 }
 
+/** Fills the header's action slot with one more 44 px header button, as the mic (#227) does: a copy of the switch. */
+async function giveAction(page: Page): Promise<void> {
+  await header(page)
+    .locator("[data-header-action]")
+    .evaluate((slot, name) => {
+      const model = slot.closest("header")?.querySelector('button[aria-label="Switch space or tab"]');
+      const action = model?.cloneNode(true);
+      if (!(action instanceof HTMLElement)) throw new Error("no header button to copy");
+      action.setAttribute("aria-label", name);
+      slot.append(action);
+    }, ACTION);
+  await expect(header(page).getByRole("button", { name: ACTION })).toBeVisible();
+}
+
+/** The header holds its content and grows for it: at least 48 px, nothing cut, nothing over the terminal. */
+async function expectHeaderHolds(page: Page, width: number, withAction: boolean): Promise<void> {
+  const bar = header(page);
+  await expect(bar.getByRole("heading", { level: 1 })).toBeVisible();
+  const box = await bar.boundingBox();
+  const bottom = (box?.y ?? 0) + (box?.height ?? 0);
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(48 - 0.5);
+
+  // Nothing in the header spills out of its own box vertically: the header itself, and each of its rows.
+  const spills = await bar.evaluate((el) =>
+    [el, ...el.querySelectorAll("h1, p, div")]
+      .filter((node) => node.scrollHeight > node.clientHeight + 1)
+      .map((node) => `${node.tagName.toLowerCase()} ${node.scrollHeight}>${node.clientHeight}`),
+  );
+  expect(spills).toEqual([]);
+
+  // Every text row, the tab position and the counts end inside the header and the screen; the last two are never cut.
+  const parts = [
+    bar.getByRole("heading", { level: 1 }),
+    bar.locator("p"),
+    bar.locator("[data-tab-position]"),
+    bar.locator("[data-agent-counts]"),
+  ];
+  const placed = await Promise.all(
+    parts.map((part) =>
+      part.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return { bottom: rect.bottom, right: rect.right, cut: el.scrollWidth > el.clientWidth + 1 };
+      }),
+    ),
+  );
+  for (const part of placed) {
+    expect(part.bottom).toBeLessThanOrEqual(bottom + 0.5);
+    expect(part.right).toBeLessThanOrEqual(width + 0.5);
+  }
+  expect(placed.slice(2).map((part) => part.cut)).toEqual([false, false]);
+
+  // The terminal begins below the header, never under it.
+  const terminal = await page.locator("[data-terminal]").boundingBox();
+  expect(terminal?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
+  const firstRow = await page.locator("[data-terminal] .term-row").first().boundingBox();
+  expect(firstRow?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
+
+  // Every button stays a full touch target inside the header and the screen.
+  const names = [/^Back to agents$/, /^Switch space or tab$/, /^Session actions for /];
+  if (withAction) names.push(new RegExp(`^${ACTION}$`));
+  const targets = await Promise.all(names.map((name) => bar.getByRole("button", { name }).boundingBox()));
+  for (const target of targets) {
+    expect(target?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(target?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect((target?.x ?? 0) + (target?.width ?? 0)).toBeLessThanOrEqual(width + 0.5);
+    expect((target?.y ?? 0) + (target?.height ?? 0)).toBeLessThanOrEqual(bottom + 0.5);
+  }
+}
+
 for (const width of [390, 320]) {
-  test(`at ${width} px with 1.4.12 text spacing the terminal header holds its title rows and clears the terminal`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 800 });
-    await openPhoneTerminal(page);
-    const bar = header(page);
-    // Without overrides the header keeps its 48 px: the min-height only lets it grow when its content needs more.
-    expect((await bar.boundingBox())?.height).toBeCloseTo(48, 0);
-    await page.addStyleTag({ content: TEXT_SPACING });
-    await expect(bar.getByRole("heading", { level: 1 })).toBeVisible();
-
-    // Nothing in the header spills out of its own box vertically: the header itself, and each of its text rows.
-    const spills = await bar.evaluate((el) =>
-      [el, ...el.querySelectorAll("h1, p, div")]
-        .filter((node) => node.scrollHeight > node.clientHeight + 1)
-        .map((node) => `${node.tagName.toLowerCase()} ${node.scrollHeight}>${node.clientHeight}`),
-    );
-    expect(spills).toEqual([]);
-
-    // Every text row ends inside the header, and the header ends before the terminal's first row begins.
-    const headerBox = await bar.boundingBox();
-    const bottom = (headerBox?.y ?? 0) + (headerBox?.height ?? 0);
-    const rows = await Promise.all(
-      [bar.getByRole("heading", { level: 1 }), bar.locator("p")].map((row) => row.boundingBox()),
-    );
-    for (const box of rows) expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(bottom + 0.5);
-    const firstRow = await page.locator("[data-terminal] .term-row").first().boundingBox();
-    expect(firstRow?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
-
-    // The tab position and the agent counts are never cut: each ends inside the header and inside the screen.
-    const parts = [bar.locator("[data-tab-position]"), bar.locator("[data-agent-counts]")];
-    await Promise.all(parts.map((part) => expect(part).toBeVisible()));
-    const placed = await Promise.all(
-      parts.map((part) =>
-        part.evaluate((el) => {
-          const box = el.getBoundingClientRect();
-          return { bottom: box.bottom, right: box.right, cut: el.scrollWidth > el.clientWidth + 1 };
-        }),
-      ),
-    );
-    for (const part of placed) {
-      expect(part.bottom).toBeLessThanOrEqual(bottom + 0.5);
-      expect(part.right).toBeLessThanOrEqual(width + 0.5);
-      expect(part.cut).toBe(false);
-    }
-
-    // The switch and the session actions stay full touch targets.
-    const targets = await Promise.all(
-      [/^Switch space or tab$/, /^Session actions for /].map((name) => bar.getByRole("button", { name }).boundingBox()),
-    );
-    for (const target of targets) {
-      expect(target?.width).toBeGreaterThanOrEqual(44);
-      expect(target?.height).toBeGreaterThanOrEqual(44);
-    }
-  });
+  for (const withAction of [false, true]) {
+    test(`at ${width} px${withAction ? " with a header action" : ""} the terminal header grows to hold its rows, with and without 1.4.12 text spacing`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await openPhoneTerminal(page);
+      if (withAction) await giveAction(page);
+      await expectHeaderHolds(page, width, withAction);
+      await page.addStyleTag({ content: TEXT_SPACING });
+      await expectHeaderHolds(page, width, withAction);
+    });
+  }
 }
