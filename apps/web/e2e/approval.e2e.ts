@@ -120,14 +120,16 @@ test("a link that drops between the claim and the key press shows the failure, p
   const link = await routeHcSocket(page);
   await page.goto("/");
   await openAsking(page);
-  // The claim reaches the core; the re-read of the screen is held, then the link drops under it.
+  // The claim reaches the core; the re-read of the screen is held, then the link drops under it. The banner's own first
+  // read already sent a terminal.read; the re-read is the next one, sent only once the claim's doc.set was answered.
+  const reads = () => link.sent().filter((frame) => frame.includes('"method":"terminal.read"')).length;
+  const readsBefore = reads();
   link.hold("terminal.read");
-  const claims = () => link.sent().filter((frame) => frame.includes('"method":"doc.set"')).length;
   await banner(page)
     .getByRole("button", { name: /^Allow/ })
     .click();
-  await expect.poll(claims, { timeout: 10_000 }).toBeGreaterThan(0);
-  await expect.poll(() => link.sent().some((frame) => frame.includes('"method":"terminal.read"'))).toBe(true);
+  await expect.poll(reads, { timeout: 10_000 }).toBeGreaterThan(readsBefore);
+  expect(agent.records()).toMatchObject([{ answer: "allow", outcome: "claimed" }]);
   const sockets = link.opened();
   await link.drop(true);
   link.hold();
