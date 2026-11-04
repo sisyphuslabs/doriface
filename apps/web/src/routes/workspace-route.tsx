@@ -2,6 +2,7 @@ import { Button, EmptyState, Notice, Spinner } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { PlugZap } from "lucide-react";
 import { hostFailure } from "../connection/host-failure.ts";
+import { staysOnThisComputer } from "../connection/settings.ts";
 import { connectionStore, useConnection } from "../connection/store.ts";
 import { FirstRun } from "../pair/first-run.tsx";
 import { useOnline } from "../pwa/use-online.ts";
@@ -13,6 +14,8 @@ const Workspace = lazy(() => import("../workspace/workspace.tsx").then((module) 
 export function WorkspaceRoute() {
   const state = useConnection();
   const online = useOnline();
+  // A link to this computer needs no network, so a lost network is never its cause (as in reconnect-status.tsx).
+  const offline = !online && !staysOnThisComputer(connectionStore.settings);
   const shown =
     state.phase === "open"
       ? state.connection
@@ -27,20 +30,21 @@ export function WorkspaceRoute() {
     );
   }
 
-  if (state.phase === "unconfigured" && online) return <FirstRun />;
+  // Nothing chosen yet: always the first-run steps, so being offline is never a dead end (#216).
+  if (state.phase === "unconfigured") return <FirstRun offline={!online} />;
   const settings = (
-    <Button render={<Link to="/settings" />} variant={state.phase === "unconfigured" ? "primary" : "secondary"}>
+    <Button render={<Link to="/settings" />} variant="secondary">
       Open settings
     </Button>
   );
   return (
     <main className="grid min-h-dvh place-items-center p-6">
       <div className="flex w-full max-w-md flex-col gap-4">
-        {online ? null : (
+        {offline ? (
           <Notice tone="warning" title="You are offline">
             The app works offline, but reaching your host needs a network.
           </Notice>
-        )}
+        ) : null}
         {state.phase === "connecting" ? (
           <EmptyState icon={<Spinner />} title="Connecting to your host" description="Opening the session." />
         ) : state.phase === "failed" ? (

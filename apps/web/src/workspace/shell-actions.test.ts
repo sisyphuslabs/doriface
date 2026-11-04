@@ -48,6 +48,7 @@ const layout: Layout = {
   equalize: () => true,
   toggleZoom: () => true,
   moveTab: noop,
+  restored: true,
   lastMove: null,
 };
 const handlers = {

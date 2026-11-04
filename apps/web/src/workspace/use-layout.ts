@@ -30,7 +30,7 @@ import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
 import { orderTabs, type TabMove } from "./tab-order.ts";
 import { useTabMoves } from "./use-tab-moves.ts";
-import type { MachineLayout } from "./use-layout-docs.ts";
+import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
 export interface Layout extends PaneMoves {
   readonly tabs: readonly LayoutTab[];
@@ -52,6 +52,8 @@ export interface Layout extends PaneMoves {
   readonly moveTab: (key: string, to: number) => void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
   readonly lastMove: TabMove | null;
+  /** Every machine's layout has been read, or cannot be: the tabs on screen are all the documents hold. */
+  readonly restored: boolean;
 }
 
 export interface PaneTarget {
@@ -263,6 +265,7 @@ export function useLayout(
     ...moves,
     moveTab,
     lastMove,
+    restored: layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
   };
 }
 

@@ -7,10 +7,12 @@ import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } fr
 import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
+import { mayTakeFocus } from "./may-take-focus.ts";
 import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
+import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
@@ -59,6 +61,7 @@ export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onSend, onEnd } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
+  const dark = useDarkScheme();
   const [core, setCore] = useState<GhosttyCore | null>(null);
   const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,17 +105,19 @@ export function TerminalView(props: TerminalViewProps) {
   // The default cursor shape is the terminal's own state, set locally; programs still override it.
   useEffect(() => handle.current?.write(options.cursorSequence), [wt, options.cursorSequence]);
 
-  // After the stylesheet changes, tell libghostty and the core the colors programs may query.
+  // After the stylesheet or the system's light/dark changes, tell libghostty and the core the colors programs
+  // may query. The colors set last are inline on the element and would shadow the page's new ones, so they go first.
   useEffect(() => {
     if (wt === null) return undefined;
     const frame = requestAnimationFrame(() => {
+      wt.setThemeColors(null);
       const colors = readThemeColors(wt.element);
       if (colors !== null) wt.setThemeColors(colors);
       stream.current?.facts(readDisplay(wt.element));
       wt.fit();
     });
     return () => cancelAnimationFrame(frame);
-  }, [wt, config]);
+  }, [wt, config, dark]);
 
   const onUnsafePaste = useCallback((pending: PendingPaste) => setPaste(pending), []);
   // Input while no stream is open (attaching, or the connection dropped) waits here for the next stream.
@@ -156,6 +161,10 @@ export function TerminalView(props: TerminalViewProps) {
   useEffect(() => {
     isFocused.current = focused;
   }, [focused]);
+  /** The view in use takes keyboard focus once it is ready, unless a modal is open over it. */
+  const focusWhenFree = (ready: WTerm): void => {
+    if (isFocused.current && mayTakeFocus(ready.element)) ready.focus();
+  };
   // Read when the stream ends, not when it attached, so an end acts on the tabs as they are by then.
   const onEndNow = useRef(onEnd);
   useEffect(() => {
@@ -230,8 +239,7 @@ export function TerminalView(props: TerminalViewProps) {
             if (end === "lost") settle(ready, null);
           });
           for (const data of pending.current.splice(0)) attached.write(data);
-          // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
-          if (isFocused.current) ready.focus();
+          focusWhenFree(ready);
           return attached;
         },
         (cause: unknown) => {
@@ -268,7 +276,11 @@ export function TerminalView(props: TerminalViewProps) {
         data-terminal={address}
         data-ready={wt !== null}
         className={cn("min-h-0 flex-1 bg-term-bg", options.hollowCursor && "cursor-hollow", className)}
-        onReady={attach}
+        onReady={(ready) => {
+          // The renderer no longer focuses itself as it starts (patches/@wterm%2Fdom@0.5.8.patch); the view decides.
+          focusWhenFree(ready);
+          attach(ready);
+        }}
         onData={(data) => send(transformInput === undefined ? data : transformInput(data))}
         onResize={(cols, rows) => stream.current?.resize(cols, rows)}
         onFocus={(event) => {
