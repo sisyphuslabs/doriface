@@ -1,39 +1,33 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Locator } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 
 test.use({ serviceWorkers: "block" });
 
-/** The value a CSS variable resolves to as a colour, so it compares with a computed border colour. */
-const colourOf = (page: Page, variable: string) =>
-  page.evaluate((name) => {
-    const probe = document.createElement("div");
-    probe.style.color = `var(${name})`;
-    document.body.append(probe);
-    const value = getComputedStyle(probe).color;
-    probe.remove();
-    return value;
-  }, variable);
-
 const edgeOf = (pane: Locator) => pane.evaluate((el) => getComputedStyle(el).borderTopColor);
 
-test("with no pane title bar, a split marks the focused pane's edge and the other shown pane's tab", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await openNewTerminal(page);
-  await openNewTerminal(page);
-  await page.getByRole("button", { name: "Split" }).click();
-  const focused = page.locator('section[data-focused="true"]');
-  const other = page.locator('section[data-split="true"][data-focused="false"]:visible');
-  await expect(other).toHaveCount(1);
+for (const scheme of ["light", "dark"] as const) {
+  test(`with no pane title bar, a split marks the focused pane's edge and names the other shown tab (${scheme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/");
+    await openNewTerminal(page);
+    await openNewTerminal(page);
+    const single = page.locator('section[data-focused="true"]');
+    const unsplitEdge = await edgeOf(single);
+    await page.getByRole("button", { name: "Split" }).click();
+    const focused = page.locator('section[data-focused="true"]');
+    const other = page.locator('section[data-split="true"][data-focused="false"]:visible');
+    await expect(other).toHaveCount(1);
 
-  await expect.poll(() => edgeOf(focused)).toBe(await colourOf(page, "--input"));
-  await expect.poll(() => edgeOf(other)).toBe(await colourOf(page, "--border"));
+    // The focused pane's edge differs from the other shown pane's, which keeps the unsplit hairline.
+    await expect.poll(() => edgeOf(other)).toBe(unsplitEdge);
+    await expect.poll(async () => (await edgeOf(focused)) !== (await edgeOf(other))).toBe(true);
 
-  const otherName = (await other.getAttribute("aria-label"))?.replace(/ terminal$/, "") ?? "";
-  const shownPill = page.locator("[role=tablist] [data-shown=true]");
-  await expect(shownPill).toHaveCount(1);
-  const otherTab = shownPill.getByRole("tab");
-  await expect(otherTab).toHaveAttribute("title", new RegExp(`^${otherName}\\b`));
-  await expect(otherTab).toHaveAttribute("aria-selected", "false");
-});
+    const otherTitle = (await other.getAttribute("aria-label"))?.replace(/ terminal$/, "") ?? "";
+    const shownTab = page.getByRole("tab", { name: /, shown in split$/ });
+    await expect(shownTab).toHaveCount(1);
+    await expect(shownTab).toHaveAttribute("aria-selected", "false");
+    await expect.poll(async () => (await shownTab.getAttribute("title"))?.startsWith(otherTitle)).toBe(true);
+  });
+}

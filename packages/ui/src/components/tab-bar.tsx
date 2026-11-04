@@ -91,6 +91,8 @@ export function TabBar({
                   </span>
                 )}
                 {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
+                {/* The hairline pill says "on screen" to sight; assistive tech hears it in the tab's name. */}
+                {shown ? <span className="sr-only">, shown in split</span> : null}
               </button>
               <IconButton
                 label={`Close ${tab.title}`}
