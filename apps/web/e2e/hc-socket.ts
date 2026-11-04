@@ -18,10 +18,33 @@ export interface HcSocket {
   /** Every frame the host has delivered to the page, in order, as text. */
   readonly received: () => readonly string[];
   /**
-   * Holds frames from the host that contain any of these texts (others pass) until the returned release delivers them,
-   * in order. Hold a channel's whole stream, not one event in it: the feed drops an event older than one it has seen.
+   * Holds hc frames from the host that contain any of these texts (others pass, even from the same message) until the
+   * returned release delivers them, in order; holds are independent. Hold a channel's whole stream, not one event in
+   * it: the feed drops an event older than one it has seen.
    */
   readonly holdFromHost: (...needles: string[]) => () => void;
+}
+
+interface HostHold {
+  readonly needles: readonly string[];
+  readonly parked: (() => void)[];
+}
+
+/** hc's wire frame header: channel (u32), kind (u8), payload length (u32), little-endian. */
+const HEADER_BYTES = 9;
+
+/** Splits one WebSocket message into its hc frames; bytes after the last whole frame stay one piece. */
+function hcFrames(message: Buffer): Buffer[] {
+  const frames: Buffer[] = [];
+  let offset = 0;
+  while (message.byteLength - offset >= HEADER_BYTES) {
+    const end = offset + HEADER_BYTES + message.readUInt32LE(offset + 5);
+    if (end > message.byteLength) break;
+    frames.push(message.subarray(offset, end));
+    offset = end;
+  }
+  if (offset < message.byteLength) frames.push(message.subarray(offset));
+  return frames;
 }
 
 /** Call before page.goto: every connection to the e2e host passes through the returned handle. */
@@ -36,8 +59,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   let held: readonly string[] = [];
   const parked: (() => void)[] = [];
   const received: string[] = [];
-  let heldFromHost: readonly string[] = [];
-  const parkedFromHost: (() => void)[] = [];
+  const hostHolds = new Set<HostHold>();
   await page.routeWebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, (socket) => {
     if (down) {
       refused += 1;
@@ -51,15 +73,22 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       if (held.some((method) => text.includes(`"method":"${method}"`))) parked.push(() => host.send(frame));
       else host.send(frame);
     });
-    host.onMessage((frame) => {
-      const text = typeof frame === "string" ? frame : frame.toString("latin1");
-      const deliver = (): void => {
-        received.push(text);
-        socket.send(frame);
-      };
-      if (heldFromHost.some((needle) => text.includes(needle))) return void parkedFromHost.push(deliver);
-      lastDue = Math.max(Date.now() + delay, lastDue);
-      setTimeout(deliver, Math.max(0, lastDue - Date.now()));
+    host.onMessage((message) => {
+      // One message can carry several hc frames (an event and an RPC answer together): each is held or passed alone.
+      for (const frame of typeof message === "string" ? [message] : hcFrames(message)) {
+        const text = typeof frame === "string" ? frame : frame.toString("latin1");
+        const deliver = (): void => {
+          received.push(text);
+          socket.send(frame);
+        };
+        const hold = [...hostHolds].find((entry) => entry.needles.some((needle) => text.includes(needle)));
+        if (hold !== undefined) {
+          hold.parked.push(deliver);
+          continue;
+        }
+        lastDue = Math.max(Date.now() + delay, lastDue);
+        setTimeout(deliver, Math.max(0, lastDue - Date.now()));
+      }
     });
     live.add(socket);
     opened += 1;
@@ -80,10 +109,11 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
     },
     received: () => received,
     holdFromHost: (...needles) => {
-      heldFromHost = needles;
+      const hold: HostHold = { needles, parked: [] };
+      hostHolds.add(hold);
       return () => {
-        heldFromHost = [];
-        for (const deliver of parkedFromHost.splice(0)) deliver();
+        hostHolds.delete(hold);
+        for (const deliver of hold.parked.splice(0)) deliver();
       };
     },
     hold: (...methods) => {
