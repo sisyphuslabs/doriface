@@ -1,6 +1,6 @@
 import { AgentRow, IconButton, Sheet, SidebarSection, StatusChip, StatusIndicator, cn } from "@doriface/ui";
 import { ArrowLeftRight, ChevronLeft } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   agentCounts,
   agentStatus,
@@ -21,6 +21,8 @@ export interface PhoneHeaderProps {
   readonly terminals: readonly Session[];
   readonly onBack: () => void;
   readonly onOpen: (address: string) => void;
+  /** One more header control before the switch, such as the mic (#227). */
+  readonly action?: ReactNode;
 }
 
 const COUNTED = [
@@ -30,7 +32,7 @@ const COUNTED = [
 ] as const;
 
 /** The phone terminal's header, after herdr-app's: name and state, where it is (n/m), the agent counts, a switch. */
-export function PhoneHeader({ terminal, terminals, onBack, onOpen }: PhoneHeaderProps) {
+export function PhoneHeader({ terminal, terminals, onBack, onOpen, action }: PhoneHeaderProps) {
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   const where = machine === undefined ? spaceName(terminal) : `${machine} · ${spaceName(terminal)}`;
@@ -75,6 +77,10 @@ export function PhoneHeader({ terminal, terminals, onBack, onOpen }: PhoneHeader
           </span>
         </div>
       </div>
+      {/* `contents`: an empty slot draws no box and takes no gap; a control in it is one more header item. */}
+      <span data-header-action className="contents">
+        {action}
+      </span>
       <SpaceSwitcher terminals={terminals} active={terminal.address} onOpen={onOpen} />
       <SessionMenu address={terminal.address} title={title} placement="header" />
     </header>
