@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 import { devices, type Locator, type Page } from "@playwright/test";
 import { rowEdges, visibleCharacters } from "./sidebar-measure.ts";
 import {
@@ -229,9 +229,9 @@ test("a hidden sidebar comes back from a named button at the window's left edge,
   await sidebar.getByRole("region", { name: "Spaces" }).getByRole("button").first().click({ timeout: 20_000 });
   const show = await hideSidebar(page);
   const tablist = page.getByRole("tablist", { name: "Tabs" });
-  const [button, tabs] = await Promise.all([show.boundingBox(), tablist.boundingBox()]);
-  expect(button?.x).toBeLessThan(24);
-  expect((button?.x ?? 0) + (button?.width ?? 0)).toBeLessThanOrEqual(tabs?.x ?? 0);
+  const [button, tabs] = await Promise.all([laidOutBox(show), laidOutBox(tablist)]);
+  expect(button.x).toBeLessThan(24);
+  expect(button.x + button.width).toBeLessThanOrEqual(tabs.x);
 
   await show.hover();
   await expect(page.locator("[data-side]").filter({ hasText: "Show sidebar" }).first()).toBeVisible();
@@ -253,6 +253,6 @@ test("with the macOS app's titlebar inset, the button that brings the sidebar ba
   await page.goto("/");
   await expect(page.getByRole("complementary", { name: "Workspace" })).toBeVisible({ timeout: 20_000 });
   await page.addStyleTag({ content: MAC_INSET_CSS });
-  const box = await (await hideSidebar(page)).boundingBox();
-  expect(box?.x).toBe(TITLEBAR_INSET_START);
+  const box = await laidOutBox(await hideSidebar(page));
+  expect(box.x).toBe(TITLEBAR_INSET_START);
 });
