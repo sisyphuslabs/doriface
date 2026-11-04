@@ -22,6 +22,7 @@ export {
 export { promptStillThere, readApproval, type ApprovalCore } from "./approval-live.ts";
 export {
   answerApproval,
+  CLAIM_TTL_MS,
   readApprovalRecord,
   type AnswerResult,
   type Answerer,

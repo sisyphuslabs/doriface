@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { answerApproval, readApprovalRecord } from "./approval-answer.ts";
+import { answerApproval, CLAIM_TTL_MS, readApprovalRecord } from "./approval-answer.ts";
 import { markApproval } from "./approval-prompt.ts";
 import { MemoryApprovalCore } from "./testing/approval-core.ts";
 import {
@@ -89,5 +89,73 @@ describe("answering a permission prompt", () => {
     await answerApproval(core, mark, "allow", phone, 1);
     expect(core.docNames()).toEqual(["box:approval.t3"]);
     expect(core.pressed).toEqual([{ address: "box/t3", keys: ["1"] }]);
+  });
+});
+
+describe("a claim is only as true as what happened after it", () => {
+  test("a failure between the claim and the key press records failed and presses nothing; the next answer goes through", async () => {
+    const { core, mark } = claudeAt("t3");
+    core.failNext("screen");
+    expect(await answerApproval(core, mark, "allow", phone, 1)).toMatchObject({ kind: "failed" });
+    expect(core.pressed).toEqual([]);
+    expect((await readApprovalRecord(core, mark))?.outcome).toBe("failed");
+    expect(await answerApproval(core, mark, "allow", laptop, 2)).toEqual({ kind: "sent" });
+    expect(core.pressed).toEqual([{ address: "t3", keys: ["1"] }]);
+    expect(await readApprovalRecord(core, mark)).toMatchObject({ by: laptop.by, outcome: "sent" });
+  });
+
+  test("a key press that fails is never recorded as sent", async () => {
+    const { core, mark } = claudeAt("t3");
+    core.failNext("keys");
+    expect(await answerApproval(core, mark, "allow", phone, 1)).toMatchObject({ kind: "failed" });
+    expect((await readApprovalRecord(core, mark))?.outcome).toBe("failed");
+  });
+
+  test("when even the failure cannot be recorded, the same client can answer again", async () => {
+    const { core, mark } = claudeAt("t3");
+    core.failNext("screen");
+    core.failNext("doc", 1, 1);
+    // The claim lands (its doc.get passes); the re-read throws; recording `failed` cannot read the document.
+    const first = answerApproval(core, mark, "allow", phone, 1);
+    expect(await first).toMatchObject({ kind: "failed" });
+    expect((await readApprovalRecord(core, mark))?.outcome).toBe("claimed");
+    expect(await answerApproval(core, mark, "allow", phone, 2)).toEqual({ kind: "sent" });
+    expect(core.pressed).toHaveLength(1);
+  });
+
+  test("another client's live claim is not taken over, and it does not read as answered", async () => {
+    const { core, mark } = claudeAt("t3");
+    core.failNext("screen");
+    core.failNext("doc", 1, 1);
+    await answerApproval(core, mark, "allow", phone, 1_000);
+    const taken = await answerApproval(core, mark, "allow", laptop, 1_000 + CLAIM_TTL_MS - 1);
+    expect(taken).toMatchObject({ kind: "lost", record: { by: phone.by, outcome: "claimed" } });
+    expect(core.pressed).toEqual([]);
+  });
+
+  test("a claim whose owner went away expires after CLAIM_TTL_MS, and the prompt can be answered", async () => {
+    const { core, mark } = claudeAt("t3");
+    core.failNext("screen");
+    core.failNext("doc", 1, 1);
+    await answerApproval(core, mark, "allow", phone, 1_000);
+    expect(await answerApproval(core, mark, "deny", laptop, 1_000 + CLAIM_TTL_MS)).toEqual({ kind: "sent" });
+    expect(core.pressed).toEqual([{ address: "t3", keys: ["esc"] }]);
+    expect(await readApprovalRecord(core, mark)).toMatchObject({ by: laptop.by, answer: "deny", outcome: "sent" });
+  });
+});
+
+describe("the same dialog asked again", () => {
+  test("is a new prompt: answering the first does not answer it, and the old mark cannot press on it", async () => {
+    const { core, mark } = claudeAt("t3");
+    expect(await answerApproval(core, mark, "allow", phone, 1)).toEqual({ kind: "sent" });
+    // The agent asks the identical command again: same dialog, a new turn and status_ms.
+    const again = terminalAt("t3", CLAUDE_BLOCKED, { statusMs: 41_000, turn: 2 });
+    core.show(again, CLAUDE_PROMPT_SCREEN);
+    expect(await answerApproval(core, mark, "allow", laptop, 2)).toMatchObject({ kind: "lost" });
+    const second = markApproval(again, CLAUDE_PROMPT_SCREEN);
+    if (second === undefined) throw new Error("fixture did not mark");
+    expect(await readApprovalRecord(core, second)).toBeUndefined();
+    expect(await answerApproval(core, second, "allow", laptop, 3)).toEqual({ kind: "sent" });
+    expect(core.pressed).toHaveLength(2);
   });
 });
