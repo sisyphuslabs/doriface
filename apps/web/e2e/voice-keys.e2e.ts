@@ -124,6 +124,6 @@ test.describe("on a phone", () => {
     await terminal.getByRole("textbox").focus();
     await page.keyboard.press("Control+Alt+Shift+D");
     await expect(page.getByText("Use your browser's speech service?")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Left arrow" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Show keyboard" })).toHaveCount(0);
   });
 });

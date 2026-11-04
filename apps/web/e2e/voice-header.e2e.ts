@@ -62,7 +62,7 @@ for (const width of [390, 320]) {
     const title = await bar.getByRole("heading", { level: 1 }).boundingBox();
     expect(title?.width).toBeGreaterThan(40);
     // The key bar is untouched while nobody dictates: its keys keep their 44 pt.
-    const key = await page.getByRole("button", { name: "Left arrow" }).boundingBox();
+    const key = await page.getByRole("button", { name: "Show keyboard" }).boundingBox();
     expect(key?.height).toBeGreaterThanOrEqual(44);
   });
 }
@@ -76,5 +76,5 @@ test("where the browser has no speech recognition the mic says so, and why, and 
   const notice = page.getByRole("status").filter({ hasText: "Dictation isn't available here" });
   await expect(notice).toContainText("This browser has no speech recognition");
   await notice.getByRole("button", { name: "Close" }).click();
-  await expect(page.getByRole("button", { name: "Left arrow" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show keyboard" })).toBeVisible();
 });

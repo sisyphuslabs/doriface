@@ -12,7 +12,8 @@ test.use({ ...phone, serviceWorkers: "block" });
 const NAME = "dictate";
 const header = (page: Page) => page.getByRole("banner");
 const mic = (page: Page) => header(page).getByRole("button", { name: `Dictate into ${NAME}` });
-const keyBar = (page: Page) => page.getByRole("button", { name: "Left arrow" });
+// With the soft keyboard down (always, in headless Chromium) the keys bar is its round Show keyboard button (#195).
+const keyBar = (page: Page) => page.getByRole("button", { name: "Show keyboard" });
 const transcript = (page: Page) => page.getByRole("textbox", { name: `Transcript for ${NAME}` });
 const announced = (page: Page, words: string) => page.getByRole("status").filter({ hasText: words });
 

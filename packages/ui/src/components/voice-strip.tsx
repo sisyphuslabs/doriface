@@ -1,5 +1,5 @@
 import { Mic, Square, X } from "lucide-react";
-import { useId, type KeyboardEvent, type ReactNode } from "react";
+import { useId, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
 import { Button } from "./button.tsx";
 import { IconButton } from "./icon-button.tsx";
@@ -40,6 +40,8 @@ export interface VoiceStripProps {
   /** Moves focus into the transcript once it is ready, so it can be edited straight away. */
   readonly focusTranscript?: boolean;
   readonly className?: string;
+  /** Placement from the screen, e.g. a margin that lifts the strip onto the soft keyboard. */
+  readonly style?: CSSProperties;
 }
 
 const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -69,6 +71,7 @@ export function VoiceStrip(props: VoiceStripProps) {
       aria-label={`Dictation into ${target}`}
       data-voice-strip={state.kind}
       className={shell}
+      style={props.style}
       onKeyDown={onKeyDown}
     >
       {body}

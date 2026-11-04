@@ -1,4 +1,5 @@
 import { VoiceStrip, type VoiceState } from "@doriface/ui";
+import type { CSSProperties } from "react";
 import { useNow } from "../workspace/use-now.ts";
 import type { DictationState } from "./dictation.ts";
 import type { Unavailable } from "./recognizer.ts";
@@ -34,10 +35,11 @@ export interface VoiceDockProps {
   /** After Cancel, Close, Discard or Not now, with nothing typed. */
   readonly onClose: () => void;
   readonly className?: string;
+  readonly style?: CSSProperties;
 }
 
 /** The voice strip for a dictation that is under way; nothing while it is idle. */
-export function VoiceDock({ voice, target, onType, onClose, className }: VoiceDockProps) {
+export function VoiceDock({ voice, target, onType, onClose, className, style }: VoiceDockProps) {
   const settings = useVoiceSettings();
   const now = useNow(1_000);
   const { dictation, state } = voice;
@@ -62,6 +64,7 @@ export function VoiceDock({ voice, target, onType, onClose, className }: VoiceDo
         if (text !== null) onType(text);
       }}
       {...(className === undefined ? {} : { className })}
+      {...(style === undefined ? {} : { style })}
     />
   );
 }
