@@ -1,75 +1,20 @@
-import type { Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import {
+  centre,
+  domOrder,
+  dragPast,
+  focusedAddress,
+  fourTabs,
+  openFour,
+  order,
+  rearranged,
+  selectedIndex,
+  strip,
+  tabs,
+} from "./tab-strip.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
-
-const strip = (page: Page) => page.getByRole("tablist", { name: "Tabs" });
-const tabs = (page: Page) => strip(page).getByRole("tab");
-const focusedAddress = (page: Page) =>
-  page.locator('[data-focused="true"] [data-terminal]').getAttribute("data-terminal");
-const selectedIndex = (page: Page) =>
-  tabs(page).evaluateAll((els) => els.findIndex((el) => el.getAttribute("aria-selected") === "true"));
-
-/** The strip's order as the terminals ⌘1..⌘N select, then the tab that was selected is selected again. */
-async function order(page: Page): Promise<string[]> {
-  const count = await tabs(page).count();
-  const selected = await selectedIndex(page);
-  const select = async (index: number) => {
-    await page.keyboard.press(`ControlOrMeta+${index + 1}`);
-    await expect(tabs(page).nth(index)).toHaveAttribute("aria-selected", "true");
-  };
-  const addresses = await Array.from({ length: count }, (_unused, index) => index).reduce<Promise<string[]>>(
-    async (previous, index) => {
-      const listed = await previous;
-      await select(index);
-      return [...listed, (await focusedAddress(page)) ?? ""];
-    },
-    Promise.resolve([]),
-  );
-  await select(selected);
-  return addresses;
-}
-
-/** The strip's tab ids in DOM order, read without pressing a key. */
-const domOrder = (page: Page) =>
-  strip(page)
-    .locator("[data-tab-id]")
-    .evaluateAll((els) => els.map((el) => el.getAttribute("data-tab-id") ?? ""));
-
-/** Four tabs, the last of them new and selected: the workspace opens one on its own when the core has a live one. */
-async function fourTabs(page: Page): Promise<string[]> {
-  await openFour(page);
-  return order(page);
-}
-
-async function openFour(page: Page): Promise<void> {
-  await page.goto("/");
-  await openNewTerminal(page);
-  const missing = 4 - (await tabs(page).count());
-  await Array.from({ length: missing }).reduce<Promise<unknown>>(
-    (previous) => previous.then(() => openNewTerminal(page)),
-    Promise.resolve(),
-  );
-  await expect(tabs(page)).toHaveCount(4);
-}
-
-const centre = async (locator: Locator) => {
-  const box = await locator.boundingBox();
-  if (box === null) throw new Error("the tab has no box");
-  return { x: box.x + box.width / 2, y: box.y + box.height / 2, right: box.x + box.width };
-};
-
-async function dragPast(page: Page, from: Locator, past: Locator): Promise<void> {
-  const start = await centre(from);
-  const end = await centre(past);
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(end.right - 4, end.y, { steps: 16 });
-  await page.mouse.up();
-}
-
-const rearranged = (list: readonly string[], indexes: readonly number[]) => indexes.map((index) => list[index]);
 
 test("dragging a tab past two others moves it there, keeps the selection, and the order survives a reload", async ({
   page,
@@ -153,73 +98,6 @@ test("under reduced motion neighbours stay put and a caret marks where the tab l
     .evaluateAll((els) => els.map((el) => getComputedStyle(el).translate));
   expect(translates.every((value) => value === "none")).toBe(true);
   await page.mouse.up();
-});
-
-/**
- * One finger through CDP, on a paused page clock so only the test decides when the hold has lasted: held
- * (`hold`, the clock runs past the lift) or not, then moved to `x` (or left in place), then lifted.
- */
-async function touch(page: Page, from: Locator, x: number | null, hold: boolean): Promise<void> {
-  const start = await centre(from);
-  // A pause must lie ahead of the page clock, which keeps running while this call travels.
-  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 5_000);
-  const cdp = await page.context().newCDPSession(page);
-  const at = (px: number) => [{ x: px, y: start.y }];
-  // Every event carries the touch's own time (8 ms a step, the moves after the hold when held), so the browser's
-  // gesture recognition sees the same finger whatever this machine's load makes the calls take.
-  const t0 = Date.now() / 1000;
-  const stamp = (ms: number) => t0 + ms / 1000;
-  const movesFrom = hold ? TOUCH_LIFT_MS : 0;
-  const steps = x === null ? 0 : 12;
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x), timestamp: stamp(0) });
-  if (hold) {
-    await page.clock.runFor(TOUCH_LIFT_MS);
-    await expect(strip(page).locator("[data-lifted]")).toHaveCount(1);
-  }
-  const target = x ?? start.x;
-  await Array.from({ length: steps }, (_unused, index) => index + 1).reduce<Promise<unknown>>(
-    (previous, step) =>
-      previous.then(() =>
-        cdp.send("Input.dispatchTouchEvent", {
-          type: "touchMove",
-          touchPoints: at(start.x + ((target - start.x) * step) / 12),
-          timestamp: stamp(movesFrom + step * 8),
-        }),
-      ),
-    Promise.resolve(),
-  );
-  await cdp.send("Input.dispatchTouchEvent", {
-    type: "touchEnd",
-    touchPoints: [],
-    timestamp: stamp(movesFrom + (steps + 1) * 8),
-  });
-  await cdp.detach();
-  await page.clock.resume();
-}
-
-/** Past the 300 ms hold that lifts a tab under a finger. */
-const TOUCH_LIFT_MS = 350;
-
-test.describe("touch", () => {
-  test.use({ hasTouch: true });
-
-  test("a held touch drags a tab, a quick swipe does not, and a hold let go opens the tab's menu", async ({ page }) => {
-    await page.clock.install();
-    const before = await fourTabs(page);
-    const selected = await selectedIndex(page);
-    const past = async () => (await centre(tabs(page).nth(2))).right - 4;
-    await touch(page, tabs(page).nth(0), await past(), false);
-    expect(await order(page)).toEqual(before);
-    await touch(page, tabs(page).nth(0), await past(), true);
-    const after = rearranged(before, [1, 2, 0, 3]);
-    expect(await order(page)).toEqual(after);
-
-    await touch(page, tabs(page).nth(0), null, true);
-    await expect(page.getByRole("menuitem", { name: "Move tab right" })).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(tabs(page).nth(selected)).toHaveAttribute("aria-selected", "true");
-    expect(await order(page)).toEqual(after);
-  });
 });
 
 test("on macOS the move chord stays with a text field, so the palette keeps its text editing, and from the terminal it moves the tab", async ({
