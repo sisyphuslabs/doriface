@@ -126,7 +126,7 @@ export function TabBar({
                 active
                   ? "border-border bg-raised text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-hover",
-                lifted === tab.id && "bg-raised shadow-overlay",
+                lifted === tab.id && "border-border bg-raised shadow-overlay hover:bg-raised",
                 place.className,
               )}
             >

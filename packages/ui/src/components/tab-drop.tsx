@@ -11,7 +11,11 @@ export function placement(id: string, index: number, drag: DragState | null, set
       : { offset: settle.offset, className: "motion-reduce:translate-none! motion-reduce:opacity-0" };
   }
   if (drag === null) return { offset: 0, className: "" };
-  if (drag.id === id) return { offset: drag.offset, className: "z-10 cursor-grabbing bg-raised shadow-overlay" };
+  if (drag.id === id)
+    return {
+      offset: drag.offset,
+      className: "z-10 cursor-grabbing border-border bg-raised shadow-overlay hover:bg-raised",
+    };
   return { offset: shiftOf(drag, index), className: cn(MOTION, "motion-reduce:translate-none!") };
 }
 
