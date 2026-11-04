@@ -176,9 +176,19 @@ test("keyboard: the edge toggles the rail with Enter and steps with arrows; a ro
   await page.keyboard.press("ArrowLeft");
 });
 
-test("reduced motion: the sidebar's width changes without a transition", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
+test("the sidebar's width eases, and under reduced motion it changes without a transition", async ({ page }) => {
+  const widthEase = () =>
+    sidebar(page).evaluate((element) => {
+      const style = getComputedStyle(element);
+      const at = style.transitionProperty
+        .split(",")
+        .map((part) => part.trim())
+        .indexOf("width");
+      return at === -1 ? 0 : Number.parseFloat(style.transitionDuration.split(",")[at] ?? "0");
+    });
   await page.goto("/");
-  const duration = await sidebar(page).evaluate((element) => getComputedStyle(element).transitionDuration);
-  expect(duration.split(",").every((part) => Number.parseFloat(part) === 0)).toBe(true);
+  await expect(sidebar(page)).toBeVisible({ timeout: 20_000 });
+  expect(await widthEase()).toBeGreaterThan(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await widthEase()).toBe(0);
 });
