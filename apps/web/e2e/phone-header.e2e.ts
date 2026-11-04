@@ -81,6 +81,17 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await switcher.click();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
     await expect(sheet).toBeVisible();
+    // A visible Done closes the sheet and hands focus back to the switch.
+    // Exact: an agent row's name also carries its state, "Done" among them.
+    const done = sheet.getByRole("button", { name: "Done", exact: true });
+    const doneBox = await done.boundingBox();
+    expect(doneBox?.width).toBeGreaterThanOrEqual(44);
+    expect(doneBox?.height).toBeGreaterThanOrEqual(44);
+    await done.click();
+    await expect(sheet).toBeHidden();
+    await expect(switcher).toBeFocused();
+    await switcher.click();
+    await expect(sheet).toBeVisible();
     const section = sheet.getByRole("region", { name: space });
     await expect(agentRow(section, first, false)).toHaveAttribute("aria-current", "true");
     await agentRow(section, second, false).click();

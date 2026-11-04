@@ -1,4 +1,5 @@
 import { devices, type Page } from "@playwright/test";
+import { endAgent, startAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
@@ -14,12 +15,28 @@ const TEXT_SPACING = `
 const header = (page: Page) => page.getByRole("banner");
 const ACTION = "Header action";
 
+/** Two-digit counts in every state, the widest the counts get in practice: 11 done, 11 working, 15 idle at least. */
+const LARGE = { done: 11, working: 11, idle: 15 } as const;
+const started: string[] = [];
+test.beforeAll(() => {
+  for (const [state, count] of Object.entries(LARGE)) {
+    for (let index = 0; index < count; index += 1)
+      started.push(startAgent("host", `wide-${state}-${index}`, state, "wide"));
+  }
+});
+test.afterAll(() => {
+  for (const address of started.splice(0)) endAgent("host", address);
+});
+
 async function openPhoneTerminal(page: Page): Promise<void> {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
   await header(page).getByRole("button", { name: "New tab" }).click();
   await expect(page.locator("[data-terminal]")).toContainText("$", { timeout: 15_000 });
   await expect(header(page).getByRole("button", { name: "Back to agents" })).toBeVisible();
+  await expect(header(page).locator("[data-agent-counts]")).toHaveText(/^\d{2,} done, \d{2,} working, \d{2,} idle$/, {
+    timeout: 15_000,
+  });
 }
 
 /** Fills the header's action slot with one more 44 px header button, as the mic (#227) does: a copy of the switch. */
@@ -44,12 +61,21 @@ async function expectHeaderHolds(page: Page, width: number, withAction: boolean)
   const bottom = (box?.y ?? 0) + (box?.height ?? 0);
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(48 - 0.5);
 
-  // Nothing in the header spills out of its own box vertically: the header itself, and each of its rows.
-  const spills = await bar.evaluate((el) =>
-    [el, ...el.querySelectorAll("h1, p, div")]
+  // Every item of the header ends inside it, and none of its rows spills out of its own box vertically. (The header's
+  // own scrollHeight is not compared: the buttons' larger hit areas reach past it by design, and nothing there is cut.)
+  const spills = await bar.evaluate((el) => {
+    const edge = el.getBoundingClientRect();
+    const outside = [...el.children]
+      .filter((child) => {
+        const rect = child.getBoundingClientRect();
+        return rect.height > 0 && (rect.top < edge.top - 0.5 || rect.bottom > edge.bottom + 0.5);
+      })
+      .map((child) => `${child.tagName.toLowerCase()} outside the header`);
+    const spilled = [...el.querySelectorAll("h1, p, div")]
       .filter((node) => node.scrollHeight > node.clientHeight + 1)
-      .map((node) => `${node.tagName.toLowerCase()} ${node.scrollHeight}>${node.clientHeight}`),
-  );
+      .map((node) => `${node.tagName.toLowerCase()} ${node.scrollHeight}>${node.clientHeight}`);
+    return [...outside, ...spilled];
+  });
   expect(spills).toEqual([]);
 
   // Every text row, the tab position and the counts end inside the header and the screen; the last two are never cut.
