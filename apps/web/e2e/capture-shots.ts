@@ -1,7 +1,9 @@
 import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
-import { machineRow, STATE_BOUND_MS } from "./machine-switch.ts";
+import { agentRow, startShell } from "./agents.ts";
+import { MACHINE_NAME } from "./machine.ts";
+import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
 import { resetMeshDocs } from "./mesh-reset.ts";
 
 export type Width = "1440" | "390";
@@ -15,6 +17,8 @@ export interface Shot {
   readonly only?: Width;
   readonly storageFails?: true;
   readonly run: (page: Page, width: Width) => Promise<void>;
+  /** Ends what `run` started, once the shot is taken. */
+  readonly cleanup?: () => void;
 }
 
 const focusedTerminal = (page: Page) => page.locator('[data-focused="true"] [data-terminal]');
@@ -49,7 +53,7 @@ const refusedWith = (closeCode: number) => async (page: Page) => {
   await page.getByRole("button", { name: "They match" }).click();
   await expect(page.getByText("Pairing did not finish")).toBeVisible({ timeout: 15_000 });
 };
-const SETTINGS = ["Appearance", "Terminal", "Keybindings"] as const;
+const SETTINGS = ["Appearance", "Device", "Terminal", "Keybindings"] as const;
 /** The mesh panel once its document and the added machine it is checked against have both arrived. */
 const meshLoaded = async (page: Page) => {
   resetMeshDocs();
@@ -58,6 +62,9 @@ const meshLoaded = async (page: Page) => {
   await section(page, "Mesh");
   await expect(page.locator('[data-mesh-group="pending"] [data-mesh-answer]').first()).toBeVisible({ timeout: 20_000 });
 };
+
+/** The terminal the session-ended shot started on the added machine, by its address there. */
+let ended = "";
 
 export const SHOTS: readonly Shot[] = [
   {
@@ -219,6 +226,30 @@ export const SHOTS: readonly Shot[] = [
     run: async (page) => {
       await section(page, "Keybindings");
       await expect(page.getByRole("alert").first()).toBeVisible();
+    },
+  },
+  {
+    // A session whose program ended while its machine was offline, so its view first attaches to a finished terminal.
+    name: "session-ended",
+    start: "connected",
+    run: async (page, width) => {
+      ended = startShell("machine", "nightly-build");
+      await page.goto("/");
+      await expect(machineRow(page)).toContainText("connected", { timeout: STATE_BOUND_MS });
+      await agentRow(page, "nightly-build", true).click();
+      const terminal = page.locator(`[data-terminal="${MACHINE_NAME}/${ended}"]`);
+      await expect(terminal).toContainText("$", { timeout: 15_000 });
+      switchTo("drop");
+      await expect(terminal).toHaveCount(0, { timeout: STATE_BOUND_MS });
+      hcOn("machine", ["kill", ended]);
+      reconnect();
+      // The phone's terminal screen has no machine list to wait on.
+      if (width === "1440") await expect(machineRow(page)).toContainText("connected", { timeout: STATE_BOUND_MS });
+      await expect(page.getByRole("heading", { name: "This session ended" })).toBeVisible({ timeout: STATE_BOUND_MS });
+    },
+    cleanup: () => {
+      reconnect();
+      hcOn("machine", ["rm", ended]);
     },
   },
 ];
