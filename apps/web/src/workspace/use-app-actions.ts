@@ -1,5 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { useNavigate } from "@tanstack/react-router";
+import { type ZoomStep, zoomDesktopWindow } from "../desktop/bridge.ts";
 import { terminalConfigStore } from "../ghostty/config-store.ts";
 import { single, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
 import { KEY_BY_NAME } from "../ghostty/keys.ts";
@@ -52,11 +53,22 @@ export function neighbour(list: readonly string[], current: string | null, step:
   return target === current ? null : target;
 }
 
+const ZOOM_STEPS: Readonly<Record<string, ZoomStep>> = {
+  "app.zoom_in": "in",
+  "app.zoom_out": "out",
+  "app.zoom_reset": "reset",
+};
+
+const FONT_DELTA: Readonly<Record<ZoomStep, number | null>> = { in: FONT_STEP, out: -FONT_STEP, reset: null };
+
+/**
+ * The desktop app zooms its whole window, as its View menu does; a browser keeps its own page zoom, which a page cannot
+ * set, so there the keys step the terminal text size.
+ */
 function zoomAction(verb: string): boolean {
-  if (verb === "app.zoom_in") zoom(FONT_STEP);
-  else if (verb === "app.zoom_out") zoom(-FONT_STEP);
-  else if (verb === "app.zoom_reset") zoom(null);
-  else return false;
+  const step = ZOOM_STEPS[verb];
+  if (step === undefined) return false;
+  if (!zoomDesktopWindow(step)) zoom(FONT_DELTA[step]);
   return true;
 }
 

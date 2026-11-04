@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { untilGone } from "./support/mesh/gone.ts";
-import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { statusOf } from "./support/mesh/status.ts";
 import { inOrder } from "./support/sequential.ts";
@@ -96,7 +96,7 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
   afterAll(async () => {
     const receipt = await mesh?.dispose();
     expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-  });
+  }, TEARDOWN_MS);
 
   test(
     "E-IP: eight hosts behind one source IP all join and converge with no 4429 at any host",

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { lookupPairSlot, PairLookupError } from "@doriface/relay-client";
 import { join } from "node:path";
-import { HOST_NAMES, type Mesh, type Receipt, startMesh } from "./support/mesh/mesh.ts";
+import { HOST_NAMES, type Mesh, type Receipt, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { isAlive } from "./support/mesh/processes.ts";
 import { testIp } from "./support/probe.ts";
 import { inOrder } from "./support/sequential.ts";
@@ -21,7 +21,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (receipt === undefined) await mesh?.dispose();
-});
+}, TEARDOWN_MS);
 
 /** One pairing-slot lookup through `relayUrl`, on a fresh connection so a tap sees (and stamps) every request. */
 const lookup = (relayUrl: string, code: string, ip?: string): Promise<string | number | undefined> =>
@@ -125,6 +125,9 @@ describe("the harness ended by a signal", () => {
     expect(pids.length).toBeGreaterThan(3);
     child.kill("SIGTERM");
     await child.exited;
-    expect(pids.filter(isAlive)).toEqual([]);
+    const survivors = pids.filter(isAlive);
+    // A red run leaves no core behind for the next file: whatever survived is ended before the assertion.
+    for (const pid of survivors) process.kill(pid, "SIGKILL");
+    expect(survivors).toEqual([]);
   }, 180_000);
 });

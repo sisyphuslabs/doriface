@@ -138,8 +138,11 @@ export async function startMeshRelay(): Promise<MeshRelay> {
   const ip = testIp();
   const stop = async (): Promise<void> => {
     for (const tap of taps) tap.stop();
-    await stopLaunch(current);
-    rmSync(scratch, { recursive: true, force: true });
+    try {
+      await stopLaunch(current);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   };
   try {
     const url = await current.ready;

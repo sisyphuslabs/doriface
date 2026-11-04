@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { BACKDATE_SHAPES } from "./support/mesh/backdate-graphs.ts";
-import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { needLib, scenario } from "./support/mesh/present.ts";
 import { returnRevoked } from "./support/mesh/revoked-return.ts";
 import { runAttack } from "./support/mesh/shape-attack.ts";
@@ -29,7 +29,7 @@ for (const shape of BACKDATE_SHAPES) {
     afterAll(async () => {
       const receipt = await mesh?.dispose();
       expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-    });
+    }, TEARDOWN_MS);
 
     test("the honest revoke asks for --yes exactly when its witness pool is empty (the revoke-time warning)", () => {
       expect(shaped().warning).toEqual({ poolEmpty: shape.emptyPool, neededYes: shape.emptyPool });

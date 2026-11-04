@@ -14,6 +14,8 @@ const WAIT_MS = 60_000;
  * terminal, status and doc events only, so a machine's line turning `connected` is seen by reading `machine.list` again.
  */
 export const REREAD_MS = 500;
+/** A scenario's teardown hook: dispose waits up to 10 s for owned processes, and a host or the relay up to 15 s to stop. */
+export const TEARDOWN_MS = 60_000;
 const OFFER_URL = /https:\/\/\S*pair#\S+/;
 
 export interface Receipt {

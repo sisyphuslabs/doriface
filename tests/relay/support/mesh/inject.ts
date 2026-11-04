@@ -47,8 +47,7 @@ export async function deliver(options: DeliverOptions): Promise<Delivery> {
     // Not a mesh host: its own address, so the relay's per-source lookup quota (3) is not the hosts' to share.
     createSocket: socketFrom(testIp()),
   });
-  // `stream` is PR 3's handshake member; this branch's SecureLinkOptions does not declare it yet.
-  const handshake: SecureLinkOptions & { readonly stream: "mesh" } = {
+  const handshake: SecureLinkOptions = {
     role: "initiator",
     hostId: target.hostId,
     staticKey: rawStaticKey(carrier.noise),

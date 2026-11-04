@@ -69,6 +69,9 @@ jobs:
         run: bun run relay:fetch
       - name: Relay suites against the private relay
         if: env.RELAY_TOKEN_SET == 'true'
+        # A mesh scenario whose capability is missing fails instead of being skipped.
+        env:
+          DORIFACE_MESH_E2E: require
         run: bun run relay:test
       - name: Relay suites without the token
         if: env.RELAY_TOKEN_SET != 'true'
