@@ -14,7 +14,7 @@ export interface WorkspaceTab {
   readonly status?: AgentStatus;
   /** The machine it runs on, for a tab that is not on this one: shown after the title and in its tooltip. */
   readonly machine?: string;
-  /** The shortcut that focuses this tab's pane, as written on this platform: shown in the tooltip. */
+  /** The "Go to tab N" chord that selects this tab by position, as written on this platform: shown in the tooltip. */
   readonly shortcut?: string;
 }
 

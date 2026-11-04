@@ -30,9 +30,10 @@ export function WorkspaceRoute() {
     );
   }
 
-  if (state.phase === "unconfigured" && online) return <FirstRun />;
+  // Nothing chosen yet: always the first-run steps, so being offline is never a dead end (#216).
+  if (state.phase === "unconfigured") return <FirstRun offline={!online} />;
   const settings = (
-    <Button render={<Link to="/settings" />} variant={state.phase === "unconfigured" ? "primary" : "secondary"}>
+    <Button render={<Link to="/settings" />} variant="secondary">
       Open settings
     </Button>
   );
