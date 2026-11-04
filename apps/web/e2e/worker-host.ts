@@ -50,6 +50,32 @@ async function healthy(
   throw new Error(`the e2e host for ${url} exited during setup (exit ${String(await exited)})`);
 }
 
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Playwright starts a replacement worker in a slot (a new repeat, or other `test.use` options) without waiting for the
+ * old one to finish its teardown, so the slot's previous host may still hold the port and the machine dir. The host
+ * deletes its saved environment as it exits; until then its pid there is the one to wait out.
+ */
+async function previousGone(envFile: string): Promise<void> {
+  const pid = existsSync(envFile) ? readSavedEnv(envFile).pid : undefined;
+  if (pid === undefined) return;
+  const deadline = Date.now() + READY_WITHIN_MS;
+  while (alive(pid)) {
+    if (Date.now() > deadline)
+      throw new Error(`the slot's previous e2e host (pid ${pid}) did not stop within ${READY_WITHIN_MS} ms`);
+    // oxlint-disable-next-line no-await-in-loop -- waits on the previous host's exit, not on a fixed delay
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
 /** Starts this worker's e2e host and resolves once it answers; the returned stop ends it, core included. */
 export async function startWorkerHost(): Promise<() => Promise<void>> {
   // The host reads its port from E2E_HOST_PORT; without a worker slot of its own it takes that port as is.
@@ -62,6 +88,7 @@ export async function startWorkerHost(): Promise<() => Promise<void>> {
   const env: NodeJS.ProcessEnv = { ...process.env, E2E_HOST_PORT: String(port) };
   delete env["TEST_PARALLEL_INDEX"];
   const url = `http://127.0.0.1:${port}/healthz`;
+  await previousGone(hostEnvOf(port));
   // A process already answering here (a second checkout's host) would pass the readiness check for this one.
   const taken = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
     () => true,

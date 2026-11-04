@@ -1,12 +1,17 @@
 import type { Page, Route } from "@playwright/test";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
+import { hcOn } from "./machine-switch.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 
 /** The default close-tab shortcut on this platform's keymap (Cmd+W on macOS, Ctrl+Shift+W elsewhere). */
 const CLOSE_TAB = process.platform === "darwin" ? "Meta+KeyW" : "Control+Shift+KeyW";
+
+/** Opens a terminal and returns its address; the shared fixture ends it after the test (terminal-guard.ts). */
+const openOwnTerminal = async (page: Page): Promise<string> =>
+  (await (await openNewTerminal(page)).getAttribute("data-terminal")) ?? "";
 
 const focusInside = (page: Page, role: "dialog" | "menu", name?: RegExp) =>
   page.getByRole(role, name === undefined ? {} : { name }).evaluate((layer) => layer.contains(document.activeElement));
@@ -97,6 +102,58 @@ test("a terminal whose renderer starts while Cmd+W's question is open leaves the
   await page.keyboard.press("Escape");
   await expect(ask).toHaveCount(0);
   await expect.poll(() => focusedAddress(page)).toBe(await terminal.getAttribute("data-terminal"));
+});
+
+test("the terminal left when Cmd+W's session ends under the question does not take focus from it", async ({ page }) => {
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  const remaining = await openOwnTerminal(page);
+  const asked = await openOwnTerminal(page);
+  await page.locator(`[data-terminal="${asked}"]`).getByRole("textbox").focus();
+  await page.keyboard.press(CLOSE_TAB);
+  const name = /^Close .+\?$/;
+  const ask = page.getByRole("dialog", { name });
+  await expect(ask).toBeVisible();
+  await expect.poll(() => focusInside(page, "dialog", name)).toBe(true);
+
+  // The feed's word that the session ended waits, so the question stays open while its tab goes and the remaining
+  // terminal's pane becomes the focused one.
+  const release = socket.holdFromHost(`"${asked}"`);
+  hcOn("host", ["kill", asked]);
+  await expect(page.locator(`[data-focused="true"] [data-terminal="${remaining}"]`)).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  // A later update from the core: React runs the pane's effects from becoming focused before it renders this one, so
+  // once the new name shows, the pane has done whatever it does on becoming focused.
+  hcOn("host", ["label", remaining, "herdr.name=after-the-tab-went"]);
+  await expect(page.locator('[data-focused="true"]')).toHaveAttribute("aria-label", "after-the-tab-went terminal", {
+    timeout: 15_000,
+  });
+  await expect(ask).toBeVisible();
+  expect(await focusInside(page, "dialog", name)).toBe(true);
+
+  release();
+  hcOn("host", ["rm", asked]);
+});
+
+test("a press on a terminal that ends after Cmd+W's question opened leaves focus in the question", async ({ page }) => {
+  await page.goto("/");
+  const address = await openOwnTerminal(page);
+  const box = await page.locator(`[data-terminal="${address}"]`).boundingBox();
+  if (box === null) throw new Error(`${address} has no box`);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // The question opens from the keyboard while the button is still down; the press then ends over it.
+  await page.keyboard.press(CLOSE_TAB);
+  const name = /^Close .+\?$/;
+  const ask = page.getByRole("dialog", { name });
+  await expect(ask).toBeVisible();
+  await expect.poll(() => focusInside(page, "dialog", name)).toBe(true);
+
+  await page.mouse.up();
+  expect(await focusInside(page, "dialog", name)).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(ask).toHaveCount(0);
 });
 
 test("a terminal whose renderer starts while its session menu is open leaves the menu open with focus in it", async ({
