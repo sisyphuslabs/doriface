@@ -87,3 +87,43 @@ test("a tab shows its herdr-app split tree, four levels of rows and columns, and
   await page.reload();
   await showsTheTree();
 });
+
+test("a fresh device focuses a split tab's first pane, and Alt+arrows move focus between its panes", async ({
+  page,
+}) => {
+  const [t1, t2, t3] = [shell("left"), shell("top"), shell("bottom")] as const;
+  seedLayout([
+    {
+      id: "tb-move",
+      root: [
+        { pane: "p1", terminal: t1, weight: 0.5 },
+        {
+          id: "s-col",
+          axis: "column",
+          weight: 0.5,
+          children: [
+            { pane: "p2", terminal: t2 },
+            { pane: "p3", terminal: t3 },
+          ],
+        },
+      ],
+    },
+  ]);
+  const focusedPane = () => page.locator('[data-focused="true"] [data-terminal]').getAttribute("data-terminal");
+  const keyboardIn = () =>
+    page.evaluate(() => document.activeElement?.closest("[data-terminal]")?.getAttribute("data-terminal") ?? null);
+  const focusIs = async (address: string): Promise<void> => {
+    await expect.poll(focusedPane, { timeout: 15_000 }).toBe(address);
+    await expect.poll(keyboardIn, { timeout: 15_000 }).toBe(address);
+  };
+
+  await page.goto("/");
+  await Promise.all(
+    [t1, t2, t3].map((address) => expect(paneOf(page, address)).toContainText("$", { timeout: 20_000 })),
+  );
+  await focusIs(t1);
+  await page.keyboard.press("Alt+ArrowRight");
+  await focusIs(t2);
+  await page.keyboard.press("Alt+ArrowLeft");
+  await focusIs(t1);
+});
