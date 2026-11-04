@@ -67,14 +67,17 @@
 /*
  * Arrival: a region that the layout just gained (a new tab, the shown sidebar) eases in from --arrive-from, once the
  * app sets data-ready after the workspace's first loaded paint. Reduced motion keeps only the opacity (the rule
- * below), so it becomes a cross-fade.
+ * below), so it becomes a cross-fade. A region already drawn carries data-arrived: a DOM move (a reordered tab)
+ * re-inserts it, and only the region's first insertion may start from @starting-style.
  */
 @layer components {
   :root[data-ready] .motion-arrive {
     transition:
       opacity var(--arrive-duration, var(--duration-standard)) var(--ease-out),
       transform var(--arrive-duration, var(--duration-standard)) var(--ease-out);
+  }
 
+  :root[data-ready] .motion-arrive:not([data-arrived]) {
     @starting-style {
       opacity: 0;
       transform: var(--arrive-from, scale(0.97));
