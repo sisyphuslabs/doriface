@@ -96,8 +96,10 @@ export function TerminalView(props: TerminalViewProps) {
     [],
   );
 
+  // Becoming the focused pane (a tab closed, a split moved) takes keyboard focus, unless a modal is open over it.
   useEffect(() => {
-    if (focused) handle.current?.focus();
+    const instance = handle.current?.instance ?? null;
+    if (focused && instance !== null && mayTakeFocus(instance.element)) instance.focus();
   }, [focused]);
 
   // The default cursor shape is the terminal's own state, set locally; programs still override it.
