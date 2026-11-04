@@ -2,12 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ViewCache, viewOf } from "@doriface/mesh";
+import { signRecord, ViewCache, viewOf } from "@doriface/mesh";
+import { parseMeshStatus } from "@doriface/protocol";
 import { machine, MeshFixture, signPubOf } from "../testing/mesh-history.ts";
 import { planRevoke } from "./revoke-plan.ts";
 import { IDLE_MESH_HOOKS } from "./host-hooks.ts";
 import { meshStatus } from "./status.ts";
-import { meshSourcesOf } from "./status-store.ts";
+import { meshSourcesOf, storedMeshStatus } from "./status-store.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -43,5 +44,38 @@ describe("mesh status and the revoke plan build every engine through the call's 
     cache.engines = 0;
     planRevoke(file.records, view, self, "a", true, cache);
     expect(cache.engines).toBeGreaterThan(0);
+  });
+});
+
+function meshAtF() {
+  const dir = mkdtempSync(join(tmpdir(), "dh-status-read-"));
+  dirs.push(dir);
+  const f = machine("f"),
+    a = machine("a"),
+    b = machine("b");
+  const mesh = new MeshFixture(dir, f);
+  mesh.admit(f, a);
+  mesh.admit(f, b);
+  return { f, a, b, mesh };
+}
+const readable = (status: unknown) => parseMeshStatus(JSON.parse(JSON.stringify(status)));
+
+describe("the stored status is always one the status parser reads (contract v1.5 mesh status)", () => {
+  test("a revoke whose display time is not an ISO instant shows no time instead of an unreadable status", () => {
+    const { f, b, mesh } = meshAtF();
+    const body = { ...mesh.next(f, "revoke", { signPubs: [signPubOf(b)], reason: "revoke" }), at: "yesterday" };
+    mesh.store.merge([signRecord(body, f.identity.sign.secretKey)]);
+    const status = readable(storedMeshStatus(mesh.store, f.identity, IDLE_MESH_HOOKS));
+    expect(status?.revoked.map((entry) => entry.at)).toEqual([null]);
+  });
+
+  test("a host its own view no longer holds lists only its view's members, and says it is possibly revoked", () => {
+    const { f, a, b, mesh } = meshAtF();
+    mesh.revoke(a, f);
+    const status = readable(storedMeshStatus(mesh.store, f.identity, IDLE_MESH_HOOKS));
+    expect(status?.members.map((member) => member.hostId).toSorted()).toEqual(
+      [a.identity.hostId, b.identity.hostId].toSorted(),
+    );
+    expect(status?.stuck).toContainEqual({ kind: "possibly_revoked" });
   });
 });
