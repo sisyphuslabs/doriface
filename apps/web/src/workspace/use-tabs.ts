@@ -14,6 +14,8 @@ export interface TabsState {
 }
 
 export interface Tabs extends TabsState {
+  /** False while a kept tab waits for machine.list to name its machine, so it cannot show yet. */
+  readonly restored: boolean;
   select(address: string): void;
   /** Closing a tab as the person asked: the workspace asks first whether to keep the session running. */
   close(address: string): void;
@@ -121,6 +123,7 @@ export function useTabs(
   const open = state.open.flatMap((key) => tabAddress(key, ids) ?? []);
   return {
     open,
+    restored: open.length === state.open.length,
     active: resolve(state.active),
     split: resolve(state.split),
     select,
