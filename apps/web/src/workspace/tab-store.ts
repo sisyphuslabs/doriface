@@ -33,12 +33,19 @@ export function loadTabs(core: string, storage: Pick<Storage, "getItem"> = local
   return { ...NO_TABS, open, active, split: split === active ? null : split };
 }
 
-/** Saves one core's tabs, leaving every other core's as they were. */
+/**
+ * Saves one core's tabs, leaving every other core's as they were. Storage that is full or denied is reported and the
+ * tabs live on in memory, so a refused write never takes the workspace down.
+ */
 export function saveTabs(
   core: string,
   tabs: KeyedTabs,
   storage: Pick<Storage, "getItem" | "setItem"> = localStorage,
 ): void {
   const all = { ...readAll(storage), [core]: { open: tabs.open, active: tabs.active, split: tabs.split } };
-  storage.setItem(TABS_KEY, JSON.stringify(all));
+  try {
+    storage.setItem(TABS_KEY, JSON.stringify(all));
+  } catch (error) {
+    console.error(`save the tab order: ${String(error)}`);
+  }
 }
