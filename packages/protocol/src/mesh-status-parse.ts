@@ -156,7 +156,9 @@ function isConsistent(status: MeshStatus): boolean {
     hostIds.size === status.members.length &&
     (onSelfLine.length === 1
       ? onSelfLine[0]?.hostId === status.self
-      : onSelfLine.length === 0 && status.stuck.some((reason) => OUTSIDE_OWN_VIEW.has(reason.kind))) &&
+      : onSelfLine.length === 0 &&
+        !hostIds.has(status.self) &&
+        status.stuck.some((reason) => OUTSIDE_OWN_VIEW.has(reason.kind))) &&
     status.members.every(
       (member) => member.lineReason === null || MESH_LINE_STATES_WITH_REASON.includes(member.line),
     ) &&
