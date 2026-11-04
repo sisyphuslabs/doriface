@@ -43,7 +43,8 @@ export interface RelayedHost {
   /** Runs typed-code pairing (CPace on a `?pair=<slot>` session) and returns the confirmed session. */
   dialPairCode(device: KeyPair, code: string, name: string): Promise<SecureLink>;
   pair(device: KeyPair, name: string): Promise<void>;
-  dial(device: KeyPair): Promise<SecureLink>;
+  /** A session through the relay; `stream` names what it carries (the hc stream by default). */
+  dial(device: KeyPair, stream?: "push"): Promise<SecureLink>;
   connect(device: KeyPair): Promise<HcConnection>;
   /** A connection whose plaintext is kept, to compare with what the host's hc read and wrote. */
   connectRecorded(device: KeyPair): Promise<{ readonly connection: HcConnection; readonly link: RecordingLink }>;
@@ -58,6 +59,8 @@ export interface RelayedHostOptions {
   readonly uplinkTimeoutMs?: number;
   /** Wraps the sockets the host's uplink and the clients open, e.g. to capture what the relay forwards. */
   readonly wrapSockets?: (base: CreateSocket) => { readonly host: CreateSocket; readonly client: CreateSocket };
+  /** Origins of a test push service the host may post web push notices to. */
+  readonly pushTestOrigins?: readonly string[];
 }
 
 const UPLINK_TIMEOUT_MS = 30_000;
@@ -93,6 +96,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
       env: session.env,
       stateDir,
       relay: { url: options.hostRelayUrl ?? relay.url, createSocket: sockets.host },
+      pushTestOrigins: options.pushTestOrigins,
       log: (line) => {
         logs.push(line);
         if (line.startsWith("relay: connected")) connected.resolve();
@@ -144,7 +148,7 @@ async function relayedHost(started: Started): Promise<RelayedHost> {
   };
   const pairingLink = async (): Promise<string> => (await pairingOffer()).url;
   const hostKey = parsePairingUrl(await pairingLink()).noiseStaticPub;
-  const open = async (device: KeyPair, pairing?: PairingSecret): Promise<SecureLink> => {
+  const open = async (device: KeyPair, pairing?: PairingSecret, stream?: "push"): Promise<SecureLink> => {
     const pairSlot = pairing?.mode === "code" ? pairSlotOf(pairing.code) : undefined;
     const link = await connectRelayClient({
       relayUrl,
@@ -158,6 +162,7 @@ async function relayedHost(started: Started): Promise<RelayedHost> {
       staticKey: rawStaticKey(device),
       remoteStatic: hostKey,
       pairing,
+      stream,
     });
   };
   return {
@@ -177,7 +182,7 @@ async function relayedHost(started: Started): Promise<RelayedHost> {
       // The host answers hello on a pairing session only once it stored the device.
       (await HcConnection.open(await open(device, { mode: "link", linkSecret, name }))).close();
     },
-    dial: (device) => open(device),
+    dial: (device, stream) => open(device, undefined, stream),
     connect: async (device) => HcConnection.open(await open(device)),
     async connectRecorded(device) {
       const link = new RecordingLink(await open(device));

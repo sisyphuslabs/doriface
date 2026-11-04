@@ -3,7 +3,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_ENV, E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
+import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_ENV, E2E_LAYOUT_PORT, E2E_PUSH_ORIGIN, E2E_TOKEN } from "./config.ts";
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
@@ -38,9 +38,10 @@ writeFileSync(
   JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: layout ? LAYOUT_CORE : "studio" }),
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
-// Each host owns its own file: the layout host runs beside the main one and must not overwrite or delete its file.
+// Each host owns its own file: the layout host runs beside the main ones and must not overwrite or delete theirs.
+// The pid lets the run's leftover check stop a host that outlived its worker.
 const savedEnv = layout ? E2E_LAYOUT_ENV : E2E_HOST_ENV;
-writeFileSync(savedEnv, JSON.stringify({ hc, env: own }));
+writeFileSync(savedEnv, JSON.stringify({ hc, env: own, pid: process.pid }));
 const host = Bun.spawn(
   [
     "bun",
@@ -54,6 +55,10 @@ const host = Bun.spawn(
     "--token",
     E2E_TOKEN,
     "--no-relay",
+    // The notifications specs run their own push service here (the layout host too: a connection moves there); nothing
+    // listens on it otherwise.
+    "--push-test-origin",
+    E2E_PUSH_ORIGIN,
   ],
   { env, stdout: "inherit", stderr: "inherit" },
 );

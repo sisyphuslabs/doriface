@@ -19,6 +19,7 @@ import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import { Ended } from "./ended.tsx";
+import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
@@ -35,10 +36,10 @@ export interface TerminalViewProps {
   readonly focused: boolean;
   readonly label: string;
   readonly className?: string;
-  /** Rewrites typed input before it is sent (latched phone modifiers). */
+  /** Rewrites typed input before it is sent (latched phone modifiers); an empty result sends nothing. */
   readonly transformInput?: (data: string) => string;
-  /** The view's input path for keys pressed outside it (the phone's extra keys); null once it unmounts. */
-  readonly onSend?: (send: ((data: TerminalInput) => void) | null) => void;
+  /** The view's port for keys pressed outside it (the phone's keys bar); null once it unmounts. */
+  readonly onPort?: (port: TerminalPort | null) => void;
   /** Every time the stream ends, with why; see TerminalEnd. */
   readonly onEnd?: (address: string, end: TerminalEnd) => void;
   /** The action of a view whose program had ended before it attached, which reports it `finished` (default Close tab). */
@@ -64,7 +65,7 @@ function handBack(event: FocusEvent<HTMLElement>): void {
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
-  const { connection, address, pid, live, focused, label, className, transformInput, onSend, onEnd } = props;
+  const { connection, address, pid, live, focused, label, className, transformInput, onPort, onEnd } = props;
   const { closeLabel = "Close tab", onEnded } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
@@ -107,8 +108,10 @@ export function TerminalView(props: TerminalViewProps) {
     [],
   );
 
+  // Becoming the focused pane (a tab closed, a split moved) takes keyboard focus, unless a modal is open over it.
   useEffect(() => {
-    if (focused) handle.current?.focus();
+    const instance = handle.current?.instance ?? null;
+    if (focused && instance !== null && mayTakeFocus(instance.element)) instance.focus();
   }, [focused]);
 
   // The default cursor shape is the terminal's own state, set locally; programs still override it.
@@ -135,10 +138,7 @@ export function TerminalView(props: TerminalViewProps) {
   const send = useCallback((data: TerminalInput): void => {
     if (stream.current?.write(data) !== true) pending.current.push(data);
   }, []);
-  useEffect(() => {
-    onSend?.(send);
-    return () => onSend?.(null);
-  }, [onSend, send]);
+  useTerminalPort(handle, send, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
   useTerminalActions(wt, send, focused);
   useFocusAfterSelect(wt);
@@ -299,7 +299,10 @@ export function TerminalView(props: TerminalViewProps) {
           focusWhenFree(ready);
           attach(ready);
         }}
-        onData={(data) => send(transformInput === undefined ? data : transformInput(data))}
+        onData={(data) => {
+          const input = transformInput?.(data) ?? data;
+          if (input !== "") send(input);
+        }}
         onResize={(cols, rows) => stream.current?.resize(cols, rows)}
         onFocus={(event) => {
           // wterm focuses every terminal as it starts (@wterm/dom 0.5.8 wterm.js:410). Only the focused pane's keeps
