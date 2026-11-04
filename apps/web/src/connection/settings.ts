@@ -59,6 +59,21 @@ export function saveSettings(settings: ConnectionSettings, storage: Storage = lo
   storage.setItem(KEY, JSON.stringify(settings));
 }
 
+/**
+ * Whether the link stays on this computer (the loopback gateway on 127.0.0.1, localhost or ::1), so a lost network
+ * says nothing about it: the desktop app's "This computer" keeps working with Wi-Fi off.
+ */
+export function staysOnThisComputer(settings: ConnectionSettings): boolean {
+  if (settings.mode !== "loopback") return false;
+  let host: string;
+  try {
+    host = new URL(settings.loopbackUrl).hostname;
+  } catch {
+    return false;
+  }
+  return host === "localhost" || host === "[::1]" || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
 /** Whether these settings name something to connect to. */
 export function isConfigured(settings: ConnectionSettings): boolean {
   return settings.mode === "loopback"
