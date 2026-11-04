@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { expect, test } from "bun:test";
-import { followTerminals, type KeyedTabs, NO_TABS, selectTab } from "./tab-follow.ts";
+import { followTerminals, type KeyedTabs, NO_TABS, selectTab, selectTerminal } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 const terminal = (address: string): Terminal => ({
@@ -77,4 +77,16 @@ test("a selected terminal the feed already lists opens at once, and a later sele
   expect([tabs.open, tabs.active]).toEqual([[two], two]);
   tabs = followTerminals(tabs, [terminal("t2"), terminal("t3")], ids, 1);
   expect([tabs.open, tabs.active]).toEqual([[two], two]);
+});
+
+test("New tab's answer opens its terminal at once when the feed already lists it, and waits when it does not", () => {
+  const ids = machineIds([]);
+  const [kept, started] = [tabKey("t1", ids), tabKey("t2", ids)];
+  const shown: KeyedTabs = { ...NO_TABS, open: [kept], active: kept };
+  const feedFirst = selectTerminal(shown, "t2", ids, [terminal("t1"), terminal("t2")]);
+  expect([feedFirst.open, feedFirst.active, feedFirst.pending]).toEqual([[kept, started], started, null]);
+  for (const listed of [[terminal("t1")], null]) {
+    const answerFirst = selectTerminal(shown, "t2", ids, listed);
+    expect([answerFirst.open, answerFirst.active, answerFirst.pending]).toEqual([[kept], kept, started]);
+  }
 });

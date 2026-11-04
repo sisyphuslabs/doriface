@@ -1,7 +1,7 @@
 // New tab focuses the terminal it started even when the feed lists that terminal after another machine.list read has
 // come back: the tab waits for its terminal instead of being dropped as gone. A terminal is already open, as in a
 // workspace in use; with none, the first-live rule would reopen the new one and hide the drop.
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 const idOf = (frame: string): string | undefined => /"id":(\d+)/.exec(frame)?.[1];
@@ -44,4 +44,41 @@ test("a New tab whose terminal the feed lists only after a machine.list read sti
   const focused = page.locator(`[data-focused="true"] [data-terminal="${address}"]`);
   await expect(focused).toBeVisible({ timeout: 15_000 });
   await expect(focused).toContainText("$", { timeout: 15_000 });
+});
+
+// The other order: the feed lists the terminal before terminal.run answers. Once listed, the feed and machine.list are
+// held, so nothing but the answer can move focus; the new tab must take it as the answer lands, not on a later event.
+const FEED_FIRST_FOCUS_MS = 250;
+
+test("a New tab whose terminal the feed lists before terminal.run answers takes focus as the answer lands", async ({
+  page,
+}) => {
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  const count = await terminalCount(page);
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  const before = await focused.getAttribute("data-terminal");
+  const releaseList = socket.hold("machine.list");
+  const releaseAnswers = socket.holdFromHost('"result"');
+  await page
+    .getByRole("button", { name: "New tab" })
+    .or(page.getByRole("button", { name: "New terminal" }))
+    .first()
+    .click();
+  await count.grown();
+  const releaseFeed = socket.holdFromHost('"method":"event"', '"method":"heartbeat"', '"method":"missed"');
+  const answered = Date.now();
+  releaseAnswers();
+  await expect
+    .poll(async () => (await focused.getAttribute("data-terminal").catch(() => null)) !== before, {
+      intervals: [10],
+      timeout: 5_000,
+    })
+    .toBe(true);
+  const ms = Date.now() - answered;
+  test.info().annotations.push({ type: "focus-ms", description: String(ms) });
+  releaseFeed();
+  releaseList();
+  expect(ms).toBeLessThan(FEED_FIRST_FOCUS_MS);
 });
