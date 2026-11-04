@@ -39,7 +39,8 @@ writeFileSync(
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
 // Only the main host owns it: the layout host runs beside it and must not overwrite or delete it.
-if (!layout) writeFileSync(E2E_HOST_ENV, JSON.stringify({ hc, env: own }));
+// The pid lets the run's leftover check stop a host that outlived its worker.
+if (!layout) writeFileSync(E2E_HOST_ENV, JSON.stringify({ hc, env: own, pid: process.pid }));
 const host = Bun.spawn(
   [
     "bun",
