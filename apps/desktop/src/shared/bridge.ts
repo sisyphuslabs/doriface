@@ -30,14 +30,33 @@ export interface LocalHostEndpoint {
   readonly token: string;
 }
 
+/**
+ * Why this computer's host did not start. `code` is doriface-host's own startup error code (`hc-binary-missing`,
+ * `hc-version-failed`, `port-in-use`, `permission-denied`, `already-running`, `startup-failed`), or the shell's:
+ * `host-exited` (it exited without one), `host-timeout`, `host-spawn-failed` (doriface-host itself could not run).
+ */
+export interface LocalHostFailure {
+  readonly code: string;
+  readonly message: string;
+  readonly path?: string;
+  readonly address?: string;
+  /** The host's own output, for a Details disclosure; never its usage text. */
+  readonly details: string;
+}
+
+/** A failed start crosses IPC as a value: Electron hands the renderer only the message of a thrown error. */
+export interface LocalHostStartFailed {
+  readonly failure: LocalHostFailure;
+}
+
 /** What the desktop shell exposes to the renderer as `window.doriface`. */
 export interface DorifaceBridge {
   readonly version: string;
   readonly platform: DesktopPlatform;
   /** Opens an allowlisted https link in the system browser; resolves false when the link is refused. */
   openExternal(url: string): Promise<boolean>;
-  /** Starts (or reuses) doriface-host + hc on this machine. */
-  startLocalHost(): Promise<LocalHostEndpoint>;
+  /** Starts (or reuses) doriface-host + hc on this machine; resolves with why it did not start otherwise. */
+  startLocalHost(): Promise<LocalHostEndpoint | LocalHostStartFailed>;
   /** Calls `listener` with an app path to show, e.g. `/settings` from the app menu. */
   onNavigate(listener: (path: string) => void): void;
   /** Paints the window, now and at the next launch, with the in-app theme's background (`#rrggbb`). */
@@ -53,6 +72,25 @@ export interface DorifaceBridge {
 export function parsePlatform(value: string): DesktopPlatform {
   if (value === "darwin" || value === "linux" || value === "win32") return value;
   throw new Error(`unsupported platform ${value}`);
+}
+
+const optionalString = (value: object, key: string): boolean => {
+  const field: unknown = Reflect.get(value, key);
+  return field === undefined || typeof field === "string";
+};
+
+export function isLocalHostStartFailed(value: unknown): value is LocalHostStartFailed {
+  if (typeof value !== "object" || value === null) return false;
+  const failure: unknown = Reflect.get(value, "failure");
+  return (
+    typeof failure === "object" &&
+    failure !== null &&
+    typeof Reflect.get(failure, "code") === "string" &&
+    typeof Reflect.get(failure, "message") === "string" &&
+    typeof Reflect.get(failure, "details") === "string" &&
+    optionalString(failure, "path") &&
+    optionalString(failure, "address")
+  );
 }
 
 export function isLocalHostEndpoint(value: unknown): value is LocalHostEndpoint {

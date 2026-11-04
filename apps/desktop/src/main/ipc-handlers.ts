@@ -1,7 +1,8 @@
 import { allowedExternal } from "../config/external.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
-import { isZoomStep, type LocalHostEndpoint, type ZoomStep } from "../shared/bridge.ts";
+import { isZoomStep, type LocalHostEndpoint, type LocalHostStartFailed, type ZoomStep } from "../shared/bridge.ts";
+import { LocalHostStartError } from "./local-host.ts";
 
 /** The part of an IPC event the gate reads; `senderFrame` is null once the frame is gone. */
 export interface IpcSender {
@@ -20,7 +21,7 @@ export interface IpcDeps {
 
 export interface IpcHandlers {
   openExternal(event: IpcSender, candidate: unknown): Promise<boolean>;
-  startLocalHost(event: IpcSender): Promise<LocalHostEndpoint>;
+  startLocalHost(event: IpcSender): Promise<LocalHostEndpoint | LocalHostStartFailed>;
   /** Paints the window and the next launch with the in-app theme's background; only `#rrggbb` is taken. */
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
@@ -47,7 +48,12 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     },
     async startLocalHost(event) {
       assertAppFrame(event, deps.origin);
-      return deps.startLocalHost();
+      try {
+        return await deps.startLocalHost();
+      } catch (error) {
+        if (error instanceof LocalHostStartError) return { failure: error.failure };
+        throw error;
+      }
     },
     async setWindowBackground(event, candidate) {
       assertAppFrame(event, deps.origin);

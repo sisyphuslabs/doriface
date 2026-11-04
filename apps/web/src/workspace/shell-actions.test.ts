@@ -17,6 +17,7 @@ const terminal = (address: string): Terminal => ({
 });
 const tabs: Tabs = {
   open: ["t1", "t2"],
+  restored: true,
   active: "t1",
   split: null,
   select: () => undefined,

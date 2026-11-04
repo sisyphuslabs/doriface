@@ -22,7 +22,7 @@ export async function lookupCode(code: string, relayUrl: string, signal?: AbortS
       signal === undefined ? {} : { signal },
     );
   } catch {
-    return { ok: false, reason: "The relay cannot be reached. Check the network, or scan the QR code instead." };
+    return { ok: false, reason: "The relay cannot be reached. Check the network and try again." };
   }
   if (response.status === 404) return { ok: false, reason: "No host is pairing with this code. It may have expired." };
   if (!response.ok) return { ok: false, reason: `The relay answered ${response.status}. Try a new code.` };

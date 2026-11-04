@@ -65,6 +65,7 @@ export {
   type TerminalPreviewProps,
   type TerminalSpan,
 } from "./components/terminal-preview.tsx";
+export { ThemeBrowser, type ThemeBrowserProps, type ThemeKind } from "./components/theme-browser.tsx";
 export { ThemePicker, type ThemeOption, type ThemePickerProps } from "./components/theme-picker.tsx";
 export { ToastProvider, ToastViewport, useToastManager, type ToastViewportProps } from "./components/toast.tsx";
 export { Tooltip, TooltipProvider, type TooltipProps } from "./components/tooltip.tsx";
