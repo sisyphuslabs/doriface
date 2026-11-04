@@ -39,8 +39,10 @@ writeFileSync(
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
 // Only the main host owns it: the layout host runs beside it and must not overwrite or delete it.
-// The pid lets the run's leftover check stop a host that outlived its worker.
-if (!layout) writeFileSync(E2E_HOST_ENV, JSON.stringify({ hc, env: own, pid: process.pid }));
+// The pid lets the run's leftover check stop a host that outlived its worker. The file is saved again with `ready` once
+// setup has finished: a worker waits for that, so the core it first sees already holds every seed (#226).
+const saved = { hc, env: own, pid: process.pid };
+if (!layout) writeFileSync(E2E_HOST_ENV, JSON.stringify(saved));
 const host = Bun.spawn(
   [
     "bun",
@@ -95,6 +97,7 @@ try {
     if (capture) await seed(hc, env, join(dir, "work"));
     await seedMeshDoc(hc, session, env);
     stopMachine = await addMachine(hc, env, join(dir, "machine"), capture);
+    writeFileSync(E2E_HOST_ENV, JSON.stringify({ ...saved, ready: true }));
   }
 } catch (error) {
   console.error(`e2e host setup failed: ${String(error)}`);

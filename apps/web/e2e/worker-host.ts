@@ -38,8 +38,10 @@ async function healthy(
       (r) => r.ok,
       () => false,
     );
-    // Another process can answer on this port (a second checkout's host): ready means the host saved here is this child.
-    if (ok && existsSync(envFile) && readSavedEnv(envFile).pid === child.pid) return;
+    // Another process can answer on this port (a second checkout's host): ready means the host saved here is this child,
+    // and that it has finished seeding its core and adding its machine.
+    const saved = ok && existsSync(envFile) ? readSavedEnv(envFile) : undefined;
+    if (saved !== undefined && saved.pid === child.pid && saved.ready === true) return;
     if (Date.now() > deadline)
       throw new Error(
         `the e2e host for ${url} was not ready within ${READY_WITHIN_MS} ms (answered by another process: ${ok})`,
