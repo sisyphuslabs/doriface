@@ -5,7 +5,8 @@ export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 60_000,
-  workers: 1,
+  // Each worker runs its own e2e host and core (e2e/worker-host.ts), so workers share no terminals.
+  workers: process.env["CI"] ? 8 : 4,
   globalTeardown: "./e2e/leftover-hosts.ts",
   forbidOnly: Boolean(process.env["CI"]),
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
