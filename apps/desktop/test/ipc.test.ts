@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { APP_ORIGIN } from "../src/config/origin.ts";
 import { openPairingLink, takePairingLink } from "../src/main/deep-link.ts";
 import { ipcHandlers, type IpcSender } from "../src/main/ipc-handlers.ts";
+import { LocalHostStartError } from "../src/main/local-host.ts";
 
 const endpoint = { url: "ws://127.0.0.1:1/v1/hc", token: "t".repeat(43) };
 const app: IpcSender = { senderFrame: { url: "app://doriface/hosts" } };
@@ -11,7 +12,7 @@ const foreign: readonly IpcSender[] = [
   { senderFrame: null },
 ];
 
-const setup = () => {
+const setup = (start: () => Promise<typeof endpoint> = async () => endpoint) => {
   const opened: string[] = [];
   const painted: string[] = [];
   const zooms: string[] = [];
@@ -26,7 +27,7 @@ const setup = () => {
     origin: APP_ORIGIN,
     startLocalHost: async () => {
       starts += 1;
-      return endpoint;
+      return start();
     },
     openExternal: async (url) => {
       opened.push(url);
@@ -109,6 +110,14 @@ describe("IPC sender gate", () => {
     const { handlers, starts } = setup();
     expect(await handlers.startLocalHost(app)).toBe(endpoint);
     expect(starts()).toBe(1);
+  });
+
+  test("a host that did not start answers with its failure as a value; any other error still rejects", async () => {
+    const failure = { code: "hc-binary-missing", message: "not found", path: "/x/hc", details: "raw" };
+    const failed = setup(async () => Promise.reject(new LocalHostStartError(failure)));
+    expect(await failed.handlers.startLocalHost(app)).toEqual({ failure });
+    const broken = setup(async () => Promise.reject(new Error("bug")));
+    await expect(broken.handlers.startLocalHost(app)).rejects.toThrow("bug");
   });
 
   test("the app origin can set the window background to a hex colour and nothing else", async () => {

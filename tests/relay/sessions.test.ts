@@ -137,13 +137,26 @@ describe("client sessions through the relay", () => {
   });
 
   test("connections over the per-IP rate are refused with 4429", async () => {
-    const ip = testIp();
-    const codes = await inOrder(
-      times(61),
-      async () => (await new Probe(clientUrl(`${"b".repeat(25)}a`), ip).closed).code,
-    );
-    expect(codes.slice(0, 60)).toEqual(Array.from({ length: 60 }, () => CloseCode.HostOffline));
-    expect(codes[60]).toBe(CloseCode.RateLimited);
+    // The relay admits 60 upgrades per address per minute, in windows aligned to the wall clock. The 61 dials go out at
+    // once, so the wall time does not grow with a loaded runner, and exactly one of them is over the rate. A burst that
+    // spans a window boundary is counted in two windows and proves nothing: it is dialed again from a fresh address,
+    // which then starts just after that boundary.
+    const burst = async (): Promise<number[] | undefined> => {
+      const ip = testIp();
+      const window = Math.floor(Date.now() / 60_000);
+      const codes = await Promise.all(
+        times(61).map(async () => (await new Probe(clientUrl(`${"b".repeat(25)}a`), ip).closed).code),
+      );
+      return Math.floor(Date.now() / 60_000) === window ? codes : undefined;
+    };
+    const codes = (await burst()) ?? (await burst());
+    if (codes === undefined) throw new Error("two bursts in a row spanned a rate window boundary");
+    expect(codes.toSorted((a, b) => a - b)).toEqual([
+      ...Array.from({ length: 60 }, () => CloseCode.HostOffline),
+      CloseCode.RateLimited,
+    ]);
     expect((await new Probe(clientUrl(`${"b".repeat(25)}a`), testIp()).closed).code).toBe(CloseCode.HostOffline);
-  });
+    // One burst took 0.5-3.1 s (median ~1.1 s) over 91 runs on runners loaded to 1.3-2.9x their cores; the budget covers
+    // two bursts at that worst case with more than 2x to spare.
+  }, 15_000);
 });

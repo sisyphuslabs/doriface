@@ -133,7 +133,7 @@ function ready(): void {
   const context = hostContext();
   const localHost = new LocalHost({
     command: hostCommand(context),
-    hc: findHc(context),
+    hc: () => findHc(context),
     env: process.env,
     log: (line) => console.log(line),
   });

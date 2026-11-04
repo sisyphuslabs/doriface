@@ -7,8 +7,6 @@ import {
   editTab,
   freshId,
   type Node,
-  panesOf,
-  removePane,
   removeTab,
   splitPane,
   tabsOf,
@@ -29,6 +27,7 @@ import { machineOf } from "./model.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
 import { orderTabs, type TabMove } from "./tab-order.ts";
+import { useDropPane } from "./use-drop-pane.ts";
 import { useTabMoves } from "./use-tab-moves.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
@@ -52,7 +51,10 @@ export interface Layout extends PaneMoves {
   readonly moveTab: (key: string, to: number) => void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
   readonly lastMove: TabMove | null;
-  /** Every machine's layout has been read, or cannot be: the tabs on screen are all the documents hold. */
+  /**
+   * machine.list has answered and every machine's layout has been read, or cannot be: the tabs on screen are all the
+   * documents hold, so a tab showing up now is an arrival, not the restored screen.
+   */
   readonly restored: boolean;
 }
 
@@ -79,6 +81,8 @@ export function useLayout(
   terminals: readonly Terminal[],
   failed: (message: string) => void,
   told: (message: string) => void,
+  /** machine.list has answered since the workspace mounted, so every added machine's layout is known. */
+  machinesListed = true,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
   const [fresh, setFresh] = useState<string | null>(null);
@@ -207,19 +211,12 @@ export function useLayout(
     [active, addTab, focused, keepHere, layoutOf, show, tabs, told],
   );
 
+  const dropFromDoc = useDropPane(tabs, layoutOf, setLoose);
   const dropPane = useCallback(
     (address: string): void => {
       const found = findTerminal(tabs, address);
-      if (found === null) return;
-      if (found.tab.transient) return setLoose((prev) => prev.filter((each) => each !== address));
-      const layout = layoutOf(found.tab.machine);
-      void layout?.edit((doc) => {
-        if (doc === null) return null;
-        const tab = tabsOf(doc).find((each) => each.id === found.tab.id);
-        const root = tab === undefined ? null : removePane(tab.root, found.pane.id);
-        if (root === null) return null;
-        return panesOf(root).length === 0 ? removeTab(doc, found.tab.id) : editTab(doc, found.tab.id, () => root);
-      });
+      dropFromDoc(address);
+      if (found === null || found.tab.transient) return;
       // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there.
       const key = found.tab.key;
       const gone = found.pane.id;
@@ -232,7 +229,7 @@ export function useLayout(
           prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev,
         );
     },
-    [layoutOf, tabs],
+    [dropFromDoc, tabs],
   );
 
   const closeTab = useCallback(
@@ -265,7 +262,7 @@ export function useLayout(
     ...moves,
     moveTab,
     lastMove,
-    restored: layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
+    restored: machinesListed && layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
   };
 }
 
