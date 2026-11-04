@@ -22,9 +22,16 @@ test.describe("two terminals named alike on two machines", () => {
     await expect(tabs).toHaveCount(2, { timeout: 15_000 });
     const remote = tabs.filter({ hasText: MACHINE_NAME });
     await expect(remote).toHaveCount(1);
-    // The tooltip ends in the pane's shortcut while the tab is shown, e.g. "review on build-box (Ctrl+1)".
-    await expect(remote).toHaveAttribute("title", new RegExp(`^review on ${MACHINE_NAME}( \\(.+\\))?$`));
-    await expect(tabs.filter({ hasNotText: MACHINE_NAME })).toHaveAttribute("title", /^review( \(.+\))?$/);
+    // Each tooltip ends in the chord that selects that tab by position, e.g. "review on build-box (Ctrl+2)".
+    const all = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+    const chord = await page.evaluate(() => (navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+"));
+    const positionOf = async (tab: typeof remote) =>
+      (await all.evaluateAll((els) => els.map((el) => el.getAttribute("title")))).indexOf(
+        await tab.getAttribute("title"),
+      ) + 1;
+    const local = tabs.filter({ hasNotText: MACHINE_NAME });
+    await expect(remote).toHaveAttribute("title", `review on ${MACHINE_NAME} (${chord}${await positionOf(remote)})`);
+    await expect(local).toHaveAttribute("title", `review (${chord}${await positionOf(local)})`);
 
     const status = page.getByRole("contentinfo");
     await expect(status).toContainText(MACHINE_NAME);

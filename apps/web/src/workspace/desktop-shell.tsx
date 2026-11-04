@@ -1,8 +1,8 @@
 import type { HcConnection } from "@doriface/client";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
-import { currentPlatform } from "../keys/trigger.ts";
 import { useActionKeys } from "../keys/use-action-keys.ts";
+import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
@@ -34,10 +34,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
-  // macOS writes shortcuts as joined glyphs (⌘1); elsewhere they read Ctrl+1.
-  const joiner = currentPlatform() === "mac" ? "" : "+";
-  const firstKeys = useActionKeys("tab.select:1")?.join(joiner);
-  const secondKeys = useActionKeys("tab.select:2")?.join(joiner);
+  const tabKeys = useTabSelectKeys();
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   useAppActions({
     terminals,
@@ -48,10 +45,11 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     onSession,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
-  const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
+  const tabList: WorkspaceTab[] = tabs.open.flatMap((address, position) => {
     const terminal = byAddress.get(address);
     if (terminal === undefined) return [];
-    const shortcut = address === tabs.active ? firstKeys : address === tabs.split ? secondKeys : undefined;
+    // tab.select:N opens tabs.open[N - 1], so the hint is read by the same position.
+    const shortcut = tabKeys[position];
     const machine = machineOf(address);
     return [
       {
@@ -115,7 +113,9 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           }
           trailing={
             <>
-              {focusedTerminal === undefined ? null : <SessionMenu address={focusedTerminal.address} />}
+              {focusedTerminal === undefined ? null : (
+                <SessionMenu address={focusedTerminal.address} title={terminalTitle(focusedTerminal)} />
+              )}
               {toggle}
             </>
           }
@@ -133,10 +133,17 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
         <StatusBar
           start={
             <>
-              <StatusBarItem icon={<Monitor aria-hidden />}>{focusedMachine}</StatusBarItem>
+              {/* A terminal on another machine shows its full hc address (build-box/t3): what hc commands take. */}
+              <span data-status-machine className="flex min-w-0">
+                <span className="sr-only">Machine: </span>
+                <StatusBarItem icon={<Monitor aria-hidden />}>
+                  {tabs.active !== null && machineOf(tabs.active) !== undefined ? tabs.active : focusedMachine}
+                </StatusBarItem>
+              </span>
               {focusedTerminal === undefined ? null : (
                 // The space gives way first, so a long name never pushes the terminal count out of the bar.
                 <span data-status-space className="flex max-w-48 min-w-0">
+                  <span className="sr-only">Space: </span>
                   <StatusBarItem icon={<Folder aria-hidden />}>{spaceName(focusedTerminal)}</StatusBarItem>
                 </span>
               )}
