@@ -66,8 +66,9 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
-  // The first screen is whole once the list has loaded and its default tab has opened (one render after `loaded`).
-  useArrivalReady(loaded && (tabs.open.length > 0 || live.length === 0));
+  // The screen is whole once the list has loaded and every kept tab shows: a tab on an added machine waits for
+  // machine.list, so a remount (coming back from Settings) would otherwise scale that tab in late.
+  useArrivalReady(loaded && tabs.restored);
   const toggle = (
     <IconButton
       label="Split"
