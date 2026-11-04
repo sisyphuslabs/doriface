@@ -44,7 +44,7 @@ function atB(records: readonly Signed[], seed: number) {
       return body?.by === b.signPub ? [body.n] : [];
     });
   const at = async (ms: number): Promise<void> => clock.advance(ms - clock.now());
-  return { clock, mesh, connect, signs, ownNs, at };
+  return { clock, mesh, connect, signs, ownNs, at, records: () => host.records() };
 }
 
 type Host = ReturnType<typeof atB>;
@@ -95,6 +95,16 @@ const tactics: readonly [string, number, (s: Host, session: Session, stored: Sig
     25_000,
     (_s, session, stored) => {
       session.say({ t: "records", records: [stored] });
+      return session;
+    },
+  ],
+  [
+    "sends a membership record, which b acks, and done",
+    25_000,
+    (s, session) => {
+      const records = s.records();
+      session.say({ t: "records", records: [new Signer(a, records).admit(peer(`x${s.clock.now()}`), headsOfRecords(records))] });
+      session.say({ t: "done", mesh: s.mesh });
       return session;
     },
   ],

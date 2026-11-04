@@ -96,7 +96,12 @@ export class Gossip implements SyncHost {
       sync: (member, purpose) => this.sync(member, purpose),
     });
     const own = (): number => ownN(this.records(), this.self);
-    this.#claims = new Claims(options.clock, own, (peer) => this.#known.nameOf(peer), options.log);
+    const ack = (): boolean => {
+      const result = mergeBatch(options, [], true);
+      if (result.added.length > 0) this.#changed(result, true);
+      return result.counterBehind;
+    };
+    this.#claims = new Claims(options.clock, own, (peer) => this.#known.nameOf(peer), options.log, ack);
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
   }
@@ -177,8 +182,8 @@ export class Gossip implements SyncHost {
   }
 
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult {
-    const result = mergeBatch(this.#options, batch);
-    this.#claims.merged();
+    const result = mergeBatch(this.#claims.signing(this.#options), batch);
+    this.#claims.merged(session.peer, result);
     this.#confirmed.sent(session.peer, batch);
     for (const refusal of result.refused) {
       this.#options.log(
@@ -194,20 +199,20 @@ export class Gossip implements SyncHost {
       this.#options.log(`mesh: merged ${result.added.length} records from ${this.#known.nameOf(session.peer)}`);
       this.#changed(result, session.sweeping);
     }
+    this.#claims.release();
     return result;
   }
 
   /** Records this host already signed through its store (a join's admit, a revoke): owed to every member. */
   stored(records: readonly Signed[]): void {
     const view = this.#stored.view();
-    this.#changed({ added: records, refused: [], wanted: [], ack: undefined, counterBehind: false, view }, true);
+    const result = { added: records, refused: [], wanted: [], ack: undefined, counterBehind: false, ackHeld: false };
+    this.#changed({ ...result, view }, true);
   }
 
   /** Signs and pushes one record of this host's own (a revoke, a leave, a rename). */
   append(draft: RecordDraft): MergeResult {
-    const floor = this.#claims.floor();
-    const counterFloor = floor === undefined ? undefined : { n: floor.n, peer: this.#known.nameOf(floor.peer) };
-    const result = appendOwn({ ...this.#options, ...(counterFloor === undefined ? {} : { counterFloor }) }, draft);
+    const result = appendOwn(this.#claims.signing(this.#options), draft);
     this.#changed(result, true);
     return result;
   }

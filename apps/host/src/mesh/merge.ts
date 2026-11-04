@@ -23,7 +23,8 @@ export interface MergeDeps {
   readonly meshId: string;
   /**
    * The highest `n` of this host's key that a peer's `hello` claims and whose records have not arrived yet (section
-   * 10.1): below it this host signs no record of its own. A merge needs none: at `done` the claim is resolved.
+   * 10.1): below it this host signs no record of its own. A merge holds its automatic ack back below it too
+   * (`ackHeld`), and the ack is signed once no claim stands.
    */
   readonly counterFloor?: { readonly n: number; readonly peer: string };
 }
@@ -46,6 +47,8 @@ export interface MergeResult {
    * the counter is caught up from the merged records, and the next merge signs.
    */
   readonly counterBehind: boolean;
+  /** An ack was owed, but this host's counter is still below `counterFloor`: nothing was signed (section 10.1). */
+  readonly ackHeld: boolean;
   readonly view: MeshView;
 }
 
@@ -96,14 +99,17 @@ function fitHeads(deps: MergeDeps, tx: MeshTx, draft?: RecordDraft): boolean {
   return tx.records.length < MAX_RECORDS;
 }
 
-/** A membership record signed by someone else is acked once, by a member that is valid in the merged view. */
-function needsAck(deps: MergeDeps, added: readonly Signed[], view: () => MeshView): boolean {
+/**
+ * A membership record signed by someone else is acked once, by a member that is valid in the merged view; `owed` is an
+ * ack an earlier merge held back.
+ */
+function needsAck(deps: MergeDeps, added: readonly Signed[], view: () => MeshView, owed: boolean): boolean {
   const self = selfOf(deps);
   const membership = added.some((record) => {
     const body = parseRecord(record);
     return body !== undefined && body.by !== self && MEMBERSHIP.has(body.type);
   });
-  return membership && view().members.some((member) => member.signPub === self);
+  return (owed || membership) && view().members.some((member) => member.signPub === self);
 }
 
 /** The view of `tx`'s records, evaluated once and only if asked: a batch that adds nothing never evaluates one. */
@@ -124,16 +130,19 @@ function wantedBy(tx: MeshTx): readonly string[] {
 /**
  * Merges a batch in one state transaction (section 5.5): the door and the dangling pool, the view, and the automatic
  * ack signed on the heads after the merge, all written in one generation, so no interleaved merge separates the ack
- * from the batch and nothing is pushed before it is committed.
+ * from the batch and nothing is pushed before it is committed. With `ackOwed` it signs the ack an earlier merge held.
  */
-export function mergeBatch(deps: MergeDeps, batch: readonly Signed[]): MergeResult {
+export function mergeBatch(deps: MergeDeps, batch: readonly Signed[], ackOwed = false): MergeResult {
   const result = deps.store.transact((tx) => {
     const before = tx.records.length;
     const merged = tx.merge(batch);
     const view = viewOnce(tx);
     let behind = false;
     let ack: Signed | undefined;
-    if (needsAck(deps, merged.added, view)) {
+    const due = needsAck(deps, merged.added, view, ackOwed);
+    const floor = deps.counterFloor;
+    const held = due && floor !== undefined && ownN(tx.records, selfOf(deps)) < floor.n;
+    if (due && !held) {
       try {
         if (fitHeads(deps, tx)) ack = tx.sign(deps.identity, (n, prev) => bodyOf(deps, n, prev));
       } catch (error) {
@@ -151,6 +160,7 @@ export function mergeBatch(deps: MergeDeps, batch: readonly Signed[]): MergeResu
       wanted,
       ack,
       counterBehind: behind,
+      ackHeld: held,
       get view(): MeshView {
         return view();
       },
@@ -174,7 +184,8 @@ export function appendOwn(deps: MergeDeps, draft: RecordDraft): MergeResult {
     if (!fitHeads(deps, tx, draft)) throw new Error(`mesh log full (${MAX_RECORDS})`);
     tx.sign(deps.identity, (n, prev) => bodyOf(deps, n, prev, draft));
     const view = meshViewOf(tx.records, tx.view());
-    return { added: tx.records.slice(before), refused: [], wanted: [], ack: undefined, counterBehind: false, view };
+    const added = tx.records.slice(before);
+    return { added, refused: [], wanted: [], ack: undefined, counterBehind: false, ackHeld: false, view };
   });
 }
 
@@ -197,6 +208,7 @@ export function ackAdmission(deps: MergeDeps): MergeResult | undefined {
       wanted: [],
       ack,
       counterBehind: false,
+      ackHeld: false,
       get view(): MeshView {
         return view();
       },
