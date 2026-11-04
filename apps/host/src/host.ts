@@ -78,7 +78,6 @@ export interface Host {
 }
 
 export async function startHost(options: HostOptions): Promise<Host> {
-  const { hostname, port } = options.listen;
   assertListenAllowed(options.listen, options.unsafeListen === true);
   if (options.lanListen !== undefined && options.stateDir === undefined) {
     throw new Error("a LAN listener serves only /v1/e2ee, which needs a state dir");
@@ -88,6 +87,27 @@ export async function startHost(options: HostOptions): Promise<Host> {
     throw new StartupError("already-running", message, { path: options.stateDir });
   }
   const hcVersion = await readHcVersion(options.hc);
+  // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
+  const started: (() => unknown)[] = [];
+  try {
+    return await serve(options, hcVersion, (undo) => started.push(undo));
+  } catch (error) {
+    await started
+      .toReversed()
+      .reduce<Promise<unknown>>(
+        (previous, undo) =>
+          previous
+            .then(undo)
+            .catch((cause: unknown) => options.log(`startup: stopping a part it had started failed: ${String(cause)}`)),
+        Promise.resolve(),
+      );
+    throw error;
+  }
+}
+
+/** Starts every part of the host; `started` records how to stop each one once it runs. */
+async function serve(options: HostOptions, hcVersion: string, started: (undo: () => unknown) => void): Promise<Host> {
+  const { hostname, port } = options.listen;
   const stateDir = options.stateDir;
   if (options.relay !== undefined && stateDir === undefined) throw new Error("the relay uplink needs a state dir");
   const identity = stateDir === undefined ? undefined : loadHostIdentity(stateDir);
@@ -109,6 +129,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     stateDir === undefined || identity === undefined
       ? undefined
       : e2eeDeps(stateDir, identity, options.pairingSlots ?? uplink, options, proofs);
+  if (e2ee !== undefined) started(() => e2ee.sync.stop());
   const push =
     stateDir === undefined || e2ee === undefined
       ? undefined
@@ -120,7 +141,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
           extraOrigins: options.pushTestOrigins,
           log: options.log,
         });
+  if (push !== undefined) started(() => push.stop());
   const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
+  started(() => ends.stop());
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -134,6 +157,8 @@ export async function startHost(options: HostOptions): Promise<Host> {
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
+  started(() => gateway.closeAll());
+  if (uplink !== undefined) started(() => uplink.stop());
   await uplink?.start({
     onSession: (session) => {
       gateway
@@ -154,10 +179,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
   try {
     server = Bun.serve({ hostname, port, fetch: gateway.app.fetch, websocket: gateway.websocket });
   } catch (error) {
-    push?.stop();
-    await uplink?.stop();
     throw listenError(error, `${formatHost(hostname)}:${port}`);
   }
+  started(() => server.stop(true));
   const lan = options.lanListen;
   let lanServer: ReturnType<typeof Bun.serve> | undefined;
   try {
@@ -171,10 +195,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
             websocket: gateway.websocket,
           });
   } catch (error) {
-    await uplink?.stop();
-    await server.stop(true);
     throw lan === undefined ? error : listenError(error, `${formatHost(lan.hostname)}:${lan.port}`);
   }
+  if (lanServer !== undefined) started(() => lanServer.stop(true));
   if (lan !== undefined && lanServer !== undefined) {
     e2ee?.lanUrls.push(...lanUrlsFor(lan.hostname, lanServer.port ?? lan.port));
   }
@@ -185,7 +208,6 @@ export async function startHost(options: HostOptions): Promise<Host> {
         ? undefined
         : openControl(options.stateDir, e2ee, options.meshStatus ?? e2ee.meshStatus, push);
   } catch (error) {
-    await Promise.all([server.stop(true), lanServer?.stop(true)]);
     throw new Error(`cannot open the control socket that devices revoke uses: ${String(error)}`, { cause: error });
   }
   e2ee?.slots.start();
@@ -207,13 +229,14 @@ export async function startHost(options: HostOptions): Promise<Host> {
           },
     relayUrl: uplink === undefined ? undefined : options.relay?.url,
     stop() {
-      push?.stop();
+      const pushStopped = push?.stop();
       e2ee?.slots.stop();
       control?.stop();
       stopping ??= Promise.resolve(e2ee?.sync.stop())
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
+        .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => undefined);
       return stopping;
