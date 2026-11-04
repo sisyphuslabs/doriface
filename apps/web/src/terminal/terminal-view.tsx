@@ -42,6 +42,8 @@ export interface TerminalViewProps {
   readonly onEnd?: (address: string, end: TerminalEnd) => void;
   /** The action of a view whose program had ended before it attached, which reports it `finished` (default Close tab). */
   readonly closeLabel?: string;
+  /** Once the view shows that its program had ended before it attached: there is no terminal left to type into. */
+  readonly onEnded?: () => void;
 }
 
 const HISTORY_LINES = 2_000;
@@ -51,7 +53,7 @@ const FULL_RESET = "\u001bc";
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onSend, onEnd } = props;
-  const { closeLabel = "Close tab" } = props;
+  const { closeLabel = "Close tab", onEnded } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -172,7 +174,10 @@ export function TerminalView(props: TerminalViewProps) {
       if (connection.closed || unmounted.current) return undefined;
       const then: Record<Settled, () => void> = {
         finished: () => onEndNow.current?.(address, "finished"),
-        ended: () => setEnded(true),
+        ended: () => {
+          setEnded(true);
+          onEnded?.();
+        },
         restarting: () => setRestarting(true),
         reattach: () => attach(ready),
         replaced: () => undefined,

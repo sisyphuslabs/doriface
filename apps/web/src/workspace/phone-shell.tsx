@@ -83,6 +83,10 @@ function PhoneTerminal(props: {
   const { connection, terminal, onBack } = props;
   const send = useRef<((data: TerminalInput) => void) | null>(null);
   const [latched, setLatched] = useState<ReadonlySet<string>>(new Set());
+  // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
+  const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
+  // The view that showed its program had already ended; the keys bar has nothing to send to under it.
+  const [endedView, setEndedView] = useState<string | null>(null);
   const onSend = useCallback((next: ((data: TerminalInput) => void) | null) => {
     send.current = next;
   }, []);
@@ -132,8 +136,7 @@ function PhoneTerminal(props: {
         <MachineOffline machine={machine} />
       ) : (
         <TerminalView
-          // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
-          key={`${terminal.address}#${terminal.pid ?? ""}`}
+          key={viewKey}
           connection={connection}
           address={terminal.address}
           pid={terminal.pid ?? null}
@@ -144,10 +147,14 @@ function PhoneTerminal(props: {
           onSend={onSend}
           // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
-          closeLabel="Back to agents"
+          // The header already has Back to agents; this one closes the ended session.
+          closeLabel="Close"
+          onEnded={() => setEndedView(viewKey)}
         />
       )}
-      <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
+      {endedView === viewKey ? null : (
+        <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
+      )}
     </div>
   );
 }

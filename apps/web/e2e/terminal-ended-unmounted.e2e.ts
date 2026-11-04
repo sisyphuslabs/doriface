@@ -1,32 +1,11 @@
 import { writeFileSync } from "node:fs";
+import { removeTerminal, stateOn, waitFor } from "./ended-terminal.ts";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
-import { hcOn, machineRow, newOn, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
+import { machineRow, newOn, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
-
-/** hc's answer to `get` for a terminal on one core: "live", "finished", or "gone" once it is removed. */
-function stateOn(core: "host" | "machine", address: string): string {
-  try {
-    const got: unknown = JSON.parse(hcOn(core, ["get", address, "--json"]));
-    const state = typeof got === "object" && got !== null ? Reflect.get(got, "state") : undefined;
-    return typeof state === "string" ? state : "unknown";
-  } catch {
-    return "gone";
-  }
-}
-
-/** Ends the program (the file it waits for) and removes the terminal, so no later spec counts it. */
-function removeTerminal(core: "host" | "machine", address: string, go: string): void {
-  writeFileSync(go, "");
-  if (stateOn(core, address) === "gone") return;
-  if (stateOn(core, address) === "live") hcOn(core, ["kill", address]);
-  hcOn(core, ["rm", address]);
-}
-
-// A program that ends only once the test creates `go`, so it ends while its view is not mounted.
-const waitFor = (go: string) => `echo armed-$((3*3)); until [ -e '${go}' ]; do sleep 0.1; done; exit`;
 
 test("a terminal whose program ends while the page is closed shows as ended after a reload, and closes from there", async ({
   page,
