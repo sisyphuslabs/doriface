@@ -16,15 +16,12 @@ const advertised = (page: Page) =>
 
 /** Presses each chord in turn and checks that it selected the tab that advertised it. */
 const pressEach = (page: Page, chords: readonly (string | null)[]) =>
-  chords.reduce<Promise<void>>(
-    (previous, chord, index) =>
-      previous.then(async () => {
-        await page.locator('[data-focused="true"] [data-terminal]').getByRole("textbox").focus();
-        await page.keyboard.press(chord ?? "");
-        await expect(tabs(page).nth(index)).toHaveAttribute("aria-selected", "true");
-      }),
-    Promise.resolve(),
-  );
+  chords.reduce<Promise<void>>(async (previous, chord, index) => {
+    await previous;
+    await page.locator('[data-focused="true"] [data-terminal]').getByRole("textbox").focus();
+    await page.keyboard.press(chord ?? "");
+    await expect(tabs(page).nth(index)).toHaveAttribute("aria-selected", "true");
+  }, Promise.resolve());
 
 test("each tab's tooltip names the chord that selects that tab, split or not", async ({ page }) => {
   await page.goto("/");
