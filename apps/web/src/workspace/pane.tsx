@@ -67,7 +67,9 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onS
       onFocusCapture={(event) => {
         // wterm takes focus as it starts; that is not the person picking this pane (see TerminalView's onFocus).
         if (event.target instanceof Element && event.target.closest('[data-ready="false"]') !== null) return;
-        onFocus();
+        // Already the pane in focus: nothing to choose. It may only stand in for a pane still being written (a split's),
+        // and writing it would replace that choice.
+        if (!focused) onFocus();
       }}
       data-split={split}
       data-focused={focused}
