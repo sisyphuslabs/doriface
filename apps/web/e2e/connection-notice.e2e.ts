@@ -53,16 +53,16 @@ test.describe("desktop", () => {
   });
 });
 
+async function openPhoneTerminal(page: Page): Promise<void> {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("banner").getByRole("button", { name: "New tab" }).click();
+  await expect(page.locator("[data-terminal]")).toContainText("$", { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible();
+}
+
 test.describe("phone", () => {
   test.use({ ...phone });
-
-  async function openPhoneTerminal(page: Page): Promise<void> {
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("banner").getByRole("button", { name: "New tab" }).click();
-    await expect(page.locator("[data-terminal]")).toContainText("$", { timeout: 15_000 });
-    await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible();
-  }
 
   test("the phone terminal screen says it is offline, and clears when the network is back", async ({
     page,
