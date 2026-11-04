@@ -1,17 +1,16 @@
 import type { HcConnection } from "@doriface/client";
 import type { MachineView, Terminal, TerminalRunParams } from "@doriface/protocol";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { machineEntries, machineKey, orderMachines, type MachineEntry } from "./machines.ts";
 import type { Session } from "./model.ts";
 import { withReach } from "./reach.ts";
 
 export interface Machines {
   readonly entries: readonly MachineEntry[];
-  /**
-   * The first terminal list and the first machine.list answer (or its failure) are in. Until then the sidebar draws no
-   * lists, so nothing it draws is pushed aside when they arrive.
-   */
-  readonly ready: boolean;
+  /** The first terminal list is in: the agents draw from it at once. */
+  readonly terminalsLoaded: boolean;
+  /** The first machine.list answer (or its failure) is in; until then Spaces holds a loading row in its place. */
+  readonly machinesListed: boolean;
   /** Starts a shell on that machine (`terminal.run` with `on`) and opens it at its `machine/tN` address. */
   readonly newTerminalOn: (machine: string) => void;
   /** New terminal with these run parameters; with no `on`, on this machine. */
@@ -28,7 +27,8 @@ export interface Machines {
 
 export const MachinesContext = createContext<Machines>({
   entries: [],
-  ready: true,
+  terminalsLoaded: true,
+  machinesListed: true,
   newTerminalOn: () => {},
   start: () => {},
   listError: undefined,
@@ -67,23 +67,36 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
   const [listed, setListed] = useState(0);
   const refresh = useCallback(() => setReads((count) => count + 1), []);
   const key = machineKey(terminals);
+  // Each read is numbered when sent. An answer applies unless a later-sent read's answer was already applied, so an
+  // answer slower than the refresh period still draws, and an old answer never overwrites a newer one.
+  const sentSeq = useRef(0);
+  const appliedSeq = useRef(0);
+  const mounted = useRef(true);
   useEffect(() => {
-    let current = true;
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    sentSeq.current += 1;
+    const seq = sentSeq.current;
+    const fresh = (): boolean => mounted.current && seq > appliedSeq.current;
     connection.call("machine.list").then(
       (list) => {
-        if (!current) return list;
+        if (!fresh()) return list;
+        appliedSeq.current = seq;
         setViews(orderMachines(list.machines));
         setListError(undefined);
         setListed((count) => count + 1);
         return list;
       },
       (error: unknown) => {
-        if (current) setListError(error instanceof Error ? error.message : String(error));
+        if (!fresh()) return;
+        appliedSeq.current = seq;
+        setListError(error instanceof Error ? error.message : String(error));
       },
     );
-    return () => {
-      current = false;
-    };
   }, [connection, key, reads]);
   useEffect(() => {
     const whenVisible = (): void => {

@@ -15,8 +15,10 @@ export interface AgentListsProps {
 
 /** The agents first, then the spaces (under their machines once there are more), on the desktop sidebar and the phone. */
 export function AgentLists({ terminals, active, onOpen, rail = false, heading = true }: AgentListsProps) {
-  const { ready } = useMachinesContext();
-  if (!ready) return <div aria-busy="true" className="px-2 pb-3" />;
+  // Nothing until the terminal list is in: the agents then draw in their final place, and the spaces (or their loading
+  // row) below them, so nothing already drawn moves.
+  const { terminalsLoaded } = useMachinesContext();
+  if (!terminalsLoaded) return <div aria-busy="true" className="px-2 pb-3" />;
   return (
     <div className="flex flex-col gap-4 px-2 pb-3">
       <AgentsGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} heading={heading} />

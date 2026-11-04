@@ -1,5 +1,5 @@
 import type { Terminal } from "@doriface/protocol";
-import { IconButton, MachineHeader, Notice, SidebarSection, SpaceRow, type Space } from "@doriface/ui";
+import { IconButton, MachineHeader, Notice, SidebarSection, SpaceRow, cn, type Space } from "@doriface/ui";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { machineCause } from "./machine-cause.ts";
@@ -39,6 +39,32 @@ function MachineNotice({ name }: { readonly name: string }) {
  */
 export function SpacesGroup({ terminals, active, onOpen, rail = false }: SpacesGroupProps) {
   const machines = useMachinesContext();
+  if (!machines.machinesListed) return <SpacesLoading rail={rail} />;
+  return <SpacesLists terminals={terminals} active={active} onOpen={onOpen} rail={rail} machines={machines} />;
+}
+
+/** Holds the spaces' place, labeled, until the first machine.list answer: one row, where the first machine row goes. */
+function SpacesLoading({ rail }: { readonly rail: boolean }) {
+  return (
+    <SidebarSection title="Spaces" {...(rail ? { className: "[&>header]:sr-only" } : {})}>
+      <div
+        role="status"
+        aria-label="Loading machines and spaces"
+        className={cn("flex h-(--row) items-center text-xs text-muted-foreground", rail ? "justify-center" : "px-2")}
+      >
+        {rail ? <span aria-hidden className="size-1.5 rounded-full bg-dim" /> : "Loading machines…"}
+      </div>
+    </SidebarSection>
+  );
+}
+
+function SpacesLists({
+  terminals,
+  active,
+  onOpen,
+  rail,
+  machines,
+}: SpacesGroupProps & { readonly rail: boolean; readonly machines: ReturnType<typeof useMachinesContext> }) {
   const spaces = useMemo(() => toSpaces(terminals), [terminals]);
   const colors = useSpaceColors(useMemo(() => spaces.map((space) => space.id), [spaces]));
   const colored = spaces.map((space): Space => {

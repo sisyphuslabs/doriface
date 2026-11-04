@@ -85,10 +85,11 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
 
   const openAddMachine = useCallback(() => setAdding(true), []);
-  const ready = fed.loaded && (listed > 0 || listError !== undefined);
+  const terminalsLoaded = fed.loaded;
+  const machinesListed = listed > 0 || listError !== undefined;
   const machines = useMemo(
-    () => ({ entries, ready, listError, openAddMachine, views, retry, ...runs }),
-    [entries, ready, listError, openAddMachine, views, retry, runs],
+    () => ({ entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, ...runs }),
+    [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, runs],
   );
   return (
     <MachinesContext value={machines}>
