@@ -91,36 +91,44 @@ describe("a claim's 30 s run on only while its claimer delivers this host's own 
     expect(h.signs()).toBe(false);
     await h.at(30_001);
     expect(h.cooldowns()).toBe(1);
-    expect(h.own().slice(before).map((record) => record.type)).toEqual(["ack"]);
+    expect(
+      h
+        .own()
+        .slice(before)
+        .map((record) => record.type),
+    ).toEqual(["ack"]);
   });
 
   test.each<[string, (signer: Signer, prev: readonly string[]) => Signed]>([
     ["a record it does not ack", (signer, prev) => signer.name(prev, "a2")],
     ["a record it acks itself", (signer, prev) => signer.admit(peer("e"), prev)],
-  ])("an ack held back is signed once after the claimed records resolve the claim and %s arrives: no fork", async (_how, next) => {
-    const { records, chain, heads } = restored(1);
-    const signer = new Signer(a, records);
-    const admit = signer.admit(peer("d"), headsOfRecords(records));
-    const h = hostB(records, 12);
-    const session = h.connect(a, heads);
-    session.hello({ [b.signPub]: 1 });
-    await h.at(1_000);
-    session.send(admit);
-    session.done();
-    await h.at(2_000);
-    expect(h.ownNs()).toEqual([]);
-    session.send(...chain);
-    session.done();
-    await h.at(3_000);
-    session.send(next(signer, [hashOf(admit)]));
-    session.done();
-    await h.at(4_000);
-    expect(h.own()).toEqual([
-      { n: 1, type: "ack" },
-      { n: 2, type: "ack" },
-    ]);
-    expect(h.cooldowns()).toBe(0);
-  });
+  ])(
+    "an ack held back is signed once after the claimed records resolve the claim and %s arrives: no fork",
+    async (_how, next) => {
+      const { records, chain, heads } = restored(1);
+      const signer = new Signer(a, records);
+      const admit = signer.admit(peer("d"), headsOfRecords(records));
+      const h = hostB(records, 12);
+      const session = h.connect(a, heads);
+      session.hello({ [b.signPub]: 1 });
+      await h.at(1_000);
+      session.send(admit);
+      session.done();
+      await h.at(2_000);
+      expect(h.ownNs()).toEqual([]);
+      session.send(...chain);
+      session.done();
+      await h.at(3_000);
+      session.send(next(signer, [hashOf(admit)]));
+      session.done();
+      await h.at(4_000);
+      expect(h.own()).toEqual([
+        { n: 1, type: "ack" },
+        { n: 2, type: "ack" },
+      ]);
+      expect(h.cooldowns()).toBe(0);
+    },
+  );
 
   test("a claimer that delivers is resolved: it is logged nowhere, and its next claim is heard", async () => {
     const { records, chain, heads } = restored(1);
