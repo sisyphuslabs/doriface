@@ -249,7 +249,7 @@ membership(S, eff):
 
 ### Revocation
 
-- `doriface-host mesh revoke <member>` signs a `revoke`; `--compromised` names the member and everyone it admitted, transitively, in one record. Every member closes the revoked keys' sessions (4401), removes the machine, removes the keys from its paired-devices store and the hostId from its known hosts, and refuses those keys on every path. `mesh leave` signs a revoke of the leaving host first. A host acts on its own revocation only when its computed view says so, and stays read-only for 7 days.
+- `doriface-host mesh revoke <member>` signs a `revoke`; `--compromised` names the member and everyone it admitted, transitively, in one record. Every member closes the revoked keys' sessions (4401): inbound ones at once, and a sync session it dialed to a revoked member within 60 s, so the revoked host still learns its revoke and the acks after it. It removes the machine, removes the keys from its paired-devices store and the hostId from its known hosts, and refuses those keys on every path. `mesh leave` signs a revoke of the leaving host first. A host acts on its own revocation only when its computed view says so, and stays read-only for 7 days.
 - Compromise of any member's keys, of a device paired to any member, or of an open offer is compromise of the mesh until revoked; the records name who did what.
 
 ### Host state and commands
