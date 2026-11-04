@@ -51,6 +51,7 @@ test("on a phone the open terminal's header ends its session and returns to the 
     .fill("phone-end-check");
   await page.keyboard.press("Enter");
   await expect(header(page).getByRole("heading", { name: "phone-end-check" })).toBeVisible();
+  await expect(header(page).getByRole("button", { name: "Session actions for phone-end-check" })).toBeVisible();
 
   await sessionAction(page, "End session…");
   const ask = page.getByRole("dialog", { name: "End phone-end-check?" });
