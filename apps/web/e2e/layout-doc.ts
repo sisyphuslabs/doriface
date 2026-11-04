@@ -2,6 +2,7 @@
 // every node, a tab's root a row whose id is the tab's.
 import type { Locator, Page } from "@playwright/test";
 import { setCoreDoc } from "./core-doc.ts";
+import { LAYOUT_MACHINE_SPEC } from "./layout-seed.ts";
 import { MACHINE_NAME } from "./machine.ts";
 
 export const LAYOUT_DOC = "herdr-app";
@@ -59,8 +60,13 @@ export function clearLayout(): void {
 export function clearLayouts(): void {
   clearLayout();
   setCoreDoc(LAYOUT_DOC, null, undefined, "layout");
+  clearOn(MACHINE_NAME, "host");
+  clearOn(LAYOUT_MACHINE_SPEC.name, "layout");
+}
+
+function clearOn(machine: string, core: "host" | "layout"): void {
   try {
-    setCoreDoc(LAYOUT_DOC, null, MACHINE_NAME);
+    setCoreDoc(LAYOUT_DOC, null, machine, core);
   } catch (error) {
     if (!/"kind":"(unavailable|machine_unknown|needs_login)"/.test(String(error))) throw error;
   }
