@@ -33,6 +33,8 @@ export interface LeaveReply {
   readonly confirmed: readonly MemberRef[];
   /** Set when other members exist and none confirmed: the revoke to run on one of them. */
   readonly revokeCommand: string | null;
+  /** Why this host's mesh machines were not all removed from its core (design 6.5), or null once they were. */
+  readonly machinesKept: string | null;
 }
 
 const isString = (value: unknown): value is string => typeof value === "string";
@@ -75,10 +77,11 @@ export function parseRenameReply(value: unknown): RenameReply {
 
 export function parseLeaveReply(value: unknown): LeaveReply {
   if (!isRecord(value)) return unreadable();
-  const { signed, revokeCommand } = value;
+  const { signed, revokeCommand, machinesKept } = value;
   const members = memberRefs(value["members"]);
   const confirmed = memberRefs(value["confirmed"]);
   if (!isBoolean(signed) || members === undefined || confirmed === undefined) return unreadable();
   if (revokeCommand !== null && !isString(revokeCommand)) return unreadable();
-  return { signed, members, confirmed, revokeCommand };
+  if (machinesKept !== null && !isString(machinesKept)) return unreadable();
+  return { signed, members, confirmed, revokeCommand, machinesKept };
 }

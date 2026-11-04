@@ -82,7 +82,10 @@ export async function leaveMesh(context: ChangeContext): Promise<number> {
     line(context, `left the mesh, but reached no member within ${PUSH_WITHIN_MS / 1000} s (${names(reply.members)})`);
     if (reply.revokeCommand !== null) line(context, `run this on one of them: ${reply.revokeCommand}`);
   }
-  return 0;
+  if (reply.machinesKept === null) return 0;
+  line(context, `but this host's mesh machines were not all removed from herdr: ${reply.machinesKept}`);
+  line(context, "remove them with: hc machine list, then hc machine rm <name>");
+  return 1;
 }
 
 export async function confirmOnTerminal(question: string): Promise<boolean> {
