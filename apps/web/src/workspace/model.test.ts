@@ -1,6 +1,15 @@
 import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { agentStatus, firstInSpace, groupAgents, spaceId, terminalTitle, toSpaces } from "./model.ts";
+import {
+  agentCounts,
+  agentStatus,
+  firstInSpace,
+  groupAgents,
+  spaceId,
+  tabPosition,
+  terminalTitle,
+  toSpaces,
+} from "./model.ts";
 
 const terminal = (fields: Partial<Terminal>): Terminal => ({
   address: "t1",
@@ -27,6 +36,49 @@ describe("spaces", () => {
       expect(selected).toHaveLength(1);
       expect(firstInSpace([here, there], selected[0]?.id ?? "")).toBe(active.address);
     }
+  });
+});
+
+describe("tabPosition", () => {
+  const terminals = [
+    terminal({ address: "t1", cwd: "/home/me/api" }),
+    terminal({ address: "t2", cwd: "/home/me/web" }),
+    terminal({ address: "t3", cwd: "/home/me/api", state: "finished" }),
+    terminal({ address: "t4", cwd: "/home/me/api" }),
+    terminal({ address: "box/t4", cwd: "/srv/api" }),
+  ];
+
+  test("counts the live terminals of the same space on the same machine, in feed order", () => {
+    expect(tabPosition(terminals, "t1")).toEqual({ index: 1, count: 2 });
+    expect(tabPosition(terminals, "t4")).toEqual({ index: 2, count: 2 });
+    expect(tabPosition(terminals, "t2")).toEqual({ index: 1, count: 1 });
+    expect(tabPosition(terminals, "box/t4")).toEqual({ index: 1, count: 1 });
+  });
+
+  test("a finished or unknown terminal has no position", () => {
+    expect(tabPosition(terminals, "t3")).toBeUndefined();
+    expect(tabPosition(terminals, "t9")).toBeUndefined();
+  });
+});
+
+describe("agentCounts", () => {
+  test("agrees with the agent sections for done, working and idle, leaving out offline and finished terminals", () => {
+    const terminals = [
+      terminal({ address: "t1" }),
+      terminal({ address: "t2", status: { state: "working" } }),
+      terminal({ address: "t3", status: { state: "done" } }),
+      terminal({ address: "t4", status: { state: "working" } }),
+      terminal({ address: "t5", status: { state: "blocked" } }),
+      terminal({ address: "t6", state: "finished" }),
+      { ...terminal({ address: "box/t1", status: { state: "working" } }), offline: true as const },
+    ];
+    const groups = groupAgents(terminals, 0);
+    expect(agentCounts(terminals)).toEqual({
+      done: groups.done.length,
+      working: groups.working.length,
+      idle: groups.idle.length,
+    });
+    expect(agentCounts(terminals)).toEqual({ done: 1, working: 2, idle: 1 });
   });
 });
 

@@ -16,11 +16,12 @@ describe("settled", () => {
     ["the core no longer knows it (after a drop)", failed("not_found"), false, true, "finished"],
     ["its machine cannot answer (first attach)", failed("unavailable"), true, true, "error"],
     ["its machine cannot answer (after a drop)", failed("unavailable"), false, true, "error"],
-    ["it finished before a first attach", finished, true, true, "error"],
+    ["it finished before a first attach", finished, true, true, "ended"],
     ["it finished while the line was down", finished, false, true, "finished"],
     ["it is lost, waiting for its new shell", live(null), false, false, "restarting"],
     ["another program runs there now", live(PROGRAM + 1), false, false, "replaced"],
     ["the same program refused the reattach", live(PROGRAM), false, true, "error"],
+    ["the program runs but refused a first attach", live(PROGRAM), true, true, "error"],
     ["the same program still runs after a lost stream", live(PROGRAM), false, false, "reattach"],
   ];
   test.each(cases)("%s", (_, answer, first, refused, expected) => {

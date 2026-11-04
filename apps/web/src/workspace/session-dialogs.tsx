@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { terminalInput } from "./focus-targets.ts";
 import { terminalTitle } from "./model.ts";
 import { RenameDialog } from "./rename-dialog.tsx";
-import { endSession, renameSession, sessionCalls } from "./session-actions.ts";
+import { endSession, renameSession, sessionCalls, takeBackEnd } from "./session-actions.ts";
 import type { SessionAsk } from "./session-context.ts";
 
 export interface SessionDialogsProps {
@@ -35,8 +35,8 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
   const terminal = ask === null ? undefined : terminals.find((entry) => entry.address === ask.address);
   const live = terminal?.state === "live";
   // A session that stops meanwhile needs no answer, except that a question whose action is still running stays up until
-  // it settles, and one whose action failed stays up to say why, even if the session left the list (a reconnect lists
-  // live terminals only), so the user can try again.
+  // it settles, and one whose action failed stays up to say why, even if the session left the list, so the user can
+  // try again.
   const keep = busy || error !== null;
   const current = terminal === undefined ? null : terminalTitle(terminal);
   const [lastTitle, setLastTitle] = useState("");
@@ -65,6 +65,16 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
     );
   };
   const end = (): void => run(() => endSession(sessionCalls(connection), ask.address), onDone);
+  // Left after a failed End, the session runs on: it must not keep End's mark, which a dropped link may have kept.
+  const dismiss = (): void => {
+    if (error !== null && live) {
+      const { address } = ask;
+      takeBackEnd(sessionCalls(connection), address).catch((cause: unknown) =>
+        console.error(`take End's mark off ${address}: ${String(cause)}`),
+      );
+    }
+    onDone();
+  };
   if (ask.kind === "rename") {
     return (
       <RenameDialog
@@ -85,14 +95,14 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onDone();
+        if (!open) dismiss();
       }}
       finalFocus={backTo}
       title={ask.kind === "end" ? `End ${title}?` : `Close ${title}?`}
       description={COPY[ask.kind]}
       actions={
         <>
-          <Button variant="ghost" onClick={onDone}>
+          <Button variant="ghost" onClick={dismiss}>
             Cancel
           </Button>
           <Button variant="destructive" loading={busy} onClick={end}>
