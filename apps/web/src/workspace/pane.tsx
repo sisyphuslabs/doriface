@@ -1,4 +1,5 @@
 import type { HcConnection } from "@doriface/client";
+import { cn } from "@doriface/ui";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
@@ -8,15 +9,16 @@ export interface PaneProps {
   readonly connection: HcConnection;
   readonly terminal: Session;
   readonly focused: boolean;
-  /** True while two panes are shown; unfocused-split-opacity dims only those. */
+  /** True when the tab holds more than one pane: unfocused-split-opacity dims only those, and each gets a header. */
   readonly split: boolean;
-  readonly onFocus: (address: string) => void;
+  readonly onFocus: () => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
 }
 
 /**
- * A terminal card with no title bar: its tab names it, the status bar says where it runs, and the tab strip
- * carries its session actions (each shown pane is its own tab, so a header would repeat the tab).
+ * A terminal card. A tab's only pane has no title bar: its tab names it, the status bar says where it runs, and the
+ * tab strip carries its session actions. Inside a split each pane gets a slim header naming its terminal, as herdr-app
+ * frames panes only once a tab is split, since the tab can name only one of them.
  */
 export function Pane({ connection, terminal, focused, split, onFocus, onEnd }: PaneProps) {
   const title = terminalTitle(terminal);
@@ -24,11 +26,23 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd }: P
   return (
     <section
       aria-label={`${title} terminal`}
-      onFocusCapture={() => onFocus(terminal.address)}
+      onFocusCapture={onFocus}
       data-split={split}
       data-focused={focused}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
+      {split ? (
+        <header
+          className={cn(
+            "flex h-6 shrink-0 items-center border-b border-border px-2.5 text-xs",
+            focused ? "bg-raised text-foreground" : "text-muted-foreground",
+          )}
+        >
+          <h2 title={title} className="min-w-0 truncate">
+            {title}
+          </h2>
+        </header>
+      ) : null}
       {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />
       ) : (

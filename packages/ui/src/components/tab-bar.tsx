@@ -13,6 +13,8 @@ export interface WorkspaceTab {
   readonly machine?: string;
   /** The shortcut that focuses this tab's pane, as written on this platform: shown in the tooltip. */
   readonly shortcut?: string;
+  /** The id of the tab panel it shows (WAI-ARIA tabs: `aria-controls`). */
+  readonly controls?: string;
 }
 
 function tooltipOf(tab: WorkspaceTab): string {
@@ -72,6 +74,7 @@ export function TabBar({
                 type="button"
                 role="tab"
                 aria-selected={active}
+                aria-controls={tab.controls}
                 title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"

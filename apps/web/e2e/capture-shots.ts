@@ -128,7 +128,7 @@ export const SHOTS: readonly Shot[] = [
       if (width === "390") return void (await expect(page.getByText("Needs you")).toBeVisible());
       await openTerminal(page, /shell/, "$");
       await openTerminal(page, /deploy/, "Waiting for approval");
-      await page.getByRole("button", { name: "Split" }).click();
+      await page.getByRole("button", { name: "Split right" }).click();
       // Hidden tabs stay mounted, so only the two shown panes count.
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
       await expect(page.locator("[data-terminal]:visible").filter({ hasText: "$" })).toBeVisible();

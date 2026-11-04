@@ -31,9 +31,10 @@ function call(core: CoreEnv, method: string, params: unknown): unknown {
   throw new Error(`${method}: no reply`);
 }
 
-export function setCoreDoc(name: string, value: unknown): void {
+export function setCoreDoc(name: string, value: unknown, on?: string): void {
   const core = coreEnv();
-  const current = call(core, "doc.get", { name });
+  const where = on === undefined ? { name } : { name, on };
+  const current = call(core, "doc.get", where);
   const version = typeof current === "object" && current !== null && "version" in current ? current.version : 0;
-  call(core, "doc.set", { name, value, version });
+  call(core, "doc.set", { ...where, value, version });
 }

@@ -33,7 +33,8 @@ test("each tab's tooltip names the chord that selects that tab, split or not", a
   expect(unsplit).toEqual(unsplit.map((_chord, index) => `ControlOrMeta+${index + 1}`));
   await pressEach(page, unsplit);
 
-  await page.getByRole("button", { name: "Split" }).click();
+  // A split adds a pane to the tab in view, not a tab, so every tab keeps its chord.
+  await page.getByRole("button", { name: "Split right" }).click();
   const split = (await advertised(page)).slice(0, 9);
   expect(split).toEqual(unsplit);
   await pressEach(page, split);

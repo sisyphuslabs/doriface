@@ -91,10 +91,10 @@ test("an unfocused split pane keeps its pty size through a reattach until it is 
   const link = await routeHcSocket(page);
   await page.goto("/");
   await openNewTerminal(page);
-  await openNewTerminal(page);
   const focused = page.locator('[data-focused="true"] [data-terminal]');
   const single = await gridSize(focused);
-  await page.getByRole("button", { name: "Split" }).click();
+  // Split right focuses the new pane, so the first one is the unfocused pane.
+  await page.getByRole("button", { name: "Split right" }).click();
   const unfocused = page.locator('[data-focused="false"] [data-terminal]:visible');
   await expect(unfocused).toHaveCount(1);
   const address = (await unfocused.getAttribute("data-terminal")) ?? "";

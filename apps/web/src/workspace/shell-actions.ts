@@ -1,5 +1,3 @@
-import type { Tabs } from "./use-tabs.ts";
-
 export type Shell = "desktop" | "phone";
 
 /** An app action the palette lists; `unavailable` says why it cannot run right now. */
@@ -25,20 +23,25 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
 
 const SESSION_ACTIONS = new Set(["session.rename", "session.end"]);
 
-/** Splitting needs two open tabs; until then it is listed as unavailable, with the reason. */
-function unavailable(id: string, tabs: Pick<Tabs, "open">): string | undefined {
-  return id === "pane.split" && tabs.open.length < 2 ? "Needs two tabs" : undefined;
+/** Splitting needs a terminal in view whose layout takes edits; until then it is listed as unavailable, with why. */
+function unavailable(id: string, inView: boolean, readOnly: string | null): string | undefined {
+  if (id !== "pane.split") return undefined;
+  return inView ? (readOnly ?? undefined) : "No terminal to split";
 }
 
 /**
  * What the palette lists right now. Rename and End session apply to the session in view, so with none in view they
  * are left out, as a palette leaves out commands that do not apply; Split is listed as unavailable until it can run.
  */
-export function availableActions(shell: Shell, tabs: Pick<Tabs, "open">, inView: boolean): readonly ShellAction[] {
+export function availableActions(
+  shell: Shell,
+  inView: boolean,
+  readOnly: string | null = null,
+): readonly ShellAction[] {
   return SHELL_ACTIONS[shell]
     .filter((id) => inView || !SESSION_ACTIONS.has(id))
     .map((id) => {
-      const reason = unavailable(id, tabs);
+      const reason = unavailable(id, inView, readOnly);
       return reason === undefined ? { id } : { id, unavailable: reason };
     });
 }

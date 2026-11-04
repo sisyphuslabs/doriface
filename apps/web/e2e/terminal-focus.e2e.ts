@@ -126,35 +126,25 @@ test.describe("with clipboard access", () => {
   });
 });
 
-test("clicking Split moves keyboard focus into the new pane, and clicking it again back to the terminal", async ({
+test("clicking Split right puts keyboard focus in the new pane beside the first, where typing lands", async ({
   page,
 }) => {
   await page.goto("/");
-  await openNewTerminal(page);
   const first = await openNewTerminal(page);
   const firstAddress = await first.getAttribute("data-terminal");
-  const split = page.getByRole("button", { name: "Split" });
 
-  await split.click();
-  await expect(split).toHaveAttribute("aria-pressed", "true");
-  const shown = page.locator("[data-terminal]:visible");
-  await expect(shown).toHaveCount(2);
-  const other = (await shown.evaluateAll((els) => els.map((el) => el.getAttribute("data-terminal")))).find(
-    (address) => address !== firstAddress,
-  );
-  await expect.poll(() => focusedAddress(page)).toBe(other);
-
-  await split.click();
-  await expect(split).toHaveAttribute("aria-pressed", "false");
-  const remaining = page.locator("[data-terminal]:visible");
-  await expect(remaining).toHaveCount(1);
-  const address = await remaining.getAttribute("data-terminal");
-  await expect.poll(() => focusedAddress(page)).toBe(address);
-  // Enter typed here must reach the shell, not press Split again.
-  await page.keyboard.type("echo unsplit-$((3+4))");
+  await page.getByRole("button", { name: "Split right" }).click();
+  await expect(page.locator("[data-terminal]:visible")).toHaveCount(2, { timeout: 15_000 });
+  await expect.poll(() => focusedAddress(page), { timeout: 15_000 }).not.toBe(firstAddress);
+  const address = await focusedAddress(page);
+  if (address === null) throw new Error("keyboard focus is in no terminal after the split");
+  const created = page.locator(`[data-terminal="${address}"]`);
+  await expect(created).toContainText("$", { timeout: 15_000 });
+  // Enter typed here must reach the new shell, not press Split right again.
+  await page.keyboard.type("echo split-$((3+4))");
   await page.keyboard.press("Enter");
-  await expect(remaining).toContainText("unsplit-7", { timeout: 15_000 });
-  await expect(split).toHaveAttribute("aria-pressed", "false");
+  await expect(created).toContainText("split-7", { timeout: 15_000 });
+  await expect(first).not.toContainText("split-7");
 });
 
 test("closing the palette with its shortcut or by running an action gives focus back to the terminal", async ({

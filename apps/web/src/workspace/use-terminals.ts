@@ -1,6 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import type { ListResult, Terminal } from "@doriface/protocol";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { applyEvent, fromSnapshot, type TerminalMap } from "./terminals.ts";
 
 export interface TerminalsState {
@@ -18,9 +18,17 @@ export function machineCount(list: Pick<ListResult, "machines">): number {
 
 const EMPTY: TerminalsState = { terminals: [], loaded: false, machines: 0, error: null };
 
-/** terminal.list for the first picture and machine count, then events.subscribe keeps it live. */
-export function useTerminals(connection: HcConnection | null): TerminalsState {
+/** A core document changed: which machine's (null for this core's), its name and its new version. */
+export type DocHeard = (machine: string | null, name: string, version: number) => void;
+
+/**
+ * terminal.list for the first picture and machine count, then events.subscribe keeps it live. The same feed carries
+ * `doc` events, handed to `onDoc`.
+ */
+export function useTerminals(connection: HcConnection | null, onDoc?: DocHeard): TerminalsState {
   const [state, setState] = useState<TerminalsState>(EMPTY);
+  const docHeard = useRef(onDoc);
+  docHeard.current = onDoc;
 
   useEffect(() => {
     if (connection === null) {
@@ -55,6 +63,7 @@ export function useTerminals(connection: HcConnection | null): TerminalsState {
         publish();
       });
       subscribed.onEvent((event) => {
+        if (event.type === "doc") docHeard.current?.(event.machine ?? null, event.data.name, event.data.version);
         const next = applyEvent(map, event);
         if (next === map) return;
         map = next;

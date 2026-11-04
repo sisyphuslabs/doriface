@@ -32,9 +32,10 @@ function setAt(value: JsonValue, path: readonly Step[], to: JsonValue | undefine
   }
   if (!isJsonObject(value)) throw new Error(`cannot step into ${JSON.stringify(value)}`);
   const key = String(step);
-  const { [key]: old, ...others } = value;
-  if (rest.length === 0 && to === undefined) return others;
-  return { ...others, [key]: setAt(old ?? {}, rest, to) };
+  if (rest.length === 0 && to === undefined)
+    return Object.fromEntries(Object.entries(value).filter(([k]) => k !== key));
+  const entries = Object.entries(value).map(([k, v]): [string, JsonValue] => [k, k === key ? setAt(v, rest, to) : v]);
+  return key in value ? Object.fromEntries(entries) : { ...value, [key]: setAt({}, rest, to) };
 }
 
 function ok(value: JsonValue): JsonObject {
