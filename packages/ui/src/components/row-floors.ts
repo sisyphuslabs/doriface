@@ -18,17 +18,27 @@ const ELLIPSIS = "\u2026";
 const segmenter = new Intl.Segmenter();
 let pen: CanvasRenderingContext2D | null | undefined;
 
-/** The width of the part's first `count` characters and the ellipsis, in the font the part is drawn in. */
+/**
+ * The width of a text's first `count` characters and the ellipsis, never more than the whole text: an ellipsis is
+ * wider than many a character, so a name one character past the floor would otherwise get a floor wider than itself
+ * and push a gap in after it.
+ */
+export function floorFor(text: string, count: number, width: (text: string) => number): number {
+  const characters = [...segmenter.segment(text)].map(({ segment }) => segment);
+  const whole = width(text);
+  if (characters.length <= count) return Math.ceil(whole);
+  return Math.ceil(Math.min(whole, width(characters.slice(0, count).join("") + ELLIPSIS)));
+}
+
+/** The floor of a part in the font it is drawn in. */
 function floorWidth(part: HTMLElement, count: number): number {
   pen ??= document.createElement("canvas").getContext("2d");
   if (pen === null) return 0;
-  const text = part.textContent ?? "";
-  const characters = [...segmenter.segment(text)].map(({ segment }) => segment);
   const style = getComputedStyle(part);
   pen.font = style.font;
   pen.letterSpacing = style.letterSpacing === "normal" ? "0px" : style.letterSpacing;
-  const kept = characters.length <= count ? text : characters.slice(0, count).join("") + ELLIPSIS;
-  return Math.ceil(pen.measureText(kept).width);
+  const font = pen;
+  return floorFor(part.textContent ?? "", count, (text) => font.measureText(text).width);
 }
 
 const px = (value: string): number => Number.parseFloat(value) || 0;

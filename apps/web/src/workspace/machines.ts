@@ -1,5 +1,5 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
-import { idOfMachine, machineOf, type Session } from "./model.ts";
+import { byName, idOfMachine, machineOf, type Session } from "./model.ts";
 
 export interface MachineEntry {
   /** Unique even when an added machine is named like this one. */
@@ -33,6 +33,13 @@ function entry(name: string, local: boolean, state: string, terminals: readonly 
   const own = live.filter((t) => machineOf(t.address) === (local ? undefined : name));
   return { id: idOfMachine(local ? undefined : name), name, local, state, live: own.length, first: own[0]?.address };
 }
+
+/**
+ * The added machines by name. hc lists them in the order this host learned of them, which in a mesh differs from host
+ * to host and moves when a machine reconnects, so every list (sidebar, notices, phone, Settings) reads them sorted.
+ */
+export const orderMachines = (machines: readonly MachineView[]): MachineView[] =>
+  machines.toSorted((a, b) => byName.compare(a.name, b.name));
 
 export function machineEntries(
   localName: string,
