@@ -182,8 +182,7 @@ export class Gossip implements SyncHost {
   }
 
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult {
-    const result = mergeBatch(this.#claims.signing(this.#options), batch);
-    this.#claims.merged(session.peer, result);
+    const result = this.#claims.merging(session.peer, () => mergeBatch(this.#claims.signing(this.#options), batch));
     this.#confirmed.sent(session.peer, batch);
     for (const refusal of result.refused) {
       this.#options.log(

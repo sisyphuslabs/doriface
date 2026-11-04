@@ -212,14 +212,18 @@ describe("a claim's 30 s run on only while its claimer delivers this host's own 
     expect(new Set(ns).size).toBe(ns.length);
   });
 
-  test("this host's own records that another member delivers renew no claim", async () => {
+  test("this host's own records that another member delivers renew no claim, nor the claimer's next records", async () => {
     const { records, chain, heads } = restored(2);
     const h = hostB(records, 17);
-    h.connect(a, heads).hello({ [b.signPub]: 2 });
+    const fromA = h.connect(a, heads);
+    fromA.hello({ [b.signPub]: 2 });
     await h.at(20_000);
     const fromC = h.connect(c, heads);
     fromC.send(...chain.slice(0, 1));
     fromC.done();
+    await h.at(25_000);
+    fromA.send(new Signer(a, records).admit(peer("d"), headsOfRecords(records)));
+    fromA.done();
     await h.at(30_001);
     expect(h.cooldowns()).toBe(1);
   });

@@ -10,8 +10,6 @@ export const CLAIM_COOLDOWN_MS = 600_000;
 
 interface Held {
   readonly n: number;
-  /** This host's own counter when the claim was made or last moved. */
-  readonly own: number;
   readonly cancel: () => void;
 }
 
@@ -55,16 +53,19 @@ export class Claims {
     for (const [key, until] of this.#ignoredUntil) if (until <= now) this.#ignoredUntil.delete(key);
     if (n <= own || this.#ignoredUntil.has(peer)) return false;
     const held = this.#held.get(peer);
-    if (held === undefined) this.#hold(peer, n, own);
+    if (held === undefined) this.#hold(peer, n);
     else this.#held.set(peer, { ...held, n: Math.max(n, held.n) });
     return true;
   }
 
   /**
-   * Records from `from` were merged: a claim this host's own counter now meets resolves, and the claim of `from` runs
-   * 30 s more when they moved the counter toward it. Records from anyone else renew no claim.
+   * Runs `merge` of records from `from`: a claim this host's own counter then meets resolves, and the claim of `from`
+   * runs 30 s more when this merge moved the counter toward it. Records from anyone else renew no claim, and neither
+   * does a merge of `from` that brought none of this host's records.
    */
-  merged(from: string, result: Pick<MergeResult, "ack" | "ackHeld">): void {
+  merging<R extends Pick<MergeResult, "ack" | "ackHeld">>(from: string, merge: () => R): R {
+    const before = this.#own();
+    const result = merge();
     if (result.ack !== undefined) this.#ackOwed = false;
     if (result.ackHeld) this.#ackOwed = true;
     const own = this.#own();
@@ -72,11 +73,12 @@ export class Claims {
       if (own >= held.n) {
         held.cancel();
         this.#held.delete(peer);
-      } else if (peer === from && own > held.own) {
+      } else if (peer === from && own > before) {
         held.cancel();
-        this.#hold(peer, held.n, own);
+        this.#hold(peer, held.n);
       }
     }
+    return result;
   }
 
   /** No claim stands: the ack a claim held back is signed now. */
@@ -106,7 +108,7 @@ export class Claims {
     this.#held.clear();
   }
 
-  #hold(peer: string, n: number, own: number): void {
+  #hold(peer: string, n: number): void {
     const cancel = deadline(this.#clock, CLAIM_MS, () => {
       const top = this.#held.get(peer)?.n ?? n;
       this.#held.delete(peer);
@@ -116,6 +118,6 @@ export class Claims {
       );
       this.release();
     });
-    this.#held.set(peer, { n, own, cancel });
+    this.#held.set(peer, { n, cancel });
   }
 }
