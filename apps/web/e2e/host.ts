@@ -3,7 +3,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
+import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_PUSH_PORT, E2E_TOKEN } from "./config.ts";
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
@@ -53,6 +53,8 @@ const host = Bun.spawn(
     "--token",
     E2E_TOKEN,
     "--no-relay",
+    // The notifications specs run their own push service here; nothing listens on it otherwise.
+    ...(layout ? [] : ["--push-test-origin", `http://127.0.0.1:${E2E_PUSH_PORT}`]),
   ],
   { env, stdout: "inherit", stderr: "inherit" },
 );
