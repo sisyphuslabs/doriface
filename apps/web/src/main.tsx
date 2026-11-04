@@ -11,6 +11,7 @@ import {
   onDesktopNavigate,
   onDesktopPairingLink,
   setDesktopBackground,
+  zoomDesktopWindow,
 } from "./desktop/bridge.ts";
 import { bootConnection } from "./desktop/local-host.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
@@ -34,6 +35,11 @@ onDesktopNavigate((path) => router.history.push(path));
 if (desktopBridge() !== null) {
   // The desktop app's Close Window leaves Cmd+W to the keymap; with no tab or Settings to close, it closes the window.
   setActionFallback("tab.close", () => closeDesktopWindow());
+  // The View menu shows the zoom keys without registering them, so on Linux and Windows only the keymap zooms. Screens
+  // with no workspace (Settings, pairing) handle no zoom action, so the window zooms from here.
+  setActionFallback("app.zoom_in", () => zoomDesktopWindow("in"));
+  setActionFallback("app.zoom_out", () => zoomDesktopWindow("out"));
+  setActionFallback("app.zoom_reset", () => zoomDesktopWindow("reset"));
   paintWindow();
   appearanceStore.subscribe(paintWindow);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintWindow);
