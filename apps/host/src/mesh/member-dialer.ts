@@ -19,6 +19,7 @@ export interface MemberDialerOptions {
  * for a token is used instead, giving the token back.
  */
 export class MemberDialer {
+  readonly #refusedAsRevoked = new Set<string>();
   readonly #options: MemberDialerOptions;
   readonly #dialing = new Map<string, Promise<boolean>>();
 
@@ -35,6 +36,11 @@ export class MemberDialer {
     return dial;
   }
 
+  /** Members whose last answer to this host's sync dial was 4401: they may have merged a revoke of this host. */
+  get refusedAsRevoked(): number {
+    return this.#refusedAsRevoked.size;
+  }
+
   async #dial(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
     const { policy } = this.#options;
     const grant = await policy.acquire(member.signPub, purpose);
@@ -46,11 +52,13 @@ export class MemberDialer {
     try {
       const link = await this.#options.dial(member);
       policy.report(member.signPub, "connected");
+      this.#refusedAsRevoked.delete(member.signPub);
       this.#options.attach(member, link, purpose === "sweep" || purpose === "probe");
       return true;
     } catch (error) {
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
       policy.report(member.signPub, code === 4429 ? 4429 : 4404);
+      if (code === 4401) this.#refusedAsRevoked.add(member.signPub);
       this.#options.log(`mesh: sync with ${member.name} failed: ${String(error)}`);
       return false;
     }

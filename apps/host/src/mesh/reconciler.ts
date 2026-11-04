@@ -145,7 +145,7 @@ export class Reconciler {
     }
   }
 
-  /** The mesh machines herdr listed at this host's last reconcile, for status (which cannot wait on herdr). */
+  /** The mesh machines herdr listed at the end of this host's last reconcile, for status (which cannot wait on herdr). */
   lines(): readonly MeshEntry[] {
     return this.#listed;
   }
@@ -157,7 +157,6 @@ export class Reconciler {
       const hostId = machine.via === true ? meshHostOf(machine.target, program, stateDir) : undefined;
       if (hostId !== undefined) entries.push({ machine, hostId });
     }
-    this.#listed = entries;
     return entries;
   }
 
@@ -186,6 +185,7 @@ export class Reconciler {
     );
     const key = JSON.stringify([view.members.map((m) => [m.hostId, m.name]), list.map((m) => m.name).toSorted()]);
     await Promise.all(missing.map((member) => this.#add(member, list, key)));
+    this.#listed = await this.#entries();
     this.#armRetry(view);
   }
 

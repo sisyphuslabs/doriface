@@ -41,7 +41,6 @@ export function meshDeps(options: MeshDepsOptions) {
   const closeRevoked = (): void => sessions.closeRevoked();
   const sync = new HostSync({ identity, mesh, relay, hc, stateDir, program, closeRevoked, log });
   sync.changed();
-  const hooks = options.hooks ?? syncHooks(sync, monotonicClock);
   const hostMesh = new HostMesh({
     stateDir,
     identity,
@@ -53,6 +52,15 @@ export function meshDeps(options: MeshDepsOptions) {
     sync: (s) => sync.adopt(s),
     log,
   });
+  const pending = () =>
+    hostMesh.pending.list().map(({ nonce, name, hostId, noisePub, expiresAt }) => ({
+      nonce,
+      name,
+      hostId,
+      noisePub,
+      expiresAt: new Date(expiresAt),
+    }));
+  const hooks = options.hooks ?? syncHooks(sync, monotonicClock, pending);
   return {
     hostMesh,
     sync,

@@ -64,6 +64,7 @@ describe("the running host's mesh offers", () => {
     const asked = host.pending.ask({
       nonce: "old",
       name: "beta",
+      noisePub: "noise-beta",
       hostId: "h",
       fingerprint: "f",
       expiresAt: Date.now() + 60_000,
@@ -173,6 +174,7 @@ describe("the running host's mesh offers", () => {
     const asked = host.pending.ask({
       nonce: "old",
       name: "beta",
+      noisePub: "noise-beta",
       hostId: "h",
       fingerprint: "f",
       expiresAt: Date.now() + 60_000,

@@ -101,11 +101,6 @@ export class DialPolicy {
     return this.#clock.now() < this.#halvedUntil ? this.#halvedUntil : undefined;
   }
 
-  /** Whether `member` showed presence since this host's uplink last returned. */
-  present(member: string): boolean {
-    return this.#present.has(member);
-  }
-
   /** Since when `member` has failed every dial, while that was not this host's own outage. */
   unreachableSince(member: string): number | undefined {
     return this.#firstMiss.get(member);

@@ -57,6 +57,7 @@ export class Gossip implements SyncHost {
   readonly #known = new MemberBook();
   readonly #revokedLast: RevokedLast;
   #view: MeshView;
+  #peerCounter = 0;
   #stopNet: () => void = () => undefined;
 
   constructor(options: GossipOptions) {
@@ -112,6 +113,16 @@ export class Gossip implements SyncHost {
   /** When this host last had a sync session with `peer`, on this host's clock. */
   lastSync(peer: string): number | undefined {
     return this.#lastSync.get(peer);
+  }
+
+  /** The highest counter of this host's key any peer's `hello` showed (section 10.1). */
+  get peerCounter(): number {
+    return this.#peerCounter;
+  }
+
+  /** A member refused this host's sync dial with 4401: this host may be revoked (section 8.6). */
+  get possiblyRevoked(): boolean {
+    return this.#dialer.refusedAsRevoked > 0;
   }
 
   /** How many stored records `peer` is not known to hold. */
@@ -189,6 +200,7 @@ export class Gossip implements SyncHost {
     this.#confirmed.set(peer, heads);
     const claim = n[this.self];
     if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
+    if (claim !== undefined) this.#peerCounter = Math.max(this.#peerCounter, claim);
   }
 
   ended(session: SyncSession): void {

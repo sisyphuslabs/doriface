@@ -16,8 +16,7 @@ import type { Gossip } from "./gossip.ts";
 import type { HcTarget } from "./hc-machines.ts";
 import { type HostRuntime, startHostRuntime } from "./host-runtime.ts";
 import type { MeshRuntime } from "./runtime.ts";
-import type { MeshLiveFacts } from "./host-hooks.ts";
-import { liveFactsOf } from "./live-facts.ts";
+import { liveFactsOf, NOT_RUNNING, type SyncFacts } from "./live-facts.ts";
 
 export interface HostSyncOptions {
   readonly identity: HostIdentity;
@@ -58,10 +57,10 @@ export class HostSync {
     return this.#running?.runtime.gossip;
   }
 
-  /** The running mesh's live facts for `mesh status`, or undefined before sync runs. */
-  live(): MeshLiveFacts | undefined {
+  /** The running mesh's live facts for `mesh status` (none before sync runs). */
+  live(): SyncFacts {
     const runtime = this.#running?.runtime;
-    return runtime === undefined ? undefined : liveFactsOf(runtime, this.#clock());
+    return runtime === undefined ? NOT_RUNNING : liveFactsOf(runtime, this.#clock());
   }
 
   /** The running mesh (sync, reconciler, lines) once this host has a mesh.json. */
