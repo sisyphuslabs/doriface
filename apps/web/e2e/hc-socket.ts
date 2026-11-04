@@ -1,5 +1,33 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
-import { E2E_HOST_PORT } from "./config.ts";
+import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
+
+/** A gateway on the LAN rather than on this computer: a lost network concerns it. */
+export const LAN_HC_URL = `ws://studio.lan:${E2E_HOST_PORT}/v1/hc`;
+
+/** Call before page.goto: carries the page's connections to LAN_HC_URL to the e2e host, as the LAN would. */
+export async function routeLanToHost(page: Page): Promise<void> {
+  await page.routeWebSocket(LAN_HC_URL, (socket) => {
+    const host = new WebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, ["doriface.v1", `doriface.token.${E2E_TOKEN}`]);
+    host.binaryType = "arraybuffer";
+    const early: (string | Uint8Array<ArrayBuffer>)[] = [];
+    host.addEventListener("open", () => {
+      for (const frame of early.splice(0)) host.send(frame);
+    });
+    socket.onMessage((message) => {
+      const frame = typeof message === "string" ? message : Uint8Array.from(message);
+      if (host.readyState === WebSocket.OPEN) host.send(frame);
+      else early.push(frame);
+    });
+    host.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) =>
+      socket.send(typeof event.data === "string" ? event.data : Buffer.from(event.data)),
+    );
+    host.addEventListener(
+      "close",
+      (event) => void socket.close({ code: event.code === 1000 ? 1000 : 1011, reason: event.reason }),
+    );
+    socket.onClose(() => host.close());
+  });
+}
 
 /** The page's hc WebSocket, routed through the spec so it can lag like the relay and drop like a relay blip. */
 export interface HcSocket {

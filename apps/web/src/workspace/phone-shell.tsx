@@ -12,9 +12,11 @@ import { AgentLists } from "./agent-lists.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
-import { ReconnectStatus } from "./reconnect-status.tsx";
+import { ConnectionLine, ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
+import { afterEnd } from "./session-actions.ts";
+import { SessionMenu } from "./session-menu.tsx";
 import { usePhoneActions, type SessionVerb } from "./use-app-actions.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -109,7 +111,7 @@ function PhoneTerminal(props: {
     <div className="flex h-dvh min-h-0 flex-col bg-card">
       <header
         data-titlebar
-        className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
+        className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
       >
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -123,7 +125,9 @@ function PhoneTerminal(props: {
             {where}
           </p>
         </div>
+        <SessionMenu address={terminal.address} title={title} placement="header" />
       </header>
+      <ConnectionLine />
       {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />
       ) : (
@@ -138,7 +142,8 @@ function PhoneTerminal(props: {
           label={`${title} output`}
           transformInput={transform}
           onSend={onSend}
-          onEnd={(_address, end) => (closesTab(end) ? onBack() : undefined)}
+          // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
+          onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
         />
       )}
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
