@@ -93,6 +93,44 @@ test("a session ended on a phone is removed even when the page closes as soon as
   await expect(page.getByText("This terminal didn't open")).toHaveCount(0);
 });
 
+test("a session renamed and ended on a phone is removed even when the page closes as soon as End is confirmed", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const link = await routeHcSocket(page);
+  await page.goto("/");
+  await expect(agentsList(page)).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("banner").getByRole("button", { name: "New tab" }).click();
+  const terminal = page.locator("[data-terminal]");
+  await expect(terminal).toContainText("$", { timeout: 15_000 });
+  const address = await terminal.getAttribute("data-terminal");
+  if (address === null) throw new Error("the new terminal has no address");
+  const name = `end-at-once-${address}`;
+  const actions = page.getByRole("banner").getByRole("button", { name: /^Session actions for / });
+  await actions.click();
+  await page.getByRole("menuitem", { name: "Rename…" }).click();
+  await page
+    .getByRole("dialog", { name: /^Rename / })
+    .getByRole("textbox", { name: "Name" })
+    .fill(name);
+  await page.keyboard.press("Enter");
+  await expect(screenTitle(page)).toHaveText(name);
+  await actions.click();
+  await page.getByRole("menuitem", { name: "End session…" }).click();
+  // The kill's answer has not come back when the page closes, as over a slow relay: the answer is held, never released.
+  link.holdFromHost('"state":"finished"');
+  await page
+    .getByRole("dialog", { name: `End ${name}?` })
+    .getByRole("button", { name: "End session" })
+    .click();
+  // A role query for the terminal screen already reads it as gone: the End question hides the page behind it.
+  await expect(page.getByRole("button", { name: "Back to agents" })).toHaveCount(0);
+  await expect.poll(() => link.sent().some((frame) => frame.includes('"method":"terminal.kill"'))).toBe(true);
+  await page.close();
+
+  await expect.poll(() => onCore(address), { timeout: 10_000, message: `${address} still on the core` }).toBe(false);
+});
+
 test("an End whose removal fails says so, lets the phone leave, and a second End finishes it", async ({ page }) => {
   const { link, name, address } = await phoneWithTerminal(page, "end-fails");
   const deliver = await endWithRemovalHeld(page, link, name);
