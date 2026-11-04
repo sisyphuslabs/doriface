@@ -135,7 +135,10 @@ describe("a move saved through the order document", () => {
     const doc = new LayoutDoc(store.calls, null, () => undefined, readOrderDocument);
     await doc.refresh();
     expect(doc.state.phase).toBe("unreadable");
-    expect(await doc.edit(moveInOrder(LIVE, "build", 0))).toBe(false);
+    // The move is refused with the reason, which the workspace shows; nothing is written.
+    await expect(doc.edit(moveInOrder(LIVE, "build", 0))).rejects.toThrow(
+      "a machine order that is not a list of machine ids",
+    );
     expect(store.current()).toEqual({ machine_order: "not a list" });
   });
 });
