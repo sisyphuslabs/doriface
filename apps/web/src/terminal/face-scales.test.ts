@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FaceScales, type Measure } from "./face-scales.ts";
+import { FaceScales, faceScalesFor, forgetMeasuredFaces, type Measure } from "./face-scales.ts";
 
 const ASCII_INK = {
   actualBoundingBoxLeft: 0,
@@ -31,6 +31,35 @@ function fakeCanvas(): { readonly measure: Measure; readonly calls: () => number
 }
 
 const DEFAULT = '"JetBrains Mono Variable", monospace';
+
+const measureFor = () => fakeCanvas().measure;
+
+describe("faceScalesFor", () => {
+  test("one font at one size is measured once, by every caller", () => {
+    forgetMeasuredFaces();
+    expect(faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor)).toBe(faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor));
+  });
+
+  test("another size is another set of measurements, never the scales of the first", () => {
+    forgetMeasuredFaces();
+    expect(faceScalesFor(30.67, DEFAULT, DEFAULT, measureFor)).not.toBe(
+      faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor),
+    );
+  });
+
+  test("another font stack is another set of measurements", () => {
+    forgetMeasuredFaces();
+    const own = faceScalesFor(17.33, `"Own CJK", ${DEFAULT}`, DEFAULT, measureFor);
+    expect(own).not.toBe(faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor));
+  });
+
+  test("forgetting the measurements, as a finished font load does, measures again", () => {
+    forgetMeasuredFaces();
+    const before = faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor);
+    forgetMeasuredFaces();
+    expect(faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor)).not.toBe(before);
+  });
+});
 
 describe("FaceScales", () => {
   test("a fallback face is sized to the primary's ideograph width, the same for every glyph of a block", () => {

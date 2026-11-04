@@ -91,30 +91,48 @@ export function forgetMeasuredFaces(): void {
   faces.clear();
 }
 
+// Here, not in each terminal view: the cache outlives the views, and a font can finish loading while none is mounted.
+if (typeof document !== "undefined") document.fonts.addEventListener("loadingdone", forgetMeasuredFaces);
+
+/**
+ * The FaceScales for a font stack at a size in px, made the first time that font and size is asked for, with the
+ * measure `measureFor(size)` returns. Null when there is nothing to measure with.
+ */
+export function faceScalesFor(
+  size: number,
+  family: string,
+  defaultFamily: string,
+  measureFor: (size: number) => Measure | null,
+): FaceScales | null {
+  const key = `${size}px ${family} | ${defaultFamily}`;
+  const known = faces.get(key);
+  if (known !== undefined) return known;
+  const measure = measureFor(size);
+  if (measure === null) return null;
+  const made = new FaceScales(measure, family, defaultFamily);
+  faces.set(key, made);
+  return made;
+}
+
 /**
  * The scale for each wide glyph of `element`'s terminal, in its computed font: the browser's own fallback picks the face,
  * so each face is measured, never assumed. Null when there is no canvas to measure with.
  */
 export function wideGlyphScaler(element: HTMLElement): ((text: string) => number) | null {
   const style = getComputedStyle(element);
-  const size = parseFloat(style.fontSize);
   const family = style.fontFamily;
-  const defaultFamily = style.getPropertyValue("--font-term").trim() || family;
-  const key = `${size}px ${family} | ${defaultFamily}`;
-  let scales = faces.get(key);
-  if (scales === undefined) {
-    const context = element.ownerDocument.createElement("canvas").getContext("2d");
-    if (context === null) return null;
-    scales = new FaceScales(
-      (text, font, at) => {
+  const scales = faceScalesFor(
+    parseFloat(style.fontSize),
+    family,
+    style.getPropertyValue("--font-term").trim() || family,
+    (size) => {
+      const context = element.ownerDocument.createElement("canvas").getContext("2d");
+      if (context === null) return null;
+      return (text, font, at) => {
         context.font = `${size * at}px ${font}`;
         return context.measureText(text);
-      },
-      family,
-      defaultFamily,
-    );
-    faces.set(key, scales);
-  }
-  const found = scales;
-  return (text) => found.scaleOf(text);
+      };
+    },
+  );
+  return scales === null ? null : (text) => scales.scaleOf(text);
 }
