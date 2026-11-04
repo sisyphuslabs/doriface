@@ -159,6 +159,7 @@ export class Gossip implements SyncHost {
     this.#lastSync.set(peer, this.#options.clock.now());
     if (dialer === peer) this.#options.policy.presence(peer);
     session.start(waitForHello);
+    this.#retireIfGone(session);
     return session;
   }
 
@@ -289,6 +290,17 @@ export class Gossip implements SyncHost {
     this.#options.onView?.(result.view, result);
     for (const session of this.#sessions.values()) session.flush();
     if (owedOnwards) this.#push(result);
+    for (const session of this.#sessions.values()) this.#retireIfGone(session);
+  }
+
+  /**
+   * Section 6.2: a revoked member's inbound sessions close at once through LiveSessions; one this host dialed, at the
+   * view change or later (section 5.3's last push to it), retires within the linger.
+   */
+  #retireIfGone(session: SyncSession): void {
+    if (session.dialer !== this.self || this.#view.members.some((member) => member.signPub === session.peer)) return;
+    const capped = this.#view.overCap.some((member) => member.signPub === session.peer);
+    session.retire(capped ? "past the mesh's 12-member cap" : "revoked from the mesh");
   }
 
   /** Section 5.3: a revoke first; the revoked member last, after one ack came back or 10 s. */
