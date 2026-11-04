@@ -2,6 +2,7 @@ import { closeCodeOf } from "@doriface/crypto";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { DialPolicy, DialPurpose } from "./dial-policy.ts";
 import type { LineLink } from "./lines.ts";
+import { NoUplinkError } from "./no-uplink.ts";
 
 export interface MemberDialerOptions {
   readonly policy: DialPolicy;
@@ -61,21 +62,37 @@ export class MemberDialer {
       return false;
     }
     if (this.#options.flushOpen(member.signPub)) {
-      policy.release();
+      policy.release(grant.chargedAt);
       this.accepted(member.signPub);
       return true;
     }
+    let link: LineLink;
     try {
-      const link = await this.#options.dial(member);
-      policy.report(member.signPub, "connected");
-      this.accepted(member.signPub);
-      this.#options.attach(member, link, purpose === "sweep" || purpose === "probe");
-      return true;
+      link = await this.#options.dial(member);
     } catch (error) {
+      if (error instanceof NoUplinkError) {
+        policy.release(grant.chargedAt);
+        return false;
+      }
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
-      policy.report(member.signPub, code === 4429 ? 4429 : 4404);
+      policy.report(member.signPub, code === 4429 || code === 4412 ? code : 4404);
       if (code === 4401) this.#refusedAsRevoked.add(member.signPub);
       this.#options.log(`mesh: sync with ${member.name} failed: ${String(error)}`);
+      return false;
+    }
+    policy.report(member.signPub, "connected");
+    this.accepted(member.signPub);
+    return this.#attach(member, link, purpose === "sweep" || purpose === "probe");
+  }
+
+  /** The member answered: a session this host fails to set up says nothing about the member, so it gates nothing. */
+  #attach(member: MemberEntry, link: LineLink, sweeping: boolean): boolean {
+    try {
+      this.#options.attach(member, link, sweeping);
+      return true;
+    } catch (error) {
+      link.close(1011, "sync failed to start");
+      this.#options.log(`mesh: sync with ${member.name} failed to start here: ${String(error)}`);
       return false;
     }
   }
