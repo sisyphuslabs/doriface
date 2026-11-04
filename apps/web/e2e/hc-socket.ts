@@ -41,8 +41,11 @@ export interface HcSocket {
   /** Closes every open connection; while `down` is true the page's reconnects are refused. */
   readonly drop: (down: boolean) => Promise<void>;
   readonly restore: () => void;
-  /** Holds the page's requests for these methods (others pass) until the returned release sends them, in order. */
-  readonly hold: (...methods: string[]) => () => void;
+  /**
+   * Holds the page's requests for these methods (others pass) until the returned release sends them, in order. With
+   * `fail`, each is sent as a same-length unknown method instead, so hc answers it with an RPC error.
+   */
+  readonly hold: (...methods: string[]) => (fail?: boolean) => void;
   /** Every frame the host has delivered to the page, in order, as text. */
   readonly received: () => readonly string[];
   /**
@@ -85,7 +88,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   let delay = 0;
   let lastDue = 0;
   let held: readonly string[] = [];
-  const parked: (() => void)[] = [];
+  const parked: ((fail: boolean) => void)[] = [];
   const received: string[] = [];
   const hostHolds = new Set<HostHold>();
   await page.routeWebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, (socket) => {
@@ -98,8 +101,13 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
     socket.onMessage((frame) => {
       const text = typeof frame === "string" ? frame : frame.toString("latin1");
       sent.push(text);
-      if (held.some((method) => text.includes(`"method":"${method}"`))) parked.push(() => host.send(frame));
-      else host.send(frame);
+      const method = held.find((name) => text.includes(`"method":"${name}"`));
+      if (method === undefined) host.send(frame);
+      else
+        parked.push((fail) => {
+          const broken = `"method":"${method.slice(0, -1)}${method.endsWith("x") ? "y" : "x"}"`;
+          host.send(fail ? Buffer.from(text.replace(`"method":"${method}"`, broken), "latin1") : frame);
+        });
     });
     host.onMessage((message) => {
       // One message can carry several hc frames (an event and an RPC answer together): each is held or passed alone.
@@ -146,9 +154,9 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
     },
     hold: (...methods) => {
       held = methods;
-      return () => {
+      return (fail = false) => {
         held = [];
-        for (const send of parked.splice(0)) send();
+        for (const send of parked.splice(0)) send(fail);
       };
     },
   };

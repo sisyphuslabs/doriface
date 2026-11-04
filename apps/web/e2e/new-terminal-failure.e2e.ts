@@ -23,8 +23,8 @@ test("New terminal on an added machine that fails reports in the same place as N
   const socket = await routeHcSocket(page);
   await page.goto("/");
   await openNewTerminal(page);
-  const machines = page.getByRole("region", { name: "Machines" });
-  const newOn = machines.getByRole("button", { name: /^New terminal on build-box/ });
+  const machines = page.getByRole("region", { name: "Spaces" });
+  const newOn = machines.getByRole("button", { name: /^New space on build-box/ });
   // An earlier spec may have taken the machine offline; it is back once its button is enabled again.
   await expect(newOn).toBeEnabled({ timeout: 30_000 });
   // Hold the core's reply, so the link drops while the run is in flight and the run fails.

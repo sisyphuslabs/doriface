@@ -24,6 +24,7 @@ const SCREENS = [
   "mobile",
   "mobile-agents",
   "states",
+  "sidebar-recompose",
   "approval",
   "voice",
 ] as const;
