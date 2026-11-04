@@ -6,7 +6,7 @@
 import { generateToken } from "../src/auth.ts";
 import { startHost } from "../src/host.ts";
 import type { ByteReader } from "../src/testing/byte-reader.ts";
-import { createHcSession, HELLO, rpcFrame } from "../src/testing/hc-session.ts";
+import { createHcSession, HELLO, rpcFrame, stopLeftoverCores } from "../src/testing/hc-session.ts";
 import { openWsClient } from "../src/testing/ws-client.ts";
 
 const CALLS = Number(Bun.argv[2] ?? 1000);
@@ -77,4 +77,5 @@ try {
 } finally {
   await host.stop();
   await session.dispose();
+  await stopLeftoverCores();
 }

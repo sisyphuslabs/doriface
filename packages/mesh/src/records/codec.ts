@@ -51,7 +51,21 @@ export function verifies(prefix: "record" | "card", signed: Signed, signPub: str
 }
 
 export const encodeBody = (body: RecordBody | CardBody): string => JSON.stringify(body);
-export const hashOf = (record: Signed): string => base64urlEncode(sha256(encoder.encode(record.body)));
+/**
+ * A signed record's hash and parsed body, computed once per record object: a `Signed` is immutable, and a merge asks
+ * for both of every stored record many times (heads, own counters, the fold, the door's index), each a SHA-256 or a
+ * JSON parse of the whole body.
+ */
+const hashes = new WeakMap<Signed, string>();
+const bodies = new WeakMap<Signed, RecordBody | null>();
+
+export function hashOf(record: Signed): string {
+  const known = hashes.get(record);
+  if (known !== undefined) return known;
+  const hash = base64urlEncode(sha256(encoder.encode(record.body)));
+  hashes.set(record, hash);
+  return hash;
+}
 export const meshIdOf = (found: Signed): string => base32Encode(sha256(encoder.encode(found.body)).subarray(0, 16));
 
 export const signRecord = (body: RecordBody, signSecret: Uint8Array): Signed =>
@@ -108,9 +122,13 @@ function recordBodyOf(body: JsonObject): RecordBody | undefined {
 
 /** The record's body when it is a well-formed v2 record body (shape only: no signature or card check). */
 export function parseRecord(record: Signed): RecordBody | undefined {
-  if (!isSigned(record) || !fitsBody(record.body)) return undefined;
-  const body = parseIJsonObject(record.body);
-  return body === undefined ? undefined : recordBodyOf(body);
+  if (!isSigned(record)) return undefined;
+  const known = bodies.get(record);
+  if (known !== undefined) return known ?? undefined;
+  const json = fitsBody(record.body) ? parseIJsonObject(record.body) : undefined;
+  const body = json === undefined ? undefined : recordBodyOf(json);
+  bodies.set(record, body ?? null);
+  return body;
 }
 
 function cardBodyOf(body: JsonObject): CardBody | undefined {
