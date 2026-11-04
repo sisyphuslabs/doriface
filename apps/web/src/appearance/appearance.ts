@@ -5,7 +5,7 @@ import { activeThemeId, parseAppearance, type Appearance } from "./stored.ts";
 
 export type { CustomTheme, ThemeChoice } from "./choices.ts";
 export { themeChoices } from "./choices.ts";
-export type { Appearance, AppearanceMode } from "./stored.ts";
+export type { Appearance, AppearanceMode, Density } from "./stored.ts";
 export { activeThemeId } from "./stored.ts";
 
 const KEY = "doriface.appearance";
@@ -24,12 +24,16 @@ function load(): Appearance {
 
 const systemDark = (): boolean => matchMedia(DARK_QUERY).matches;
 
-/** Writes the theme on screen as variables onto <html>, so the UI and every terminal re-theme without a reload. */
+/**
+ * Writes the theme on screen as variables onto <html>, so the UI and every terminal re-theme without a reload, and the
+ * density as `data-ui-density`, which tokens.css turns into row heights.
+ */
 export function applyAppearance(
   appearance: Appearance,
   root: HTMLElement = document.documentElement,
   dark: boolean = systemDark(),
 ): void {
+  root.dataset["uiDensity"] = appearance.density;
   for (const name of Array.from(root.style)) if (name.startsWith("--")) root.style.removeProperty(name);
   root.style.removeProperty("color-scheme");
   const choice = themeChoices(appearance.custom).get(activeThemeId(appearance, dark));

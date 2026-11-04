@@ -99,7 +99,7 @@ The theme input is a herdr-app terminal palette (background, foreground, selecti
 
 ## 4. Spacing & Layout
 
-Base unit 4 px (Tailwind's spacing scale: 1 = 4 px). Fixed geometry tokens from herdr-app's layout: `--sidebar-width` 268 px, `--tabbar-height` 42 px, `--statusbar-height` 28 px, `--row` 30 px (44 px coarse), `--control-sm/--control/--control-lg` 26/30/36 px (44/44/48 coarse). Pane gutter and gap 8 px. Breakpoints: Tailwind defaults; the shell collapses below `md` (768 px) to the phone navigation.
+Base unit 4 px (Tailwind's spacing scale: 1 = 4 px). Fixed geometry tokens from herdr-app's layout: `--sidebar-width` 268 px, `--tabbar-height` 42 px, `--statusbar-height` 28 px, `--row` 30 px (44 px coarse; Settings > Appearance > Density makes it 26 px Compact or 36 px Spacious on fine pointers, and 48 px Spacious on coarse ones, never below 44 px there), `--control-sm/--control/--control-lg` 26/30/36 px (44/44/48 coarse). Pane gutter and gap 8 px. Breakpoints: Tailwind defaults; the shell collapses below `md` (768 px) to the phone navigation.
 
 Layout lines:
 

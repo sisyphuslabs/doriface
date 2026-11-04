@@ -1,6 +1,8 @@
 import { themeChoices, type CustomTheme } from "./choices.ts";
 
 export type AppearanceMode = "system" | "light" | "dark";
+/** Row height of the UI chrome (sidebar, lists, menus); the terminal font is its own setting. */
+export type Density = "compact" | "comfortable" | "spacious";
 
 export interface Appearance {
   /** "system" uses `light` or `dark` as the device asks; "light" and "dark" pin one of them. */
@@ -8,12 +10,20 @@ export interface Appearance {
   /** The theme id used when the appearance is dark, and when it is light. */
   readonly dark: string;
   readonly light: string;
+  readonly density: Density;
   readonly custom: readonly CustomTheme[];
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { mode: "system", dark: "night", light: "day", custom: [] };
+export const DEFAULT_APPEARANCE: Appearance = {
+  mode: "system",
+  dark: "night",
+  light: "day",
+  density: "comfortable",
+  custom: [],
+};
 
 const MODES: readonly AppearanceMode[] = ["system", "light", "dark"];
+const DENSITIES: readonly Density[] = ["compact", "comfortable", "spacious"];
 
 function isCustomTheme(value: unknown): value is CustomTheme {
   return (
@@ -43,6 +53,7 @@ export function parseAppearance(stored: unknown): Appearance {
   const base = {
     dark: pick(text(stored, "dark"), false) ?? DEFAULT_APPEARANCE.dark,
     light: pick(text(stored, "light"), true) ?? DEFAULT_APPEARANCE.light,
+    density: DENSITIES.find((entry) => entry === text(stored, "density")) ?? DEFAULT_APPEARANCE.density,
     custom,
   };
   const mode = MODES.find((entry) => entry === text(stored, "mode"));

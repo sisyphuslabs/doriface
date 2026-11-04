@@ -9,7 +9,13 @@ import {
   type ThemeOption,
 } from "@doriface/ui";
 import { useRef, useState } from "react";
-import { appearanceStore, themeChoices, useAppearance, type AppearanceMode } from "../appearance/appearance.ts";
+import {
+  appearanceStore,
+  themeChoices,
+  useAppearance,
+  type AppearanceMode,
+  type Density,
+} from "../appearance/appearance.ts";
 import { useDarkScheme } from "../terminal/use-dark-scheme.ts";
 import { importThemeFile } from "./import-theme.ts";
 
@@ -19,7 +25,13 @@ const MODES = [
   { value: "dark", label: "Dark" },
 ] as const satisfies readonly { value: AppearanceMode; label: string }[];
 
-/** Light/dark mode, a dark and a light pick from the theme library, and herdr-app theme import. */
+const DENSITIES = [
+  { value: "compact", label: "Compact" },
+  { value: "comfortable", label: "Comfortable" },
+  { value: "spacious", label: "Spacious" },
+] as const satisfies readonly { value: Density; label: string }[];
+
+/** Light/dark mode, a dark and a light pick from the theme library, density, and herdr-app theme import. */
 export function AppearanceSection() {
   const appearance = useAppearance();
   const systemDark = useDarkScheme();
@@ -69,6 +81,18 @@ export function AppearanceSection() {
           (3=#rrggbb); minimum-contrast, which would lift them all, is not available in the web terminal yet.
         </p>
       )}
+      <SettingRow
+        title="Density"
+        description="Row height in the sidebar, lists and menus. The terminal keeps its own font size."
+        control={
+          <SegmentedControl
+            label="Density"
+            value={appearance.density}
+            options={DENSITIES}
+            onValueChange={(density) => appearanceStore.update({ density })}
+          />
+        }
+      />
       <SettingRow
         title="Import a herdr-app theme"
         description="A herdr-app theme file (.json) imports unchanged."
