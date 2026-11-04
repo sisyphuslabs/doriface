@@ -127,3 +127,34 @@ test("a fresh device focuses a split tab's first pane, and Alt+arrows move focus
   await page.keyboard.press("Alt+ArrowLeft");
   await focusIs(t1);
 });
+
+test("a pane another device splits in while you type leaves the keyboard in the pane you are typing in", async ({
+  page,
+}) => {
+  const [t1, t2] = [shell("mine"), shell("theirs")] as const;
+  seedLayout([{ id: "tb-remote", root: [{ pane: "p1", terminal: t1 }] }]);
+  const focusedPane = () => page.locator('[data-focused="true"] [data-terminal]').getAttribute("data-terminal");
+  const keyboardIn = () =>
+    page.evaluate(() => document.activeElement?.closest("[data-terminal]")?.getAttribute("data-terminal") ?? null);
+
+  await page.goto("/");
+  await expect(paneOf(page, t1)).toContainText("$", { timeout: 20_000 });
+  await expect.poll(keyboardIn, { timeout: 15_000 }).toBe(t1);
+  await page.keyboard.type("echo remote-");
+  // Another device splits p1 while the line is half typed: the same tab, now with t2 beside it.
+  seedLayout([
+    {
+      id: "tb-remote",
+      root: [
+        { pane: "p1", terminal: t1, weight: 0.5 },
+        { pane: "p2", terminal: t2, weight: 0.5 },
+      ],
+    },
+  ]);
+  await expect(page.locator(`[data-terminal="${t2}"][data-ready="true"]`)).toHaveCount(1, { timeout: 20_000 });
+  expect(await focusedPane()).toBe(t1);
+  expect(await keyboardIn()).toBe(t1);
+  await page.keyboard.type("$((40+2))\n");
+  await expect(paneOf(page, t1)).toContainText("remote-42", { timeout: 10_000 });
+  await expect(paneOf(page, t2)).not.toContainText("remote-");
+});
