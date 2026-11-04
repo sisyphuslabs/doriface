@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "@doriface/protocol";
+import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../json.ts";
 import { editTab, readDocument, tabsOf } from "./document.ts";
 import { panesOf, splitPane, terminalBlock } from "./tree.ts";
 

@@ -1,9 +1,19 @@
 import type { JsonObject, Terminal } from "@doriface/protocol";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addTab as addDocTab, editTab, removeTab, tabsOf } from "../layout/document.ts";
-import { freshId, type Axis, type Node } from "../layout/node.ts";
-import type { DocEdit } from "../layout/sync.ts";
-import { panesOf, removePane, splitPane, terminalBlock } from "../layout/tree.ts";
+import {
+  addTab as addDocTab,
+  type Axis,
+  type DocEdit,
+  editTab,
+  freshId,
+  type Node,
+  panesOf,
+  removePane,
+  removeTab,
+  splitPane,
+  tabsOf,
+  terminalBlock,
+} from "@doriface/protocol/layout";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import { buildTabs, findTerminal, localOf, pick, type LayoutPane, type LayoutTab } from "./layout-model.ts";
 import { machineOf } from "./model.ts";

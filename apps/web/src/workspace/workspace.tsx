@@ -3,7 +3,7 @@ import { useToastManager } from "@doriface/ui";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
-import { LAYOUT_DOC } from "../layout/document.ts";
+import { LAYOUT_DOC } from "@doriface/protocol/layout";
 import { closesTab, type TerminalEnd } from "../terminal/terminal-end.ts";
 import { CloseTabDialog } from "./close-tab-dialog.tsx";
 import { AddMachineDialog } from "./add-machine-dialog.tsx";

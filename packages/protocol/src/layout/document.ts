@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "@doriface/protocol";
+import { isJsonObject, type JsonObject, type JsonValue } from "../json.ts";
 import { problemIn, type Node } from "./node.ts";
 
 /** The core document herdr-app keeps its spaces, tabs and split trees in, one per machine (`doc.get` `on`). */

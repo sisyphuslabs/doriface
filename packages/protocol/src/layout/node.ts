@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "@doriface/protocol";
+import { isJsonObject, type JsonObject, type JsonValue } from "../json.ts";
 
 /**
  * A node of herdr-app's layout tree (`src/layout.rs` `Node`): a `block` shows a terminal or a herdr-app panel, `row`

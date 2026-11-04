@@ -1,8 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import type { JsonObject, MachineView } from "@doriface/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LAYOUT_DOC } from "../layout/document.ts";
-import { LayoutDoc, type DocCalls, type DocEdit } from "../layout/sync.ts";
+import { type DocCalls, type DocEdit, LAYOUT_DOC, LayoutDoc } from "@doriface/protocol/layout";
 
 /** One machine's layout as this screen can show it: `doc` is the last one read, and `readOnly` says why it is frozen. */
 export interface MachineLayout {

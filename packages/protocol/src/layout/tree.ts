@@ -1,4 +1,4 @@
-import { isJsonObject } from "@doriface/protocol";
+import { isJsonObject } from "../json.ts";
 import {
   childrenOf,
   idOf,

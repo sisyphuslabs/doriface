@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { HcRpcError, isJsonObject, type JsonObject, type JsonValue } from "@doriface/protocol";
+import { isJsonObject, type JsonObject, type JsonValue } from "../json.ts";
+import { HcRpcError } from "../jsonrpc.ts";
 import { LayoutDoc, type DocCalls, type DocState } from "./sync.ts";
 
 /** A core's document store with compare-and-set, and a way for "another client" to write between our calls. */

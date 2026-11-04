@@ -1,4 +1,5 @@
-import { HcRpcError, type JsonObject, type JsonValue } from "@doriface/protocol";
+import { type JsonObject, type JsonValue } from "../json.ts";
+import { HcRpcError } from "../jsonrpc.ts";
 import { readDocument } from "./document.ts";
 
 export interface DocCalls {

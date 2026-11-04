@@ -1,4 +1,4 @@
-import { childrenOf, idOf, pixelsOf, typeOf, weightOf, type Node } from "./node.ts";
+import { childrenOf, idOf, pixelsOf, typeOf, weightOf, type Node } from "@doriface/protocol/layout";
 
 export interface Rect {
   readonly x: number;

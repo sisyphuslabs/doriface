@@ -1,7 +1,5 @@
 import type { Terminal } from "@doriface/protocol";
-import { tabsOf } from "../layout/document.ts";
-import type { Node } from "../layout/node.ts";
-import { panesOf, terminalBlock } from "../layout/tree.ts";
+import { type Node, panesOf, tabsOf, terminalBlock } from "@doriface/protocol/layout";
 import { tabKey, type View } from "../layout/view.ts";
 import { machineOf } from "./model.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";

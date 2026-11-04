@@ -38,3 +38,9 @@ export function setCoreDoc(name: string, value: unknown, on?: string): void {
   const version = typeof current === "object" && current !== null && "version" in current ? current.version : 0;
   call(core, "doc.set", { ...where, value, version });
 }
+
+/** A herdr document on the e2e host's core, as another client would read it. */
+export function getCoreDoc(name: string): unknown {
+  const current = call(coreEnv(), "doc.get", { name });
+  return typeof current === "object" && current !== null && "value" in current ? current.value : null;
+}
