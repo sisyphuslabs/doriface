@@ -63,7 +63,6 @@ export class Gossip implements SyncHost {
   readonly #revokeOwed = new Set<string>();
   #view: MeshView;
   #peerCounter = 0;
-  #stopNet: () => void = () => undefined;
 
   constructor(options: GossipOptions) {
     this.#options = options;

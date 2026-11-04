@@ -24,6 +24,7 @@ describe("a member dial to a relay that never opens the socket (L-E1)", () => {
       hc: { hc: "hc-not-installed" },
       stateDir: mkdtempSync(join(tmpdir(), "dh-host-sync-")),
       program: "/opt/doriface-host",
+      openFrom: () => false,
       closeRevoked: () => undefined,
       log: (line) => void logs.push(line),
       clock,
