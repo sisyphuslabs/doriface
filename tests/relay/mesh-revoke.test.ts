@@ -4,7 +4,7 @@ import { untilFullMesh } from "./support/mesh/echo.ts";
 import { watchForbidden } from "./support/mesh/forbidden-watch.ts";
 import { untilGone } from "./support/mesh/gone.ts";
 import { identityOf, mintIdentity } from "./support/mesh/identity.ts";
-import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { machineIds, meshFileOf, statusOf } from "./support/mesh/status.ts";
 
@@ -39,7 +39,7 @@ scenario(
     afterAll(async () => {
       const receipt = await mesh?.dispose();
       expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-    });
+    }, TEARDOWN_MS);
 
     test("E-OUT: an outsider's mesh-stream and hc dials get 4401 from every member, and leave no record or machine", async () => {
       const hosts = running();

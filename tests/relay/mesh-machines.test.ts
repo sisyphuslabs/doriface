@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { untilFullMesh } from "./support/mesh/echo.ts";
-import { HOST_NAMES, type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { HOST_NAMES, type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { machineIds } from "./support/mesh/status.ts";
 
@@ -26,7 +26,7 @@ scenario("automatic machine add and remove in hc", ["join", "revoke", "leave", "
   afterAll(async () => {
     const receipt = await mesh?.dispose();
     expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-  });
+  }, TEARDOWN_MS);
 
   test("a new member appears as a machine on every core, and every core lists exactly the other members", async () => {
     const hosts = running();

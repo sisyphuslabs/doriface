@@ -5,7 +5,7 @@ import { untilGone } from "./support/mesh/gone.ts";
 import { identityOf, mintIdentity } from "./support/mesh/identity.ts";
 import { deliver, type Judgement, untilJudged } from "./support/mesh/inject.ts";
 import { isolate } from "./support/mesh/isolate.ts";
-import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { needLib, scenario } from "./support/mesh/present.ts";
 import { actorOf, cardIn, cardOf, foundRecord, lastOwn, signAck, signAdmit } from "./support/mesh/records.ts";
 import { machineIds, meshIdOf, type SignedRecord, storedRecords, viewOf } from "./support/mesh/status.ts";
@@ -73,7 +73,7 @@ scenario(
     afterAll(async () => {
       const receipt = await mesh?.dispose();
       expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-    });
+    }, TEARDOWN_MS);
 
     test("an admit signed by a key that is no member waits in the dangling pool (3.3, rule 4) and changes nothing", async () => {
       const hosts = running();

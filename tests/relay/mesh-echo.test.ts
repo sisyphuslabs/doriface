@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { directedPairs, echoAll, untilFullMesh } from "./support/mesh/echo.ts";
-import { HOST_NAMES, type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { HOST_NAMES, type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { machineIds, statusOf, viewOf } from "./support/mesh/status.ts";
 
@@ -29,7 +29,7 @@ scenario(
     afterAll(async () => {
       const receipt = await mesh?.dispose();
       expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-    });
+    }, TEARDOWN_MS);
 
     test("E-MESH: every host is ok with 3 machines; all 12 pairs echo a nonce and run a terminal on the target", async () => {
       const hosts = running();

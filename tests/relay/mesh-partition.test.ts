@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { untilFullMesh } from "./support/mesh/echo.ts";
-import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { viewOf } from "./support/mesh/status.ts";
 
@@ -49,7 +49,7 @@ scenario(
     afterAll(async () => {
       const receipt = await mesh?.dispose();
       expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-    });
+    }, TEARDOWN_MS);
 
     test("a admits e while c renames d to d2; after the heal every host has both, one view, and matching machines", async () => {
       const hosts = running();

@@ -6,7 +6,7 @@ import { untilFullMesh } from "./support/mesh/echo.ts";
 import { untilGone } from "./support/mesh/gone.ts";
 import { holdLine } from "./support/mesh/held-line.ts";
 import { identityOf } from "./support/mesh/identity.ts";
-import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
+import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { machineIds } from "./support/mesh/status.ts";
 import { within } from "./support/watch.ts";
@@ -46,7 +46,7 @@ scenario(
     afterAll(async () => {
       const receipt = await mesh?.dispose();
       expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
-    });
+    }, TEARDOWN_MS);
 
     test("E-REVOKE --compromised c: c and d go everywhere, with their sessions (4401), lines and device entries", async () => {
       const hosts = running();
