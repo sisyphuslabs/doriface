@@ -79,6 +79,18 @@ export function selectTab(prev: KeyedTabs, key: string, listed: boolean): KeyedT
 }
 
 /**
+ * Moves the open tab `key` so that it ends at index `to`. Nothing else changes: the active tab, the split and which
+ * terminals are shown stay as they are. An unknown key or an index outside the list leaves the tabs unchanged.
+ */
+export function moveTab(prev: KeyedTabs, key: string, to: number): KeyedTabs {
+  const from = prev.open.indexOf(key);
+  if (from === -1 || from === to || !Number.isInteger(to) || to < 0 || to >= prev.open.length) return prev;
+  const open = prev.open.filter((entry) => entry !== key);
+  open.splice(to, 0, key);
+  return { ...prev, open };
+}
+
+/**
  * Selects the terminal at `address` against the feed as it is now (`listed`, null before the first answer): New tab
  * answers after the feed may already list its terminal, and then it opens at once instead of waiting for a later pass.
  */

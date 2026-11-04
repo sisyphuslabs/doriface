@@ -1,7 +1,8 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { followTerminals, type KeyedTabs, NO_TABS, selectTerminal } from "./tab-follow.ts";
+import { followTerminals, type KeyedTabs, moveTab, selectTerminal } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
+import { loadTabs, saveTabs } from "./tab-store.ts";
 
 export interface TabsState {
   readonly open: readonly string[];
@@ -19,9 +20,21 @@ export interface Tabs extends TabsState {
   toggleSplit(): void;
   /** Marks a shown pane as the focused one. */
   focus(address: string): void;
+  /** Moves an open tab so it ends at index `to` of `open`; shown panes and focus stay as they are. */
+  move(address: string, to: number): void;
+  /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
+  readonly lastMove: TabMove | null;
 }
 
-/** Per core, so leaving the workspace (Settings, a reconnect) and coming back finds the same tabs. */
+export interface TabMove {
+  readonly address: string;
+  readonly count: number;
+}
+
+/**
+ * Per core, so leaving the workspace (Settings, a reconnect) and coming back finds the same tabs; saved to
+ * localStorage as well, so a reload finds them too, in the same order.
+ */
 const kept = new Map<string, KeyedTabs>();
 
 /**
@@ -37,10 +50,13 @@ export function useTabs(
   listed: number,
 ): Tabs {
   const ids = useMemo(() => machineIds(machines), [machines]);
-  const [state, setState] = useState<KeyedTabs>(() => kept.get(core) ?? NO_TABS);
+  const [state, setState] = useState<KeyedTabs>(() => kept.get(core) ?? loadTabs(core));
+  const [lastMove, setLastMove] = useState<TabMove | null>(null);
 
   useEffect(() => {
+    if (kept.get(core) === state) return;
     kept.set(core, state);
+    saveTabs(core, state);
   }, [core, state]);
 
   useEffect(() => {
@@ -93,6 +109,18 @@ export function useTabs(
     [ids],
   );
 
+  const move = useCallback(
+    (address: string, to: number) => {
+      setState((prev) => {
+        // `to` counts the tabs `open` lists; a tab whose machine is not listed yet holds its place without one.
+        const target = prev.open.filter((key) => tabAddress(key, ids) !== undefined)[to];
+        return target === undefined ? prev : moveTab(prev, tabKey(address, ids), prev.open.indexOf(target));
+      });
+      setLastMove((prev) => ({ address, count: (prev?.count ?? 0) + 1 }));
+    },
+    [ids],
+  );
+
   const resolve = (key: string | null): string | null => (key === null ? null : (tabAddress(key, ids) ?? null));
   const open = state.open.flatMap((key) => tabAddress(key, ids) ?? []);
   return {
@@ -104,5 +132,7 @@ export function useTabs(
     drop: close,
     toggleSplit,
     focus,
+    move,
+    lastMove,
   };
 }

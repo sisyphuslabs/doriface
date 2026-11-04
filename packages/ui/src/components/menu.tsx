@@ -1,5 +1,6 @@
+import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
-import type { ComponentProps, ReactElement, ReactNode } from "react";
+import type { ComponentProps, ReactElement, ReactNode, RefObject } from "react";
 import { cn } from "../lib/cn.ts";
 import { Kbd } from "./kbd.tsx";
 import { overlaySurface } from "./overlay.ts";
@@ -28,6 +29,33 @@ export function Menu({ trigger, children, align = "start", className, defaultOpe
         </BaseMenu.Positioner>
       </BaseMenu.Portal>
     </BaseMenu.Root>
+  );
+}
+
+export interface ContextMenuProps {
+  /** The element whose right-click, Menu key or touch long-press opens the menu at the pointer. */
+  readonly trigger: ReactElement;
+  readonly children: ReactNode;
+  readonly onOpenChange?: (open: boolean) => void;
+  /** Where focus goes when the menu closes; Base UI's default otherwise. */
+  readonly finalFocus?: RefObject<HTMLElement | null>;
+}
+
+export function ContextMenu({ trigger, children, onOpenChange, finalFocus }: ContextMenuProps) {
+  return (
+    <BaseContextMenu.Root {...(onOpenChange === undefined ? {} : { onOpenChange: (open) => onOpenChange(open) })}>
+      <BaseContextMenu.Trigger render={trigger} />
+      <BaseContextMenu.Portal>
+        <BaseContextMenu.Positioner>
+          <BaseContextMenu.Popup
+            {...(finalFocus === undefined ? {} : { finalFocus })}
+            className={cn(overlaySurface, "min-w-48 p-1")}
+          >
+            {children}
+          </BaseContextMenu.Popup>
+        </BaseContextMenu.Positioner>
+      </BaseContextMenu.Portal>
+    </BaseContextMenu.Root>
   );
 }
 

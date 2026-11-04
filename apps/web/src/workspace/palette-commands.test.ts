@@ -18,7 +18,7 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
 });
 
 const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
-  actions: availableActions(shell, { open: ["t1", "t2"] }, false),
+  actions: availableActions(shell, { open: ["t1", "t2"], active: null }, false),
   terminals,
   host: "studio",
   route: "relay",
@@ -27,7 +27,7 @@ const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
 });
 
 const split = (open: readonly string[]) =>
-  paletteCommands({ ...source([]), actions: availableActions("desktop", { open }, false) }).find(
+  paletteCommands({ ...source([]), actions: availableActions("desktop", { open, active: null }, false) }).find(
     (command) => command.id === "pane.split",
   );
 

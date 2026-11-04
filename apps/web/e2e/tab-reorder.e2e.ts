@@ -15,14 +15,19 @@ const selectedIndex = (page: Page) =>
 async function order(page: Page): Promise<string[]> {
   const count = await tabs(page).count();
   const selected = await selectedIndex(page);
-  const addresses: string[] = [];
-  for (let position = 1; position <= count; position += 1) {
-    await page.keyboard.press(`ControlOrMeta+${position}`);
-    await expect(tabs(page).nth(position - 1)).toHaveAttribute("aria-selected", "true");
-    addresses.push((await focusedAddress(page)) ?? "");
-  }
-  await page.keyboard.press(`ControlOrMeta+${selected + 1}`);
-  await expect(tabs(page).nth(selected)).toHaveAttribute("aria-selected", "true");
+  const select = async (index: number) => {
+    await page.keyboard.press(`ControlOrMeta+${index + 1}`);
+    await expect(tabs(page).nth(index)).toHaveAttribute("aria-selected", "true");
+  };
+  const addresses = await Array.from({ length: count }, (_unused, index) => index).reduce<Promise<string[]>>(
+    async (previous, index) => {
+      const listed = await previous;
+      await select(index);
+      return [...listed, (await focusedAddress(page)) ?? ""];
+    },
+    Promise.resolve([]),
+  );
+  await select(selected);
   return addresses;
 }
 
@@ -30,7 +35,11 @@ async function order(page: Page): Promise<string[]> {
 async function fourTabs(page: Page): Promise<string[]> {
   await page.goto("/");
   await openNewTerminal(page);
-  while ((await tabs(page).count()) < 4) await openNewTerminal(page);
+  const missing = 4 - (await tabs(page).count());
+  await Array.from({ length: missing }).reduce<Promise<unknown>>(
+    (previous) => previous.then(() => openNewTerminal(page)),
+    Promise.resolve(),
+  );
   await expect(tabs(page)).toHaveCount(4);
   return order(page);
 }
@@ -129,25 +138,29 @@ test("under reduced motion neighbours stay put and a caret marks where the tab l
   await page.mouse.up();
 });
 
+/** A one-finger touch through CDP: held until the tab lifts when `hold` is set, then moved to `x`, then lifted. */
+async function touchDrag(page: Page, from: Locator, x: number, hold: boolean): Promise<void> {
+  const start = await centre(from);
+  const cdp = await page.context().newCDPSession(page);
+  const at = (px: number) => [{ x: px, y: start.y }];
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x) });
+  if (hold) await expect(strip(page).locator("[data-lifted]")).toHaveCount(1);
+  await Array.from({ length: 12 }, (_unused, index) => index + 1).reduce<Promise<unknown>>(
+    (previous, step) =>
+      previous.then(() =>
+        cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: at(start.x + ((x - start.x) * step) / 12),
+        }),
+      ),
+    Promise.resolve(),
+  );
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+}
+
 test.describe("touch", () => {
   test.use({ hasTouch: true });
-
-  /** A one-finger touch through CDP: held until the tab lifts when `hold` is set, then moved to `x`, then lifted. */
-  async function touchDrag(page: Page, from: Locator, x: number, hold: boolean): Promise<void> {
-    const start = await centre(from);
-    const cdp = await page.context().newCDPSession(page);
-    const at = (px: number) => [{ x: px, y: start.y }];
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x) });
-    if (hold) await expect(strip(page).locator("[data-lifted]")).toHaveCount(1);
-    for (let step = 1; step <= 12; step += 1) {
-      await cdp.send("Input.dispatchTouchEvent", {
-        type: "touchMove",
-        touchPoints: at(start.x + ((x - start.x) * step) / 12),
-      });
-    }
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await cdp.detach();
-  }
 
   test("a held touch drags a tab; a quick swipe does not move it", async ({ page }) => {
     const before = await fourTabs(page);

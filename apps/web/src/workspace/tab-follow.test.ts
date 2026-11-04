@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { expect, test } from "bun:test";
-import { followTerminals, type KeyedTabs, NO_TABS, selectTab, selectTerminal } from "./tab-follow.ts";
+import { followTerminals, type KeyedTabs, moveTab, NO_TABS, selectTab, selectTerminal } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 const terminal = (address: string): Terminal => ({
@@ -88,5 +88,20 @@ test("New tab's answer opens its terminal at once when the feed already lists it
   for (const listed of [[terminal("t1")], null]) {
     const answerFirst = selectTerminal(shown, "t2", ids, listed);
     expect([answerFirst.open, answerFirst.active, answerFirst.pending]).toEqual([[kept], kept, started]);
+  }
+});
+
+test("moving a tab changes only the order, and an index past either end changes nothing", () => {
+  const three: KeyedTabs = { ...NO_TABS, open: ["a", "b", "c"], active: "b", split: "c" };
+  expect(moveTab(three, "a", 2)).toEqual({ ...three, open: ["b", "c", "a"] });
+  expect(moveTab(three, "c", 0)).toEqual({ ...three, open: ["c", "a", "b"] });
+  for (const [key, to] of [
+    ["a", 0],
+    ["a", -1],
+    ["a", 3],
+    ["zz", 1],
+    ["a", 1.5],
+  ] as const) {
+    expect(moveTab(three, key, to)).toBe(three);
   }
 });

@@ -13,6 +13,8 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
   desktop: [
     "tab.new",
     "pane.split",
+    "tab.move:left",
+    "tab.move:right",
     "session.rename",
     "session.end",
     "layout.toggle:sidebar",
@@ -25,18 +27,29 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
 
 const SESSION_ACTIONS = new Set(["session.rename", "session.end"]);
 
+type ActionTabs = Pick<Tabs, "open" | "active">;
+
+/** Whether the active tab has a neighbour on that side to move past. */
+function canMove(id: string, { open, active }: ActionTabs): boolean {
+  const at = active === null ? -1 : open.indexOf(active);
+  if (at === -1) return false;
+  return id === "tab.move:left" ? at > 0 : at < open.length - 1;
+}
+
 /** Splitting needs two open tabs; until then it is listed as unavailable, with the reason. */
-function unavailable(id: string, tabs: Pick<Tabs, "open">): string | undefined {
+function unavailable(id: string, tabs: ActionTabs): string | undefined {
   return id === "pane.split" && tabs.open.length < 2 ? "Needs two tabs" : undefined;
 }
 
 /**
  * What the palette lists right now. Rename and End session apply to the session in view, so with none in view they
- * are left out, as a palette leaves out commands that do not apply; Split is listed as unavailable until it can run.
+ * are left out, as a palette leaves out commands that do not apply, and so is moving the active tab past an end of the
+ * strip; Split is listed as unavailable until it can run.
  */
-export function availableActions(shell: Shell, tabs: Pick<Tabs, "open">, inView: boolean): readonly ShellAction[] {
+export function availableActions(shell: Shell, tabs: ActionTabs, inView: boolean): readonly ShellAction[] {
   return SHELL_ACTIONS[shell]
     .filter((id) => inView || !SESSION_ACTIONS.has(id))
+    .filter((id) => !id.startsWith("tab.move:") || canMove(id, tabs))
     .map((id) => {
       const reason = unavailable(id, tabs);
       return reason === undefined ? { id } : { id, unavailable: reason };

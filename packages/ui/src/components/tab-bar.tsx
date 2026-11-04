@@ -1,8 +1,10 @@
-import { Plus, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
+import { ContextMenu, MenuItem } from "./menu.tsx";
 import { StatusIndicator, type AgentStatus } from "./status.tsx";
+import { caretLeft, type DragState, landingLeft, type Settle, shiftOf, useTabDrag } from "./tab-drag.ts";
 
 export interface WorkspaceTab {
   readonly id: string;
@@ -20,32 +22,110 @@ function tooltipOf(tab: WorkspaceTab): string {
   return tab.shortcut === undefined ? named : `${named} (${tab.shortcut})`;
 }
 
+/** A tab that moved, by any path (drag, its menu, a key); counted so moving it to the same place again is news. */
+export interface TabMoved {
+  readonly id: string;
+  readonly count: number;
+}
+
 export interface TabBarProps {
   readonly tabs: readonly WorkspaceTab[];
   readonly activeId: string;
   readonly onSelect?: (id: string) => void;
   readonly onClose?: (id: string) => void;
   readonly onNew?: () => void;
+  /** Moves a tab so it ends at index `to` of `tabs`; without it tabs neither drag nor offer Move in their menu. */
+  readonly onMove?: (id: string, to: number) => void;
   /** The New tab shortcut as key chips, from the app's live binding; none when it is unbound. */
   readonly newTabKeys?: readonly string[];
+  /** The Move tab left and right shortcuts as key chips, shown in each tab's menu. */
+  readonly moveKeys?: { readonly left?: readonly string[]; readonly right?: readonly string[] };
+  /** The last move, which the strip announces to screen readers; a tab that had focus keeps it. */
+  readonly moved?: TabMoved | null;
   /** Before the tabs, e.g. the button that brings a hidden sidebar back where the sidebar was. */
   readonly leading?: ReactNode;
   readonly trailing?: ReactNode;
   readonly className?: string;
 }
 
-/** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars. */
+const MOTION = "transition-[translate,opacity] duration-(--duration-micro) ease-out";
+
+/** Where a tab is drawn while a drag or its settle is under way, and how it gets there. */
+function placement(id: string, index: number, drag: DragState | null, settle: Settle | null) {
+  if (settle?.id === id) {
+    return settle.running
+      ? { offset: 0, className: cn(MOTION, "motion-reduce:translate-none!") }
+      : { offset: settle.offset, className: "motion-reduce:translate-none! motion-reduce:opacity-0" };
+  }
+  if (drag === null) return { offset: 0, className: "" };
+  if (drag.id === id) return { offset: drag.offset, className: "z-10 cursor-grabbing bg-raised shadow-overlay" };
+  return { offset: shiftOf(drag, index), className: cn(MOTION, "motion-reduce:translate-none!") };
+}
+
+/** The landing place: the gap neighbours open, or a caret where they stay put under reduced motion. */
+function DropIndicator({ drag }: { readonly drag: DragState }) {
+  const width = drag.slots[drag.from]?.width ?? 0;
+  return (
+    <span
+      aria-hidden
+      data-tab-drop-indicator
+      className="pointer-events-none absolute top-1/2 h-7 -translate-y-1/2 rounded-md bg-hover motion-reduce:hidden"
+      style={{ left: landingLeft(drag), width }}
+    />
+  );
+}
+
+function DropCaret({ drag }: { readonly drag: DragState }) {
+  return (
+    <span
+      aria-hidden
+      data-tab-drop-caret
+      className="pointer-events-none absolute top-1/2 hidden h-5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ring motion-reduce:block"
+      style={{ left: caretLeft(drag) }}
+    />
+  );
+}
+
+/** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars; tabs reorder by drag. */
 export function TabBar({
   tabs,
   activeId,
   onSelect,
   onClose,
   onNew,
+  onMove,
   newTabKeys,
+  moveKeys,
+  moved,
   leading,
   trailing,
   className,
 }: TabBarProps) {
+  const list = useRef<HTMLDivElement>(null);
+  const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const focused = useRef<string | null>(null);
+  const { drag, settle, lifted, onPointerDown, onClickCapture, cancel } = useTabDrag(
+    list,
+    tabs.map((tab) => tab.id),
+    onMove,
+  );
+
+  // Reordering moves the focused button in the DOM, which drops its focus; it goes straight back.
+  const last = moved ?? null;
+  useLayoutEffect(() => {
+    if (last === null || focused.current !== last.id) return;
+    const button = buttons.current.get(last.id);
+    if (button !== undefined && document.activeElement !== button) button.focus();
+  }, [last]);
+
+  const movedAt = last === null ? -1 : tabs.findIndex((tab) => tab.id === last.id);
+  const movedTab = tabs[movedAt];
+  // The count's parity changes the text each time, so a second move to the same place is still read out.
+  const announcement =
+    last === null || movedTab === undefined
+      ? ""
+      : `Moved ${movedTab.title} to position ${movedAt + 1} of ${tabs.length}${last.count % 2 === 0 ? "" : "\u00a0"}`;
+
   return (
     <div
       data-titlebar
@@ -55,25 +135,51 @@ export function TabBar({
       )}
     >
       {leading}
-      <div role="tablist" aria-label="Tabs" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        {tabs.map((tab) => {
+      <div
+        ref={list}
+        role="tablist"
+        aria-label="Tabs"
+        onClickCapture={onClickCapture}
+        className="relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+      >
+        {drag === null ? null : <DropIndicator drag={drag} />}
+        {drag === null ? null : <DropCaret drag={drag} />}
+        {tabs.map((tab, index) => {
           const active = tab.id === activeId;
-          return (
+          const place = placement(tab.id, index, drag, settle);
+          const item = (
             <div
               key={tab.id}
+              data-tab-id={tab.id}
+              {...(drag?.id === tab.id ? { "data-dragging": "" } : {})}
+              {...(lifted === tab.id ? { "data-lifted": "" } : {})}
+              onPointerDown={(event) => onPointerDown(event, tab.id, index)}
+              style={place.offset === 0 ? undefined : { translate: `${place.offset}px 0` }}
               className={cn(
-                "group flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem]",
+                "group relative flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] select-none",
                 active
                   ? "border-border bg-raised text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-hover",
+                lifted === tab.id && "bg-raised shadow-overlay",
+                place.className,
               )}
             >
               <button
+                ref={(element) => {
+                  if (element === null) buttons.current.delete(tab.id);
+                  else buttons.current.set(tab.id, element);
+                }}
                 type="button"
                 role="tab"
                 aria-selected={active}
                 title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
+                onFocus={() => {
+                  focused.current = tab.id;
+                }}
+                onBlur={(event) => {
+                  if (event.relatedTarget !== null) focused.current = null;
+                }}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
@@ -90,6 +196,7 @@ export function TabBar({
               <IconButton
                 label={`Close ${tab.title}`}
                 icon={<X />}
+                data-tab-close
                 onClick={() => onClose?.(tab.id)}
                 className={cn(
                   "size-5 [&_svg]:size-3",
@@ -97,6 +204,44 @@ export function TabBar({
                 )}
               />
             </div>
+          );
+          if (onMove === undefined) return item;
+          return (
+            <ContextMenu
+              key={tab.id}
+              trigger={item}
+              finalFocus={{
+                get current() {
+                  return buttons.current.get(tab.id) ?? null;
+                },
+              }}
+              onOpenChange={(open) => {
+                if (open) cancel();
+              }}
+            >
+              <MenuItem
+                icon={<ArrowLeft />}
+                disabled={index === 0}
+                {...(moveKeys?.left === undefined ? {} : { keys: moveKeys.left })}
+                onClick={() => {
+                  focused.current = tab.id;
+                  onMove(tab.id, index - 1);
+                }}
+              >
+                Move tab left
+              </MenuItem>
+              <MenuItem
+                icon={<ArrowRight />}
+                disabled={index === tabs.length - 1}
+                {...(moveKeys?.right === undefined ? {} : { keys: moveKeys.right })}
+                onClick={() => {
+                  focused.current = tab.id;
+                  onMove(tab.id, index + 1);
+                }}
+              >
+                Move tab right
+              </MenuItem>
+            </ContextMenu>
           );
         })}
         <IconButton
@@ -106,6 +251,9 @@ export function TabBar({
           onClick={onNew}
         />
       </div>
+      <span role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
       {trailing}
     </div>
   );
