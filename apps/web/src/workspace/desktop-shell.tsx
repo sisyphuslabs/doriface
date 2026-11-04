@@ -12,6 +12,7 @@ import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
+import { useArrivalReady } from "./use-arrival-ready.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown } from "./layout-store.ts";
 import type { Tabs } from "./use-tabs.ts";
@@ -30,6 +31,7 @@ export interface DesktopShellProps {
 }
 
 export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette, onSession }: DesktopShellProps) {
+  useArrivalReady(loaded);
   const [sidebar, setSidebar] = useSidebarShown();
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");

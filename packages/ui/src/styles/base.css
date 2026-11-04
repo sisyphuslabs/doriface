@@ -65,9 +65,9 @@
 }
 
 /*
- * Arrival: a region that the layout just gained (a tab, the split's second pane, the shown sidebar) eases in from
- * --arrive-from. CSS transitions retarget mid-flight, so a quick toggle never snaps or queues; reduced motion keeps
- * only the opacity (the rule below), so it becomes a cross-fade.
+ * Arrival: a region that the layout just gained (a new tab, the shown sidebar) eases in from --arrive-from, once the
+ * app sets data-ready after the workspace's first loaded paint. Reduced motion keeps only the opacity (the rule
+ * below), so it becomes a cross-fade.
  */
 @layer components {
   :root[data-ready] .motion-arrive {
