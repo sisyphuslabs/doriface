@@ -41,6 +41,16 @@ function cardsOf(parsed: readonly Parsed[], key: string): readonly CardBody[] {
   });
 }
 
+/** The latest name record about `key`, if any (design 7.5). */
+function lastNameOf(parsed: readonly Parsed[], key: string): string | undefined {
+  return parsed
+    .flatMap(({ body }) => {
+      const subject = body.subject;
+      return subject !== undefined && "name" in subject && subject.signPub === key ? [subject.name] : [];
+    })
+    .at(-1);
+}
+
 /** The revoke behind every revoked key: its effective revokes' signers, the latest one's reason and time. */
 function revocationsOf(parsed: readonly Parsed[], view: View): ReadonlyMap<string, RevocationFact> {
   const facts = new Map<string, RevocationFact>();
@@ -53,23 +63,25 @@ function revocationsOf(parsed: readonly Parsed[], view: View): ReadonlyMap<strin
     const latest = revokes.at(-1)?.body;
     const card = cardsOf(parsed, key).at(-1);
     if (latest?.subject === undefined || !("reason" in latest.subject) || card === undefined) continue;
-    const renamed = parsed
-      .flatMap(({ body }) =>
-        body.subject !== undefined && "name" in body.subject && body.subject.signPub === key ? [body.subject.name] : [],
-      )
-      .at(-1);
+    const renamed = lastNameOf(parsed, key);
     facts.set(key, {
       name: renamed ?? card.name,
       noisePub: card.noisePub,
       by: [...new Set(revokes.map(({ body }) => body.by))],
       reason: latest.subject.reason,
-      at: latest.at ?? null,
+      at: isoOf(latest.at),
     });
   }
   return facts;
 }
 
 const field = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
+
+/** A record's `at` is the signer's display time, in any form it chose: an ISO instant when it reads as one. */
+function isoOf(value: string | undefined): string | null {
+  const time = value === undefined ? Number.NaN : Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
 
 function dateOf(value: unknown): Date | null {
   if (typeof value !== "string") return null;
@@ -116,6 +128,8 @@ export function meshSourcesOf(
   const parsed = parsedOf(file.records);
   /** The founder is admitted by its own found record; PR 7's ViewFacts gives it no admitter. */
   const foundHash = parsed.find(({ body }) => body.type === "found")?.hash;
+  /** A host its own view no longer holds lists the view's members only, and says it is possibly revoked. */
+  const inView = view.members.has(self) || view.overCap.has(self);
   return {
     view: {
       members: view.members,
@@ -127,7 +141,7 @@ export function meshSourcesOf(
     },
     revocations: revocationsOf(parsed, view),
     failClosed: [],
-    local: localOf(file, view, self, live),
+    local: { ...localOf(file, view, self, live), possiblyRevoked: live.possiblyRevoked || !inView },
     pending: live.pending,
     peers: live.peers,
     lines: live.lines,
