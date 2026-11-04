@@ -88,11 +88,18 @@ test("a press that wobbles 2 px is a click that selects, and Escape puts a dragg
   await page.mouse.up();
   await expect(tabs(page).nth(1)).toHaveAttribute("aria-selected", "true");
 
+  // Drag a tab that is not the selected one: only those carry the hover wash.
+  const other = await centre(tabs(page).nth(0));
   const end = await centre(tabs(page).nth(3));
-  await page.mouse.move(first.x, first.y);
+  await page.mouse.move(other.x, other.y);
   await page.mouse.down();
   await page.mouse.move(end.x, end.y, { steps: 12 });
   await expect(strip(page).locator("[data-dragging]")).toHaveCount(1);
+  // Hovered under the pointer, the lifted tab still hides the tab it passes over.
+  const fill = await strip(page)
+    .locator("[data-dragging]")
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(fill).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
   await page.keyboard.press("Escape");
   await page.mouse.up();
   expect(await order(page)).toEqual(before);
