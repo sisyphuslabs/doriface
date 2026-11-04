@@ -26,7 +26,7 @@ export interface ReconcilerOptions {
   readonly log: (line: string) => void;
 }
 
-interface MeshEntry {
+export interface MeshEntry {
   readonly machine: MachineView;
   readonly hostId: string;
 }
@@ -67,6 +67,8 @@ export class Reconciler {
   #running: Promise<void> = Promise.resolve();
   #queued = false;
   #cancelRetry: () => void = () => undefined;
+
+  #listed: readonly MeshEntry[] = [];
 
   constructor(options: ReconcilerOptions) {
     this.#options = options;
@@ -143,6 +145,11 @@ export class Reconciler {
     }
   }
 
+  /** The mesh machines herdr listed at the end of this host's last reconcile, for status (which cannot wait on herdr). */
+  lines(): readonly MeshEntry[] {
+    return this.#listed;
+  }
+
   async #entries(): Promise<readonly MeshEntry[]> {
     const { program, stateDir } = this.#options;
     const entries: MeshEntry[] = [];
@@ -178,6 +185,7 @@ export class Reconciler {
     );
     const key = JSON.stringify([view.members.map((m) => [m.hostId, m.name]), list.map((m) => m.name).toSorted()]);
     await Promise.all(missing.map((member) => this.#add(member, list, key)));
+    this.#listed = await this.#entries();
     this.#armRetry(view);
   }
 

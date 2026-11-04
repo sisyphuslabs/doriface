@@ -17,6 +17,11 @@ export class LiveSessions {
     this.#log = log;
   }
 
+  /** Whether an authenticated session from the remote static key `key` (base64url) is open now. */
+  has(key: string): boolean {
+    return this.#byKey.has(key);
+  }
+
   /**
    * Registers a session, then re-checks the stores: a revoke that ran during its handshake still closes it. False when
    * that re-check closed it.
