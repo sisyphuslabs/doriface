@@ -37,7 +37,9 @@ test("New tab starts in the directory the active shell has moved to", async ({ p
   const first = await openNewTerminal(page);
   await first.click();
   await page.keyboard.type('mkdir -p "${TMPDIR:-/tmp}/f13-moved" && cd "${TMPDIR:-/tmp}/f13-moved"\r');
-  await expect(page.locator('[data-focused="true"] header')).toContainText("f13-moved", { timeout: 15_000 });
+  await expect(page.getByRole("contentinfo").locator("[data-status-space]")).toHaveText("f13-moved", {
+    timeout: 15_000,
+  });
   const moved = await workingDirectory(page, first);
   expect(moved).toMatch(/f13-moved$/);
   // The tab bar's New tab, not openNewTerminal's first match, which can be the sidebar's New terminal on this machine.
