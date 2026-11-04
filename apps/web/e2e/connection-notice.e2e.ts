@@ -12,6 +12,13 @@ const notice = (page: Page, text: RegExp) => page.getByRole("status").filter({ h
 const OFFLINE = /Offline/;
 const RECONNECTING = /Reconnecting/;
 
+/** What the OS says about the network, as the page sees it; a link to 127.0.0.1 keeps its own state either way. */
+const osOnline = (page: Page, online: boolean) =>
+  page.evaluate((value) => {
+    Object.defineProperty(Navigator.prototype, "onLine", { configurable: true, get: () => value });
+    dispatchEvent(new Event(value ? "online" : "offline"));
+  }, online);
+
 async function echoes(page: Page, marker: string): Promise<void> {
   const terminal = page.locator("[data-terminal]").filter({ visible: true }).first();
   await terminal.getByRole("textbox").focus();
@@ -45,12 +52,32 @@ test.describe("desktop", () => {
     await page.goto("/");
     await openNewTerminal(page);
     // Wi-Fi off: navigator.onLine turns false and `offline` fires, while 127.0.0.1 keeps answering.
-    await page.evaluate(() => {
-      Object.defineProperty(Navigator.prototype, "onLine", { configurable: true, get: () => false });
-      dispatchEvent(new Event("offline"));
-    });
+    await osOnline(page, false);
     await echoes(page, "loopback-still-works");
     await expect(notice(page, /Offline|Reconnecting/)).toHaveCount(0);
+  });
+
+  test("with the OS offline, a link to this computer that really drops says Reconnecting, never Offline, and clears on online", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const socket = await routeHcSocket(page);
+    await page.goto("/");
+    await openNewTerminal(page);
+    const opened = socket.opened();
+    await osOnline(page, false);
+    await socket.drop(true);
+    await expect(notice(page, RECONNECTING)).toBeVisible({ timeout: 2_000 });
+    await expect(notice(page, OFFLINE)).toHaveCount(0);
+    // Four refused attempts leave the next one 10 s away; the notice keeps saying Reconnecting meanwhile.
+    await expect.poll(socket.refused, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
+    await expect(notice(page, /Reconnecting in ([6-9]|10) s/)).toBeVisible({ timeout: 5_000 });
+    await expect(notice(page, OFFLINE)).toHaveCount(0);
+    socket.restore();
+    await osOnline(page, true);
+    await expect(notice(page, RECONNECTING)).toHaveCount(0, { timeout: 3_000 });
+    expect(socket.opened() - opened).toBe(1);
+    await echoes(page, "loopback-back");
   });
 
   test("back online, a reconnect waiting out its longest back-off starts at once, on one new socket", async ({
