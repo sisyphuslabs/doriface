@@ -67,6 +67,7 @@ export function useTabDrag(
   const [lifted, setLifted] = useState<string | null>(null);
   const press = useRef<Press | null>(null);
   const swallowClick = useRef(false);
+  const disarm = useRef<() => void>(() => undefined);
   const stop = useRef<() => void>(() => undefined);
   const latestMove = useRef(onMove);
   latestMove.current = onMove;
@@ -76,6 +77,23 @@ export function useTabDrag(
   latestHoldRelease.current = onHoldRelease;
 
   const end = useCallback(() => stop.current(), []);
+
+  // The click that ends a drag is swallowed; a drop let go off the strip sends none, so the next press or key anywhere
+  // clears the latch instead, and a later click or Enter on a tab still selects it.
+  const swallowNextClick = useCallback(() => {
+    disarm.current();
+    swallowClick.current = true;
+    const clear = (): void => {
+      swallowClick.current = false;
+      window.removeEventListener("pointerdown", clear, true);
+      window.removeEventListener("keydown", clear, true);
+      disarm.current = () => undefined;
+    };
+    window.addEventListener("pointerdown", clear, true);
+    window.addEventListener("keydown", clear, true);
+    disarm.current = clear;
+  }, []);
+  useEffect(() => () => disarm.current(), []);
 
   const update = useCallback(() => {
     const current = press.current;
@@ -101,19 +119,18 @@ export function useTabDrag(
       const last = current === null || current.dragging === null ? null : update();
       end();
       if (last === null) return;
-      swallowClick.current = true;
+      swallowNextClick();
       const to = commit ? last.to : last.from;
       const landed = commit ? landingLeft(last) : (last.slots[last.from]?.left ?? 0);
       const offset = (last.slots[last.from]?.left ?? 0) + last.offset - landed;
       setSettle({ id: last.id, offset, running: false });
       if (to !== last.from) latestMove.current?.(last.id, to);
     },
-    [end, update],
+    [end, swallowNextClick, update],
   );
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>, id: string, index: number) => {
-      swallowClick.current = false;
       if (event.button !== 0 || press.current !== null || latestMove.current === undefined) return;
       if (event.target instanceof Element && event.target.closest("[data-tab-close]") !== null) return;
       const touch = event.pointerType === "touch";
@@ -177,7 +194,7 @@ export function useTabDrag(
         if (!current.touch || !current.armed || current.dragging !== null) return finish(true);
         // A lifted tab let go where it was: its menu opens instead of a tap selecting it. Cancelling the touchend that
         // follows keeps the browser from sending the tap's mouse events, whose mousedown would close the menu at once.
-        swallowClick.current = true;
+        swallowNextClick();
         window.addEventListener("touchend", cancelTap, { once: true, passive: false, capture: true });
         end();
         latestHoldRelease.current?.(current.id, up.clientX, up.clientY);
@@ -217,7 +234,7 @@ export function useTabDrag(
         setLifted(null);
       };
     },
-    [end, finish, list, update],
+    [end, finish, list, swallowNextClick, update],
   );
 
   // The settle runs in two frames: first at the drop offset with no transition, then to its slot.
@@ -237,7 +254,7 @@ export function useTabDrag(
 
   const onClickCapture = useCallback((event: { stopPropagation(): void; preventDefault(): void }) => {
     if (!swallowClick.current) return;
-    swallowClick.current = false;
+    disarm.current();
     event.stopPropagation();
     event.preventDefault();
   }, []);
