@@ -27,7 +27,7 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd }: P
       onFocusCapture={() => onFocus(terminal.address)}
       data-split={split}
       data-focused={focused}
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card data-[split=true]:data-[focused=true]:border-input"
     >
       {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />

@@ -96,6 +96,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
         <TabBar
           tabs={tabList}
           activeId={tabs.active ?? ""}
+          {...(tabs.split === null ? {} : { shownId: tabs.split })}
           {...(newTabKeys === undefined ? {} : { newTabKeys })}
           onSelect={tabs.select}
           onClose={tabs.close}
