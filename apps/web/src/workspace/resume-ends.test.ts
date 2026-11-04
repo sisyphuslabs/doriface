@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { HcRpcError, type Terminal } from "@doriface/protocol";
 import { PENDING_END_MAX_AGE_MS, pendingEnds, resumeOf } from "./pending-ends.ts";
-import { resumeEnds } from "./resume-ends.ts";
+import { recordedEnd, resumeEnds } from "./resume-ends.ts";
 import type { SessionCalls } from "./session-actions.ts";
 
 /** A Storage held in memory, as localStorage holds it. */
@@ -33,21 +33,21 @@ function recorder() {
   return { asked, calls };
 }
 
-const facts = (state: Terminal["state"], pid: number | null) => ({ state, pid });
+const facts = (state: Terminal["state"], pid: number | null, created_ms = 500) => ({ state, pid, created_ms });
 
 describe("pending Ends", () => {
   test("are kept per core, one per address, and the stale ones are not offered", () => {
     const storage = memoryStorage();
     const ends = pendingEnds("core-a", storage);
-    ends.add({ address: "t1", pid: 10, at: 1_000 });
-    ends.add({ address: "t2", pid: 20, at: 2_000 });
-    ends.add({ address: "t1", pid: 11, at: 3_000 });
+    ends.add({ address: "t1", pid: 10, created: 1, at: 1_000 });
+    ends.add({ address: "t2", pid: 20, created: 2, at: 2_000 });
+    ends.add({ address: "t1", pid: 11, created: 3, at: 3_000 });
     expect(pendingEnds("core-a", storage).list(3_000)).toEqual([
-      { address: "t2", pid: 20, at: 2_000 },
-      { address: "t1", pid: 11, at: 3_000 },
+      { address: "t2", pid: 20, created: 2, at: 2_000 },
+      { address: "t1", pid: 11, created: 3, at: 3_000 },
     ]);
     expect(pendingEnds("core-b", storage).list(3_000)).toEqual([]);
-    expect(ends.list(2_000 + PENDING_END_MAX_AGE_MS + 1)).toEqual([{ address: "t1", pid: 11, at: 3_000 }]);
+    expect(ends.list(2_000 + PENDING_END_MAX_AGE_MS + 1)).toEqual([{ address: "t1", pid: 11, created: 3, at: 3_000 }]);
     ends.remove("t2");
     ends.remove("t1");
     expect(storage.length).toBe(0);
@@ -61,16 +61,22 @@ describe("pending Ends", () => {
       },
     };
     const ends = pendingEnds("core-a", refusing);
-    ends.add({ address: "t1", pid: 1, at: 0 });
+    ends.add({ address: "t1", pid: 1, created: 1, at: 0 });
     expect(ends.list(0)).toEqual([]);
   });
 
-  test("resume ends the program it was asked about, removes one that ended, and leaves a new program alone", () => {
-    const end = { address: "t1", pid: 42, at: 0 };
+  test("resume ends or removes only the very terminal it was asked about, and drops everything else", () => {
+    const end = { address: "build/t1", pid: 42, created: 500, at: 0 };
     expect(resumeOf(end, facts("live", 42))).toBe("end");
-    expect(resumeOf({ ...end, pid: null }, facts("live", 7))).toBe("end");
-    expect(resumeOf(end, facts("finished", null))).toBe("remove");
+    expect(resumeOf(end, facts("finished", 42))).toBe("remove");
+    // Another program at the address: a restart, or a machine whose name now names another machine.
     expect(resumeOf(end, facts("live", 43))).toBe("drop");
+    expect(resumeOf(end, facts("finished", 43))).toBe("drop");
+    expect(resumeOf(end, facts("live", 42, 900))).toBe("drop");
+    expect(resumeOf(end, facts("finished", 42, 900))).toBe("drop");
+    // A record that cannot say which program it was about never acts.
+    expect(resumeOf({ ...end, pid: null }, facts("live", 7))).toBe("drop");
+    expect(resumeOf({ ...end, pid: null }, facts("finished", 7))).toBe("drop");
     expect(resumeOf(end, null)).toBe("drop");
   });
 });
@@ -85,12 +91,12 @@ describe("resuming pending Ends", () => {
       ["t3", 3],
       ["t4", 4],
     ] as const) {
-      ends.add({ address, pid: 9, at: Date.now() - 1_000 + at });
+      ends.add({ address, pid: 9, created: 500, at: Date.now() - 1_000 + at });
     }
-    const terminals: Record<string, Pick<Terminal, "state" | "pid">> = {
-      t1: { state: "live", pid: 9 },
-      t2: { state: "finished", pid: null },
-      t3: { state: "live", pid: 99 },
+    const terminals: Record<string, Pick<Terminal, "state" | "pid" | "created_ms">> = {
+      t1: { state: "live", pid: 9, created_ms: 500 },
+      t2: { state: "finished", pid: 9, created_ms: 500 },
+      t3: { state: "live", pid: 99, created_ms: 500 },
     };
     const { asked, calls } = recorder();
     const get = (address: string) => {
@@ -104,7 +110,7 @@ describe("resuming pending Ends", () => {
 
   test("an End that fails again stays pending for the next connection", async () => {
     const ends = pendingEnds("core", memoryStorage());
-    ends.add({ address: "t1", pid: 9, at: Date.now() });
+    ends.add({ address: "t1", pid: 9, created: 500, at: Date.now() });
     const calls: SessionCalls = {
       label: () => Promise.resolve({}),
       kill: () => Promise.reject(new Error("connection is closed")),
@@ -114,7 +120,7 @@ describe("resuming pending Ends", () => {
     const log = console.error;
     console.error = (...args: unknown[]) => void errors.push(args);
     try {
-      await resumeEnds(ends, () => Promise.resolve({ state: "live", pid: 9 }), calls);
+      await resumeEnds(ends, () => Promise.resolve({ state: "live", pid: 9, created_ms: 500 }), calls);
     } finally {
       console.error = log;
     }
@@ -124,15 +130,28 @@ describe("resuming pending Ends", () => {
 
   test("stops once the connection it runs on is gone", async () => {
     const ends = pendingEnds("core", memoryStorage());
-    ends.add({ address: "t1", pid: 9, at: Date.now() });
+    ends.add({ address: "t1", pid: 9, created: 500, at: Date.now() });
     const { asked, calls } = recorder();
     await resumeEnds(
       ends,
-      () => Promise.resolve({ state: "live", pid: 9 }),
+      () => Promise.resolve({ state: "live", pid: 9, created_ms: 500 }),
       calls,
       () => false,
     );
     expect(asked).toEqual([]);
     expect(ends.list().length).toBe(1);
+  });
+  test("an End asked through the record clears it whether it succeeds or fails", async () => {
+    const ends = pendingEnds("core", memoryStorage());
+    const end = { address: "t1", pid: 9, created: 500, at: Date.now() };
+    const { calls } = recorder();
+    await recordedEnd(ends, end, calls);
+    expect(ends.list()).toEqual([]);
+    const refused: SessionCalls = { ...calls, kill: () => Promise.reject(new Error("connection is closed")) };
+    const failed = recordedEnd(ends, end, refused);
+    expect(ends.list().map((entry) => entry.address)).toEqual(["t1"]);
+    await expect(failed).rejects.toThrow("connection is closed");
+    // Left after "The session did not end", the session is the person's to keep: no later page may end it.
+    expect(ends.list()).toEqual([]);
   });
 });
