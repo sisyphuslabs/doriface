@@ -63,6 +63,13 @@
   --color-status-idle-text: var(--status-idle-text);
   --color-status-unknown: var(--status-unknown);
   --color-status-unknown-text: var(--status-unknown-text);
+  --color-avatar-teal: var(--avatar-teal);
+  --color-avatar-orange: var(--avatar-orange);
+  --color-avatar-blue: var(--avatar-blue);
+  --color-avatar-violet: var(--avatar-violet);
+  --color-avatar-green: var(--avatar-green);
+  --color-avatar-pink: var(--avatar-pink);
+  --color-avatar-ink: var(--avatar-ink);
   --color-term-fg: var(--term-fg);
   --color-term-bg: var(--term-bg);
 
@@ -116,6 +123,16 @@
   --row: 1.875rem;
   --hit: 1.5rem;
   --sidebar-width: 16.75rem;
+  /* The sidebar dragged narrow: an icon rail. The macOS desktop app widens it to clear the window buttons. */
+  --sidebar-rail-width: 2.75rem;
+  /* Space avatars: one strong colour per hue, the same in light and dark, with a white initial (decorative). */
+  --avatar-teal: #1f9688;
+  --avatar-orange: #c96a3a;
+  --avatar-blue: #4a7be0;
+  --avatar-violet: #7a68e8;
+  --avatar-green: #33945a;
+  --avatar-pink: #c45487;
+  --avatar-ink: #ffffff;
   --tabbar-height: 2.625rem;
   --statusbar-height: 1.75rem;
   /* Device safe areas; a preview frame sets them to a real device's insets. */
