@@ -9,7 +9,25 @@ import { Steps } from "./steps.tsx";
 
 const HOST_GUIDE = "https://github.com/sisyphuslabs/doriface#readme";
 
-function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
+/** Pairing reaches the relay, so offline it is shown, disabled, with why; nothing else here needs a network. */
+const PAIR_NEEDS_NETWORK = "Pairing a host needs a network.";
+
+function PairAHost({ offline, primary }: { readonly offline: boolean; readonly primary: boolean }) {
+  if (offline) {
+    return (
+      <Button size="lg" disabled aria-describedby="pair-offline">
+        Pair a host
+      </Button>
+    );
+  }
+  return (
+    <Button variant={primary ? "primary" : undefined} size="lg" render={<Link to="/pair" />}>
+      Pair a host
+    </Button>
+  );
+}
+
+function LocalFirstRun({ bridge, offline }: { readonly bridge: DesktopBridge; readonly offline: boolean }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const start = (): void => {
@@ -31,12 +49,15 @@ function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
             <Button variant="primary" size="lg" loading={starting} onClick={start}>
               Use this computer
             </Button>
-            <Button size="lg" render={<Link to="/pair" />}>
-              Pair a host
-            </Button>
+            <PairAHost offline={offline} primary={false} />
           </>
         }
       />
+      {offline ? (
+        <p id="pair-offline" className="text-sm text-muted-foreground">
+          {PAIR_NEEDS_NETWORK}
+        </p>
+      ) : null}
       {error === null ? null : (
         <Notice tone="error" title="This computer's host did not start" className="w-full max-w-md">
           {error}
@@ -46,12 +67,22 @@ function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
   );
 }
 
-/** No host yet: in the desktop app, start one here; elsewhere, the command that starts pairing. */
-export function FirstRun() {
+/**
+ * No host yet: in the desktop app, start one here (this computer needs no network, so being offline changes nothing);
+ * elsewhere, the command that starts pairing, which does need a network, so an offline device says so above it.
+ */
+export function FirstRun({ offline = false }: { readonly offline?: boolean }) {
   const bridge = desktopBridge();
-  if (bridge !== null) return <LocalFirstRun bridge={bridge} />;
+  if (bridge !== null) return <LocalFirstRun bridge={bridge} offline={offline} />;
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10">
+      {offline ? (
+        <div id="pair-offline" className="w-full max-w-md">
+          <Notice tone="warning" title="You are offline">
+            {PAIR_NEEDS_NETWORK} The steps below work once it is back.
+          </Notice>
+        </div>
+      ) : null}
       <Steps current={0} />
       <EmptyState
         icon={<Server />}
@@ -60,9 +91,7 @@ export function FirstRun() {
         description="doriface shows the terminals and agents running on a computer with herdr-core. Start the host there, then pair this device."
         actions={
           <>
-            <Button variant="primary" size="lg" render={<Link to="/pair" />}>
-              Pair a host
-            </Button>
+            <PairAHost offline={offline} primary />
             <Button variant="ghost" size="lg" render={<a href={HOST_GUIDE} target="_blank" rel="noreferrer" />}>
               How to start a host
             </Button>
