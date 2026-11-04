@@ -12,8 +12,7 @@ test("the sidebar and tabs ease in with transform and opacity once the first fra
   await page.goto("/");
   await openNewTerminal(page);
   await expect(page.locator(":root")).toHaveAttribute("data-ready", "");
-  for (const selector of ARRIVING) {
-    const property = await transitionOf(page, selector);
+  for (const property of await Promise.all(ARRIVING.map((selector) => transitionOf(page, selector)))) {
     expect(property).toContain("transform");
     expect(property).toContain("opacity");
   }
@@ -23,8 +22,7 @@ test("under reduced motion the same arrivals keep only the cross-fade", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await openNewTerminal(page);
-  for (const selector of ARRIVING) {
-    const property = await transitionOf(page, selector);
+  for (const property of await Promise.all(ARRIVING.map((selector) => transitionOf(page, selector)))) {
     expect(property).not.toContain("transform");
     expect(property).toContain("opacity");
   }
