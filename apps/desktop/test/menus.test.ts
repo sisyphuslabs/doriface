@@ -20,6 +20,7 @@ const options = (platform: MenuOptions["platform"], more: Partial<MenuOptions> =
   openSettings: noop,
   keys: new Map(),
   runAction: noop,
+  zoomWindow: noop,
   ...more,
 });
 
@@ -39,7 +40,7 @@ describe("menus", () => {
   test("the macOS app menu opens Settings, and the page's keymap owns its shortcut", () => {
     const opened: string[] = [];
     const menu = menuTemplate(options("darwin", { openSettings: () => opened.push("settings") }));
-    expect(roles(menu)).toEqual(["appMenu", "File", "editMenu", "Shell", "viewMenu", "windowMenu", "help"]);
+    expect(roles(menu)).toEqual(["appMenu", "File", "editMenu", "Shell", "View", "windowMenu", "help"]);
     const app = submenuOf(menu[0]);
     expect(roles(app)).toEqual([
       "about",
@@ -113,10 +114,37 @@ describe("menus", () => {
       "fileMenu",
       "editMenu",
       "Shell",
-      "viewMenu",
+      "View",
       "windowMenu",
       "help",
     ]);
+  });
+
+  test("View's zoom items zoom the window and leave their keys to the page, which zooms the same way", () => {
+    for (const platform of ["darwin", "linux", "win32"] as const) {
+      const steps: string[] = [];
+      const menu = menuTemplate(options(platform, { zoomWindow: (s) => steps.push(s) }));
+      const view = submenuOf(menu.find((item) => item.label === "View"));
+      expect(roles(view)).toEqual([
+        "reload",
+        "forceReload",
+        "toggleDevTools",
+        "separator",
+        "Actual Size",
+        "Zoom In",
+        "Zoom Out",
+        "separator",
+        "togglefullscreen",
+      ]);
+      const zoomItems = view.filter((item) => item.id?.startsWith("zoom-"));
+      expect(zoomItems.map((item) => [item.id, item.accelerator, item.registerAccelerator])).toEqual([
+        ["zoom-reset", "CommandOrControl+0", false],
+        ["zoom-in", "CommandOrControl+Plus", false],
+        ["zoom-out", "CommandOrControl+-", false],
+      ]);
+      for (const item of zoomItems) item.click?.(Object.create(null), undefined, Object.create(null));
+      expect(steps).toEqual(["reset", "in", "out"]);
+    }
   });
 });
 

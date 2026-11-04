@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
 import { machineRow, STATE_BOUND_MS } from "./machine-switch.ts";
+import { resetMeshDocs } from "./mesh-reset.ts";
 
 export type Width = "1440" | "390";
 /** Which stored connection a shot starts from: the e2e host, pairing against the fake relay, or none. */
@@ -51,6 +52,7 @@ const refusedWith = (closeCode: number) => async (page: Page) => {
 const SETTINGS = ["Appearance", "Terminal", "Keybindings"] as const;
 /** The mesh panel once its document and the added machine it is checked against have both arrived. */
 const meshLoaded = async (page: Page) => {
+  resetMeshDocs();
   await page.goto("/");
   await expect(machineRow(page)).toContainText("connected", { timeout: STATE_BOUND_MS });
   await section(page, "Mesh");

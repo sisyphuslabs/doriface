@@ -17,6 +17,8 @@ import { menuTemplate } from "./menu.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
+import { windowZoom, type WindowZoom } from "./zoom.ts";
+import type { ZoomStep } from "../shared/bridge.ts";
 
 const platform = parsePlatform(process.platform);
 const devSetting = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
@@ -72,6 +74,14 @@ function navigate(path: string): void {
 
 const openSettings = (): void => navigate("/settings");
 
+let zoom: WindowZoom | undefined;
+const currentZoom = (): WindowZoom => (zoom ??= windowZoom(savedFile("window-zoom.json")));
+
+const zoomWindow = (step: ZoomStep): void => {
+  const window = liveWindow();
+  if (window !== undefined) currentZoom().step(window, step);
+};
+
 /** A Shell menu item runs its action in the page, as its key would. */
 function runAction(action: string): void {
   liveWindow()?.webContents.send(Channel.runAction, action);
@@ -79,7 +89,7 @@ function runAction(action: string): void {
 
 function showMenu(keys: ReadonlyMap<string, string>): void {
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, keys, runAction })),
+    Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, zoomWindow, keys, runAction })),
   );
 }
 
@@ -88,8 +98,10 @@ function createWindow(path: string): BrowserWindow {
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
   const placement = restorePlacement(savedPlacement(placementFile), workAreas, screen.getPrimaryDisplay().workArea);
   const background = launchBackground(readSaved(savedFile("window-background.json")), nativeTheme.shouldUseDarkColors);
-  const window = new BrowserWindow(windowOptions(platform, webPreferences, { background, placement }));
+  const opening = { ...webPreferences, zoomFactor: currentZoom().factor };
+  const window = new BrowserWindow(windowOptions(platform, opening, { background, placement }));
   mainWindow = window;
+  currentZoom().applyOnEveryLoad(window);
   window.once("ready-to-show", () => window.show());
   if (platform === "darwin") applyMacTitlebar(window);
   rememberPlacement(window, placementFile);
@@ -136,6 +148,7 @@ function ready(): void {
     openExternal: (url) => shell.openExternal(url),
     setWindowBackground,
     closeWindow: () => liveWindow()?.close(),
+    zoomWindow,
     takePairingLink,
     setMenuKeys: showMenu,
   });

@@ -10,6 +10,7 @@ export function registerIpc(deps: IpcDeps): void {
     handlers.setWindowBackground(event, candidate),
   );
   ipcMain.handle(Channel.closeWindow, (event) => handlers.closeWindow(event));
+  ipcMain.handle(Channel.zoomWindow, (event, candidate: unknown) => handlers.zoomWindow(event, candidate));
   ipcMain.handle(Channel.takePairingLink, (event) => handlers.takePairingLink(event));
   ipcMain.handle(Channel.setMenuKeys, (event, candidate: unknown) => handlers.setMenuKeys(event, candidate));
 }

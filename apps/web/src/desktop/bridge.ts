@@ -50,6 +50,17 @@ export function closeDesktopWindow(scope: object = globalThis): boolean {
   return true;
 }
 
+export type ZoomStep = "in" | "out" | "reset";
+
+/** Asks the desktop shell to zoom its whole window one step; false outside the desktop app. */
+export function zoomDesktopWindow(step: ZoomStep, scope: object = globalThis): boolean {
+  const zoom = bridgeMethod("zoomWindow", scope);
+  if (zoom === null) return false;
+  const zoomed = zoom(step);
+  if (zoomed instanceof Promise) zoomed.catch((error: unknown) => console.error(`zoom window: ${String(error)}`));
+  return true;
+}
+
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
 export function setDesktopBackground(color: string, scope: object = globalThis): void {
   const painted = bridgeMethod("setWindowBackground", scope)?.(color);

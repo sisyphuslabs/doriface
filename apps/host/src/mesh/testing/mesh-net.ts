@@ -79,6 +79,7 @@ export class MeshNet {
   readonly #links: { readonly a: string; readonly b: string; readonly end: MemoryEnd }[] = [];
   readonly #offline = new Set<string>();
   readonly #broken = new Set<string>();
+  readonly #refused = new Map<string, number>();
   #groups: readonly (readonly string[])[] | undefined;
 
   constructor(clock: FakeClock, random: () => number, timings?: GossipTimings) {
@@ -196,6 +197,15 @@ export class MeshNet {
     this.#broken.delete(this.host(name).member.signPub);
   }
 
+  /** The host's sessions refuse dials with `code` (4401: it does not accept the dialer yet), until `accept`. */
+  refuse(name: string, code: number): void {
+    this.#refused.set(this.host(name).member.signPub, code);
+  }
+
+  accept(name: string): void {
+    this.#refused.delete(this.host(name).member.signPub);
+  }
+
   converged(): boolean {
     const sets = [...this.hosts.values()].map((host) => setOf(host).join(","));
     return sets.every((set) => set === sets[0]);
@@ -207,6 +217,8 @@ export class MeshNet {
 
   async #connect(from: string, to: string): Promise<ByteLink> {
     if (this.#broken.has(to)) throw new Error("the dial timed out");
+    const refused = this.#refused.get(to);
+    if (refused !== undefined) throw new SecureLinkError(refused, "refused");
     const target = this.hosts.get(to);
     if (target === undefined || !this.reachable(from, to)) {
       throw new SecureLinkError(4404, "host is not connected to the relay (4404)");

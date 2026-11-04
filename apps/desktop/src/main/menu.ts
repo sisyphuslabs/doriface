@@ -1,5 +1,5 @@
 import type { MenuItemConstructorOptions } from "electron";
-import type { DesktopPlatform } from "../shared/bridge.ts";
+import type { DesktopPlatform, ZoomStep } from "../shared/bridge.ts";
 import { shellMenu } from "./shell-menu.ts";
 
 export const REPOSITORY_URL = "https://github.com/sisyphuslabs/doriface";
@@ -8,6 +8,7 @@ export interface MenuOptions {
   readonly platform: DesktopPlatform;
   readonly openExternal: (url: string) => void;
   readonly openSettings: () => void;
+  readonly zoomWindow: (step: ZoomStep) => void;
   /** The page's trigger per Shell menu action, as it last reported them; empty until it has. */
   readonly keys: ReadonlyMap<string, string>;
   readonly runAction: (action: string) => void;
@@ -47,6 +48,35 @@ const MAC_FILE_MENU: MenuItemConstructorOptions = {
   ],
 };
 
+/**
+ * The standard View menu, except that its zoom items zoom the whole window through the app (saved for the next launch)
+ * and show their shortcuts without registering them: the page's keymap owns those keys and zooms the same way, so a
+ * key press never reaches Chromium's separate page zoom.
+ */
+function viewMenu(zoomWindow: (step: ZoomStep) => void): MenuItemConstructorOptions {
+  const zoomItem = (id: string, label: string, accelerator: string, step: ZoomStep): MenuItemConstructorOptions => ({
+    id,
+    label,
+    accelerator,
+    registerAccelerator: false,
+    click: () => zoomWindow(step),
+  });
+  return {
+    label: "View",
+    submenu: [
+      { role: "reload" },
+      { role: "forceReload" },
+      { role: "toggleDevTools" },
+      { type: "separator" },
+      zoomItem("zoom-reset", "Actual Size", "CommandOrControl+0", "reset"),
+      zoomItem("zoom-in", "Zoom In", "CommandOrControl+Plus", "in"),
+      zoomItem("zoom-out", "Zoom Out", "CommandOrControl+-", "out"),
+      { type: "separator" },
+      { role: "togglefullscreen" },
+    ],
+  };
+}
+
 /** Standard roles carry the platform's own labels and keyboard shortcuts. */
 export function menuTemplate(options: MenuOptions): MenuItemConstructorOptions[] {
   const mac = options.platform === "darwin";
@@ -54,7 +84,7 @@ export function menuTemplate(options: MenuOptions): MenuItemConstructorOptions[]
     mac ? MAC_FILE_MENU : { role: "fileMenu" },
     { role: "editMenu" },
     shellMenu(options.platform, options.keys, options.runAction),
-    { role: "viewMenu" },
+    viewMenu(options.zoomWindow),
     { role: "windowMenu" },
     {
       role: "help",
