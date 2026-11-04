@@ -1,0 +1,140 @@
+// Every overlay that shows a session's name keeps it inside the viewport, however long and unbroken the name (#152):
+// the tooltip, the menus, the dialogs and the statement that a session already ended, on a phone and on a desktop.
+import type { Locator, Page } from "@playwright/test";
+import { agentRow, endAgent, startShell } from "./agents.ts";
+import { expect, test } from "./fixtures.ts";
+import { hcOn } from "./machine-switch.ts";
+import { fakeSoftKeyboard, key, PHONE } from "./phone-key-bar.ts";
+
+/** 200 characters with no break opportunity: no space, hyphen or punctuation. */
+const LONG = `unbroken${"x".repeat(192)}`;
+
+/**
+ * The overlay's box is inside the viewport, and so is every line of text in it, which also stays inside the box: a
+ * text that cannot wrap overflows its box without moving the box itself.
+ */
+async function expectInside(overlay: Locator, what: string): Promise<void> {
+  await expect(overlay, what).toBeVisible();
+  const outside = await overlay.evaluate((element) => {
+    const right = document.documentElement.clientWidth;
+    const bottom = window.innerHeight;
+    const box = element.getBoundingClientRect();
+    const found: string[] = [];
+    const rects: { readonly text: string | null; readonly rect: DOMRect }[] = [{ text: null, rect: box }];
+    const texts = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = texts.nextNode(); node !== null; node = texts.nextNode()) {
+      const text = node.textContent ?? "";
+      if (text.trim() === "") continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) rects.push({ text, rect });
+    }
+    for (const { text, rect } of rects) {
+      // Inside the viewport, and a text also inside the overlay's box (1 px of rounding either way).
+      const inView = rect.left >= -1 && rect.top >= -1 && rect.right <= right + 1 && rect.bottom <= bottom + 1;
+      const inBox =
+        text === null ||
+        (rect.left >= box.left - 1 &&
+          rect.top >= box.top - 1 &&
+          rect.right <= box.right + 1 &&
+          rect.bottom <= box.bottom + 1);
+      if (inView && inBox) continue;
+      const at = `${Math.round(rect.left)}..${Math.round(rect.right)} x ${Math.round(rect.top)}..${Math.round(rect.bottom)}`;
+      found.push(
+        text === null
+          ? `box at ${at} in a ${right}x${bottom} viewport`
+          : `"${text.slice(0, 24)}…" at ${at}, box ${Math.round(box.left)}..${Math.round(box.right)}`,
+      );
+    }
+    return found;
+  });
+  // Soft, so one run names every overlay that overflows, not only the first.
+  expect.soft(outside, what).toEqual([]);
+}
+
+/** The open tooltip whose whole text is `label`; the button it describes carries the label only as its name. */
+const tooltip = (page: Page, label: string) => page.getByText(label, { exact: true });
+
+let address = "";
+let ended = false;
+test.beforeEach(() => {
+  // hc names stop at 32 characters; the name a rename sets (the herdr.name label) is what every overlay shows.
+  address = startShell("host", "overlay-long-name");
+  hcOn("host", ["label", address, `herdr.name=${LONG}`]);
+  ended = false;
+});
+test.afterEach(() => {
+  if (!ended) endAgent("host", address);
+});
+
+for (const width of [320, 390] as const) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test.describe(`on a ${width} px phone, ${colorScheme}`, () => {
+      test.use({ ...PHONE, viewport: { width, height: 844 }, colorScheme, serviceWorkers: "block" });
+
+      test("the tooltip, both menus, the dialogs and the ended statement keep a 200-character name inside", async ({
+        page,
+      }) => {
+        await fakeSoftKeyboard(page);
+        await page.goto("/");
+        await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
+        await agentRow(page, LONG, false).click({ timeout: 20_000 });
+        const header = page.getByRole("banner");
+        await expect(header.getByRole("heading", { name: LONG })).toBeVisible({ timeout: 15_000 });
+        const actions = header.getByRole("button", { name: `Session actions for ${LONG}` });
+
+        await actions.hover();
+        await expectInside(tooltip(page, `Session actions for ${LONG}`), "the session actions tooltip");
+
+        await expect(page.getByRole("toolbar", { name: "Terminal keys" })).toBeVisible({ timeout: 15_000 });
+        await key(page, "Switch session").click();
+        const sessions = page.getByRole("menu");
+        await expect(sessions.getByRole("menuitem", { name: new RegExp(LONG) })).toBeVisible();
+        await expectInside(sessions, "the Switch session menu");
+        await page.keyboard.press("Escape");
+        await expect(sessions).toBeHidden();
+
+        await actions.click();
+        await page.getByRole("menuitem", { name: "Rename…" }).click();
+        const rename = page.getByRole("dialog", { name: `Rename ${LONG}` });
+        await expectInside(rename, "the Rename dialog");
+        await rename.getByRole("button", { name: "Cancel" }).click();
+        await expect(rename).toBeHidden();
+
+        await actions.click();
+        await page.getByRole("menuitem", { name: "End session…" }).click();
+        await expectInside(page.getByRole("dialog", { name: `End ${LONG}?` }), "the End dialog");
+
+        // The session ends while its question is open: the question becomes the statement that it already ended.
+        endAgent("host", address);
+        ended = true;
+        const statement = page.getByRole("alertdialog", { name: `${LONG} already ended` });
+        await expectInside(statement, "the already ended statement");
+        await statement.getByRole("button", { name: "OK" }).click();
+      });
+    });
+  }
+}
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test.describe(`on a 1440 px desktop, ${colorScheme}`, () => {
+    test.use({ viewport: { width: 1440, height: 900 }, colorScheme, serviceWorkers: "block" });
+
+    test("the close tooltip and the Close dialog keep a 200-character name inside", async ({ page }) => {
+      await page.goto("/");
+      await agentRow(page, LONG, false).click({ timeout: 20_000 });
+      const tab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: new RegExp(LONG) });
+      await expect(tab).toBeVisible({ timeout: 15_000 });
+      await tab.click();
+      const close = page.getByRole("button", { name: `Close ${LONG}` });
+      await close.hover();
+      await expectInside(tooltip(page, `Close ${LONG}`), "the close tooltip");
+
+      await close.click();
+      const ask = page.getByRole("dialog", { name: `Close ${LONG}?` });
+      await expectInside(ask, "the Close dialog");
+      await ask.getByRole("button", { name: "Cancel" }).click();
+      await expect(ask).toBeHidden();
+    });
+  });
+}
