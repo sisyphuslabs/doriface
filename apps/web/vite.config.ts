@@ -10,6 +10,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      // Our own worker (src/sw.ts): the same precache as before, plus the push and notification-click handlers.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       includeAssets: ["icon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "doriface",
@@ -27,10 +31,9 @@ export default defineConfig({
           { src: "icon.svg", sizes: "any", type: "image/svg+xml" },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ["**/*.{js,css,html,svg,png,wasm,woff2}"],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        navigateFallback: "index.html",
       },
     }),
   ],

@@ -54,10 +54,14 @@ function splitLine(payload: Uint8Array): {
 }
 
 /**
- * What the plaintext of a session carries (contract v1.5): absent or `"hc"` is the `hc connect` stream, `"mesh"` the
- * mesh stream. On a pairing, absent is a device pairing and `"mesh"` a machine join.
+ * What the plaintext of a session carries (contract v1.7): absent or `"hc"` is the `hc connect` stream, `"mesh"` the
+ * mesh stream, `"push"` a device's push stream (web push subscriptions and notice answers). On a pairing, absent is a
+ * device pairing and `"mesh"` a machine join.
  */
-export type Stream = "hc" | "mesh";
+export type Stream = "hc" | "mesh" | "push";
+
+/** The mesh and push streams start with their own lines, so their message 1 carries no early bytes. */
+const takesEarly = (stream: Stream | undefined): boolean => stream === undefined || stream === "hc";
 
 const streamField = (stream: Stream | undefined): { readonly stream?: Stream } =>
   stream === undefined ? {} : { stream };
@@ -69,7 +73,8 @@ export const encodePairingHello = (name: string, stream?: "mesh"): Uint8Array =>
 /** IK message 1: `{"v":1}\n` followed by up to {@link MAX_EARLY_BYTES} early stream bytes (none on the mesh stream). */
 export function encodeSessionHello(early: Uint8Array = new Uint8Array(0), stream?: Stream): Uint8Array {
   if (early.byteLength > MAX_EARLY_BYTES) throw new PayloadError(`at most ${MAX_EARLY_BYTES} early bytes`);
-  if (stream === "mesh" && early.byteLength > 0) throw new PayloadError("the mesh stream carries no early bytes");
+  if (!takesEarly(stream) && early.byteLength > 0)
+    throw new PayloadError(`the ${stream} stream carries no early bytes`);
   return concatBytes(line(streamField(stream)), early);
 }
 
@@ -78,7 +83,7 @@ export type Hello =
   | { readonly kind: "session"; readonly early: Uint8Array; readonly stream: Stream | undefined };
 
 function streamOf(value: unknown, pairing: boolean): Stream | undefined {
-  if (value === undefined || value === "mesh" || (value === "hc" && !pairing)) return value;
+  if (value === undefined || value === "mesh" || ((value === "hc" || value === "push") && !pairing)) return value;
   throw new PayloadError(`stream ${JSON.stringify(value)} is not valid on a ${pairing ? "pairing" : "session"}`);
 }
 
@@ -87,7 +92,8 @@ export function decodeHello(pattern: "IK" | "IKpsk2", payload: Uint8Array): Hell
   if (pattern === "IK") {
     const stream = streamOf(fields["stream"], false);
     if (rest.byteLength > MAX_EARLY_BYTES) throw new PayloadError(`at most ${MAX_EARLY_BYTES} early bytes`);
-    if (stream === "mesh" && rest.byteLength > 0) throw new PayloadError("the mesh stream carries no early bytes");
+    if (!takesEarly(stream) && rest.byteLength > 0)
+      throw new PayloadError(`the ${stream} stream carries no early bytes`);
     return { kind: "session", early: rest.slice(), stream };
   }
   const stream = streamOf(fields["stream"], true);

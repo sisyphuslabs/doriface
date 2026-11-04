@@ -7,7 +7,8 @@ const BEHIND_MODAL = '[aria-hidden="true"], [inert]';
 const LAYERS = '[role="dialog"], [role="alertdialog"], [role="menu"]';
 
 /**
- * Whether a terminal may move keyboard focus into itself on its own, as its renderer starts or its stream attaches.
+ * Whether a terminal may move keyboard focus into itself on its own: as its renderer starts, its stream attaches, its
+ * pane becomes the focused one, or a press that started on it ends.
  * Never while a modal is open over it: focus would leave the open question, Esc would no longer reach it, and keys
  * typed next would go to the program behind it.
  */

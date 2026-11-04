@@ -1,0 +1,185 @@
+import type { HcConnection } from "@doriface/client";
+import { NOTICE_EVENTS, type NoticeEvent, type PushPrefs, type Terminal } from "@doriface/protocol";
+import { Button, Notice, SettingRow, Switch } from "@doriface/ui";
+import { useEffect } from "react";
+import { useConnection } from "../connection/store.ts";
+import { pushSettings, type PushView, usePushSettings } from "../push/push-settings.ts";
+import { idOfMachine } from "../workspace/model.ts";
+import { useMachines } from "../workspace/use-machines.ts";
+
+const NO_TERMINALS: readonly Terminal[] = [];
+
+const EVENT_ROWS: Readonly<Record<NoticeEvent, { readonly title: string; readonly description: string }>> = {
+  input: { title: "An agent asks for input", description: "It stopped to ask you something." },
+  permission: {
+    title: "An agent asks for permission",
+    description: "With Allow and Deny on the notification where this device shows them.",
+  },
+  done: { title: "An agent finishes its turn", description: "It is done and waiting for what comes next." },
+  error: { title: "An agent stops with an error", description: "Its turn ended in an error." },
+};
+
+const UNSUPPORTED: Readonly<Record<Exclude<PushView["support"], "supported">, { title: string; body: string }>> = {
+  "install-first": {
+    title: "Add doriface to your Home Screen first",
+    body: "On iPhone and iPad, notifications work in the installed app. In Safari, tap Share, then Add to Home Screen, and turn notifications on from there.",
+  },
+  "desktop-app": {
+    title: "Not in the desktop app yet",
+    body: "Notifications work in a browser and in the installed web app. The desktop app does not show them yet.",
+  },
+  unsupported: {
+    title: "This browser cannot show notifications from doriface",
+    body: "Open doriface in a current Chrome, Edge, Firefox or Safari to turn them on.",
+  },
+};
+
+function statusText(view: PushView): string {
+  if (view.on) return "On. You hear about agents even with doriface closed.";
+  if (view.permission === "denied") {
+    return "Blocked for this site. Allow notifications in this browser's site settings, then come back here.";
+  }
+  return "Hear when an agent asks for input or permission, finishes, or stops with an error, even with doriface closed.";
+}
+
+function MachineMutes({
+  connection,
+  prefs,
+  disabled,
+}: {
+  readonly connection: HcConnection;
+  readonly prefs: PushPrefs;
+  readonly disabled: boolean;
+}) {
+  const { views } = useMachines(connection, NO_TERMINALS);
+  const machines = [
+    { id: idOfMachine(undefined), name: connection.hello.core.name },
+    ...views.map((view) => ({ id: idOfMachine(view.name), name: view.name })),
+  ];
+  const setMuted = (id: string, heard: boolean): void => {
+    const muted = heard ? prefs.muted.filter((entry) => entry !== id) : [...prefs.muted, id];
+    void pushSettings.setPrefs({ ...prefs, muted });
+  };
+  return (
+    <ul aria-label="Machines" className="flex flex-col">
+      {machines.map((machine) => (
+        <li key={machine.id}>
+          <SettingRow
+            inline
+            title={
+              <span className="block truncate" title={machine.name}>
+                {machine.name}
+              </span>
+            }
+            control={
+              <Switch
+                aria-label={`Notifications from ${machine.name}`}
+                data-push-machine={machine.id}
+                disabled={disabled}
+                checked={!prefs.muted.includes(machine.id)}
+                onCheckedChange={(heard) => setMuted(machine.id, heard)}
+              />
+            }
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Settings > Notifications: the permission is asked for only from Turn on. */
+export function NotificationsSection() {
+  const view = usePushSettings();
+  const state = useConnection();
+  useEffect(() => {
+    void pushSettings.load();
+  }, []);
+  if (view.support !== "supported") {
+    const reason = UNSUPPORTED[view.support];
+    return (
+      <div data-push-state={view.support}>
+        <Notice tone="info" title={reason.title}>
+          {reason.body}
+        </Notice>
+      </div>
+    );
+  }
+  const blocked = view.permission === "denied" && !view.on;
+  const off = !view.on || view.busy;
+  const setEvent = (event: NoticeEvent, on: boolean): void =>
+    void pushSettings.setPrefs({ ...view.prefs, events: { ...view.prefs.events, [event]: on } });
+  return (
+    <div className="flex flex-col gap-6" data-push-state={view.on ? "on" : blocked ? "blocked" : "off"}>
+      <div className="flex flex-col">
+        <SettingRow
+          title="Notifications on this device"
+          description={statusText(view)}
+          control={
+            view.on ? (
+              <Button loading={view.busy} disabled={view.busy} onClick={() => void pushSettings.turnOff()}>
+                Turn off
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                loading={view.busy}
+                disabled={view.busy || blocked}
+                onClick={() => void pushSettings.turnOn()}
+              >
+                Turn on
+              </Button>
+            )
+          }
+        />
+        <SettingRow
+          title="Send a test notification"
+          description={view.tested ? "Sent. It should appear in a moment." : "Checks that this device gets them."}
+          control={
+            <Button disabled={off} onClick={() => void pushSettings.test()}>
+              Send test
+            </Button>
+          }
+        />
+      </div>
+      {view.error === null ? null : (
+        <Notice tone="error" title="Notifications">
+          {view.error}
+        </Notice>
+      )}
+      <section aria-labelledby="push-events" className="flex flex-col">
+        <h3 id="push-events" className="text-sm font-medium text-muted-foreground">
+          Notify me when
+        </h3>
+        {NOTICE_EVENTS.map((event) => (
+          <SettingRow
+            key={event}
+            inline
+            title={EVENT_ROWS[event].title}
+            description={EVENT_ROWS[event].description}
+            control={
+              <Switch
+                aria-label={EVENT_ROWS[event].title}
+                data-push-event={event}
+                disabled={off}
+                checked={view.prefs.events[event]}
+                onCheckedChange={(on) => setEvent(event, on)}
+              />
+            }
+          />
+        ))}
+      </section>
+      {state.phase === "open" ? (
+        <section aria-labelledby="push-machines" className="flex flex-col">
+          <h3 id="push-machines" className="text-sm font-medium text-muted-foreground">
+            From these machines
+          </h3>
+          <MachineMutes connection={state.connection} prefs={view.prefs} disabled={off} />
+        </section>
+      ) : null}
+      <p className="text-sm text-pretty text-muted-foreground">
+        A notification carries no command or output. When you open one, your host tells this device which session it is
+        about over the encrypted connection.
+      </p>
+    </div>
+  );
+}
