@@ -157,7 +157,8 @@ export function beginWorker(): void {
 
 function readStarted(): CoreState {
   const state = readState();
-  if (state === undefined) throw new Error(`terminal guard (${WHERE}): no baseline, so the worker's host never came up`);
+  if (state === undefined)
+    throw new Error(`terminal guard (${WHERE}): no baseline, so the worker's host never came up`);
   return state;
 }
 
