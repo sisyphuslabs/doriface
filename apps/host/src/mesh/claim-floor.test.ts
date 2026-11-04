@@ -118,7 +118,7 @@ describe("a peer's hello.n claim on this host's counter (section 10.1, M-E1)", (
     expect(refused).toEqual([0, 10_000, 20_000]);
   });
 
-  test("every hello is answered with done, even when the peer lacks nothing, so an honest peer always resolves", async () => {
+  test("every hello is answered with done, even when the peer lacks nothing", async () => {
     const s = meshAtB(55);
     const toA: string[] = [];
     const session = s.connect();
