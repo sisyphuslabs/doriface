@@ -26,25 +26,32 @@ const arrivals = (page: Page) =>
     return Array.isArray(seen) ? seen.filter((entry): entry is string => typeof entry === "string").toSorted() : [];
   });
 
-/** Watches an element's opacity and transform from now on, every frame, for the given time. */
-const sample = (page: Page, selector: string, ms: number) =>
+/**
+ * Watches an element's opacity and transform every frame from now until it has appeared, run an animation and has
+ * none left running, so the last frame is its resting state; `ceiling` ms bounds the wait if it never settles.
+ */
+const sample = (page: Page, selector: string, ceiling = 15_000) =>
   page.evaluate(
-    ([sel, duration]) =>
+    ([sel, limit]) =>
       new Promise<{ opacity: number; transform: string }[]>((resolve) => {
         const frames: { opacity: number; transform: string }[] = [];
+        let animated = false;
         const start = performance.now();
         const step = () => {
           const el = document.querySelector(sel);
           if (el !== null) {
             const style = getComputedStyle(el);
             frames.push({ opacity: Number(style.opacity), transform: style.transform });
+            const running = el.getAnimations().length > 0;
+            animated ||= running;
+            if (animated && !running) return resolve(frames);
           }
-          if (performance.now() - start < duration) requestAnimationFrame(step);
-          else resolve(frames);
+          if (performance.now() - start > limit) return resolve(frames);
+          requestAnimationFrame(step);
         };
         requestAnimationFrame(step);
       }),
-    [selector, ms] as const,
+    [selector, ceiling] as const,
   );
 
 test("the first screen does not animate in: nothing arrives on load, and a later new tab does", async ({ page }) => {
@@ -69,7 +76,7 @@ test("showing the sidebar fades it in without moving it", async ({ page }) => {
   await openNewTerminal(page);
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await page.getByRole("button", { name: "Hide sidebar" }).click();
-  const frames = sample(page, SIDEBAR, 400);
+  const frames = sample(page, SIDEBAR);
   await page.getByRole("button", { name: "Show sidebar" }).click();
   const seen = await frames;
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
@@ -83,7 +90,7 @@ test("a new tab scales and fades in, and settles at rest", async ({ page }) => {
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   const count = await page.getByRole("tab").count();
   const newest = `[role="tablist"] > div:nth-of-type(${count + 1})`;
-  const frames = sample(page, newest, 400);
+  const frames = sample(page, newest);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   const seen = await frames;
   expect(seen.length).toBeGreaterThan(0);
@@ -98,7 +105,7 @@ test("under reduced motion a new tab only fades: no frame is transformed", async
   await openNewTerminal(page);
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   const count = await page.getByRole("tab").count();
-  const frames = sample(page, `[role="tablist"] > div:nth-of-type(${count + 1})`, 400);
+  const frames = sample(page, `[role="tablist"] > div:nth-of-type(${count + 1})`);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   const seen = await frames;
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
