@@ -35,7 +35,13 @@ test("a pane has no title bar: the tab names the terminal and the status bar nam
     .toBe(true);
   // Which chord: tab-shortcuts.e2e.ts presses each tab's and checks it selects that tab.
   await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", /\((⌘|Ctrl\+)\d\)$/);
-  await expect(page.getByRole("contentinfo").locator("[data-status-space]")).not.toBeEmpty();
+  // The status bar names the focused terminal's space: the same one the sidebar's Spaces list marks current.
+  const currentSpace = page
+    .getByRole("region", { name: "Spaces" })
+    .locator('[aria-current="true"] [data-floor="name"]');
+  await expect(page.getByRole("contentinfo").locator("[data-status-space] [title]")).toHaveText(
+    (await currentSpace.textContent()) ?? "missing",
+  );
 });
 
 test("renaming a session from the tab strip updates the tab", async ({ page }) => {
