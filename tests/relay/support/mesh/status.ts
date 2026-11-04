@@ -38,8 +38,10 @@ const hostIdsOf = (value: unknown): readonly string[] =>
   listOf(value).flatMap((entry) => (isRecord(entry) && typeof entry["hostId"] === "string" ? [entry["hostId"]] : []));
 
 /**
- * A status keeps this host's own row even when its own view no longer holds it. Its view holds it unless it is revoked
- * there or an undecidable revoke removed it (section 3.7), so the own row is left out of `members` in those cases.
+ * This host's view as its status prints it. `members` is the record set's view; a fail-closed conflict's removals are
+ * printed apart from it, as "the members a fail-closed conflict removed" (section 8.6, `removed[].members`), and the
+ * view R3 gives leaves them out (section 3.7: "the members present at L are removed, and the mesh may shrink to {}").
+ * So the view is `members` minus the hosts the status itself names as removed or revoked, whoever they are.
  */
 export async function statusOf(host: MeshHost): Promise<Status> {
   const run = await host.cli("mesh", "status", "--json");
@@ -50,13 +52,13 @@ export async function statusOf(host: MeshHost): Promise<Status> {
   const stuck = listOf(parsed["stuck"]).flatMap((entry) =>
     isRecord(entry) && typeof entry["kind"] === "string" ? [entry["kind"]] : [],
   );
-  const self = parsed["self"];
-  const outOfView = hostIdsOf(parsed["revoked"]).some((id) => id === self) || stuck.includes("removed_undecidable");
+  const removed = listOf(parsed["removed"]).flatMap((entry) => (isRecord(entry) ? hostIdsOf(entry["members"]) : []));
+  const out = new Set([...removed, ...hostIdsOf(parsed["revoked"])]);
   return {
     sync: String(parsed["sync"]),
     members: parsed["members"]
       .flatMap(memberOf)
-      .filter((member) => !(outOfView && member.hostId === self))
+      .filter((member) => !out.has(member.hostId))
       .toSorted((x, y) => x.hostId.localeCompare(y.hostId)),
     stuck,
   };
