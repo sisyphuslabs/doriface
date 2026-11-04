@@ -18,6 +18,11 @@ const EDGE_PX = 32;
 const EDGE_STEP_PX = 8;
 const SETTLE_MS = 200;
 
+/** Cancels a touch's tap, so the browser sends no mouse events for it. */
+function cancelTap(touchEnd: TouchEvent): void {
+  if (touchEnd.cancelable) touchEnd.preventDefault();
+}
+
 interface Press {
   readonly id: string;
   readonly from: number;
@@ -173,10 +178,7 @@ export function useTabDrag(
         // A lifted tab let go where it was: its menu opens instead of a tap selecting it. Cancelling the touchend that
         // follows keeps the browser from sending the tap's mouse events, whose mousedown would close the menu at once.
         swallowClick.current = true;
-        const noTap = (touchEnd: TouchEvent): void => {
-          if (touchEnd.cancelable) touchEnd.preventDefault();
-        };
-        window.addEventListener("touchend", noTap, { once: true, passive: false, capture: true });
+        window.addEventListener("touchend", cancelTap, { once: true, passive: false, capture: true });
         end();
         latestHoldRelease.current?.(current.id, up.clientX, up.clientY);
       };
