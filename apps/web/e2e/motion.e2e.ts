@@ -4,7 +4,10 @@ import { expect, openNewTerminal, test } from "./fixtures.ts";
 test.use({ serviceWorkers: "block" });
 
 const transitionOf = (page: Page, selector: string) =>
-  page.locator(selector).first().evaluate((el) => getComputedStyle(el).transitionProperty);
+  page
+    .locator(selector)
+    .first()
+    .evaluate((el) => getComputedStyle(el).transitionProperty);
 
 const ARRIVING = ['aside[aria-label="Workspace"]', '[role="tablist"] > div'];
 
