@@ -27,6 +27,9 @@ import {
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
+import { splitLanding } from "./split-landing.ts";
+import { orderTabs, type TabMove } from "./tab-order.ts";
+import { useTabMoves } from "./use-tab-moves.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
 export interface Layout extends PaneMoves {
@@ -45,6 +48,10 @@ export interface Layout extends PaneMoves {
   readonly closeTab: (key: string) => void;
   /** The pane this screen split off last, which grows in from the pane it came from. */
   readonly fresh: string | null;
+  /** Moves a tab so it ends at index `to` of `tabs`; panes and focus stay as they are. */
+  readonly moveTab: (key: string, to: number) => void;
+  /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
+  readonly lastMove: TabMove | null;
 }
 
 export interface PaneTarget {
@@ -76,7 +83,10 @@ export function useLayout(
   useEffect(() => saveView(core, view), [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
   const [loose, setLoose] = useState<readonly string[]>([]);
-  const tabs = useMemo(() => buildTabs(layouts, terminals, loose), [layouts, terminals, loose]);
+  const tabs = useMemo(
+    () => orderTabs(buildTabs(layouts, terminals, loose), view.order),
+    [layouts, terminals, loose, view.order],
+  );
   const { active, focused, zoomed } = pick(tabs, view);
   const layoutOf = useCallback(
     (machine: string | null) => {
@@ -112,14 +122,20 @@ export function useLayout(
     });
   }, []);
 
+  /** A tab of this screen's own for a terminal its machine's layout could not take. */
+  const keepHere = useCallback(
+    (address: string): void => {
+      setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
+      show(looseKey(address), TRANSIENT);
+    },
+    [show],
+  );
+
   const addTab = useCallback(
     (address: string): void => {
       const machine = machineOf(address) ?? null;
       const layout = layoutOf(machine);
-      if (layout === undefined || layout.readOnly !== null) {
-        setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
-        return show(looseKey(address), TRANSIENT);
-      }
+      if (layout === undefined || layout.readOnly !== null) return keepHere(address);
       const id = freshId("tb");
       const pane = freshId("p");
       const tab: JsonObject = { id, name: "", root: rootOf(id, [terminalBlock(pane, localOf(address))]) };
@@ -133,7 +149,7 @@ export function useLayout(
       });
       show(tabKey(layout.machineId, id), pane);
     },
-    [active, layoutOf, show],
+    [active, keepHere, layoutOf, show],
   );
 
   const openTerminal = useCallback(
@@ -175,17 +191,18 @@ export function useLayout(
           return next;
         })
         .then((placed) => {
-          // The pane it split closed on another device first: the new terminal still opens, in a tab of its own.
-          if (!placed && gone) {
+          const landing = splitLanding(placed, gone);
+          if (landing === "own-tab") {
             addTab(address);
             told("The pane you split had closed, so the new terminal opened in a new tab.");
           }
+          if (landing === "here") keepHere(address);
           return placed;
         });
       setFresh(pane);
       return show(tab.key, pane);
     },
-    [active, addTab, focused, layoutOf, show, tabs, told],
+    [active, addTab, focused, keepHere, layoutOf, show, tabs, told],
   );
 
   const dropPane = useCallback(
@@ -229,6 +246,8 @@ export function useLayout(
   const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
+  const { moveTab, lastMove } = useTabMoves(tabs, setView);
+
   return {
     tabs,
     active,
@@ -242,6 +261,8 @@ export function useLayout(
     closeTab,
     fresh,
     ...moves,
+    moveTab,
+    lastMove,
   };
 }
 

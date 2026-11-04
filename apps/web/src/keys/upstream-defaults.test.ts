@@ -11,7 +11,8 @@ import { PLATFORM_RESERVED } from "./platform-reserved.ts";
  * keep for themselves.
  */
 const DORIFACE_ONLY: Readonly<Record<"mac" | "other", readonly string[]>> = {
-  mac: ["layout.focus:sidebar"],
+  // Ghostty binds move_tab by default only on Linux and Windows; there doriface takes the same chord.
+  mac: ["layout.focus:sidebar", "tab.move:left", "tab.move:right"],
   other: [
     "layout.focus:sidebar",
     "pane.resize:left",
@@ -36,6 +37,14 @@ describe("doriface-only bindings", () => {
   test.each(["mac", "other"] as const)("on %s they take no chord the OS or a browser reserves", (platform) => {
     const triggers = DORIFACE_ONLY[platform].flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.filter((trigger) => trigger in PLATFORM_RESERVED)).toEqual([]);
+  });
+
+  test("on Linux and Windows moving a tab takes Ghostty's move_tab chord, not its previous/next tab", () => {
+    const keymap = defaultKeymap("other");
+    expect([triggersFor(keymap, "tab.move:left"), triggersFor(keymap, "tab.move:right")]).toEqual([
+      ["ctrl+shift+page_up"],
+      ["ctrl+shift+page_down"],
+    ]);
   });
 });
 

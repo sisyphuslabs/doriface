@@ -84,7 +84,10 @@ export function useLayoutDocs(
       doc: state?.phase === "ready" ? state.doc : (kept ?? null),
       loaded: state?.phase === "ready" || kept !== undefined,
       readOnly,
-      edit: live === undefined ? () => Promise.resolve(false) : (change) => live.edit(change),
+      edit:
+        live === undefined
+          ? () => Promise.reject(new Error("The layout cannot take changes now: the machine is not connected"))
+          : (change) => live.edit(change),
     };
   });
   return { layouts, heard };

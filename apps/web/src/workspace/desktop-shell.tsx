@@ -49,6 +49,10 @@ function tabEntry(tab: LayoutTab, byAddress: ReadonlyMap<string, Session>, focus
   };
 }
 
+/** The tab whose button has keyboard focus, which Move tab left/right moves instead of the active one. */
+const focusedTab = (): string | null =>
+  document.activeElement?.closest("[data-tab-id]")?.getAttribute("data-tab-id") ?? null;
+
 export interface DesktopShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Session[];
@@ -83,6 +87,8 @@ export function DesktopShell(props: DesktopShellProps) {
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
   const tabKeys = useTabSelectKeys();
+  const moveLeftKeys = useActionKeys("tab.move:left");
+  const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   useAppActions({
     terminals,
@@ -94,6 +100,7 @@ export function DesktopShell(props: DesktopShellProps) {
     onToggleSidebar: () => setSidebar((shown) => !shown),
     onFocusSidebar: focusSidebar,
     onSession,
+    focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const focusedAddress = layout.focused?.address ?? null;
@@ -150,6 +157,12 @@ export function DesktopShell(props: DesktopShellProps) {
           onSelect={layout.selectTab}
           onClose={onCloseTab}
           onNew={onNew}
+          onMove={layout.moveTab}
+          moveKeys={{
+            ...(moveLeftKeys === undefined ? {} : { left: moveLeftKeys }),
+            ...(moveRightKeys === undefined ? {} : { right: moveRightKeys }),
+          }}
+          moved={layout.lastMove === null ? null : { id: layout.lastMove.key, count: layout.lastMove.count }}
           {...(sidebar ? {} : { className: "pl-[var(--titlebar-inset-start,0.625rem)]" })}
           leading={
             sidebar ? null : (

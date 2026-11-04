@@ -24,6 +24,8 @@ export interface AppActionTargets {
   readonly onFocusSidebar: () => void;
   /** Renames or ends the session in view; false when there is none. */
   readonly onSession: SessionVerb;
+  /** The tab that has keyboard focus, which a key moves instead of the active one; none when focus is elsewhere. */
+  readonly focusedTab?: () => string | null;
 }
 
 export type SessionVerb = (verb: "rename" | "end") => boolean;
@@ -105,6 +107,16 @@ export function useAppActions(targets: AppActionTargets): void {
   );
 }
 
+/** Moves a tab one place; at an end of the strip the key is left to the terminal, as with nothing to select. */
+function moveTab(layout: Layout, key: string | null, side: string): boolean {
+  const keys = layout.tabs.map((tab) => tab.key);
+  const from = key === null ? -1 : keys.indexOf(key);
+  const to = from + (side === "left" ? -1 : 1);
+  if (key === null || from === -1 || to < 0 || to >= keys.length) return false;
+  layout.moveTab(key, to);
+  return true;
+}
+
 function selectTab(layout: Layout, key: string | null): boolean {
   // Nothing to do leaves the key to the terminal (ctrl+tab in a shell with one tab open).
   if (key === null || !shouldSelect(key, layout.active?.key ?? null)) return false;
@@ -132,6 +144,7 @@ export function desktopActions(
     onToggleSidebar,
     onFocusSidebar,
     onSession,
+    focusedTab,
   }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
@@ -155,6 +168,8 @@ export function desktopActions(
         return selectTab(layout, keys[Number(argument) - 1] ?? null);
       case "tab.last":
         return selectTab(layout, keys.at(-1) ?? null);
+      case "tab.move":
+        return moveTab(layout, focusedTab?.() ?? active, argument);
       case "pane.split":
         if (focused === null || (argument !== "right" && argument !== "down")) return false;
         onSplit(argument === "right" ? "row" : "column");
