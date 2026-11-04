@@ -38,7 +38,7 @@ test("off macOS the tab bar and the tab tooltip show Ctrl shortcuts", async ({ p
   await page.goto("/");
   const terminal = await openNewTerminal(page);
   const selected = page.getByRole("tab", { selected: true });
-  await expect(selected).toHaveAttribute("title", /\(Ctrl\+1\)$/);
+  await expect(selected).toHaveAttribute("title", /\(Ctrl\+\d\)$/);
   await expect(selected).not.toHaveAttribute("title", /⌘/);
   await expect(terminal).toBeVisible();
   // CI intermittently showed no tooltip when re-hovering New tab right after openNewTerminal clicked

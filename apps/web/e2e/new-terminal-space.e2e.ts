@@ -37,7 +37,7 @@ test("New tab starts in the directory the active shell has moved to", async ({ p
   const first = await openNewTerminal(page);
   await first.click();
   await page.keyboard.type('mkdir -p "${TMPDIR:-/tmp}/f13-moved" && cd "${TMPDIR:-/tmp}/f13-moved"\r');
-  await expect(page.getByRole("contentinfo").locator("[data-status-space]")).toHaveText("f13-moved", {
+  await expect(page.getByRole("contentinfo").locator("[data-status-space] [title]")).toHaveText("f13-moved", {
     timeout: 15_000,
   });
   const moved = await workingDirectory(page, first);
