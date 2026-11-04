@@ -71,7 +71,8 @@ scenario(
     }, 300_000);
 
     afterAll(async () => {
-      await mesh?.dispose();
+      const receipt = await mesh?.dispose();
+      expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
     });
 
     test("an admit signed by a key that is no member waits in the dangling pool (3.3, rule 4) and changes nothing", async () => {

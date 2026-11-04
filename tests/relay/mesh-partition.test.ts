@@ -47,7 +47,8 @@ scenario(
     }, 300_000);
 
     afterAll(async () => {
-      await mesh?.dispose();
+      const receipt = await mesh?.dispose();
+      expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
     });
 
     test("a admits e while c renames d to d2; after the heal every host has both, one view, and matching machines", async () => {

@@ -24,7 +24,8 @@ scenario("automatic machine add and remove in hc", ["join", "revoke", "leave", "
   }, 240_000);
 
   afterAll(async () => {
-    await mesh?.dispose();
+    const receipt = await mesh?.dispose();
+    expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
   });
 
   test("a new member appears as a machine on every core, and every core lists exactly the other members", async () => {

@@ -27,7 +27,8 @@ for (const shape of BACKDATE_SHAPES) {
     }, 300_000);
 
     afterAll(async () => {
-      await mesh?.dispose();
+      const receipt = await mesh?.dispose();
+      expect([receipt?.alive, receipt?.listening]).toEqual([[], []]);
     });
 
     test("the honest revoke asks for --yes exactly when its witness pool is empty (the revoke-time warning)", () => {
