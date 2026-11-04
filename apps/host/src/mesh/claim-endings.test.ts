@@ -103,7 +103,10 @@ const tactics: readonly [string, number, (s: Host, session: Session, stored: Sig
     25_000,
     (s, session) => {
       const records = s.records();
-      session.say({ t: "records", records: [new Signer(a, records).admit(peer(`x${s.clock.now()}`), headsOfRecords(records))] });
+      session.say({
+        t: "records",
+        records: [new Signer(a, records).admit(peer(`x${s.clock.now()}`), headsOfRecords(records))],
+      });
       session.say({ t: "done", mesh: s.mesh });
       return session;
     },
@@ -120,38 +123,44 @@ const tactics: readonly [string, number, (s: Host, session: Session, stored: Sig
 ];
 
 describe("no renewal tactic holds a claim past 30 s in 10 minutes (section 10.1)", () => {
-  test.each(tactics)("a claimer that %s", async (_how, everyMs, act) => {
-    const { records } = meshOf([a, b, c]);
-    const [stored] = records;
-    if (stored === undefined) throw new Error("no records");
-    const s = atB(records, 91);
-    let session = s.connect();
-    session.hello(CLAIM);
-    const samples = new Map([
-      [24_000, false],
-      [31_000, true],
-      [300_000, true],
-      [590_000, true],
-    ]);
-    const times = [
-      ...new Set([
-        ...samples.keys(),
-        ...Array.from({ length: Math.floor(600_000 / everyMs) }, (_, i) => (i + 1) * everyMs),
-      ]),
-    ].toSorted((x, y) => x - y);
-    const seen: boolean[] = [];
-    const step = async ([time, ...rest]: readonly number[]): Promise<void> => {
-      if (time === undefined) return;
-      await s.at(time);
-      if (samples.has(time)) seen.push(s.signs());
-      // A session this host closed (4400 for owing its done) is simply dialed again: that is the claimer's tactic too.
-      if (session.ours.closeCode !== undefined) session = redial(s);
-      if (time % everyMs === 0) session = act(s, session, stored);
-      return step(rest);
-    };
-    await step(times);
-    expect(seen).toEqual([...samples.values()]);
-  });
+  // The membership row stores 24 admits, and every store write re-verifies every card in pure-JS Ed25519 (#94): about 8 s
+  // of CPU on a build host, past the 5 s default. The clock is fake, so the 60 s bounds CPU only.
+  test.each(tactics)(
+    "a claimer that %s",
+    async (_how, everyMs, act) => {
+      const { records } = meshOf([a, b, c]);
+      const [stored] = records;
+      if (stored === undefined) throw new Error("no records");
+      const s = atB(records, 91);
+      let session = s.connect();
+      session.hello(CLAIM);
+      const samples = new Map([
+        [24_000, false],
+        [31_000, true],
+        [300_000, true],
+        [590_000, true],
+      ]);
+      const times = [
+        ...new Set([
+          ...samples.keys(),
+          ...Array.from({ length: Math.floor(600_000 / everyMs) }, (_, i) => (i + 1) * everyMs),
+        ]),
+      ].toSorted((x, y) => x - y);
+      const seen: boolean[] = [];
+      const step = async ([time, ...rest]: readonly number[]): Promise<void> => {
+        if (time === undefined) return;
+        await s.at(time);
+        if (samples.has(time)) seen.push(s.signs());
+        // A session this host closed (4400 for owing its done) is simply dialed again: that is the claimer's tactic too.
+        if (session.ours.closeCode !== undefined) session = redial(s);
+        if (time % everyMs === 0) session = act(s, session, stored);
+        return step(rest);
+      };
+      await step(times);
+      expect(seen).toEqual([...samples.values()]);
+    },
+    60_000,
+  );
 
   test("an empty records line is no progress: the session closes 4400 at 30 s", async () => {
     const s = atB(meshOf([a, b, c]).records, 93);
