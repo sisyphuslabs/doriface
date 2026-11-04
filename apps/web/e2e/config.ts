@@ -19,7 +19,7 @@ export const E2E_HOST_PORT = hostPortOf(E2E_SLOT);
 /** Shared by the e2e host and the specs: the added machine's switch and environment. */
 export const E2E_MACHINE_DIR = join(tmpdir(), `doriface-web-e2e-${E2E_HOST_PORT}-machine`);
 /** Where the e2e host on `port` saves its core's environment (and its pid) for the specs and the leftover check. */
-export const hostEnvOf = (port: number): string => join(tmpdir(), `doriface-web-e2e-${port}-host.json`);
+export const hostEnvOf = (hostPort: number): string => join(tmpdir(), `doriface-web-e2e-${hostPort}-host.json`);
 /** This worker's core environment, so a spec can start terminals on it with hc. */
 export const E2E_HOST_ENV = hostEnvOf(E2E_HOST_PORT);
 export const E2E_WEB_PORT = port("E2E_WEB_PORT", 4173);

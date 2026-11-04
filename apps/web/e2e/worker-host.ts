@@ -8,15 +8,20 @@ const HOST_SCRIPT = fileURLToPath(new URL("./host.ts", import.meta.url));
 /** Setup seeds the core and adds a machine (a second core) before /healthz answers. */
 const READY_WITHIN_MS = 120_000;
 
+/** The web tsconfig types ChildProcess without its EventEmitter half, so the exit is read from exitCode/signalCode. */
 function exitOf(child: ChildProcess): Promise<number | null> {
-  return new Promise((resolve) => child.once("exit", (code) => resolve(code)));
+  return new Promise((resolve) => {
+    const tick = setInterval(() => {
+      if (child.exitCode === null && child.signalCode === null) return;
+      clearInterval(tick);
+      resolve(child.exitCode);
+    }, 100);
+  });
 }
 
-async function healthy(url: string, exited: Promise<number | null>): Promise<void> {
+async function healthy(url: string, child: ChildProcess, exited: Promise<number | null>): Promise<void> {
   const deadline = Date.now() + READY_WITHIN_MS;
-  let gone = false;
-  void exited.then(() => (gone = true));
-  while (!gone) {
+  while (child.exitCode === null && child.signalCode === null) {
     // oxlint-disable-next-line no-await-in-loop -- readiness: ask again until the host answers, as webServer does
     const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
       (r) => r.ok,
@@ -38,7 +43,7 @@ export async function startWorkerHost(): Promise<() => Promise<void>> {
   delete env["TEST_PARALLEL_INDEX"];
   const child = spawn("bun", [HOST_SCRIPT], { env, stdio: ["ignore", "inherit", "inherit"] });
   const exited = exitOf(child);
-  await healthy(`http://127.0.0.1:${port}/healthz`, exited);
+  await healthy(`http://127.0.0.1:${port}/healthz`, child, exited);
   return async () => {
     child.kill("SIGTERM");
     await exited;
