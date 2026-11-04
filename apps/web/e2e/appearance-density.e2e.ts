@@ -7,7 +7,7 @@ test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 const rowHeight = (page: Page) =>
   page
     .getByRole("complementary", { name: "Workspace" })
-    .getByRole("region", { name: "Spaces" })
+    .getByRole("region", { name: "Spaces", exact: true })
     .evaluate((spaces) => {
       const rows = [...spaces.querySelectorAll("[data-machine-header]")].map(
         (button) => button.parentElement?.getBoundingClientRect().height ?? 0,
