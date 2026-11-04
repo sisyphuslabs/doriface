@@ -1,5 +1,6 @@
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
+import { Check } from "lucide-react";
 import {
   type ComponentProps,
   type ReactElement,
@@ -122,6 +123,53 @@ export function MenuItem({ icon, keys, destructive = false, children, ...props }
       <span className="flex-1">{children}</span>
       {keys === undefined ? null : <Kbd keys={keys} />}
     </BaseMenu.Item>
+  );
+}
+
+export interface MenuRadioGroupProps {
+  readonly value: string;
+  readonly onValueChange: (value: string) => void;
+  /** Names the choice, e.g. "Sort agents"; shown as the group's caption. */
+  readonly label: string;
+  readonly children: ReactNode;
+}
+
+/** One choice among menu items: the chosen one carries a check. */
+export function MenuRadioGroup({ value, onValueChange, label, children }: MenuRadioGroupProps) {
+  return (
+    <BaseMenu.Group>
+      <BaseMenu.GroupLabel className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">{label}</BaseMenu.GroupLabel>
+      <BaseMenu.RadioGroup value={value} onValueChange={(next: unknown) => onValueChange(String(next))}>
+        {children}
+      </BaseMenu.RadioGroup>
+    </BaseMenu.Group>
+  );
+}
+
+export function MenuRadioItem({
+  value,
+  icon,
+  children,
+}: {
+  readonly value: string;
+  readonly icon?: ReactNode;
+  readonly children: ReactNode;
+}) {
+  return (
+    <BaseMenu.RadioItem
+      value={value}
+      closeOnClick
+      className={cn(
+        "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-sm outline-none select-none",
+        "data-highlighted:bg-hover [&_svg]:size-3.5 [&_svg]:text-muted-foreground",
+      )}
+    >
+      {icon}
+      <span className="flex-1">{children}</span>
+      <BaseMenu.RadioItemIndicator className="[&_svg]:text-foreground">
+        <Check aria-hidden />
+      </BaseMenu.RadioItemIndicator>
+    </BaseMenu.RadioItem>
   );
 }
 
