@@ -17,6 +17,14 @@ export function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "::1" || /^127(?:\.\d{1,3}){3}$/.test(hostname);
 }
 
+/** A plaintext endpoint off loopback only with --unsafe-listen; the CLI checks this as part of its command line. */
+export function assertListenAllowed(listen: ListenAddress, unsafeListen: boolean): void {
+  if (isLoopbackHost(listen.hostname) || unsafeListen) return;
+  throw new Error(
+    `refusing to listen on ${listen.hostname}: the endpoint is plaintext; bind loopback or pass --unsafe-listen`,
+  );
+}
+
 export function formatHost(hostname: string): string {
   return hostname.includes(":") ? `[${hostname}]` : hostname;
 }
