@@ -20,7 +20,8 @@ export interface DialogProps {
   readonly alert?: boolean;
 }
 
-const popupClass = "w-[min(28rem,calc(100%-2rem))] p-5";
+/** Inside the viewport both ways: a 1rem margin each side, and a long question scrolls inside instead of off screen. */
+const popupClass = "w-[min(28rem,calc(100%-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto p-5";
 const titleClass = "text-lg font-semibold text-foreground";
 const descriptionClass = "mt-1.5 text-base text-pretty text-muted-foreground";
 

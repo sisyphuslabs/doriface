@@ -10,7 +10,7 @@ import {
 } from "react";
 import { cn } from "../lib/cn.ts";
 import { Kbd } from "./kbd.tsx";
-import { overlaySurface } from "./overlay.ts";
+import { fitsViewportWidth, overlaySurface } from "./overlay.ts";
 
 export interface MenuProps {
   readonly trigger: ReactElement;
@@ -25,9 +25,9 @@ export interface MenuProps {
 
 /**
  * A popup never grows past the room the viewport leaves it: it is capped at the positioner's available height and
- * scrolls inside. Fixed positioning measures that room against the visual viewport, so a phone's soft keyboard counts.
+ * width, and scrolls inside. Fixed positioning measures that room against the visual viewport, so a phone's soft keyboard counts.
  */
-const bounded = "max-h-(--available-height) overflow-y-auto overscroll-contain";
+const bounded = cn("max-h-(--available-height) overflow-y-auto overscroll-contain", fitsViewportWidth);
 
 /** Brings the item marked `aria-current` (the session open now) into view inside an opened menu. */
 function revealCurrent(popup: HTMLElement | null): void {
@@ -113,13 +113,14 @@ export function MenuItem({ icon, keys, destructive = false, children, ...props }
     <BaseMenu.Item
       {...props}
       className={cn(
-        "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-sm outline-none select-none",
+        // A label too long for the menu's width wraps, so the row grows from its usual height instead of running out.
+        "flex min-h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 py-1 text-sm outline-none select-none",
         "data-highlighted:bg-hover data-disabled:opacity-45 [&_svg]:size-3.5 [&_svg]:text-muted-foreground",
         destructive && "text-destructive [&_svg]:text-destructive",
       )}
     >
       {icon}
-      <span className="flex-1">{children}</span>
+      <span className="min-w-0 flex-1">{children}</span>
       {keys === undefined ? null : <Kbd keys={keys} />}
     </BaseMenu.Item>
   );
