@@ -233,17 +233,16 @@ export class Reconciler {
       if (kind === "already_added") return this.#migrate(member, attempt, name);
       this.status.set(member.hostId, { state: "retrying", reason: `${kind}: ${messageOf(error)}` });
       this.#options.log(`mesh: adding machine ${name} failed (${kind}): ${messageOf(error)}; retrying`);
-      this.#retryLater(member.hostId, messageOf(error).includes(BUDGET_REFUSAL));
+      if (!messageOf(error).includes(BUDGET_REFUSAL)) this.#retryLater(member.hostId);
     }
   }
 
   /**
    * Unreachable, hc_missing, incompatible: retried 30 s later, doubling to 5 minutes, and at once on presence. A line
-   * refused for the dial budget does not double the wait: the policy's "budget" due re-adds it once the window frees.
+   * refused for the dial budget arms no clock here: the policy's "budget" due re-adds it once a token is free for it.
    */
-  #retryLater(hostId: string, forBudget: boolean): void {
-    const previous = this.#retries.get(hostId)?.attempts ?? 0;
-    const attempts = forBudget ? Math.max(previous, 1) : previous + 1;
+  #retryLater(hostId: string): void {
+    const attempts = (this.#retries.get(hostId)?.attempts ?? 0) + 1;
     this.#retries.get(hostId)?.cancel();
     const wait = Math.min(DIAL_LIMITS.probeFirstMs * 2 ** (attempts - 1), DIAL_LIMITS.probeMaxMs);
     const cancel = this.#options.clock.after(wait, () => {

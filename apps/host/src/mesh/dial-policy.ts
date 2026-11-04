@@ -122,14 +122,24 @@ export class DialPolicy {
     });
   }
 
-  /** A line refused for the budget is due again once the window frees (herdr cannot wait past its own deadline). */
+  /**
+   * A line refused for the budget (herdr cannot wait past its own deadline) is due again the moment a token is free
+   * for it: the window slid or a dial gave its token back, and no dial of higher priority waits. While the window
+   * stays full, nothing is due, so herdr is not asked to add a line that would only be refused again.
+   */
   #lineRefused(member: string): void {
     this.#budgetRefused.add(member);
-    if (this.#budgetWake !== undefined) return;
-    const oldest = this.#charged[0] ?? this.#clock.now();
-    const at = Math.max(0, oldest + this.#limits.windowMs - this.#clock.now());
-    this.#budgetWake = this.#clock.after(at, () => {
+    this.#armBudgetWake();
+  }
+
+  #armBudgetWake(): void {
+    if (this.#budgetWake !== undefined || this.#budgetRefused.size === 0) return;
+    const now = this.#clock.now();
+    const free = this.#waiters.length === 0 && this.#used() < this.budget;
+    const at = free ? now : (this.#charged[0] ?? now) + this.#limits.windowMs;
+    this.#budgetWake = this.#clock.after(Math.max(0, at - now), () => {
       this.#budgetWake = undefined;
+      if (this.#waiters.length > 0 || this.#used() >= this.budget) return this.#armBudgetWake();
       const members = [...this.#budgetRefused];
       this.#budgetRefused.clear();
       for (const refused of members) this.#onDue(refused, "budget");
@@ -249,6 +259,9 @@ export class DialPolicy {
       waiter.resolve({ ok: true });
     }
     this.#schedule();
+    this.#budgetWake?.();
+    this.#budgetWake = undefined;
+    this.#armBudgetWake();
   }
 
   #schedule(): void {
