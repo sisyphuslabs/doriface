@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { endSession, renameSession, type SessionCalls } from "./session-actions.ts";
+import { HcRpcError } from "@doriface/protocol";
+import { afterEnd, endSession, renameSession, type SessionCalls } from "./session-actions.ts";
 
 type Call = { readonly method: string; readonly params: unknown };
 
@@ -20,6 +21,17 @@ function recorder() {
   return { calls, connection };
 }
 
+/** Calls whose `method` is refused with an hc error of this kind; the kill otherwise reports the program finished. */
+function refusing(method: "kill" | "rm", kind: string): SessionCalls {
+  const refuse = (): Promise<never> =>
+    Promise.reject(new HcRpcError({ code: -32000, message: `${method}: ${kind}`, data: { kind } }));
+  return {
+    label: () => Promise.resolve({}),
+    kill: method === "kill" ? refuse : () => Promise.resolve({ state: "finished" }),
+    rm: method === "rm" ? refuse : () => Promise.resolve({}),
+  };
+}
+
 describe("session actions", () => {
   test("a rename is the herdr.name label, and an empty name removes it (herdr-app label rules)", async () => {
     const { calls, connection } = recorder();
@@ -35,5 +47,69 @@ describe("session actions", () => {
     const { calls, connection } = recorder();
     await endSession(connection, "box/t2");
     expect(calls.map((call) => call.method)).toEqual(["terminal.kill", "terminal.rm"]);
+  });
+
+  test("a screen that leaves when the program exits waits for End's terminal.rm", async () => {
+    const asked = Promise.withResolvers<void>();
+    const removed = Promise.withResolvers<unknown>();
+    const connection: SessionCalls = {
+      label: () => Promise.resolve({}),
+      kill: () => Promise.resolve({ state: "finished" }),
+      rm: () => {
+        asked.resolve();
+        return removed.promise;
+      },
+    };
+    const left: string[] = [];
+    const ending = endSession(connection, "t4");
+    afterEnd("t4", () => left.push("t4"));
+    afterEnd("t5", () => left.push("t5"));
+    await asked.promise;
+    // The program has exited and terminal.rm is out, unanswered: only the session with no End in flight has left.
+    expect(left).toEqual(["t5"]);
+    removed.resolve({});
+    await ending;
+    expect(left).toEqual(["t5", "t4"]);
+  });
+
+  test("a terminal already gone when End's kill or rm lands counts as ended; any other refusal does not", async () => {
+    await endSession(refusing("rm", "not_found"), "t8");
+    await endSession(refusing("kill", "not_found"), "t8");
+    await expect(endSession(refusing("rm", "busy"), "t9")).rejects.toThrow("rm: busy");
+  });
+
+  test("an earlier End of the same session settling does not release a screen waiting on a later one", async () => {
+    const first = Promise.withResolvers<unknown>();
+    const second = Promise.withResolvers<unknown>();
+    const removals = [first, second];
+    const connection: SessionCalls = {
+      label: () => Promise.resolve({}),
+      kill: () => Promise.resolve({ state: "finished" }),
+      rm: () => removals.shift()?.promise ?? Promise.resolve({}),
+    };
+    const left: string[] = [];
+    const earlier = endSession(connection, "t7");
+    const later = endSession(connection, "t7");
+    first.resolve({});
+    await earlier;
+    afterEnd("t7", () => left.push("t7"));
+    expect(left).toEqual([]);
+    second.resolve({});
+    await later;
+    expect(left).toEqual(["t7"]);
+  });
+
+  test("a failed End lets the screen leave, and the next exit of that session leaves at once", async () => {
+    const connection: SessionCalls = {
+      label: () => Promise.resolve({}),
+      kill: () => Promise.reject(new Error("no such terminal")),
+      rm: () => Promise.resolve({}),
+    };
+    const left: string[] = [];
+    const ending = endSession(connection, "t6");
+    afterEnd("t6", () => left.push("after-failure"));
+    await expect(ending).rejects.toThrow("no such terminal");
+    afterEnd("t6", () => left.push("later"));
+    expect(left).toEqual(["after-failure", "later"]);
   });
 });
