@@ -42,7 +42,7 @@ test("the focus chord moves from the terminal to the sidebar and back, and Escap
 test("the focus chord does nothing while a dialog is open", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
-  await page.locator('[data-focused="true"]').getByRole("button", { name: "Session actions" }).click();
+  await page.getByRole("button", { name: "Session actions" }).click();
   await page.getByRole("menuitem", { name: "Rename…" }).click();
   const dialog = page.getByRole("dialog", { name: /^Rename / });
   await expect(dialog.getByRole("textbox", { name: "Name" })).toBeFocused();
