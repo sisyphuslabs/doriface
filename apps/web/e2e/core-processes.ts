@@ -10,7 +10,8 @@ function pidsNamed(name: string): number[] {
   const mine = uid === undefined ? [] : ["-u", String(uid)];
   const found = spawnSync("pgrep", ["-x", ...mine, name], { encoding: "utf8" });
   if (found.error !== undefined) throw found.error;
-  if (found.status !== 0 && found.status !== 1) throw new Error(`pgrep -x ${name} exited ${String(found.status)}: ${found.stderr}`);
+  if (found.status !== 0 && found.status !== 1)
+    throw new Error(`pgrep -x ${name} exited ${String(found.status)}: ${found.stderr}`);
   return found.stdout.split("\n").flatMap((line) => (line.trim() === "" ? [] : [Number(line)]));
 }
 
