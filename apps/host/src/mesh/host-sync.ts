@@ -15,8 +15,12 @@ import { type Clock, monotonicClock, type Random } from "./clock.ts";
 import type { Gossip } from "./gossip.ts";
 import type { HcTarget } from "./hc-machines.ts";
 import { type HostRuntime, startHostRuntime } from "./host-runtime.ts";
+import { NoUplinkError } from "./no-uplink.ts";
 import type { MeshRuntime } from "./runtime.ts";
 import { liveFactsOf, NOT_RUNNING, type SyncFacts } from "./live-facts.ts";
+
+/** The relay must open a member dial's socket within 10 s, as the Noise handshake after it must finish (L-E1). */
+export const CONNECT_MS = 10_000;
 
 export interface HostSyncOptions {
   readonly identity: HostIdentity;
@@ -147,6 +151,7 @@ export class HostSync {
 
   #start(meshId: string): HostRuntime {
     const { identity, mesh, log, hc, stateDir, program } = this.#options;
+    if (this.#options.relay.url === undefined) log(`mesh: ${new NoUplinkError().message}`);
     const started = startHostRuntime({
       identity,
       mesh,
@@ -178,12 +183,14 @@ export class HostSync {
   /** Through this host's own relay only: a host that keeps no uplink dials no member rather than a default relay. */
   async #dial(member: MemberEntry, stream: "mesh" | "hc"): Promise<SecureLink> {
     const { relay, identity } = this.#options;
-    if (relay.url === undefined) throw new Error("this host keeps no relay uplink, so it dials no member");
-    const link = await connectRelayClient({
-      relayUrl: relay.url,
-      hostId: member.hostId,
-      ...(relay.createSocket === undefined ? {} : { createSocket: relay.createSocket }),
-    });
+    if (relay.url === undefined) throw new NoUplinkError();
+    const link = await this.#opened(
+      connectRelayClient({
+        relayUrl: relay.url,
+        hostId: member.hostId,
+        ...(relay.createSocket === undefined ? {} : { createSocket: relay.createSocket }),
+      }),
+    );
     return secureLink(link, {
       role: "initiator",
       hostId: member.hostId,
@@ -191,5 +198,27 @@ export class HostSync {
       remoteStatic: base64urlDecode(member.noisePub),
       stream,
     });
+  }
+
+  /** A socket that has not opened by CONNECT_MS fails the dial; if it opens later, it is closed at once. */
+  #opened<T extends { close(code?: number, reason?: string): void }>(pending: Promise<T>): Promise<T> {
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    let late = false;
+    const cancel = this.#clock().after(CONNECT_MS, () => {
+      late = true;
+      reject(new Error(`the relay did not open the socket within ${CONNECT_MS / 1000} s`));
+    });
+    pending.then(
+      (link) => {
+        cancel();
+        if (late) return link.close(1000, "opened too late");
+        return resolve(link);
+      },
+      (error: unknown) => {
+        cancel();
+        reject(error);
+      },
+    );
+    return promise;
   }
 }

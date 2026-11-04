@@ -116,4 +116,27 @@ describe("a host that keeps no relay uplink (M-D3)", () => {
     expect(logs.some((line) => line.includes("no relay"))).toBe(true);
     sync.stop();
   });
+
+  test("says so once and gates no member, so nothing is retried on a probe clock (L-E5)", async () => {
+    const [a, b] = [peer("a"), peer("b")];
+    const clock = new FakeClock();
+    const logs: string[] = [];
+    const sync = new HostSync({
+      identity: b.machine.identity,
+      mesh: storeOf(b, meshOf([a, b]).records),
+      relay: { url: undefined },
+      hc: { hc: "hc-not-installed" },
+      stateDir: mkdtempSync(join(tmpdir(), "dh-host-sync-")),
+      program: "/opt/doriface-host",
+      openFrom: () => false,
+      closeRevoked: () => undefined,
+      log: (line) => void logs.push(line),
+      clock,
+      random: seededRandom(39),
+    });
+    sync.changed();
+    await clock.advance(10 * 60_000);
+    expect(logs.filter((line) => line.includes("no relay uplink"))).toHaveLength(1);
+    await sync.stop();
+  });
 });
