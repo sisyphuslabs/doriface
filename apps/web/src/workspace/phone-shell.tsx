@@ -15,6 +15,7 @@ import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "
 import { ConnectionLine, ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
+import { afterEnd } from "./session-actions.ts";
 import { SessionMenu } from "./session-menu.tsx";
 import { usePhoneActions, type SessionVerb } from "./use-app-actions.ts";
 import { useMachinesContext } from "./use-machines.ts";
@@ -141,7 +142,8 @@ function PhoneTerminal(props: {
           label={`${title} output`}
           transformInput={transform}
           onSend={onSend}
-          onEnd={(_address, end) => (closesTab(end) ? onBack() : undefined)}
+          // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
+          onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
         />
       )}
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
