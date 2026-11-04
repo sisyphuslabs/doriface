@@ -51,14 +51,17 @@ describe("agentGroups", () => {
     expect(groups[0]?.agents[0]).toMatchObject({ id: "t1", status: "done", pinned: true });
   });
 
-  test("Done, Working and Idle count as agentCounts() does, pinned agents included", () => {
+  test("each group counts the rows it shows, and per state the sections together count what agentCounts() does", () => {
     const pinned = fleet.map((one) =>
       one.address === "t2" ? { ...one, labels: { ...one.labels, [PIN_LABEL]: "1" } } : one,
     );
+    const groups = agentGroups(pinned, 0, "status");
+    for (const group of groups) expect(group.count).toBe(group.agents.length);
+    const shown = groups.flatMap((group) => group.agents);
     const counts = agentCounts(pinned);
-    const working = agentGroups(pinned, 0, "status").find((group) => group.key === "working");
-    expect(working?.agents).toHaveLength(1);
-    expect(working?.count).toBe(counts.working);
+    for (const state of ["done", "working", "idle"] as const)
+      expect(shown.filter((agent) => agent.status === state)).toHaveLength(counts[state]);
+    expect(groups.find((group) => group.key === "working")?.count).toBe(1);
     expect(counts.working).toBe(2);
   });
 

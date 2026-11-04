@@ -1,7 +1,7 @@
 import type { Agent, AvatarColor, Space } from "@doriface/ui";
 import { AVATAR_COLORS } from "@doriface/ui";
 import type { MachineEntry } from "./machines.ts";
-import { agentCounts, groupAgents, type Session } from "./model.ts";
+import { groupAgents, type Session } from "./model.ts";
 
 /** herdr-app's pin label: a pinned terminal carries it, so the pin lives in hc and follows the terminal everywhere. */
 export const PIN_LABEL = "herdr.pinned";
@@ -18,10 +18,7 @@ export interface AgentGroup {
   /** Needs you's rows use the "!" mark, since the header already says it. */
   readonly compactBlocked: boolean;
   readonly agents: readonly Agent[];
-  /**
-   * The header's count. Done, Working and Idle show agentCounts() (the phone header's numbers, pinned agents included),
-   * so every surface counts one way; the other groups count their rows.
-   */
+  /** The header's count: the rows the group shows. Pinned agents are counted in Pinned, where they are listed. */
   readonly count: number;
 }
 
@@ -50,9 +47,6 @@ export function agentGroups(terminals: readonly Session[], nowMs: number, sort: 
     pinned.length === 0
       ? []
       : [{ key: "pinned", title: "Pinned", compactBlocked: false, agents: pinned, count: pinned.length }];
-  const totals = agentCounts(terminals);
-  const countOf = (key: string, rows: number): number =>
-    key === "done" || key === "working" || key === "idle" ? totals[key] : rows;
   if (sort === "status") {
     return [
       ...head,
@@ -60,7 +54,7 @@ export function agentGroups(terminals: readonly Session[], nowMs: number, sort: 
         const agents = rest.filter((agent) => groups[group.key].some((one) => one.id === agent.id));
         return agents.length === 0
           ? []
-          : [{ ...group, compactBlocked: group.key === "blocked", agents, count: countOf(group.key, agents.length) }];
+          : [{ ...group, compactBlocked: group.key === "blocked", agents, count: agents.length }];
       }),
     ];
   }
