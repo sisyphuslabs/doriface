@@ -27,17 +27,26 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
   const [error, setError] = useState<string | null>(null);
   const terminal = ask === null ? undefined : terminals.find((entry) => entry.address === ask.address);
   const live = terminal?.state === "live";
+  // A session that stops meanwhile needs no answer, except that a question whose action is still running stays up until
+  // it settles, and one whose action failed stays up to say why, even if the session left the list (a reconnect lists
+  // live terminals only), so the user can try again.
+  const keep = busy || error !== null;
+  const current = terminal === undefined ? null : terminalTitle(terminal);
+  const [lastTitle, setLastTitle] = useState("");
   useEffect(() => {
-    if (ask === null || live) return;
+    if (current !== null) setLastTitle(current);
+  }, [current]);
+  useEffect(() => {
+    if (ask === null || keep || live) return;
     if (ask.kind === "close") onKeep(ask.address);
     onDone();
-  }, [ask, live, onDone, onKeep]);
+  }, [ask, keep, live, onDone, onKeep]);
   useEffect(() => {
     setBusy(false);
     setError(null);
   }, [ask]);
-  if (ask === null || terminal === undefined || !live) return null;
-  const title = terminalTitle(terminal);
+  if (ask === null || !(live || keep)) return null;
+  const title = current ?? lastTitle;
   const run = (work: () => Promise<void>, after: () => void): void => {
     setBusy(true);
     work().then(
