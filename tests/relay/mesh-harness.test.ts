@@ -125,6 +125,9 @@ describe("the harness ended by a signal", () => {
     expect(pids.length).toBeGreaterThan(3);
     child.kill("SIGTERM");
     await child.exited;
-    expect(pids.filter(isAlive)).toEqual([]);
+    const survivors = pids.filter(isAlive);
+    // A red run leaves no core behind for the next file: whatever survived is ended before the assertion.
+    for (const pid of survivors) process.kill(pid, "SIGKILL");
+    expect(survivors).toEqual([]);
   }, 180_000);
 });

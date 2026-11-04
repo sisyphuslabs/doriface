@@ -103,9 +103,12 @@ export async function startMeshRelay(): Promise<MeshRelay> {
   const ip = testIp();
   const stop = async (): Promise<void> => {
     for (const tap of taps) tap.stop();
-    await stopProcessGroup(proc);
-    await within(drained, "the relay's processes exiting", STOP_MS);
-    rmSync(scratch, { recursive: true, force: true });
+    try {
+      await stopProcessGroup(proc);
+      await within(drained, "the relay's processes exiting", STOP_MS);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   };
   try {
     const url = await ready.promise;
