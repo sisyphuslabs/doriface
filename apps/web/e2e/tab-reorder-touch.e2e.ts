@@ -66,7 +66,10 @@ test.describe("touch", () => {
 
     await touch(page, tabs(page).nth(0), null, true);
     await expect(page.getByRole("menuitem", { name: "Move tab right" })).toBeVisible();
+    // The menu takes focus a frame after it shows; an Escape before that goes to the terminal and leaves it open.
+    await expect(page.getByRole("menu")).toBeFocused();
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(tabs(page).nth(selected)).toHaveAttribute("aria-selected", "true");
     expect(await order(page)).toEqual(after);
   });
