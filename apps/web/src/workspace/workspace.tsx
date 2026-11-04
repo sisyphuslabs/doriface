@@ -20,6 +20,7 @@ import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 import { useLayout } from "./use-layout.ts";
+import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
 
@@ -45,6 +46,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
   const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed, told);
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, layout.dropPane);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
