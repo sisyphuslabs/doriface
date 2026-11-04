@@ -24,6 +24,8 @@ const SCREENS = [
   "mobile",
   "mobile-agents",
   "states",
+  "approval",
+  "voice",
 ] as const;
 /** Screens whose own scroll owner hides content: captured whole, plus a viewport scrolled to the end. */
 const SCROLLERS: Readonly<Record<string, string>> = {
