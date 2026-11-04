@@ -151,7 +151,8 @@ test("under reduced motion neighbours stay put and a caret marks where the tab l
  */
 async function touch(page: Page, from: Locator, x: number | null, hold: boolean): Promise<void> {
   const start = await centre(from);
-  await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+  // A pause must lie ahead of the page clock, which keeps running while this call travels.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 5_000);
   const cdp = await page.context().newCDPSession(page);
   const at = (px: number) => [{ x: px, y: start.y }];
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x) });
