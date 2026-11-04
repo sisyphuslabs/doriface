@@ -20,7 +20,7 @@ export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: Sideba
   return (
     <aside
       aria-label="Workspace"
-      className="motion-arrive flex w-(--sidebar-width) shrink-0 origin-left flex-col border-r border-sidebar-border bg-sidebar [--arrive-from:scale(0.98)]"
+      className="motion-arrive flex w-(--sidebar-width) shrink-0 flex-col border-r border-sidebar-border bg-sidebar [--arrive-from:none]"
     >
       <div
         data-titlebar
