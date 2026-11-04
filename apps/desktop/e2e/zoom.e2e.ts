@@ -112,6 +112,29 @@ async function coreGrid(page: Page): Promise<string> {
   return `${String(terminal.rows)} ${String(terminal.cols)}`;
 }
 
+type Drawn = Awaited<ReturnType<typeof drawn>>;
+
+/**
+ * The focused terminal once its grid is whole: its cell width is the font's own advance and the core holds the grid it
+ * renders. wterm swaps the grid's row elements a frame before it redraws their text, so one read can pair a new row count
+ * with an old column count.
+ */
+async function settled(page: Page, ready: (now: Drawn) => boolean = () => true): Promise<Drawn> {
+  const whole = async (): Promise<boolean> => {
+    const now = await drawn(page);
+    return ready(now) && Math.abs(now.cellMinusAdvance) < 0.05 && (await coreGrid(page)) === now.grid;
+  };
+  await expect.poll(whole, { timeout: 15_000 }).toBe(true);
+  return drawn(page);
+}
+
+/** One Cmd/Ctrl + - to `factor`: the terminal, once refit, holds at least the rows and more columns than `last`. */
+async function zoomOutTo(page: Page, factor: number, last: Drawn): Promise<Drawn> {
+  await page.keyboard.press("ControlOrMeta+Minus");
+  await expect.poll(zoomFactor).toBe(factor);
+  return settled(page, (next) => next.rows >= last.rows && next.cols > last.cols);
+}
+
 test("the zoom keys zoom the whole window and the terminal refits to it", async () => {
   const page = await app().firstWindow();
   await page.getByRole("button", { name: "Use this computer" }).click();
@@ -122,35 +145,30 @@ test("the zoom keys zoom the whole window and the terminal refits to it", async 
     .click({ timeout: 30_000 });
   await expect(terminalIn(page)).toContainText("$", { timeout: 30_000 });
   expect(await zoomFactor()).toBe(1);
-  const before = await drawn(page);
-  expect(Math.abs(before.cellMinusAdvance)).toBeLessThan(0.05);
+  const before = await settled(page);
   expect(before.transformedAncestors).toBe(0);
 
   await terminalIn(page).getByRole("textbox").focus();
-  await page.keyboard.press("ControlOrMeta+Minus");
-  await expect.poll(zoomFactor).toBe(0.9);
-  // wterm swaps the grid's row elements a frame before it redraws their text: wait until the refit is whole and the core
-  // holds it, so one read cannot pair the new row count with the old column count.
-  const refit = async (): Promise<boolean> => {
-    const now = await drawn(page);
-    const grown = now.rows > before.rows && now.cols > before.cols;
-    return grown && Math.abs(now.cellMinusAdvance) < 0.05 && (await coreGrid(page)) === now.grid;
-  };
-  await expect.poll(refit, { timeout: 15_000 }).toBe(true);
-  const after = await drawn(page);
-  // The window zoomed, not only the terminal: the page lays out more CSS pixels on the same screen.
-  expect(after.dpr).toBeCloseTo(before.dpr * 0.9, 3);
-  expect(after.cssWidth).toBeGreaterThan(before.cssWidth);
-  expect(after.cols).toBeGreaterThan(before.cols);
-  expect(after.cellDevicePx).toBeLessThan(before.cellDevicePx);
-  expect(Math.abs(after.cellMinusAdvance)).toBeLessThan(0.05);
-  expect(after.transformedAncestors).toBe(0);
-  // One zoom: the configured terminal font size is left as it was.
-  expect(after.fontSize).toBe(before.fontSize);
+  let previous = before;
+  // 90%, 80%, 75% and 67%: at every step the cell is the font's own advance, so nothing scales the terminal behind wterm's
+  // getBoundingClientRect measure.
+  for (const factor of [0.9, 0.8, 0.75, 0.67]) {
+    // oxlint-disable-next-line no-await-in-loop -- one window: each zoom step is applied and read before the next
+    const now = await zoomOutTo(page, factor, previous);
+    // The window zoomed, not only the terminal: the page lays out more CSS pixels on the same screen.
+    expect(now.dpr).toBeCloseTo(before.dpr * factor, 3);
+    expect(now.cssWidth).toBeGreaterThan(previous.cssWidth);
+    expect(now.cellDevicePx).toBeLessThan(previous.cellDevicePx);
+    expect(now.transformedAncestors).toBe(0);
+    // The window zoom leaves the configured terminal font size as it was.
+    expect(now.fontSize).toBe(before.fontSize);
+    previous = now;
+  }
 
   await page.keyboard.press("ControlOrMeta+0");
   await expect.poll(zoomFactor).toBe(1);
-  await expect.poll(async () => (await drawn(page)).grid).toBe(before.grid);
+  const reset = await settled(page, (now) => now.grid === before.grid);
+  expect(reset.transformedAncestors).toBe(0);
 });
 
 test("View > Zoom Out, Zoom In and Actual Size drive the same window zoom as the keys", async () => {

@@ -91,6 +91,12 @@ async function gridAtCoreSize(terminal: Locator): Promise<string> {
   return gridSize(terminal);
 }
 
+/** One Cmd/Ctrl + - press, read once the view has refit to `fontSize` and the core holds its grid. */
+async function zoomOutTo(page: Page, terminal: Locator, fontSize: string): Promise<Geometry> {
+  await page.keyboard.press("ControlOrMeta+Minus");
+  return settledAt(terminal, fontSize);
+}
+
 for (const dpr of [1, 2, 1.5]) {
   test(`zooming out scales the terminal in both directions and refits it, anchored left, at device pixel ratio ${dpr}`, async ({
     page,
@@ -103,17 +109,25 @@ for (const dpr of [1, 2, 1.5]) {
     const beforeGrid = await gridAtCoreSize(terminal);
 
     await terminal.getByRole("textbox").focus();
-    await page.keyboard.press("ControlOrMeta+Minus");
-    await page.keyboard.press("ControlOrMeta+Minus");
-    const after = await settledAt(terminal, `${parseFloat(before.fontSize) - 2}pt`);
-    expect(after.rows).toBeGreaterThan(before.rows);
-    expect(after.cols).toBeGreaterThan(before.cols);
-    expect(after.rowDevicePx).toBeLessThan(before.rowDevicePx);
-    expect(after.cellDevicePx).toBeLessThan(before.cellDevicePx);
-    expectFontMetrics(after);
-    expect(after.firstRowOffsetPx).toBeLessThan(0.5);
-    expect(after.scrollLeft).toBe(0);
-    expect(await gridAtCoreSize(terminal)).toBe(await gridSize(terminal));
+    // Each press is its own zoom level: the cell width and row height follow the font at every one of them. A hinted font
+    // can keep one advance across two adjacent sizes, so one press need not add columns; the whole range must.
+    let previous = before;
+    for (const step of [1, 2]) {
+      // oxlint-disable-next-line no-await-in-loop -- each press steps on from the size the previous one left
+      const after = await zoomOutTo(page, terminal, `${parseFloat(before.fontSize) - step}pt`);
+      expect(after.rows).toBeGreaterThanOrEqual(previous.rows);
+      expect(after.cols).toBeGreaterThanOrEqual(previous.cols);
+      expect(after.rowDevicePx).toBeLessThanOrEqual(previous.rowDevicePx);
+      expect(after.cellDevicePx).toBeLessThanOrEqual(previous.cellDevicePx);
+      expectFontMetrics(after);
+      expect(after.firstRowOffsetPx).toBeLessThan(0.5);
+      expect(after.scrollLeft).toBe(0);
+      previous = after;
+    }
+    expect(previous.rows).toBeGreaterThan(before.rows);
+    expect(previous.cols).toBeGreaterThan(before.cols);
+    expect(previous.rowDevicePx).toBeLessThan(before.rowDevicePx);
+    expect(previous.cellDevicePx).toBeLessThan(before.cellDevicePx);
 
     await page.keyboard.press("ControlOrMeta+0");
     const reset = await settledAt(terminal, before.fontSize);
