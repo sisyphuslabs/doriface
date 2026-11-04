@@ -95,7 +95,7 @@ export function AgentsGroup({ terminals, active, onOpen, rail = false, heading =
         <SidebarSection
           key={group.key}
           title={group.title}
-          count={group.agents.length}
+          count={group.count}
           {...(group.tone === undefined ? {} : { tone: group.tone })}
           {...(rail ? { className: "[&>header]:sr-only" } : {})}
         >

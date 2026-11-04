@@ -1,6 +1,7 @@
 import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import type { MachineEntry } from "./machines.ts";
+import { agentCounts } from "./model.ts";
 import { agentGroups, assignColors, machineGroups, PIN_LABEL } from "./sidebar-model.ts";
 
 const terminal = (address: string, state: string | undefined, labels: Record<string, string> = {}): Terminal => ({
@@ -48,6 +49,17 @@ describe("agentGroups", () => {
       ["Idle", 1],
     ]);
     expect(groups[0]?.agents[0]).toMatchObject({ id: "t1", status: "done", pinned: true });
+  });
+
+  test("Done, Working and Idle count as agentCounts() does, pinned agents included", () => {
+    const pinned = fleet.map((one) =>
+      one.address === "t2" ? { ...one, labels: { ...one.labels, [PIN_LABEL]: "1" } } : one,
+    );
+    const counts = agentCounts(pinned);
+    const working = agentGroups(pinned, 0, "status").find((group) => group.key === "working");
+    expect(working?.agents).toHaveLength(1);
+    expect(working?.count).toBe(counts.working);
+    expect(counts.working).toBe(2);
   });
 
   test("by space: one group per space, its agents most urgent first", () => {
