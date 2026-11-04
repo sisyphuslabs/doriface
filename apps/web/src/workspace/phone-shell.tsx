@@ -12,7 +12,7 @@ import { AgentLists } from "./agent-lists.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
-import { ReconnectStatus } from "./reconnect-status.tsx";
+import { ConnectionLine, ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
 import { SessionMenu } from "./session-menu.tsx";
@@ -126,6 +126,7 @@ function PhoneTerminal(props: {
         </div>
         <SessionMenu address={terminal.address} title={title} placement="header" />
       </header>
+      <ConnectionLine />
       {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />
       ) : (
