@@ -155,6 +155,14 @@ const memberAt = (index: number, patch: Record<string, unknown>): unknown => ({
   members: status.members.map((entry, at) => (at === index ? { ...entry, ...patch } : entry)),
 });
 
+/** The fixture without the reasons a host gives when it is outside its own view: such a host has a self line. */
+const inOwnView = {
+  ...status,
+  stuck: status.stuck.filter(
+    (reason) => !["possibly_revoked", "read_only", "removed_undecidable"].includes(reason.kind),
+  ),
+};
+
 describe("parseMeshStatus", () => {
   test("reads back a status that went through JSON", () => {
     expect(parseMeshStatus(JSON.parse(JSON.stringify(status)))).toEqual(status);
@@ -194,6 +202,14 @@ describe("parseMeshStatus", () => {
     expect(parseMeshStatus(JSON.parse(JSON.stringify(withOverCap)))).toEqual(withOverCap);
   });
 
+  test.each(["possibly_revoked", "removed_undecidable"] as const)(
+    "reads back a host outside its own view, with no self line, when a %s reason says why",
+    (kind) => {
+      const outside = { ...status, sync: "stuck" as const, stuck: [{ kind }], members: [member] };
+      expect(parseMeshStatus(JSON.parse(JSON.stringify(outside)))).toEqual(outside);
+    },
+  );
+
   test.each(["name", "localName", "fingerprint"])("refuses a member within the cap without its %s", (key) => {
     expect(parseMeshStatus(memberAt(1, { [key]: null }))).toBeUndefined();
   });
@@ -208,10 +224,13 @@ describe("parseMeshStatus", () => {
     ["not an object", ["doriface-mesh"]],
     ["sync ok with a STUCK reason", { ...status, sync: "ok" }],
     ["sync stuck without a reason", { ...status, stuck: [] }],
-    ["self missing from the members", { ...status, members: [member] }],
+    ["self missing from the members of a host its view holds", { ...inOwnView, members: [member] }],
     ["a member listed twice", { ...status, members: [self, member, member] }],
     ["two members on the self line", memberAt(1, { line: "self" })],
-    ["self on another line", memberAt(0, { line: "connected" })],
+    [
+      "self on another line in a host its view holds",
+      { ...inOwnView, members: [{ ...self, line: "connected" }, member] },
+    ],
     ["a member STUCK reason naming no member", { ...status, stuck: [{ kind: "line_idle", member: "z".repeat(26) }] }],
     ["an empty meshId", { ...status, meshId: "" }],
     ["a meshId of another shape", { ...status, meshId: "Q7M2K4XW2D3B5N6R6T7V3C2Z4A" }],

@@ -140,6 +140,13 @@ const STATUS: Shape<MeshStatus> = {
 };
 const isMeshStatus = objectOf(STATUS);
 
+/** The reasons a host is outside its own view (design 6.4, 3.7): then it has no self line, and says which. */
+const OUTSIDE_OWN_VIEW: ReadonlySet<MeshStuckReason["kind"]> = new Set([
+  "possibly_revoked",
+  "read_only",
+  "removed_undecidable",
+]);
+
 /** What the fields' forms cannot say: one fact in one place, and every member a reason names is in the list. */
 function isConsistent(status: MeshStatus): boolean {
   const hostIds = new Set(status.members.map((member) => member.hostId));
@@ -147,8 +154,9 @@ function isConsistent(status: MeshStatus): boolean {
   return (
     status.sync === (status.stuck.length === 0 ? "ok" : "stuck") &&
     hostIds.size === status.members.length &&
-    onSelfLine.length === 1 &&
-    onSelfLine[0]?.hostId === status.self &&
+    (onSelfLine.length === 1
+      ? onSelfLine[0]?.hostId === status.self
+      : onSelfLine.length === 0 && status.stuck.some((reason) => OUTSIDE_OWN_VIEW.has(reason.kind))) &&
     status.members.every(
       (member) => member.lineReason === null || MESH_LINE_STATES_WITH_REASON.includes(member.line),
     ) &&
