@@ -44,10 +44,10 @@ for (const width of [390, 320]) {
     // Every text row ends inside the header, and the header ends before the terminal's first row begins.
     const headerBox = await bar.boundingBox();
     const bottom = (headerBox?.y ?? 0) + (headerBox?.height ?? 0);
-    for (const row of [bar.getByRole("heading", { level: 1 }), bar.locator("p")]) {
-      const box = await row.boundingBox();
-      expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(bottom + 0.5);
-    }
+    const rows = await Promise.all(
+      [bar.getByRole("heading", { level: 1 }), bar.locator("p")].map((row) => row.boundingBox()),
+    );
+    for (const box of rows) expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(bottom + 0.5);
     const firstRow = await page.locator("[data-terminal] .term-row").first().boundingBox();
     expect(firstRow?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
 
