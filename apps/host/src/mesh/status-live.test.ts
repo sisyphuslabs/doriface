@@ -27,6 +27,7 @@ describe("a running host's mesh status (sections 8.2 and 8.6)", () => {
       hc: { hc: "hc-not-installed" },
       stateDir,
       program: "/opt/doriface-host",
+      openFrom: () => false,
       closeRevoked: () => undefined,
       log: () => undefined,
       clock,

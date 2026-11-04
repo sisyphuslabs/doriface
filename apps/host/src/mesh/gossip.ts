@@ -151,6 +151,7 @@ export class Gossip implements SyncHost {
       existing.close(1000, "replaced");
     }
     this.#sessions.set(peer, session);
+    this.#dialer.accepted(peer);
     this.#lastSync.set(peer, this.#options.clock.now());
     if (dialer === peer) this.#options.policy.presence(peer);
     session.start(waitForHello);

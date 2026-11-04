@@ -32,6 +32,8 @@ export interface HostSyncOptions {
    * steps 2 to 4 of section 6.2 run on every member that merges a revoke (section 6.3), not only on the revoker.
    */
   readonly closeRevoked: () => void;
+  /** Whether an authenticated session from this Noise key is open on this host (`LiveSessions.has`): presence. */
+  readonly openFrom: (noisePub: string) => boolean;
   readonly log: (line: string) => void;
   readonly clock?: Clock;
   readonly random?: Random;
@@ -60,7 +62,9 @@ export class HostSync {
   /** The running mesh's live facts for `mesh status` (none before sync runs). */
   live(): SyncFacts {
     const runtime = this.#running?.runtime;
-    return runtime === undefined ? NOT_RUNNING : liveFactsOf(runtime, this.#clock());
+    return runtime === undefined
+      ? NOT_RUNNING
+      : liveFactsOf({ ...runtime, openFrom: this.#options.openFrom }, this.#clock());
   }
 
   /** The running mesh (sync, reconciler, lines) once this host has a mesh.json. */

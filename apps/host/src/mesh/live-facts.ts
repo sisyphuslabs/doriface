@@ -14,6 +14,8 @@ export interface LiveParts {
     "view" | "self" | "lastSync" | "owedCount" | "session" | "peerCounter" | "possiblyRevoked"
   >;
   readonly reconciler: { lines(): readonly MeshEntry[] };
+  /** Whether an authenticated session from this Noise key (an hc line, say) is open on this host now. */
+  readonly openFrom: (noisePub: string) => boolean;
 }
 
 const LINE_STATES: readonly Exclude<MeshLineState, "self">[] = [
@@ -52,11 +54,11 @@ export function liveFactsOf(parts: LiveParts, clock: Clock, wallNow = Date.now()
   const { policy, gossip } = parts;
   const members = gossip.view.members.filter((member) => member.signPub !== gossip.self);
   const peers = new Map<string, PeerFacts>();
-  for (const { signPub } of members) {
+  for (const { signPub, noisePub } of members) {
     const gate = policy.gate(signPub);
     peers.set(signPub, {
       // Section 8.6: presence is an authenticated session from the member open now.
-      presence: gossip.session(signPub) !== undefined,
+      presence: gossip.session(signPub) !== undefined || parts.openFrom(noisePub),
       lastSync: wall(gossip.lastSync(signPub)),
       owed: gossip.owedCount(signPub),
       // A 4429 is this host's own rate limit, which the budget's halvedUntil names (section 8.2), not an offline member.

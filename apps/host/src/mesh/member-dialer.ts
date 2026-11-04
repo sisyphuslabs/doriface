@@ -28,7 +28,10 @@ export class MemberDialer {
   }
 
   sync(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
-    if (this.#options.flushOpen(member.signPub)) return Promise.resolve(true);
+    if (this.#options.flushOpen(member.signPub)) {
+      this.accepted(member.signPub);
+      return Promise.resolve(true);
+    }
     const pending = this.#dialing.get(member.signPub);
     if (pending !== undefined) return pending;
     const dial = this.#dial(member, purpose).finally(() => this.#dialing.delete(member.signPub));
@@ -41,18 +44,27 @@ export class MemberDialer {
     return this.#refusedAsRevoked.size;
   }
 
+  /**
+   * `member` holds a session with this host, so it accepts this host: an earlier 4401 from it was the join race (it had
+   * not merged this host's admission yet, section 5.4), not a revoke.
+   */
+  accepted(member: string): void {
+    this.#refusedAsRevoked.delete(member);
+  }
+
   async #dial(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
     const { policy } = this.#options;
     const grant = await policy.acquire(member.signPub, purpose);
     if (!grant.ok) return false;
     if (this.#options.flushOpen(member.signPub)) {
       policy.release();
+      this.accepted(member.signPub);
       return true;
     }
     try {
       const link = await this.#options.dial(member);
       policy.report(member.signPub, "connected");
-      this.#refusedAsRevoked.delete(member.signPub);
+      this.accepted(member.signPub);
       this.#options.attach(member, link, purpose === "sweep" || purpose === "probe");
       return true;
     } catch (error) {

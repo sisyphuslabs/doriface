@@ -23,7 +23,12 @@ const coreMember = (name: string): MemberEntry => ({
   name,
   hcId: `core-${name}`,
 });
-const partsOf = (host: NetHost): LiveParts => ({ policy: host.policy, gossip: host.gossip, reconciler: noLines });
+const partsOf = (host: NetHost, open: readonly string[] = []): LiveParts => ({
+  policy: host.policy,
+  gossip: host.gossip,
+  reconciler: noLines,
+  openFrom: (noisePub) => open.includes(noisePub),
+});
 
 function pair(): { clock: FakeClock; mesh: MeshNet; a: NetHost; b: NetHost } {
   const clock = new FakeClock();
@@ -47,6 +52,15 @@ describe("a member's presence in status (section 8.6: an authenticated session f
     const facts = liveFactsOf(partsOf(a), clock).peers.get(b.member.signPub);
     expect(facts?.gate?.refusals).toBe(1);
     expect(facts?.presence).toBe(false);
+  });
+});
+
+describe("presence through an hc line (section 8.2: any authenticated session from the member)", () => {
+  test("a member with no sync session but an open hc line reads as present", () => {
+    const { clock, a, b } = pair();
+    expect(liveFactsOf(partsOf(a), clock).peers.get(b.member.signPub)?.presence).toBe(false);
+    const facts = liveFactsOf(partsOf(a, [b.member.noisePub]), clock);
+    expect(facts.peers.get(b.member.signPub)?.presence).toBe(true);
   });
 });
 
@@ -95,6 +109,37 @@ describe("the counters and the revoke hint in status (sections 8.6 and 10.1)", (
     expect(await dialer.sync(m, "probe")).toBe(true);
     expect(dialer.refusedAsRevoked).toBe(0);
   });
+
+  test("a join-race 4401 clears once the member dials in (section 5.4: it had not merged this host's admission)", async () => {
+    const { clock, mesh, a, b } = pair();
+    mesh.refuse("a", 4401);
+    await b.gossip.sync(a.member, "push");
+    await settle();
+    expect(b.gossip.possiblyRevoked).toBe(true);
+    mesh.accept("a");
+    await a.gossip.sync(b.member, "push");
+    await clock.advance(1);
+    expect(b.gossip.possiblyRevoked).toBe(false);
+  });
+
+  test("a 4401 clears when a sync goes over a session the member already holds open", async () => {
+    const clock = new FakeClock();
+    const policy = new DialPolicy({ clock, random: seededRandom(6), onDue: () => undefined });
+    // Each sync asks twice (before and after taking a token) while no session is open.
+    const open = [false, false, true];
+    const dialer = new MemberDialer({
+      policy,
+      dial: () => Promise.reject(new SecureLinkError(4401, "revoked mesh member")),
+      flushOpen: () => open.shift() ?? true,
+      attach: () => undefined,
+      log: () => undefined,
+    });
+    const m = peer("m");
+    expect(await dialer.sync(m, "push")).toBe(false);
+    expect(dialer.refusedAsRevoked).toBe(1);
+    expect(await dialer.sync(m, "push")).toBe(true);
+    expect(dialer.refusedAsRevoked).toBe(0);
+  });
 });
 
 describe("a member's line in status (section 8.1)", () => {
@@ -115,7 +160,7 @@ describe("a member's line in status (section 8.1)", () => {
       peerCounter: 0,
       possiblyRevoked: false,
     };
-    const facts = liveFactsOf({ policy, gossip, reconciler }, clock);
+    const facts = liveFactsOf({ policy, gossip, reconciler, openFrom: () => false }, clock);
     expect(facts.lines.get(b.signPub)?.state).toBe("connected");
   });
 });

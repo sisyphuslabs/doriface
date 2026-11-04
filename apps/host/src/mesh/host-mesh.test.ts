@@ -11,6 +11,7 @@ import { MeshStore } from "../state/mesh.ts";
 import { PairingStore } from "../state/pairing.ts";
 import { removeSides, side } from "../testing/join-harness.ts";
 import { machine } from "../testing/mesh-history.ts";
+import { meshDeps } from "./host-deps.ts";
 import { HostMesh } from "./host-mesh.ts";
 import { runJoiner } from "./join.ts";
 import { JOINER_EXPECTS, MeshLines } from "./lines.ts";
@@ -181,5 +182,39 @@ describe("the running host's mesh offers", () => {
     });
     await host.pairDevice();
     expect(await asked).toBe("expired");
+  });
+});
+
+describe("the running host's pending joins in mesh status (section 4.3)", () => {
+  test("a join the inviting member is asked about is in the live facts status reads", () => {
+    const { dir, m, mesh, sessions } = hostMesh();
+    const slots = new PairingSlots(new PairingStore(dir, log), m.identity.noise.publicKey, undefined, log);
+    stops.push(() => slots.stop());
+    const deps = meshDeps({
+      stateDir: dir,
+      identity: m.identity,
+      mesh,
+      slots,
+      sessions,
+      hc: { hc: "hc" },
+      relay: { url: undefined },
+      program: "/opt/doriface-host",
+      log,
+    });
+    stops.push(() => void deps.sync.stop());
+    const expiresAt = Date.now() + PAIRING_TTL_MS;
+    const asked = {
+      nonce: "n1",
+      name: "beta",
+      hostId: "host-beta",
+      fingerprint: "fp",
+      noisePub: "noise-beta",
+      expiresAt,
+    };
+    void deps.hostMesh.pending.ask(asked);
+    expect(deps.hooks.live().pending).toEqual([
+      { nonce: "n1", name: "beta", hostId: "host-beta", noisePub: "noise-beta", expiresAt: new Date(expiresAt) },
+    ]);
+    deps.hostMesh.pending.expireAll();
   });
 });
