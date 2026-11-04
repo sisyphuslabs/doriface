@@ -18,35 +18,48 @@ const reduced = (): boolean => matchMedia("(prefers-reduced-motion: reduce)").ma
 
 export interface PaneMotion {
   readonly rect: Rect;
+  /** The box all panes are laid out in: when it changes (a window resize) panes take their place without motion. */
+  readonly frame: string;
   /** How the pane arrived: grown out of the pane it split (`row`: from the left edge, `column`: from the top), or null. */
   readonly grow: "row" | "column" | null;
   readonly bump: Bump | null;
 }
 
+/** The pane's own box clipped to `width` x `height` from its top left, as `clip-path` keyframes take it. */
+const clipTo = (rect: Rect, width: number, height: number): string =>
+  `inset(0px ${Math.max(0, rect.width - width)}px ${Math.max(0, rect.height - height)}px 0px round 8px)`;
+const UNCLIPPED = "inset(0px 0px 0px 0px round 8px)";
+
 /**
- * Moves a pane to its new rectangle with transforms only (FLIP), so a terminal never re-measures mid-animation: the
- * box takes its final size at once and the drawing slides from where it was. A new pane grows from the edge it was
- * split from, and a key that cannot move focus nudges the focused pane toward that edge.
+ * Moves a pane to its new rectangle (FLIP) with `translate` for its place and `clip-path` for its size: the box takes
+ * its final size at once and the drawing slides and opens from where it was. No `scale`: the terminal measures its cell
+ * with getBoundingClientRect, which a transform's scale would distort while its ResizeObserver reads the new size
+ * (@wterm/dom 0.5.8 `_measureCharSize`), leaving every row drawn at the wrong cell width. A new pane opens from the edge
+ * it was split from, and a key that cannot move focus nudges the focused pane toward that edge. A window resize moves
+ * every pane at once, so it plays no motion.
  */
-export function usePaneMotion(ref: RefObject<HTMLElement | null>, { rect, grow, bump }: PaneMotion): void {
+export function usePaneMotion(ref: RefObject<HTMLElement | null>, { rect, frame, grow, bump }: PaneMotion): void {
   const last = useRef<Rect | null>(null);
+  const lastFrame = useRef(frame);
   const bumped = useRef(bump?.seq ?? 0);
   useLayoutEffect(() => {
     const element = ref.current;
     const before = last.current;
+    const resized = lastFrame.current !== frame;
     last.current = rect;
-    if (element === null || rect.width === 0 || rect.height === 0) return;
+    lastFrame.current = frame;
+    if (element === null || rect.width === 0 || rect.height === 0 || resized) return;
     if (before === null) {
       if (grow === null) return;
       if (reduced()) {
         element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DURATION, easing: EASE });
         return;
       }
-      const from = grow === "row" ? "scaleX(0.02)" : "scaleY(0.02)";
+      const from = grow === "row" ? clipTo(rect, 0, rect.height) : clipTo(rect, rect.width, 0);
       element.animate(
         [
-          { transform: from, transformOrigin: "0 0", opacity: 0.4 },
-          { transform: "none", opacity: 1 },
+          { clipPath: from, opacity: 0.4 },
+          { clipPath: UNCLIPPED, opacity: 1 },
         ],
         {
           duration: DURATION,
@@ -57,13 +70,16 @@ export function usePaneMotion(ref: RefObject<HTMLElement | null>, { rect, grow, 
     }
     if (reduced() || before.width === 0 || before.height === 0) return;
     const [dx, dy] = [before.x - rect.x, before.y - rect.y];
-    const [sx, sy] = [before.width / rect.width, before.height / rect.height];
-    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(sx - 1) < 0.002 && Math.abs(sy - 1) < 0.002) return;
+    const [dw, dh] = [before.width - rect.width, before.height - rect.height];
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5 && Math.abs(dw) < 0.5 && Math.abs(dh) < 0.5) return;
     element.animate(
-      [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, transformOrigin: "0 0" }, { transform: "none" }],
+      [
+        { transform: `translate(${dx}px, ${dy}px)`, clipPath: clipTo(rect, before.width, before.height) },
+        { transform: "none", clipPath: UNCLIPPED },
+      ],
       { duration: DURATION, easing: EASE },
     );
-  }, [ref, rect, grow]);
+  }, [ref, rect, frame, grow]);
   useLayoutEffect(() => {
     const element = ref.current;
     if (bump === null || bump.seq === bumped.current || element === null) return;

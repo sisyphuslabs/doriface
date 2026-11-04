@@ -73,6 +73,7 @@ function PaneFrame({ motion, children }: { readonly motion: PaneMotion; readonly
 export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSplit, onClose }: SplitPanesProps) {
   const [ref, box] = useBoxSize();
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
+  const frame = `${box.width}x${box.height}`;
   return (
     <div className="min-h-0 flex-1 p-2">
       <div ref={ref} className="relative h-full w-full">
@@ -95,7 +96,7 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSpl
                 const grow = pane.id === layout.fresh ? axisAround(tab.root, pane.id) : null;
                 const bump = layout.bumped?.pane === pane.id ? layout.bumped : null;
                 return (
-                  <PaneFrame key={pane.id} motion={{ rect, grow, bump }}>
+                  <PaneFrame key={pane.id} motion={{ rect, frame, grow, bump }}>
                     <PaneSlot
                       connection={connection}
                       tab={tab}
