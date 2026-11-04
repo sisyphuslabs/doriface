@@ -10,13 +10,15 @@ import {
   desktopBridge,
   onDesktopNavigate,
   onDesktopPairingLink,
+  onDesktopRunAction,
   setDesktopBackground,
 } from "./desktop/bridge.ts";
 import { bootConnection } from "./desktop/local-host.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
-import { setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
+import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
+import { reportMenuKeys } from "./keys/menu-keys.ts";
 import { router } from "./router.tsx";
 
 applyAppearance(appearanceStore.value);
@@ -32,8 +34,12 @@ function paintWindow(): void {
 
 onDesktopNavigate((path) => router.history.push(path));
 if (desktopBridge() !== null) {
-  // The desktop app's Close Window leaves Cmd+W to the keymap; with no tab or Settings to close, it closes the window.
+  // The desktop app's Close Window leaves Cmd+W to the keymap; with no pane, tab or Settings to close, it closes the window.
   setActionFallback("tab.close", () => closeDesktopWindow());
+  setActionFallback("pane.close", () => closeDesktopWindow());
+  // The Shell menu runs the page's own actions and shows the page's own keys for them.
+  onDesktopRunAction((action) => void runAction(action));
+  reportMenuKeys();
   paintWindow();
   appearanceStore.subscribe(paintWindow);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintWindow);

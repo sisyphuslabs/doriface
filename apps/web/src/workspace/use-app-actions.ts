@@ -4,14 +4,16 @@ import { terminalConfigStore } from "../ghostty/config-store.ts";
 import { single, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
 import { KEY_BY_NAME } from "../ghostty/keys.ts";
 import { useActionHandler, type ActionHandler } from "../keys/dispatcher.ts";
-import type { Layout } from "./use-layout.ts";
+import type { Direction } from "../layout/neighbor.ts";
+import type { Axis } from "@doriface/protocol/layout";
+import type { Layout, PaneTarget } from "./use-layout.ts";
 
 export interface AppActionTargets {
   readonly terminals: readonly Terminal[];
   readonly layout: Layout;
   readonly onNew: () => void;
-  /** Starts a terminal beside the focused pane, to its right. */
-  readonly onSplit: () => void;
+  /** Starts a terminal beside the focused pane: to its right along a row, below it along a column. */
+  readonly onSplit: (axis: Axis, target?: PaneTarget) => void;
   /** Closes a tab, asking first whether its sessions keep running. */
   readonly onCloseTab: (key: string) => void;
   /** Closes the focused pane, asking first whether its session keeps running. */
@@ -98,6 +100,9 @@ function selectTab(layout: Layout, key: string | null): boolean {
   return true;
 }
 
+const isDirection = (value: string): value is Direction =>
+  value === "left" || value === "right" || value === "up" || value === "down";
+
 function openAgent(layout: Layout, address: string | null): boolean {
   if (address === null || !shouldSelect(address, layout.focused?.address ?? null)) return false;
   layout.openTerminal(address);
@@ -139,11 +144,13 @@ export function desktopActions(
       case "tab.last":
         return selectTab(layout, keys.at(-1) ?? null);
       case "pane.split":
-        return focused === null ? false : (onSplit(), true);
+        if (focused === null || (argument !== "right" && argument !== "down")) return false;
+        onSplit(argument === "right" ? "row" : "column");
+        return true;
+      case "pane.go":
+        return isDirection(argument) && layout.go(argument);
       case "pane.close":
         return focused === null ? false : (onClosePane(focused), true);
-      case "pane.go":
-        return (argument === "left" || argument === "right") && layout.go(argument);
       case "agent.next":
         return openAgent(layout, neighbour(live, focused, 1));
       case "agent.prev":

@@ -9,7 +9,7 @@ import {
   TabBar,
   type WorkspaceTab,
 } from "@doriface/ui";
-import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
+import { Columns2, Folder, Monitor, PanelLeft, Rows2 } from "lucide-react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
@@ -23,7 +23,8 @@ import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown } from "./layout-store.ts";
 import type { LayoutTab } from "./layout-model.ts";
-import type { Layout } from "./use-layout.ts";
+import type { Axis } from "@doriface/protocol/layout";
+import type { Layout, PaneTarget } from "./use-layout.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 
 /** A tab's glyph: the state that most needs the person among its panes, as the sidebar sections rank them. */
@@ -55,7 +56,7 @@ export interface DesktopShellProps {
   readonly loaded: boolean;
   readonly layout: Layout;
   readonly onNew: () => void;
-  readonly onSplit: () => void;
+  readonly onSplit: (axis: Axis, target?: PaneTarget) => void;
   readonly onCloseTab: (key: string) => void;
   readonly onClosePane: (address: string) => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
@@ -107,15 +108,26 @@ export function DesktopShell(props: DesktopShellProps) {
   const focusedTerminal = focusedAddress === null ? undefined : byAddress.get(focusedAddress);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
-  const splitKeys = useActionKeys("pane.split");
+  const splitRightKeys = useActionKeys("pane.split:right");
+  const splitDownKeys = useActionKeys("pane.split:down");
+  const cannotSplit = focusedTerminal === undefined || layout.active?.readOnly != null;
   const split = (
-    <IconButton
-      label="Split right"
-      {...(splitKeys === undefined ? {} : { keys: splitKeys })}
-      icon={<Columns2 />}
-      disabled={focusedTerminal === undefined || layout.active?.readOnly != null}
-      onClick={onSplit}
-    />
+    <>
+      <IconButton
+        label="Split right"
+        {...(splitRightKeys === undefined ? {} : { keys: splitRightKeys })}
+        icon={<Columns2 />}
+        disabled={cannotSplit}
+        onClick={() => onSplit("row")}
+      />
+      <IconButton
+        label="Split down"
+        {...(splitDownKeys === undefined ? {} : { keys: splitDownKeys })}
+        icon={<Rows2 />}
+        disabled={cannotSplit}
+        onClick={() => onSplit("column")}
+      />
+    </>
   );
 
   return (
@@ -165,6 +177,8 @@ export function DesktopShell(props: DesktopShellProps) {
           layout={layout}
           titles={new Map(tabList.map((tab) => [tab.id, tab.title]))}
           onEnd={onEnd}
+          onSplit={onSplit}
+          onClose={onClosePane}
         />
         <StatusBar
           start={

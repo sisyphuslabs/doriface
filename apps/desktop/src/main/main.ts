@@ -72,6 +72,17 @@ function navigate(path: string): void {
 
 const openSettings = (): void => navigate("/settings");
 
+/** A Shell menu item runs its action in the page, as its key would. */
+function runAction(action: string): void {
+  liveWindow()?.webContents.send(Channel.runAction, action);
+}
+
+function showMenu(keys: ReadonlyMap<string, string>): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, keys, runAction })),
+  );
+}
+
 function createWindow(path: string): BrowserWindow {
   const placementFile = savedFile("window-placement.json");
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
@@ -118,7 +129,7 @@ function ready(): void {
   lockPermissions(session.defaultSession, origin);
   if (devUrl === undefined) serveApp(webRoot(), csp);
   else applyDevCsp(session.defaultSession, origin, csp);
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings })));
+  showMenu(new Map());
   registerIpc({
     origin,
     startLocalHost: () => localHost.start(),
@@ -126,6 +137,7 @@ function ready(): void {
     setWindowBackground,
     closeWindow: () => liveWindow()?.close(),
     takePairingLink,
+    setMenuKeys: showMenu,
   });
   // In a checkout the executable is Electron itself, which must not become the OS handler for doriface: links.
   if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);

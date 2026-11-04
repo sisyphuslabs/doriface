@@ -2,6 +2,7 @@ import { allowedExternal } from "../config/external.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import type { LocalHostEndpoint } from "../shared/bridge.ts";
+import { SHELL_MENU_ACTIONS } from "./shell-menu.ts";
 
 /** The part of an IPC event the gate reads; `senderFrame` is null once the frame is gone. */
 export interface IpcSender {
@@ -15,6 +16,7 @@ export interface IpcDeps {
   readonly setWindowBackground: (color: string) => void;
   readonly closeWindow: () => void;
   readonly takePairingLink: () => string | undefined;
+  readonly setMenuKeys: (keys: ReadonlyMap<string, string>) => void;
 }
 
 export interface IpcHandlers {
@@ -25,6 +27,20 @@ export interface IpcHandlers {
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
   closeWindow(event: IpcSender): Promise<void>;
   takePairingLink(event: IpcSender): string | null;
+  /** Shows the page's shortcuts in the Shell menu; only its own action ids and short trigger text are taken. */
+  setMenuKeys(event: IpcSender, candidate: unknown): Promise<boolean>;
+}
+
+const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
+
+function menuKeys(candidate: unknown): Map<string, string> | undefined {
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return undefined;
+  const keys = new Map<string, string>();
+  for (const [action, trigger] of Object.entries(candidate)) {
+    if (!SHELL_MENU_ACTIONS.has(action) || typeof trigger !== "string" || !TRIGGER.test(trigger)) return undefined;
+    keys.set(action, trigger);
+  }
+  return keys;
 }
 
 function assertAppFrame(event: IpcSender, origin: string): void {
@@ -59,6 +75,13 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     takePairingLink(event) {
       assertAppFrame(event, deps.origin);
       return deps.takePairingLink() ?? null;
+    },
+    async setMenuKeys(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      const keys = menuKeys(candidate);
+      if (keys === undefined) return false;
+      deps.setMenuKeys(keys);
+      return true;
     },
   };
 }

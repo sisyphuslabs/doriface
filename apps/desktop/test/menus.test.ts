@@ -4,7 +4,8 @@ import type { MenuItemConstructorOptions } from "electron";
 import { contextMenuTemplate } from "../src/config/context-menu.ts";
 import { APP_ORIGIN } from "../src/config/origin.ts";
 import { routeWindowOpen } from "../src/config/window-open.ts";
-import { menuTemplate } from "../src/main/menu.ts";
+import { menuTemplate, type MenuOptions } from "../src/main/menu.ts";
+import { acceleratorOf } from "../src/main/shell-menu.ts";
 
 const roles = (items: readonly MenuItemConstructorOptions[]): string[] =>
   items.map((item) => item.role ?? item.type ?? item.label ?? "");
@@ -13,6 +14,14 @@ const submenuOf = (item: MenuItemConstructorOptions | undefined): MenuItemConstr
   Array.isArray(item?.submenu) ? item.submenu : [];
 
 const noop = (): void => undefined;
+const options = (platform: MenuOptions["platform"], more: Partial<MenuOptions> = {}): MenuOptions => ({
+  platform,
+  openExternal: noop,
+  openSettings: noop,
+  keys: new Map(),
+  runAction: noop,
+  ...more,
+});
 
 describe("menus", () => {
   const flags = { canCut: true, canCopy: false, canPaste: true };
@@ -29,8 +38,8 @@ describe("menus", () => {
 
   test("the macOS app menu opens Settings, and the page's keymap owns its shortcut", () => {
     const opened: string[] = [];
-    const menu = menuTemplate({ platform: "darwin", openExternal: noop, openSettings: () => opened.push("settings") });
-    expect(roles(menu)).toEqual(["appMenu", "File", "editMenu", "viewMenu", "windowMenu", "help"]);
+    const menu = menuTemplate(options("darwin", { openSettings: () => opened.push("settings") }));
+    expect(roles(menu)).toEqual(["appMenu", "File", "editMenu", "Shell", "viewMenu", "windowMenu", "help"]);
     const app = submenuOf(menu[0]);
     expect(roles(app)).toEqual([
       "about",
@@ -51,20 +60,56 @@ describe("menus", () => {
     expect(opened).toEqual(["settings"]);
   });
 
-  test("macOS Close Window shows Cmd+W but leaves the key to the page, which closes tabs and Settings with it", () => {
-    const menu = menuTemplate({ platform: "darwin", openExternal: noop, openSettings: noop });
-    const close = submenuOf(menu[1]).find((item) => item.label === "Close Window");
-    expect(close).toMatchObject({ accelerator: "CommandOrControl+W", registerAccelerator: false });
+  test("macOS Close Window takes Ghostty's Cmd+Shift+W and leaves Cmd+W to the page, which closes panes with it", () => {
+    const close = submenuOf(menuTemplate(options("darwin"))[1]).find((item) => item.label === "Close Window");
+    expect(close).toMatchObject({ accelerator: "CommandOrControl+Shift+W" });
+    expect(close?.registerAccelerator).toBeUndefined();
     const closed: string[] = [];
     const window = { close: () => void closed.push("window") };
     close?.click?.(Object.create(null), Object.assign(Object.create(null), window), Object.create(null));
     expect(closed).toEqual(["window"]);
   });
 
-  test("Linux and Windows keep the standard roles", () => {
-    expect(roles(menuTemplate({ platform: "linux", openExternal: noop, openSettings: noop }))).toEqual([
+  test("the Shell menu lists the pane and tab actions with the page's live shortcuts, and runs them in the page", () => {
+    const ran: string[] = [];
+    const keys = new Map([
+      ["pane.split:right", "super+d"],
+      ["pane.split:down", "super+shift+d"],
+      ["pane.go:left", "super+alt+left"],
+    ]);
+    const shell = submenuOf(menuTemplate(options("darwin", { keys, runAction: (id) => ran.push(id) }))[3]);
+    expect(roles(shell)).toEqual([
+      "New Tab",
+      "separator",
+      "Split Right",
+      "Split Down",
+      "separator",
+      "Select Pane",
+      "separator",
+      "Close Pane",
+      "Close Tab",
+    ]);
+    expect(shell[2]).toMatchObject({ accelerator: "Command+D", registerAccelerator: false });
+    expect(shell[3]).toMatchObject({ accelerator: "Command+Shift+D", registerAccelerator: false });
+    expect(submenuOf(shell[5])[0]).toMatchObject({ label: "Left", accelerator: "Command+Option+Left" });
+    expect(shell[0]?.accelerator).toBeUndefined();
+    shell[3]?.click?.(Object.create(null), undefined, Object.create(null));
+    expect(ran).toEqual(["pane.split:down"]);
+  });
+
+  test("a trigger becomes Electron's accelerator, and one Electron cannot name shows none", () => {
+    expect(acceleratorOf("ctrl+shift+o", "linux")).toBe("Ctrl+Shift+O");
+    expect(acceleratorOf("ctrl+alt+up", "win32")).toBe("Ctrl+Alt+Up");
+    expect(acceleratorOf("super+ctrl+=", "darwin")).toBe("Command+Ctrl+=");
+    expect(acceleratorOf("super+shift+enter", "darwin")).toBe("Command+Shift+Return");
+    expect(acceleratorOf("ctrl+ä", "linux")).toBeUndefined();
+  });
+
+  test("Linux and Windows keep the standard roles, with the Shell menu after Edit", () => {
+    expect(roles(menuTemplate(options("linux")))).toEqual([
       "fileMenu",
       "editMenu",
+      "Shell",
       "viewMenu",
       "windowMenu",
       "help",

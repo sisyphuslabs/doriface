@@ -1,5 +1,5 @@
 import type { JsonObject, Terminal } from "@doriface/protocol";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addTab as addDocTab,
   type Axis,
@@ -39,17 +39,35 @@ export interface Layout {
   readonly focusPane: (tab: string, pane: string) => void;
   /** Focuses the pane that shows the terminal, or opens it in a new tab. */
   readonly openTerminal: (address: string) => void;
-  /** Puts a terminal started for the focused pane beside it, and focuses it. */
-  readonly split: (axis: Axis, address: string) => void;
+  /** Puts a terminal started for a pane (the focused one unless `target` names another) beside it, and focuses it. */
+  readonly split: (axis: Axis, address: string, target?: PaneTarget) => void;
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
   readonly dropPane: (address: string) => void;
   readonly closeTab: (key: string) => void;
-  /** Focuses the nearest pane that way in the tab in view; false when none lies that way, so the key stays the program's. */
+  /**
+   * Focuses the nearest pane that way in the tab in view. With no pane that way in a split tab it nudges the focused
+   * pane (`bumped`) instead and still takes the key; a lone pane leaves the key to its program (false), as Ghostty does.
+   */
   readonly go: (direction: Direction) => boolean;
+  readonly bumped: Bump | null;
+  /** The pane this screen split off last, which grows in from the pane it came from. */
+  readonly fresh: string | null;
 }
 
-/** Proportions are all moving focus needs, so it measures the tree in a fixed box. */
+export interface PaneTarget {
+  readonly tab: string;
+  readonly pane: string;
+}
+
+export interface Bump {
+  readonly pane: string;
+  readonly direction: Direction;
+  readonly seq: number;
+}
+
+/** Proportions are all moving focus needs, so it measures the tree in a fixed box with the panes' gap. */
 const MEASURE = { x: 0, y: 0, width: 1600, height: 1000 } as const;
+const HISTORY = 32;
 
 const rootOf = (id: string, children: readonly Node[]): Node => ({ children: [...children], id, type: "row" });
 
@@ -69,6 +87,8 @@ export function useLayout(
   told: (message: string) => void,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
+  const [bumped, setBumped] = useState<Bump | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
   useEffect(() => saveView(core, view), [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
   const [loose, setLoose] = useState<readonly string[]>([]);
@@ -88,7 +108,13 @@ export function useLayout(
     [failed, layouts],
   );
 
+  // Panes focused per tab, oldest first, as herdr-app's `before`: moving focus prefers the pane left last.
+  const history = useRef(new Map<string, string[]>());
   const show = useCallback((key: string, pane: string | null): void => {
+    if (pane !== null) {
+      const visited = (history.current.get(key) ?? []).filter((id) => id !== pane);
+      history.current.set(key, [...visited, pane].slice(-HISTORY));
+    }
     setView((prev) => ({
       ...prev,
       active: key,
@@ -130,20 +156,22 @@ export function useLayout(
   );
 
   const split = useCallback(
-    (axis: Axis, address: string): void => {
-      if (active === null || focused === null) return addTab(address);
-      const layout = layoutOf(active.machine);
+    (axis: Axis, address: string, target?: PaneTarget): void => {
+      const tab = target === undefined ? active : (tabs.find((each) => each.key === target.tab) ?? null);
+      const from = target === undefined ? focused : (tab?.panes.find((pane) => pane.id === target.pane) ?? null);
+      if (tab === null || from === null) return addTab(address);
+      const layout = layoutOf(tab.machine);
       if (layout === undefined || layout.readOnly !== null) return undefined;
       const pane = freshId("p");
       const block = terminalBlock(pane, localOf(address));
-      if (active.transient) {
-        const tab = written(active);
-        const root = splitPane(tab.root, tab.pane, axis, block, freshId("s"));
+      if (tab.transient) {
+        const copy = written(tab);
+        const root = splitPane(copy.root, copy.pane, axis, block, freshId("s"));
         if (root === null) return undefined;
-        void layout.edit((doc) =>
-          addDocTab(doc, { id: spaceOf(doc) ?? freshId("spc"), folder: "" }, { id: tab.id, name: "", root }),
-        );
-        return show(tabKey(layout.machineId, tab.id), pane);
+        const space = (doc: JsonObject | null) => ({ id: spaceOf(doc) ?? freshId("spc"), folder: "" });
+        void layout.edit((doc) => addDocTab(doc, space(doc), { id: copy.id, name: "", root }));
+        setFresh(pane);
+        return show(tabKey(layout.machineId, copy.id), pane);
       }
       const container = freshId("s");
       // Whether the edit last found the pane gone; a write that failed instead was already reported by `edit`.
@@ -151,9 +179,7 @@ export function useLayout(
       void layout
         .edit((doc) => {
           const next =
-            doc === null
-              ? null
-              : editTab(doc, active.id, (root) => splitPane(root, focused.id, axis, block, container));
+            doc === null ? null : editTab(doc, tab.id, (root) => splitPane(root, from.id, axis, block, container));
           gone = next === null;
           return next;
         })
@@ -165,9 +191,10 @@ export function useLayout(
           }
           return placed;
         });
-      return show(active.key, pane);
+      setFresh(pane);
+      return show(tab.key, pane);
     },
-    [active, addTab, focused, layoutOf, show, told],
+    [active, addTab, focused, layoutOf, show, tabs, told],
   );
 
   const dropPane = useCallback(
@@ -197,20 +224,35 @@ export function useLayout(
     [layoutOf, tabs],
   );
 
-  const selectTab = useCallback((key: string): void => show(key, null), [show]);
-  const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
   const go = useCallback(
     (direction: Direction): boolean => {
       if (active === null || focused === null || active.panes.length < 2) return false;
-      const to = nearest(focused.id, direction, arrange(active.root, MEASURE, 8, null).panes);
-      if (to === null) return false;
-      show(active.key, to);
+      const { panes } = arrange(active.root, MEASURE, 8, null);
+      const to = nearest(focused.id, direction, panes, history.current.get(active.key) ?? []);
+      if (to === null) setBumped((prev) => ({ pane: focused.id, direction, seq: (prev?.seq ?? 0) + 1 }));
+      else show(active.key, to);
       return true;
     },
     [active, focused, show],
   );
 
-  return { tabs, active, focused, zoomed, selectTab, focusPane, openTerminal, split, dropPane, closeTab, go };
+  const selectTab = useCallback((key: string): void => show(key, null), [show]);
+  const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
+  return {
+    tabs,
+    active,
+    focused,
+    zoomed,
+    selectTab,
+    focusPane,
+    openTerminal,
+    split,
+    dropPane,
+    closeTab,
+    go,
+    bumped,
+    fresh,
+  };
 }
 
 function spaceOf(doc: JsonObject | null): string | null {

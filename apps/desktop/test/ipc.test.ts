@@ -16,7 +16,11 @@ const setup = () => {
   const painted: string[] = [];
   let starts = 0;
   let closes = 0;
+  const menus: ReadonlyMap<string, string>[] = [];
   const handlers = ipcHandlers({
+    setMenuKeys: (keys) => {
+      menus.push(keys);
+    },
     takePairingLink,
     origin: APP_ORIGIN,
     startLocalHost: async () => {
@@ -33,7 +37,7 @@ const setup = () => {
       closes += 1;
     },
   });
-  return { handlers, opened, painted, starts: () => starts, closes: () => closes };
+  return { handlers, opened, painted, menus, starts: () => starts, closes: () => closes };
 };
 
 afterEach(() => void takePairingLink());
@@ -48,12 +52,27 @@ describe("IPC sender gate", () => {
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
       ]),
     );
     for (const event of foreign) expect(() => handlers.takePairingLink(event)).toThrow("refused IPC");
     expect(opened).toEqual([]);
     expect(starts()).toBe(0);
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
+  });
+
+  test("the Shell menu takes only its own actions and short trigger text from the page", async () => {
+    const { handlers, menus } = setup();
+    expect(await handlers.setMenuKeys(app, { "pane.split:right": "super+d", "pane.go:up": "super+alt+up" })).toBe(true);
+    expect(await handlers.setMenuKeys(app, { "app.quit": "super+q" })).toBe(false);
+    expect(await handlers.setMenuKeys(app, { "tab.new": "super+t\nRole: quit" })).toBe(false);
+    expect(await handlers.setMenuKeys(app, ["tab.new"])).toBe(false);
+    expect(menus).toEqual([
+      new Map([
+        ["pane.split:right", "super+d"],
+        ["pane.go:up", "super+alt+up"],
+      ]),
+    ]);
   });
 
   test("the app origin takes a waiting pairing link once", () => {

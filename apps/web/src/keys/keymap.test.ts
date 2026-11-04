@@ -50,7 +50,7 @@ describe("resolveKeymap", () => {
   test("a changed default never overwrites an override", () => {
     const overrides = withBinding("mac", new Map(), "super+t", "tab.close");
     const shipped = resolveKeymap("mac", new Map());
-    const changedDefaults = new Map([...shipped, ["super+t", "pane.split"], ["super+shift+y", "agent.next"]]);
+    const changedDefaults = new Map([...shipped, ["super+t", "pane.split:right"], ["super+shift+y", "agent.next"]]);
     const resolved = resolveKeymap("mac", overrides, changedDefaults);
     expect(resolved.get("super+t")).toBe("tab.close");
     expect(resolved.get("super+shift+y")).toBe("agent.next");

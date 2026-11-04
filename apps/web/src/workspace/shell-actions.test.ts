@@ -2,6 +2,7 @@ import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import { availableActions, type Shell } from "./shell-actions.ts";
 import { desktopActions, phoneActions } from "./use-app-actions.ts";
+import type { LayoutTab } from "./layout-model.ts";
 import type { Layout } from "./use-layout.ts";
 
 const terminal = (address: string): Terminal => ({
@@ -16,10 +17,22 @@ const terminal = (address: string): Terminal => ({
   state: "live",
 });
 const noop = (): void => undefined;
+const pane = { id: "p1", address: "t1", mod: null };
+const tab: LayoutTab = {
+  key: "tb1",
+  id: "tb1",
+  space: "spc1",
+  machine: null,
+  name: "",
+  root: { children: [{ content: { terminal: "t1" }, id: "p1", type: "block" }], id: "tb1", type: "row" },
+  panes: [pane],
+  readOnly: null,
+  transient: false,
+};
 const layout: Layout = {
-  tabs: [],
-  active: null,
-  focused: { id: "p1", address: "t1", mod: null },
+  tabs: [tab],
+  active: tab,
+  focused: pane,
   zoomed: null,
   selectTab: noop,
   focusPane: noop,
@@ -27,7 +40,9 @@ const layout: Layout = {
   split: noop,
   dropPane: noop,
   closeTab: noop,
-  go: () => true,
+  go: () => false,
+  bumped: null,
+  fresh: null,
 };
 const handlers = {
   desktop: desktopActions(

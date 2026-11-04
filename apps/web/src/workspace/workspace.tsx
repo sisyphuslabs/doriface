@@ -3,7 +3,7 @@ import { useToastManager } from "@doriface/ui";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
-import { LAYOUT_DOC } from "@doriface/protocol/layout";
+import { type Axis, LAYOUT_DOC } from "@doriface/protocol/layout";
 import { closesTab, type TerminalEnd } from "../terminal/terminal-end.ts";
 import { CloseTabDialog } from "./close-tab-dialog.tsx";
 import { AddMachineDialog } from "./add-machine-dialog.tsx";
@@ -19,7 +19,8 @@ import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
-import { useLayout } from "./use-layout.ts";
+import { findTerminal } from "./layout-model.ts";
+import { useLayout, type PaneTarget } from "./use-layout.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
 
@@ -70,9 +71,15 @@ export function Workspace({ connection }: WorkspaceProps) {
   const [closingTab, setClosingTab] = useState<string | null>(null);
   const runs = useMachineRuns(connection, opened, refresh);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
-  const inViewTerminal = terminals.find((terminal) => terminal.address === inView);
-  const newTerminal = (): void => runs.start(runParamsFor(inViewTerminal));
-  const splitRight = (): void => runs.start(runParamsFor(inViewTerminal), (address) => layout.split("row", address));
+  const newTerminal = (): void => runs.start(runParamsFor(terminals.find((terminal) => terminal.address === inView)));
+  const split = (axis: Axis, target?: PaneTarget): void => {
+    const from =
+      target === undefined
+        ? inView
+        : layout.tabs.find((tab) => tab.key === target.tab)?.panes.find((pane) => pane.id === target.pane)?.address;
+    const near = terminals.find((terminal) => terminal.address === from);
+    runs.start(runParamsFor(near), (address) => layout.split(axis, address, target));
+  };
   const openTerminal = (address: string): void => {
     layout.openTerminal(address);
     showOnPhone(address);
@@ -89,6 +96,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (closesTab(end)) layout.dropPane(address);
   };
   const closing = layout.tabs.find((tab) => tab.key === closingTab);
+  const phoneTab = phoneOpen === null ? null : findTerminal(layout.tabs, phoneOpen);
+  const phonePanes = phoneTab?.tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
     if (inView === null) return false;
@@ -110,6 +119,7 @@ export function Workspace({ connection }: WorkspaceProps) {
             connection={connection}
             terminals={terminals}
             open={phoneOpen}
+            panes={phonePanes}
             onOpen={showOnPhone}
             onBack={() => setPhoneKey(null)}
             onNew={() => newTerminal()}
@@ -123,7 +133,7 @@ export function Workspace({ connection }: WorkspaceProps) {
             loaded={fed.loaded}
             layout={layout}
             onNew={() => newTerminal()}
-            onSplit={splitRight}
+            onSplit={split}
             onCloseTab={closeTab}
             onClosePane={(address) => setAsk({ kind: "close", address })}
             onEnd={onEnd}

@@ -35,6 +35,15 @@ const bridge: DorifaceBridge = {
     ipcRenderer.on(Channel.pairingLinkWaiting, () => void take());
     void take();
   },
+  onRunAction(listener) {
+    ipcRenderer.on(Channel.runAction, (_event, action: unknown) => {
+      if (typeof action === "string") listener(action);
+    });
+  },
+  async setMenuKeys(keys) {
+    const shown: unknown = await ipcRenderer.invoke(Channel.setMenuKeys, keys);
+    return shown === true;
+  },
 };
 
 contextBridge.exposeInMainWorld("doriface", bridge);

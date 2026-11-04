@@ -17,13 +17,17 @@ function isStored(value: unknown): value is Stored {
   return typeof version === "number" && Array.isArray(bindings);
 }
 
+/** Actions renamed since a binding was saved: split became split right when split down arrived. */
+const RENAMED: Readonly<Record<string, string>> = { "pane.split": "pane.split:right" };
+
 /** Older layouts are read through here; a shape this version cannot read keeps the defaults. */
 function migrate(stored: Stored): Overrides {
   const overrides = new Map<string, string | null>();
   for (const entry of stored.bindings) {
     if (!Array.isArray(entry)) continue;
-    const [trigger, action] = entry;
-    if (typeof trigger !== "string" || (typeof action !== "string" && action !== null)) continue;
+    const [trigger, saved] = entry;
+    if (typeof trigger !== "string" || (typeof saved !== "string" && saved !== null)) continue;
+    const action = saved === null ? null : (RENAMED[saved] ?? saved);
     const checked = checkBinding(trigger, action);
     if (checked.ok) overrides.set(checked.trigger, action);
   }

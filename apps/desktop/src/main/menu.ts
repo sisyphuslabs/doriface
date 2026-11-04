@@ -1,5 +1,6 @@
 import type { MenuItemConstructorOptions } from "electron";
 import type { DesktopPlatform } from "../shared/bridge.ts";
+import { shellMenu } from "./shell-menu.ts";
 
 export const REPOSITORY_URL = "https://github.com/sisyphuslabs/doriface";
 
@@ -7,6 +8,9 @@ export interface MenuOptions {
   readonly platform: DesktopPlatform;
   readonly openExternal: (url: string) => void;
   readonly openSettings: () => void;
+  /** The page's trigger per Shell menu action, as it last reported them; empty until it has. */
+  readonly keys: ReadonlyMap<string, string>;
+  readonly runAction: (action: string) => void;
 }
 
 /**
@@ -33,18 +37,13 @@ function appMenu(openSettings: () => void): MenuItemConstructorOptions {
 }
 
 /**
- * macOS File menu: Close Window shows Cmd+W without registering it, so the key reaches the page first; the page closes
- * the current tab or Settings with it and closes the window only when there is nothing else to close.
+ * macOS File menu: Close Window takes Ghostty's Cmd+Shift+W. Cmd+W belongs to the page, which closes the focused pane,
+ * the tab with the last one, or Settings, and closes the window only when there is nothing else to close.
  */
 const MAC_FILE_MENU: MenuItemConstructorOptions = {
   label: "File",
   submenu: [
-    {
-      label: "Close Window",
-      accelerator: "CommandOrControl+W",
-      registerAccelerator: false,
-      click: (_item, window) => window?.close(),
-    },
+    { label: "Close Window", accelerator: "CommandOrControl+Shift+W", click: (_item, window) => window?.close() },
   ],
 };
 
@@ -54,6 +53,7 @@ export function menuTemplate(options: MenuOptions): MenuItemConstructorOptions[]
   const common: MenuItemConstructorOptions[] = [
     mac ? MAC_FILE_MENU : { role: "fileMenu" },
     { role: "editMenu" },
+    shellMenu(options.platform, options.keys, options.runAction),
     { role: "viewMenu" },
     { role: "windowMenu" },
     {
