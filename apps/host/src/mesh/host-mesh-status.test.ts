@@ -8,21 +8,28 @@ import { generateToken } from "../auth.ts";
 import { requestControl } from "../control.ts";
 import { type Host, startHost } from "../host.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
-import { resolveHcBin } from "../testing/hc-session.ts";
+import { createHcSession, type HcSession } from "../testing/hc-session.ts";
 import { type Machine, machine, MeshFixture } from "../testing/mesh-history.ts";
 
 const dirs: string[] = [];
 const hosts: Host[] = [];
+const sessions: HcSession[] = [];
 afterEach(async () => {
   await Promise.all(hosts.splice(0).map((host) => host.stop()));
+  await Promise.all(sessions.splice(0).map((session) => session.dispose()));
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
+/** A host on its own scratch core: reading its core id would otherwise start the default session's core and leave it. */
 async function hostIn(dir: string): Promise<Host> {
+  const session = createHcSession("host-mesh");
+  sessions.push(session);
   const host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
     token: generateToken(),
-    hc: resolveHcBin(),
+    hc: session.hc,
+    session: session.name,
+    env: session.env,
     stateDir: dir,
     log: () => {},
   });
