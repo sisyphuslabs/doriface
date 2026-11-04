@@ -1,6 +1,6 @@
 import { devices, type Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
-import { routeHcSocket } from "./hc-socket.ts";
+import { LAN_HC_URL, routeHcSocket, routeLanToHost } from "./hc-socket.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -21,19 +21,57 @@ async function echoes(page: Page, marker: string): Promise<void> {
 }
 
 test.describe("desktop", () => {
-  test("going offline is said in the status bar at once, and the notice leaves when the network is back", async ({
+  test.describe("a host across the network", () => {
+    test.use({ loopbackUrl: LAN_HC_URL });
+
+    test("going offline is said in the status bar at once, and the notice leaves when the network is back", async ({
+      page,
+      context,
+    }) => {
+      await routeLanToHost(page);
+      await page.goto("/");
+      await openNewTerminal(page);
+      await context.setOffline(true);
+      await expect(page.getByRole("contentinfo").getByRole("status").filter({ hasText: OFFLINE })).toBeVisible({
+        timeout: 2_000,
+      });
+      await context.setOffline(false);
+      await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
+      await echoes(page, "back-online");
+    });
+  });
+
+  test("a link to this computer is never called Offline while the OS reports no network", async ({ page }) => {
+    await page.goto("/");
+    await openNewTerminal(page);
+    // Wi-Fi off: navigator.onLine turns false and `offline` fires, while 127.0.0.1 keeps answering.
+    await page.evaluate(() => {
+      Object.defineProperty(Navigator.prototype, "onLine", { configurable: true, get: () => false });
+      dispatchEvent(new Event("offline"));
+    });
+    await echoes(page, "loopback-still-works");
+    await expect(notice(page, /Offline|Reconnecting/)).toHaveCount(0);
+  });
+
+  test("back online, a reconnect waiting out its longest back-off starts at once, on one new socket", async ({
     page,
     context,
   }) => {
+    test.setTimeout(90_000);
+    const socket = await routeHcSocket(page);
     await page.goto("/");
     await openNewTerminal(page);
+    const opened = socket.opened();
+    await socket.drop(true);
+    // Four refused attempts (0.5 + 1 + 2 + 5 s) leave the next one 10 s away; only that wait counts down from above 5.
+    await expect.poll(socket.refused, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
+    await expect(notice(page, /Reconnecting in ([6-9]|10) s/)).toBeVisible({ timeout: 5_000 });
+    socket.restore();
     await context.setOffline(true);
-    await expect(page.getByRole("contentinfo").getByRole("status").filter({ hasText: OFFLINE })).toBeVisible({
-      timeout: 2_000,
-    });
     await context.setOffline(false);
-    await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
-    await echoes(page, "back-online");
+    await expect(notice(page, RECONNECTING)).toHaveCount(0, { timeout: 3_000 });
+    expect(socket.opened() - opened).toBe(1);
+    await echoes(page, "back-at-once");
   });
 
   test("a link that goes silent past the heartbeat budget is closed and reconnected", async ({ page }) => {
@@ -64,15 +102,20 @@ async function openPhoneTerminal(page: Page): Promise<void> {
 test.describe("phone", () => {
   test.use({ ...phone });
 
-  test("the phone terminal screen says it is offline, and clears when the network is back", async ({
-    page,
-    context,
-  }) => {
-    await openPhoneTerminal(page);
-    await context.setOffline(true);
-    await expect(notice(page, OFFLINE)).toBeVisible({ timeout: 2_000 });
-    await context.setOffline(false);
-    await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
+  test.describe("a host across the network", () => {
+    test.use({ loopbackUrl: LAN_HC_URL });
+
+    test("the phone terminal screen says it is offline, and clears when the network is back", async ({
+      page,
+      context,
+    }) => {
+      await routeLanToHost(page);
+      await openPhoneTerminal(page);
+      await context.setOffline(true);
+      await expect(notice(page, OFFLINE)).toBeVisible({ timeout: 2_000 });
+      await context.setOffline(false);
+      await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
+    });
   });
 
   test("the phone terminal screen says it is reconnecting while the host link is down", async ({ page }) => {
