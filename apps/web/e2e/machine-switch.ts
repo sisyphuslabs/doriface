@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { E2E_HOST_ENV } from "./config.ts";
+import { stopLines } from "./line-stop.ts";
 import { MACHINE_ENV, MACHINE_LINE_PID, MACHINE_NAME, MACHINE_SWITCH } from "./machine.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
@@ -34,29 +35,10 @@ export function switchTo(mode: "off" | "login" | "drop"): void {
     .filter((pid) => Number.isInteger(pid) && pid > 1);
   // Only this run's lines: the dial runs them under the second core's HC_SESSION (`exec env ...`), which `ps e` shows.
   const session = `HC_SESSION=${readSavedEnv(MACHINE_ENV).env["HC_SESSION"] ?? "?"}`;
-  const lines = pids.filter((pid) => {
+  stopLines(pids, (pid) => {
     const seen = spawnSync("ps", ["eww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout;
     return /\bconnect\b/.test(seen) && seen.includes(session);
   });
-  if (lines.length === 0) throw new Error(`no live line among ${pids.join(", ")}`);
-  for (const pid of lines) {
-    for (const child of childrenOf(pid)) terminate(child);
-    terminate(pid);
-  }
-}
-
-/** SIGTERM; a process that exited meanwhile (dash's `sh -c` ends once its line does) is already stopped. */
-function terminate(pid: number): void {
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
-  }
-}
-
-function childrenOf(pid: number): number[] {
-  const found = spawnSync("pgrep", ["-P", String(pid)], { encoding: "utf8" });
-  return found.stdout.split("\n").flatMap((line) => (line.trim() === "" ? [] : [Number(line)]));
 }
 
 /** Lets the machine answer again; hc redials on its own. */
