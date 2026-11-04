@@ -44,3 +44,28 @@ test("retryNow makes the waiting attempt at once, and its back-off timer makes n
   expect(store.state).toEqual({ phase: "open", connection });
   store.stop();
 });
+
+test("a local host that did not start holds its cause and cancels the waiting retry, so no link is tried", async () => {
+  jest.useFakeTimers();
+  let attempts = 0;
+  const store = new ConnectionStore(SETTINGS, () => {
+    attempts += 1;
+    return Promise.reject(new Error("refused"));
+  });
+  const failed = new Promise<void>((resolve) => {
+    const off = store.subscribe(() => {
+      if (store.state.phase !== "failed") return;
+      off();
+      resolve();
+    });
+  });
+  store.start();
+  await failed;
+  const failure = { code: "hc-binary-missing", message: "not found", details: "raw output" };
+  store.hostStartFailed(failure);
+  expect(store.state).toEqual({ phase: "host-failed", failure });
+  jest.advanceTimersByTime(10_000);
+  store.retryNow();
+  expect(attempts).toBe(1);
+  expect(store.state).toEqual({ phase: "host-failed", failure });
+});
