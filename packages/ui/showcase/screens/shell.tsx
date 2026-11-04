@@ -1,4 +1,4 @@
-import { GitBranch, Monitor, PanelLeft, Search, Settings, SquareTerminal } from "lucide-react";
+import { Columns2, Ellipsis, Folder, Monitor, PanelLeft, Search, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   AgentRow,
@@ -10,11 +10,9 @@ import {
   SpaceRow,
   StatusBar,
   StatusBarItem,
-  StatusChip,
   TabBar,
   TerminalPreview,
   cn,
-  type AgentStatus,
   type TerminalLine,
 } from "../../src/index.ts";
 import {
@@ -70,30 +68,13 @@ export function AgentLists({
   );
 }
 
-function Pane(props: {
-  readonly title: string;
-  readonly status: AgentStatus;
-  readonly meta: string;
-  readonly lines: readonly TerminalLine[];
-  readonly focused?: boolean;
-}) {
+/** A terminal card with no title bar, as in the app: its tab names it and the status bar says where it runs (#108). */
+function Pane(props: { readonly title: string; readonly lines: readonly TerminalLine[] }) {
   return (
     <section
       aria-label={`${props.title} terminal`}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
-      <header
-        className={cn(
-          "flex h-(--pane-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm",
-          props.focused === true ? "bg-selected text-foreground" : "text-muted-foreground",
-        )}
-      >
-        <SquareTerminal aria-hidden className="size-3.5 shrink-0" />
-        <h2 className={cn("truncate", props.focused === true ? "font-semibold" : "font-medium")}>{props.title}</h2>
-        {props.focused === true ? <span className="sr-only">(focused)</span> : null}
-        <StatusChip status={props.status} />
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">{props.meta}</span>
-      </header>
       <TerminalPreview lines={props.lines} cursor label={`${props.title} output`} className="flex-1" />
     </section>
   );
@@ -126,16 +107,26 @@ export function Sidebar() {
 export function WorkspaceBody() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <TabBar tabs={TABS} activeId="t1" newTabKeys={["⌘", "T"]} />
+      <TabBar
+        tabs={TABS}
+        activeId="t1"
+        newTabKeys={["⌘", "T"]}
+        trailing={
+          <>
+            <IconButton label="Session actions for Claude Code" icon={<Ellipsis />} className="size-6" />
+            <IconButton label="Split" icon={<Columns2 />} pressed />
+          </>
+        }
+      />
       <div className="flex min-h-0 flex-1 gap-2 p-2">
-        <Pane title="Claude Code" status="blocked" meta="main · ⌘1" lines={CLAUDE_LINES} focused />
-        <Pane title="Codex" status="done" meta="sync · ⌘2" lines={CODEX_LINES} />
+        <Pane title="Claude Code" lines={CLAUDE_LINES} />
+        <Pane title="Codex" lines={CODEX_LINES} />
       </div>
       <StatusBar
         start={
           <>
             <StatusBarItem icon={<Monitor aria-hidden />}>studio</StatusBarItem>
-            <StatusBarItem icon={<GitBranch aria-hidden />}>main</StatusBarItem>
+            <StatusBarItem icon={<Folder aria-hidden />}>doriface</StatusBarItem>
             <StatusBarItem>
               5 agents <span className="text-status-blocked-text">· 1 needs you</span>
             </StatusBarItem>
