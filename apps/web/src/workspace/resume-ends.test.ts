@@ -1,0 +1,138 @@
+import { describe, expect, test } from "bun:test";
+import { HcRpcError, type Terminal } from "@doriface/protocol";
+import { PENDING_END_MAX_AGE_MS, pendingEnds, resumeOf } from "./pending-ends.ts";
+import { resumeEnds } from "./resume-ends.ts";
+import type { SessionCalls } from "./session-actions.ts";
+
+/** A Storage held in memory, as localStorage holds it. */
+function memoryStorage(): Storage {
+  const items = new Map<string, string>();
+  return {
+    get length() {
+      return items.size;
+    },
+    clear: () => items.clear(),
+    getItem: (key) => items.get(key) ?? null,
+    key: (index) => [...items.keys()][index] ?? null,
+    removeItem: (key) => void items.delete(key),
+    setItem: (key, value) => void items.set(key, value),
+  };
+}
+
+const notFound = (): HcRpcError =>
+  new HcRpcError({ code: -32000, message: "no terminal", data: { kind: "not_found" } });
+
+/** Session calls that record what they are asked; terminal.kill answers with a finished terminal. */
+function recorder() {
+  const asked: string[] = [];
+  const calls: SessionCalls = {
+    label: ({ terminal }) => (asked.push(`label ${terminal}`), Promise.resolve({})),
+    kill: ({ terminal }) => (asked.push(`kill ${terminal}`), Promise.resolve({ state: "finished" })),
+    rm: ({ terminal }) => (asked.push(`rm ${terminal}`), Promise.resolve({})),
+  };
+  return { asked, calls };
+}
+
+const facts = (state: Terminal["state"], pid: number | null) => ({ state, pid });
+
+describe("pending Ends", () => {
+  test("are kept per core, one per address, and the stale ones are not offered", () => {
+    const storage = memoryStorage();
+    const ends = pendingEnds("core-a", storage);
+    ends.add({ address: "t1", pid: 10, at: 1_000 });
+    ends.add({ address: "t2", pid: 20, at: 2_000 });
+    ends.add({ address: "t1", pid: 11, at: 3_000 });
+    expect(pendingEnds("core-a", storage).list(3_000)).toEqual([
+      { address: "t2", pid: 20, at: 2_000 },
+      { address: "t1", pid: 11, at: 3_000 },
+    ]);
+    expect(pendingEnds("core-b", storage).list(3_000)).toEqual([]);
+    expect(ends.list(2_000 + PENDING_END_MAX_AGE_MS + 1)).toEqual([{ address: "t1", pid: 11, at: 3_000 }]);
+    ends.remove("t2");
+    ends.remove("t1");
+    expect(storage.length).toBe(0);
+  });
+
+  test("a store that cannot be written keeps nothing and does not throw", () => {
+    const refusing: Storage = {
+      ...memoryStorage(),
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+    };
+    const ends = pendingEnds("core-a", refusing);
+    ends.add({ address: "t1", pid: 1, at: 0 });
+    expect(ends.list(0)).toEqual([]);
+  });
+
+  test("resume ends the program it was asked about, removes one that ended, and leaves a new program alone", () => {
+    const end = { address: "t1", pid: 42, at: 0 };
+    expect(resumeOf(end, facts("live", 42))).toBe("end");
+    expect(resumeOf({ ...end, pid: null }, facts("live", 7))).toBe("end");
+    expect(resumeOf(end, facts("finished", null))).toBe("remove");
+    expect(resumeOf(end, facts("live", 43))).toBe("drop");
+    expect(resumeOf(end, null)).toBe("drop");
+  });
+});
+
+describe("resuming pending Ends", () => {
+  test("ends, removes or drops each, and forgets every one it saw through", async () => {
+    const storage = memoryStorage();
+    const ends = pendingEnds("core", storage);
+    for (const [address, at] of [
+      ["t1", 1],
+      ["t2", 2],
+      ["t3", 3],
+      ["t4", 4],
+    ] as const) {
+      ends.add({ address, pid: 9, at: Date.now() - 1_000 + at });
+    }
+    const terminals: Record<string, Pick<Terminal, "state" | "pid">> = {
+      t1: { state: "live", pid: 9 },
+      t2: { state: "finished", pid: null },
+      t3: { state: "live", pid: 99 },
+    };
+    const { asked, calls } = recorder();
+    const get = (address: string) => {
+      const terminal = terminals[address];
+      return terminal === undefined ? Promise.reject(notFound()) : Promise.resolve(terminal);
+    };
+    await resumeEnds(ends, get, calls);
+    expect(asked).toEqual(["label t1", "kill t1", "rm t1", "rm t2"]);
+    expect(ends.list()).toEqual([]);
+  });
+
+  test("an End that fails again stays pending for the next connection", async () => {
+    const ends = pendingEnds("core", memoryStorage());
+    ends.add({ address: "t1", pid: 9, at: Date.now() });
+    const calls: SessionCalls = {
+      label: () => Promise.resolve({}),
+      kill: () => Promise.reject(new Error("connection is closed")),
+      rm: () => Promise.resolve({}),
+    };
+    const errors: unknown[] = [];
+    const log = console.error;
+    console.error = (...args: unknown[]) => void errors.push(args);
+    try {
+      await resumeEnds(ends, () => Promise.resolve({ state: "live", pid: 9 }), calls);
+    } finally {
+      console.error = log;
+    }
+    expect(ends.list().map((end) => end.address)).toEqual(["t1"]);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  test("stops once the connection it runs on is gone", async () => {
+    const ends = pendingEnds("core", memoryStorage());
+    ends.add({ address: "t1", pid: 9, at: Date.now() });
+    const { asked, calls } = recorder();
+    await resumeEnds(
+      ends,
+      () => Promise.resolve({ state: "live", pid: 9 }),
+      calls,
+      () => false,
+    );
+    expect(asked).toEqual([]);
+    expect(ends.list().length).toBe(1);
+  });
+});

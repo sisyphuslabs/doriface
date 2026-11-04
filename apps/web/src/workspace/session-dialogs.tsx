@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { terminalInput } from "./focus-targets.ts";
 import { terminalTitle } from "./model.ts";
 import { RenameDialog } from "./rename-dialog.tsx";
+import { pendingEnds } from "./pending-ends.ts";
 import { endSession, renameSession, sessionCalls, takeBackEnd } from "./session-actions.ts";
 import type { SessionAsk } from "./session-context.ts";
 
@@ -36,6 +37,9 @@ const ENDED = {
 export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: SessionDialogsProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The question open now: an action settles into the question that started it, never into a later one.
+  const askNow = useRef(ask);
+  askNow.current = ask;
   const terminal = ask === null ? undefined : terminals.find((entry) => entry.address === ask.address);
   const live = terminal?.state === "live";
   const current = terminal === undefined ? null : terminalTitle(terminal);
@@ -100,16 +104,26 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
     );
   }
   const run = (work: () => Promise<void>, after: () => void): void => {
+    const started = ask;
     setBusy(true);
     work().then(
-      () => after(),
+      () => (askNow.current === started ? after() : undefined),
       (cause: unknown) => {
+        const why = cause instanceof Error ? cause.message : String(cause);
+        // Left with Cancel meanwhile: the question it would answer is gone, and the one open now is about something else.
+        if (askNow.current !== started) return console.error(`${started.kind} ${started.address}: ${why}`);
         setBusy(false);
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(why);
       },
     );
   };
-  const end = (): void => run(() => endSession(sessionCalls(connection), ask.address), onDone);
+  // Kept in local storage until it settles, so a page closed before End's calls leave it has the next page finish it.
+  const end = (): void => {
+    const { address } = ask;
+    const ends = pendingEnds(connection.hello.core.id);
+    ends.add({ address, pid: terminal?.pid ?? null, at: Date.now() });
+    run(() => endSession(sessionCalls(connection), address).finally(() => ends.remove(address)), onDone);
+  };
   // Left after a failed End, the session runs on: it must not keep End's mark, which a dropped link may have kept.
   const dismiss = (): void => {
     if (error !== null && live) {
