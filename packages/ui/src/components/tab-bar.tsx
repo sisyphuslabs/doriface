@@ -62,7 +62,7 @@ export function TabBar({
             <div
               key={tab.id}
               className={cn(
-                "group flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem]",
+                "group motion-arrive flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] [--arrive-duration:var(--duration-micro)]",
                 active
                   ? "border-border bg-raised text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-hover",

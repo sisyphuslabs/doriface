@@ -68,3 +68,5 @@ createRoot(container).render(
     </TooltipProvider>
   </StrictMode>,
 );
+// Arrival motion waits for the first painted frame, so the first screen is the real one rather than a fade-in.
+requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.setAttribute("data-ready", "")));
