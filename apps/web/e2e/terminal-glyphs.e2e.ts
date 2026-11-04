@@ -1,16 +1,22 @@
+import type { Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 
-test("a wide glyph is centred in its two cells", async ({ page }) => {
-  await page.goto("/");
-  const terminal = await openNewTerminal(page);
+/** Prints `text` in the terminal, typed as UTF-8 octal so the keyboard input stays ASCII. */
+async function print(page: Page, terminal: Locator, text: string): Promise<void> {
+  const octal = [...new TextEncoder().encode(text)].map((byte) => `\\${byte.toString(8)}`).join("");
   await terminal.getByRole("textbox").focus();
-  // U+AC00, typed as UTF-8 octal so the keyboard input stays ASCII.
-  await page.keyboard.type("printf 'w\\352\\260\\200w\\n'");
+  await page.keyboard.type(`printf '${octal}\\n'`);
   await page.keyboard.press("Enter");
-  const wide = terminal.locator(".term-row:not(.term-scrollback-row) .term-wide").filter({ hasText: "\u{AC00}" });
+}
+
+const liveWide = (terminal: Locator) => terminal.locator(".term-row:not(.term-scrollback-row) .term-wide");
+
+async function expectCentred(page: Page, terminal: Locator): Promise<void> {
+  await print(page, terminal, "w\u{AC00}w");
+  const wide = liveWide(terminal).filter({ hasText: "\u{AC00}" });
   await expect(wide).toHaveCount(1, { timeout: 15_000 });
   const margins = await wide.evaluate((span) => {
     const box = span.getBoundingClientRect();
@@ -20,6 +26,77 @@ test("a wide glyph is centred in its two cells", async ({ page }) => {
     return { left: glyph.left - box.left, right: box.right - glyph.right };
   });
   expect(Math.abs(margins.left - margins.right)).toBeLessThan(1);
+}
+
+test("a wide glyph is centred in its two cells", async ({ page }) => {
+  await page.goto("/");
+  await expectCentred(page, await openNewTerminal(page));
+});
+
+test("adjust-cell-width widens the cells, not the wide glyph inside them: it stays centred", async ({ page }) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page
+    .getByRole("tab", { name: "Terminal" })
+    .or(page.getByRole("button", { name: "Terminal" }))
+    .first()
+    .click();
+  await page.getByRole("textbox", { name: "adjust-cell-width" }).fill("4");
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Close settings" }).first().click();
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  await expect(focused).toContainText("$", { timeout: 20_000 });
+  await expect
+    .poll(() =>
+      focused
+        .locator(".term-row")
+        .first()
+        .evaluate((row) => getComputedStyle(row).letterSpacing),
+    )
+    .toBe("4px");
+  await expectCentred(page, focused);
+});
+
+test("Hangul fills its two cells as Ghostty sizes a fallback font, leaving no wider gap than the ASCII baseline sets", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  await print(page, terminal, "\u{BE0C}\u{B77C}\u{C6B0}\u{C800} abcd");
+  const syllables = liveWide(terminal).filter({ hasText: /^[\u{AC00}-\u{D7A3}]$/u });
+  await expect(syllables).toHaveCount(4, { timeout: 15_000 });
+  // The ASCII baseline in the terminal's own font: one cell, and the height of the ink of every printable ASCII glyph.
+  const ascii = await terminal.evaluate((element) => {
+    const context = document.createElement("canvas").getContext("2d");
+    if (context === null) throw new Error("no canvas");
+    const style = getComputedStyle(element);
+    context.font = `${style.fontSize} ${style.fontFamily}`;
+    let ascent = 0;
+    let descent = 0;
+    for (let code = 0x21; code < 0x7f; code++) {
+      const ink = context.measureText(String.fromCharCode(code));
+      ascent = Math.max(ascent, ink.actualBoundingBoxAscent);
+      descent = Math.max(descent, ink.actualBoundingBoxDescent);
+    }
+    return { cell: context.measureText("W").width, height: ascent + descent };
+  });
+  const cells = 2 * ascii.cell;
+  // Ghostty's advance for a fallback ideograph next to a font without one: min(ASCII height, two cells).
+  const gapAllowed = cells - Math.min(ascii.height, cells);
+  const measured = await syllables.evaluateAll((spans) =>
+    spans.map((span) => {
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      return { box: span.getBoundingClientRect().width, advance: range.getBoundingClientRect().width };
+    }),
+  );
+  for (const { box, advance } of measured) {
+    expect(Math.abs(box - cells)).toBeLessThan(0.5);
+    expect(advance).toBeLessThanOrEqual(box + 0.01);
+    // Chromium on Linux rounds advances to whole pixels, so the glyph may come one pixel short of Ghostty's.
+    expect(box - advance - gapAllowed).toBeLessThanOrEqual(1);
+  }
 });
 
 /** WCAG relative luminance of a computed `rgb(...)` colour. */
