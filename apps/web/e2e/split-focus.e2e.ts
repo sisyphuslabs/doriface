@@ -87,6 +87,19 @@ function lies(box: Box, from: Box, side: Move): boolean {
 }
 
 /** Presses a split key and returns the new pane once it holds the focus, the keys and the selected tab. */
+/** Each visible terminal's measured cell width: a font metric, the same in every pane whatever its size. */
+const cellWidths = (page: Page): Promise<string[]> =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("[data-terminal]")]
+      .filter((each) => each.offsetParent !== null)
+      .map((each) => (each.querySelector<HTMLElement>(".wterm") ?? each).style.getPropertyValue("--term-cell-width")),
+  );
+
+/** Waits until every terminal has settled on the lone terminal's cell width: no pane measured itself mid-animation. */
+async function expectCellWidth(page: Page, lone: string): Promise<void> {
+  await expect.poll(async () => [...new Set(await cellWidths(page))], { timeout: 10_000 }).toEqual([lone]);
+}
+
 async function split(page: Page, platform: Platform, side: "right" | "down", from: string): Promise<string> {
   // The tab strip is read once the selected tab is in the document, so ⌘D creating a tab cannot hide behind that write.
   await expect.poll(() => selectedTabWritten(page), { timeout: 15_000 }).toBe(true);
@@ -117,11 +130,18 @@ for (const platform of ["mac", "other"] as const) {
     const first = await openNewTerminal(page);
     const one = (await first.getAttribute("data-terminal")) ?? "";
     await first.getByRole("textbox").focus();
+    await expect.poll(async () => (await cellWidths(page))[0] ?? "", { timeout: 10_000 }).not.toBe("");
+    const lone = (await cellWidths(page))[0] ?? "";
 
     const two = await split(page, platform, "right", one);
     const three = await split(page, platform, "down", two);
     const four = await split(page, platform, "right", three);
     const five = await split(page, platform, "down", four);
+    await expectCellWidth(page, lone);
+    await page.setViewportSize({ width: 820, height: 800 });
+    await expectCellWidth(page, lone);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expectCellWidth(page, lone);
     await page.keyboard.type("echo deepest-$((2+3))");
     await page.keyboard.press("Enter");
     await expect(paneOf(page, five)).toContainText("deepest-5", { timeout: 15_000 });
