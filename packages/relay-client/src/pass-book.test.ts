@@ -202,4 +202,19 @@ describe("PassBook (contract v1.6)", () => {
     now.value = PASS_LIMITS.refreshAgeMs + 1;
     expect(restarted.wantsPass(ORIGIN)).toBe(true);
   });
+
+  test("on load, a stored pass that names another host is dropped and this host's own is kept", async () => {
+    const now = { value: 0 };
+    const store = memoryStore();
+    const first = await bookAt(now, store);
+    first.book.received(ORIGIN, { relayNowMs: 7_000, pass: await passFor(first.secretKey, 0, 30 * DAY_S) });
+    const foreign: StoredPass = {
+      pass: await passFor(generateSigningKey(), 0, 30 * DAY_S),
+      offsetMs: 0,
+      receivedAt: 0,
+    };
+    store.save(new Map([...store.load(), ["wss://foreign.example", foreign]]));
+    const restarted = await PassBook.create({ secretKey: first.secretKey, store, now: () => now.value });
+    expect([restarted.presents(ORIGIN), restarted.presents("wss://foreign.example")]).toEqual([true, false]);
+  });
 });

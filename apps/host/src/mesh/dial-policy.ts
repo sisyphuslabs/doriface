@@ -69,8 +69,10 @@ export class DialPolicy {
   readonly #firstMiss = new Map<string, number>();
   readonly #present = new Set<string>();
   readonly #budgetRefused = new Set<string>();
-  /** Members whose dial met a refused relay pass (4412): due again when a new pass arrives, never gated. */
-  /** Each one's fallback: due anyway after the first probe wait, in case no new pass ever comes. */
+  /**
+   * Members whose dial met a refused relay pass (4412): due again when a new pass arrives, never gated. Each one's
+   * fallback makes it due anyway after the first probe wait, in case no new pass ever comes.
+   */
   readonly #passRefused = new Map<string, () => void>();
   #budgetWake: (() => void) | undefined;
   #halvedUntil = Number.NEGATIVE_INFINITY;
