@@ -6,11 +6,20 @@ import { headsOfRecords, meshOf, peer, Signer, storeOf } from "./testing/mesh-pe
 
 const [a, b, c] = [peer("a"), peer("b"), peer("c")];
 
-function atB() {
+/**
+ * b's store in a mesh a founded. `seed` adds records of a's to it as stored, not merged: a wide set of heads costs one
+ * signature check per record at the door, which is not what the fold tests check and dominated their run time.
+ */
+function atB(seed: (founder: Signer, start: readonly string[]) => readonly Signed[] = () => []) {
   const { records, meshId } = meshOf([a, b]);
-  const store = storeOf(b, records);
-  return { store, deps: { store, identity: b.machine.identity, meshId }, founder: new Signer(a, records) };
+  const founder = new Signer(a, records);
+  const start = headsOfRecords(records);
+  const store = storeOf(b, [...records, ...seed(founder, start)]);
+  return { store, deps: { store, identity: b.machine.identity, meshId }, founder, start };
 }
+
+const acks = (width: number) => (founder: Signer, start: readonly string[]) =>
+  Array.from({ length: width }, () => founder.ack(start));
 
 const recordsOf = (store: MeshStore): readonly Signed[] => store.read()?.records ?? [];
 const headsAt = (store: MeshStore): readonly string[] => headsOfRecords(recordsOf(store));
@@ -59,12 +68,7 @@ describe("automatic acks (S-3, section 5.5)", () => {
   test.each([70, 120, 200])(
     "%i heads are folded by acks within the door's limits, and every record b signs stays effective (section 3.2)",
     (width) => {
-      const { store, deps, founder } = atB();
-      const start = headsAt(store);
-      mergeBatch(
-        deps,
-        Array.from({ length: width }, () => founder.ack(start)),
-      );
+      const { store, deps, founder, start } = atB(acks(width));
       expect(headsAt(store).length).toBe(width);
       mergeBatch(deps, [founder.admit(c, start)]);
       expect(headsAt(store).length).toBeLessThanOrEqual(1);
@@ -79,12 +83,7 @@ describe("automatic acks (S-3, section 5.5)", () => {
   );
 
   test("the first fold names the head that covers b's own latest record, wherever it sits among the heads", () => {
-    const { store, deps, founder } = atB();
-    const start = headsAt(store);
-    mergeBatch(
-      deps,
-      Array.from({ length: 90 }, () => founder.ack(start)),
-    );
+    const { store, deps, founder, start } = atB(acks(90));
     mergeBatch(deps, [founder.admit(c, start)]);
     const covering = founder.ack(headsAt(store));
     mergeBatch(

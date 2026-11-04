@@ -3,11 +3,14 @@ import type { Page } from "@playwright/test";
 import { setCoreDoc } from "./core-doc.ts";
 import { expect, test } from "./fixtures.ts";
 import { machineRow, STATE_BOUND_MS } from "./machine-switch.ts";
+import { resetMeshDocs } from "./mesh-reset.ts";
 
 /** The fixture's expired join; an answer to it leaves ci-runner's open. */
 const OLD_RUNNER_NONCE = "ZXhwaXJlZCBqb2lu";
 
 const group = (page: Page, id: string) => page.locator(`[data-mesh-group="${id}"]`);
+
+test.beforeEach(() => resetMeshDocs());
 
 async function openMesh(page: Page): Promise<void> {
   await page.goto("/");

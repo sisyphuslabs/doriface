@@ -24,6 +24,8 @@ const tabs: Tabs = {
   drop: () => undefined,
   toggleSplit: () => undefined,
   focus: () => undefined,
+  move: () => undefined,
+  lastMove: null,
 };
 const noop = (): void => undefined;
 const handlers = {
@@ -52,6 +54,43 @@ describe("every palette row runs something", () => {
 
 const sessionRows = (shell: Shell, inView: boolean) =>
   availableActions(shell, tabs, inView).filter(({ id }) => id.startsWith("session."));
+
+const moves = (active: string) =>
+  availableActions("desktop", { ...tabs, active }, true)
+    .map(({ id }) => id)
+    .filter((id) => id.startsWith("tab.move:"));
+
+describe("moving a tab", () => {
+  test("the palette offers only the moves the active tab can make", () => {
+    expect(moves("t1")).toEqual(["tab.move:right"]);
+    expect(moves("t2")).toEqual(["tab.move:left"]);
+  });
+
+  test("a key moves the focused tab, else the active one, one place, and leaves the key at an end", () => {
+    const calls: [string, number][] = [];
+    const handler = (focused: string | null) =>
+      desktopActions(
+        {
+          terminals: [terminal("t1"), terminal("t2"), terminal("t3")],
+          tabs: { ...tabs, open: ["t1", "t2", "t3"], active: "t1", move: (address, to) => calls.push([address, to]) },
+          onNew: noop,
+          onToggleSidebar: noop,
+          onFocusSidebar: noop,
+          onSession: () => true,
+          focusedTab: () => focused,
+        },
+        noop,
+      );
+    expect(handler(null)("tab.move:right")).toBe(true);
+    expect(handler("t2")("tab.move:left")).toBe(true);
+    expect(handler(null)("tab.move:left")).toBe(false);
+    expect(handler("t3")("tab.move:right")).toBe(false);
+    expect(calls).toEqual([
+      ["t1", 1],
+      ["t2", 0],
+    ]);
+  });
+});
 
 describe("session actions", () => {
   test.each(["desktop", "phone"] as const)(

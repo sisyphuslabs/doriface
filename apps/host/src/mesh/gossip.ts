@@ -1,8 +1,8 @@
 import { base64urlEncode } from "@doriface/crypto";
-import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
-import { type Clock, type Random, uniform } from "./clock.ts";
+import type { Signed } from "@doriface/mesh";
+import type { Clock, Random } from "./clock.ts";
 import { type DialPolicy, type DialPurpose, type DueReason } from "./dial-policy.ts";
-import { missingSince } from "./anti-entropy.ts";
+import { ownN } from "../state/mesh-tx.ts";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshStore } from "../state/mesh.ts";
 import type { LineLink } from "./lines.ts";
@@ -10,6 +10,10 @@ import type { MeshView } from "./mesh-view.ts";
 import { MemberDialer } from "./member-dialer.ts";
 import { MemberBook, StoredMesh } from "./stored-mesh.ts";
 import { RevokedLast } from "./revoked-last.ts";
+import { Claims } from "./claims.ts";
+import { Confirmed } from "./confirmed.ts";
+import { retireIfGone, revokedBy } from "./revocation.ts";
+import { Sweeps } from "./sweeps.ts";
 import { ackAdmission, appendOwn, type MergeDeps, type MergeResult, mergeBatch, type RecordDraft } from "./merge.ts";
 import { type SyncHost, SyncSession } from "./sync.ts";
 
@@ -48,19 +52,18 @@ export class Gossip implements SyncHost {
   readonly #options: GossipOptions;
   readonly #timings: GossipTimings;
   readonly #stored: StoredMesh;
-  /** Per peer, the counter of this host's key its `hello` claimed, until its batch arrives. */
-  readonly #claims = new Map<string, number>();
+  readonly #claims: Claims;
   readonly #dialer: MemberDialer;
   readonly #sessions = new Map<string, SyncSession>();
-  readonly #confirmed = new Map<string, readonly string[]>();
+  readonly #confirmed = new Confirmed(() => this.records());
   readonly #lastSync = new Map<string, number>();
+  readonly #sweeps: Sweeps;
   readonly #known = new MemberBook();
   readonly #revokedLast: RevokedLast;
   /** Revoked members whose released revoke push did not get through yet: retried as a revoke push when they are due. */
   readonly #revokeOwed = new Set<string>();
   #view: MeshView;
   #peerCounter = 0;
-  #stopNet: () => void = () => undefined;
 
   constructor(options: GossipOptions) {
     this.#options = options;
@@ -85,6 +88,20 @@ export class Gossip implements SyncHost {
         void this.sync(member, "revoke-push");
       },
     });
+    this.#sweeps = new Sweeps({
+      ...options,
+      timings: this.#timings,
+      members: () => this.#members(),
+      lastSync: (signPub) => this.#lastSync.get(signPub),
+      sync: (member, purpose) => this.sync(member, purpose),
+    });
+    const own = (): number => ownN(this.records(), this.self);
+    const ack = (): boolean => {
+      const result = mergeBatch(options, [], true);
+      if (result.added.length > 0) this.#changed(result, true);
+      return result.counterBehind;
+    };
+    this.#claims = new Claims(options.clock, own, (peer) => this.#known.nameOf(peer), options.log, ack);
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
   }
@@ -94,7 +111,7 @@ export class Gossip implements SyncHost {
   }
 
   start(): void {
-    this.#armSafetyNet();
+    this.#sweeps.start();
   }
 
   /** The joiner's ack of its own admission (section 5.5), once, owed to every member; false when nothing was signed. */
@@ -105,8 +122,9 @@ export class Gossip implements SyncHost {
   }
 
   stop(): void {
-    this.#stopNet();
+    this.#sweeps.stop();
     this.#revokedLast.stop();
+    this.#claims.stop();
     for (const session of this.#sessions.values()) session.close(1000, "host stopping");
   }
 
@@ -131,7 +149,7 @@ export class Gossip implements SyncHost {
 
   /** How many stored records `peer` is not known to hold. */
   owedCount(peer: string): number {
-    return missingSince(this.records(), this.#confirmed.get(peer) ?? []).length;
+    return this.#confirmed.owedCount(peer);
   }
 
   /** The open sync session with `peer`, if one is up. */
@@ -159,14 +177,13 @@ export class Gossip implements SyncHost {
     this.#lastSync.set(peer, this.#options.clock.now());
     if (dialer === peer) this.#options.policy.presence(peer);
     session.start(waitForHello);
-    this.#retireIfGone(session);
+    retireIfGone(session, this.#view, this.self);
     return session;
   }
 
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult {
-    this.#claims.delete(session.peer);
-    const result = mergeBatch(this.#options, batch);
-    this.#heldBy(session.peer, batch);
+    const result = this.#claims.merging(session.peer, () => mergeBatch(this.#claims.signing(this.#options), batch));
+    this.#confirmed.sent(session.peer, batch);
     for (const refusal of result.refused) {
       this.#options.log(
         `mesh: refused record ${refusal.hash} from ${this.#known.nameOf(session.peer)}: ${refusal.reason}`,
@@ -181,66 +198,66 @@ export class Gossip implements SyncHost {
       this.#options.log(`mesh: merged ${result.added.length} records from ${this.#known.nameOf(session.peer)}`);
       this.#changed(result, session.sweeping);
     }
+    this.#claims.release();
     return result;
   }
 
   /** Records this host already signed through its store (a join's admit, a revoke): owed to every member. */
   stored(records: readonly Signed[]): void {
     const view = this.#stored.view();
-    this.#changed({ added: records, refused: [], wanted: [], ack: undefined, counterBehind: false, view }, true);
+    const result = { added: records, refused: [], wanted: [], ack: undefined, counterBehind: false, ackHeld: false };
+    this.#changed({ ...result, view }, true);
+  }
+
+  /** The highest claim a peer's `hello` holds on this host's counter (section 10.1); the operator commands check it. */
+  floor(): ReturnType<Claims["floor"]> {
+    return this.#claims.floor();
   }
 
   /** Signs and pushes one record of this host's own (a revoke, a leave, a rename). */
   append(draft: RecordDraft): MergeResult {
-    const counterFloor = Math.max(0, ...this.#claims.values());
-    const result = appendOwn({ ...this.#options, counterFloor }, draft);
+    const result = appendOwn(this.#claims.signing(this.#options), draft);
     this.#changed(result, true);
     return result;
   }
 
   /**
-   * A peer's `hello`: the heads it holds, and the highest counter it holds of this host's own key. Until that peer's
-   * batch arrives (or its session ends) this host signs no own record below that counter (section 10.1); at `done`
-   * the claim is resolved, since the batch carries every record of this host's the peer holds.
+   * A peer's `hello`: the heads it holds, and the highest counter it holds of this host's own key. Above this host's
+   * own, it signs no own record below that counter (section 10.1) until those records arrive (see Claims); true when
+   * that holds them back, so the peer owes a `done` like an answer.
    */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void {
-    this.#confirmed.set(peer, heads);
-    if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
-    const claim = n[this.self];
-    if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
-    if (claim !== undefined) this.#peerCounter = Math.max(this.#peerCounter, claim);
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean {
+    this.#confirmed.heard(peer, heads);
+    if (this.#confirmed.owedCount(peer) === 0) this.#revokeOwed.delete(peer);
+    const claim = n[this.self] ?? 0;
+    this.#peerCounter = Math.max(this.#peerCounter, claim);
+    return this.#claims.claim(peer, claim);
   }
 
-  /**
-   * A stored record a peer sent, and its past, is one it holds (section 5.3: owed is what it is not known to hold).
-   * Only stored hashes are kept, as the session's own set does: refused ones would grow it without bound.
-   */
-  #heldBy(peer: string, batch: readonly Signed[]): void {
-    const stored = new Set(this.records().map(hashOf));
-    const held = batch.map(hashOf).filter((hash) => stored.has(hash));
-    this.#confirmed.set(peer, [...new Set([...(this.#confirmed.get(peer) ?? []), ...held])]);
+  meets(records: readonly Signed[]): boolean {
+    return this.#claims.meets(records, this.self);
+  }
+
+  /** The peer owed a `done` for 30 s without a line of progress: its session closes 4400 (a claim runs on). */
+  overdue(session: SyncSession): void {
+    if (this.#sessions.get(session.peer) !== session) return;
+    this.#options.log(
+      `mesh: closing the sync session with ${this.#known.nameOf(session.peer)}: no done within 30 s (4400)`,
+    );
   }
 
   /** The heads and records `peer` is known to hold: its last `hello`, and the stored records it sent since. */
   held(peer: string): readonly string[] {
-    return this.#confirmed.get(peer) ?? [];
+    return this.#confirmed.held(peer);
   }
 
   ended(session: SyncSession): void {
-    if (this.#sessions.get(session.peer) !== session) return;
-    this.#sessions.delete(session.peer);
-    this.#claims.delete(session.peer);
+    if (this.#sessions.get(session.peer) === session) this.#sessions.delete(session.peer);
   }
 
   /** Members that are owed records: their confirmed heads do not cover this host's set. */
   owed(): readonly MemberEntry[] {
-    const records = this.records();
-    return this.#known
-      .all()
-      .filter(
-        (member) =>
-          member.signPub !== this.self && missingSince(records, this.#confirmed.get(member.signPub) ?? []).length > 0,
-      );
+    return this.#known.all().filter((member) => member.signPub !== this.self && this.owedCount(member.signPub) > 0);
   }
 
   /** The dial policy's wake-up: deliver what the member is owed. */
@@ -255,14 +272,7 @@ export class Gossip implements SyncHost {
 
   /** This host's uplink answered again; after a drop of more than 2 minutes it sweeps with one member. */
   uplinkReturned(downMs: number): void {
-    const others = this.#members();
-    const downSince = this.#options.clock.now() - downMs;
-    this.#options.policy.uplinkReturned(() => this.#members().map((member) => member.signPub), downSince);
-    if (downMs <= this.#timings.sweepAfterDownMs) return;
-    const recent = others.toSorted(
-      (a, b) => (this.#lastSync.get(b.signPub) ?? -1) - (this.#lastSync.get(a.signPub) ?? -1),
-    );
-    void this.#sweep(recent);
+    this.#sweeps.uplinkReturned(downMs);
   }
 
   sync(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
@@ -276,10 +286,6 @@ export class Gossip implements SyncHost {
     return true;
   }
 
-  async #sweep(candidates: readonly MemberEntry[]): Promise<void> {
-    for (const member of candidates) if (await this.sync(member, "sweep")) return;
-  }
-
   /**
    * Open sessions get the new records at once (ack forwarding). Only this host's own records and what it merged in a
    * sweep are owed onwards by dialing: a pushed batch is the pusher's to deliver (section 5.3).
@@ -290,45 +296,17 @@ export class Gossip implements SyncHost {
     this.#options.onView?.(result.view, result);
     for (const session of this.#sessions.values()) session.flush();
     if (owedOnwards) this.#push(result);
-    for (const session of this.#sessions.values()) this.#retireIfGone(session);
-  }
-
-  /**
-   * Section 6.2: a revoked member's inbound sessions close at once through LiveSessions; one this host dialed, at the
-   * view change or later (section 5.3's last push to it), retires within the linger.
-   */
-  #retireIfGone(session: SyncSession): void {
-    if (session.dialer !== this.self || this.#view.members.some((member) => member.signPub === session.peer)) return;
-    const capped = this.#view.overCap.some((member) => member.signPub === session.peer);
-    session.retire(capped ? "past the mesh's 12-member cap" : "revoked from the mesh");
+    for (const session of this.#sessions.values()) retireIfGone(session, this.#view, this.self);
   }
 
   /** Section 5.3: a revoke first; the revoked member last, after one ack came back or 10 s. */
   #push(result: MergeResult): void {
-    const revoked = new Set<string>();
-    for (const record of result.added) {
-      const body = parseRecord(record);
-      const subject = body?.type === "revoke" ? body.subject : undefined;
-      if (subject !== undefined && "signPubs" in subject) for (const key of subject.signPubs) revoked.add(key);
-    }
+    const revoked = revokedBy(result.added);
     const purpose: DialPurpose = revoked.size > 0 ? "revoke-push" : "push";
     for (const key of revoked) if (key !== this.self) this.#revokedLast.hold(key);
     for (const member of this.owed()) {
       if (!this.#revokedLast.holds(member.signPub)) void this.sync(member, purpose);
     }
-  }
-
-  #armSafetyNet(): void {
-    const { safetyNetMs, safetyNetJitterMs } = this.#timings;
-    const delay = uniform(this.#options.random, safetyNetMs - safetyNetJitterMs, safetyNetMs + safetyNetJitterMs);
-    this.#stopNet = this.#options.clock.after(delay, () => {
-      const online = this.#members().filter((member) => this.#options.policy.gate(member.signPub) === undefined);
-      const oldest = online.toSorted(
-        (a, b) => (this.#lastSync.get(a.signPub) ?? -1) - (this.#lastSync.get(b.signPub) ?? -1),
-      );
-      void this.#sweep(oldest.slice(0, 1));
-      this.#armSafetyNet();
-    });
   }
 
   #members(): readonly MemberEntry[] {

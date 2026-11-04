@@ -1,6 +1,6 @@
 import { DEFAULT_RELAY_URL, type HostIdentity, PAIRING_TTL_MS, type SecureLink, SessionKind } from "@doriface/crypto";
 import { PairingStore } from "../state/pairing.ts";
-import type { CreateSocket } from "@doriface/relay-client";
+import type { CreateSocket, RelayProofs } from "@doriface/relay-client";
 import { parseTarget } from "../connect/target.ts";
 import type { LiveSessions } from "../e2ee/sessions.ts";
 import type { PairingSlots } from "../pairing-slots.ts";
@@ -10,6 +10,7 @@ import { type HcCore, type HcCoreOptions, hcCoreReader } from "./hc-core.ts";
 import { serveJoin } from "./invite.ts";
 import { joinMesh } from "./join-dial.ts";
 import { INVITER_EXPECTS, MeshLines } from "./lines.ts";
+import type { CounterFloor } from "./merge.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 export interface HostMeshOptions {
@@ -19,12 +20,18 @@ export interface HostMeshOptions {
   readonly slots: PairingSlots;
   readonly sessions: LiveSessions;
   readonly hc: HcCoreOptions;
-  readonly relay: { readonly url: string | undefined; readonly createSocket?: CreateSocket | undefined };
+  readonly relay: {
+    readonly url: string | undefined;
+    readonly createSocket?: CreateSocket | undefined;
+    readonly proofs?: RelayProofs | undefined;
+  };
   /**
    * The sync layer (section 5, PR 5): receives every authorized mesh session that is not a join, and the session a
    * join ran on once the join is over. It owns the session from then on. Without one, the session stays open and idle.
    */
   readonly sync?: ((session: SecureLink) => void) | undefined;
+  /** The highest claim a peer's `hello` holds on this host's counter (section 10.1): a join's admit waits for it. */
+  readonly floor: () => CounterFloor | undefined;
   readonly log: (line: string) => void;
 }
 
@@ -75,9 +82,9 @@ export class HostMesh {
   /** Serves a session on the mesh stream: a join on a mesh offer, or a member's sync session for the sync hook. */
   serve(secure: SecureLink): void {
     if (secure.kind === SessionKind.Session) return this.#options.sync?.(secure);
-    const { identity, mesh, log } = this.#options;
+    const { identity, mesh, floor, log } = this.#options;
     const expiresAt = this.#offerExpiresAt > 0 ? this.#offerExpiresAt : Date.now() + PAIRING_TTL_MS;
-    const deps = { identity, mesh, pending: this.pending, own: () => this.#own(undefined), expiresAt, log };
+    const deps = { identity, mesh, pending: this.pending, own: () => this.#own(undefined), expiresAt, floor, log };
     serveJoin(new MeshLines(secure, INVITER_EXPECTS), secure.remoteStatic, deps).then(
       () => this.#keep(secure),
       () => undefined,
@@ -100,6 +107,7 @@ export class HostMesh {
       relayUrl: request.relay,
       defaultRelayUrl: relay.url ?? DEFAULT_RELAY_URL,
       createSocket: relay.createSocket,
+      proofs: relay.proofs,
       log,
     });
     this.#keep(joined.secure);

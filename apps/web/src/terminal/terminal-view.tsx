@@ -174,6 +174,9 @@ export function TerminalView(props: TerminalViewProps) {
   const attach = (ready: WTerm): void => {
     setWt(ready);
     attachedTo.current = connection;
+    // wterm pins the row height it measured at mount inline, over the stylesheet's font-size-derived one; without this
+    // a font-size change (zoom, Settings) keeps the old row height, so the grid gains columns but never rows.
+    ready.element.style.removeProperty("--term-row-height");
     // wterm starts every grid at 80x24 and fits it later; the pty starts at the size the view renders.
     ready.fit();
     const { cols, rows } = ready;

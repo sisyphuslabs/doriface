@@ -18,6 +18,8 @@ const MAC: readonly [string, string][] = [
   ["super+shift+[", "tab.prev"],
   ["super+alt+right", "tab.next"],
   ["super+alt+left", "tab.prev"],
+  ["super+shift+left", "tab.move:left"],
+  ["super+shift+right", "tab.move:right"],
   ...digits("super+", "tab.select"),
   ["super+d", "pane.split"],
   ["super+shift+w", "pane.close"],
@@ -61,6 +63,9 @@ const OTHER: readonly [string, string][] = [
   ["ctrl+page_up", "tab.prev"],
   ["alt+]", "tab.next"],
   ["alt+[", "tab.prev"],
+  // Ghostty's own move_tab; its ctrl+shift+left/right are previous/next tab, which doriface leaves alone.
+  ["ctrl+shift+page_up", "tab.move:left"],
+  ["ctrl+shift+page_down", "tab.move:right"],
   ...digits("ctrl+", "tab.select"),
   ...digits("alt+", "tab.select"),
   ["ctrl+shift+o", "pane.split"],

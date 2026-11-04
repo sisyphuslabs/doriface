@@ -8,21 +8,31 @@ import {
   SessionKind,
 } from "@doriface/crypto";
 import { hashOf } from "@doriface/mesh";
-import { connectRelayClient, type CreateSocket } from "@doriface/relay-client";
+import { connectRelayClient, type CreateSocket, type RelayProofs } from "@doriface/relay-client";
+import { withPassRetry } from "../relay/pass-retry.ts";
 import type { MeshStore } from "../state/mesh.ts";
 import type { MemberEntry } from "./authorize-index.ts";
 import { type Clock, monotonicClock, type Random } from "./clock.ts";
 import type { Gossip } from "./gossip.ts";
 import type { HcTarget } from "./hc-machines.ts";
 import { type HostRuntime, startHostRuntime } from "./host-runtime.ts";
+import { NoUplinkError } from "./no-uplink.ts";
 import type { MeshRuntime } from "./runtime.ts";
 import { liveFactsOf, NOT_RUNNING, type SyncFacts } from "./live-facts.ts";
+
+/** The relay must open a member dial's socket within 10 s, as the Noise handshake after it must finish (L-E1). */
+export const CONNECT_MS = 10_000;
 
 export interface HostSyncOptions {
   readonly identity: HostIdentity;
   readonly mesh: MeshStore;
   /** The relay this host keeps its uplink to; members are dialed through it with this host's own Noise key. */
-  readonly relay: { readonly url: string | undefined; readonly createSocket?: CreateSocket | undefined };
+  readonly relay: {
+    readonly url: string | undefined;
+    readonly createSocket?: CreateSocket | undefined;
+    /** This host's relay passes (contract v1.6): member dials carry a proof and skip the relay's address limit. */
+    readonly proofs?: RelayProofs | undefined;
+  };
   /** This host's own herdr core, and the pinned `via` (section 7.2): its program and state dir. */
   readonly hc: HcTarget;
   readonly stateDir: string;
@@ -50,9 +60,11 @@ export class HostSync {
   #droppedAt: number | undefined;
   #running: HostRuntime | undefined;
   #stopped = false;
+  readonly #stopPasses: () => void;
 
   constructor(options: HostSyncOptions) {
     this.#options = options;
+    this.#stopPasses = options.relay.proofs?.onPass(() => this.#running?.runtime.policy.passRenewed()) ?? (() => {});
   }
 
   get gossip(): Gossip | undefined {
@@ -142,11 +154,13 @@ export class HostSync {
 
   async stop(): Promise<void> {
     this.#stopped = true;
+    this.#stopPasses();
     await this.#running?.stop();
   }
 
   #start(meshId: string): HostRuntime {
     const { identity, mesh, log, hc, stateDir, program } = this.#options;
+    if (this.#options.relay.url === undefined) log(`mesh: ${new NoUplinkError().message}`);
     const started = startHostRuntime({
       identity,
       mesh,
@@ -175,15 +189,24 @@ export class HostSync {
     return this.#options.mesh.authorizeIndex()?.member(base64urlEncode(secure.remoteStatic));
   }
 
-  /** Through this host's own relay only: a host that keeps no uplink dials no member rather than a default relay. */
   async #dial(member: MemberEntry, stream: "mesh" | "hc"): Promise<SecureLink> {
+    const { proofs, url } = this.#options.relay;
+    if (url === undefined) return this.#dialOnce(member, stream);
+    return withPassRetry(() => this.#dialOnce(member, stream), proofs, url);
+  }
+
+  /** Through this host's own relay only: a host that keeps no uplink dials no member rather than a default relay. */
+  async #dialOnce(member: MemberEntry, stream: "mesh" | "hc"): Promise<SecureLink> {
     const { relay, identity } = this.#options;
-    if (relay.url === undefined) throw new Error("this host keeps no relay uplink, so it dials no member");
-    const link = await connectRelayClient({
-      relayUrl: relay.url,
-      hostId: member.hostId,
-      ...(relay.createSocket === undefined ? {} : { createSocket: relay.createSocket }),
-    });
+    if (relay.url === undefined) throw new NoUplinkError();
+    const link = await this.#opened(
+      connectRelayClient({
+        relayUrl: relay.url,
+        hostId: member.hostId,
+        ...(relay.createSocket === undefined ? {} : { createSocket: relay.createSocket }),
+        ...(relay.proofs === undefined ? {} : { proofs: relay.proofs }),
+      }),
+    );
     return secureLink(link, {
       role: "initiator",
       hostId: member.hostId,
@@ -191,5 +214,27 @@ export class HostSync {
       remoteStatic: base64urlDecode(member.noisePub),
       stream,
     });
+  }
+
+  /** A socket that has not opened by CONNECT_MS fails the dial; if it opens later, it is closed at once. */
+  #opened<T extends { close(code?: number, reason?: string): void }>(pending: Promise<T>): Promise<T> {
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+    let late = false;
+    const cancel = this.#clock().after(CONNECT_MS, () => {
+      late = true;
+      reject(new Error(`the relay did not open the socket within ${CONNECT_MS / 1000} s`));
+    });
+    pending.then(
+      (link) => {
+        cancel();
+        if (late) return link.close(1000, "opened too late");
+        return resolve(link);
+      },
+      (error: unknown) => {
+        cancel();
+        reject(error);
+      },
+    );
+    return promise;
   }
 }
