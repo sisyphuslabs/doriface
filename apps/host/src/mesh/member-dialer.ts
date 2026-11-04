@@ -73,7 +73,7 @@ export class MemberDialer {
       return true;
     } catch (error) {
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
-      policy.report(member.signPub, code === 4429 ? 4429 : 4404);
+      policy.report(member.signPub, code === 4429 || code === 4412 ? code : 4404);
       if (code === 4401) this.#refusedAsRevoked.add(member.signPub);
       this.#options.log(`mesh: sync with ${member.name} failed: ${String(error)}`);
       return false;

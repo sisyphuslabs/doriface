@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ByteLink } from "@doriface/crypto";
+import { RelayCloseError } from "@doriface/relay-client";
 import { DialPolicy } from "./dial-policy.ts";
 import { LineGrants } from "./line-grants.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
@@ -60,6 +61,17 @@ describe("line grants (section 7.2)", () => {
       code: 4429,
       reason: "b: the relay is rate limiting this host (4429); next try in 30 s",
     });
+  });
+
+  test("a line dial refused for its pass (4412) gates nothing, unlike an offline member (4404)", async () => {
+    const refusedFor = (code: number) =>
+      lines({ members: [a, b], overCap: [], revoked: [] }, () => Promise.reject(new RelayCloseError(code, "closed")));
+    const pass = refusedFor(4412);
+    expect(await pass.lines.grant(b.hostId)).toMatchObject({ ok: false, code: 4412 });
+    expect(pass.policy.gate(b.signPub)).toBeUndefined();
+    const offline = refusedFor(4404);
+    await offline.lines.grant(b.hostId);
+    expect(offline.policy.gate(b.signPub)?.misses).toBe(1);
   });
 
   test("a line dial that fails without a close code gates the member", async () => {
