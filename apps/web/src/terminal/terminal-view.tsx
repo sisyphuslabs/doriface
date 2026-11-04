@@ -17,6 +17,7 @@ import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
+import { Ended } from "./ended.tsx";
 import { Unopened } from "./unopened.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 
@@ -39,6 +40,8 @@ export interface TerminalViewProps {
   readonly onSend?: (send: ((data: TerminalInput) => void) | null) => void;
   /** Every time the stream ends, with why; see TerminalEnd. */
   readonly onEnd?: (address: string, end: TerminalEnd) => void;
+  /** The action of a view whose program had ended before it attached, which reports it `finished` (default Close tab). */
+  readonly closeLabel?: string;
 }
 
 const HISTORY_LINES = 2_000;
@@ -48,6 +51,7 @@ const FULL_RESET = "\u001bc";
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onSend, onEnd } = props;
+  const { closeLabel = "Close tab" } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -55,6 +59,7 @@ export function TerminalView(props: TerminalViewProps) {
   const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const [ended, setEnded] = useState(false);
   const toasts = useToastManager();
   /** Why attaching failed, in plain words; Try again clears it, which mounts the terminal and attaches again. */
   const [unopened, setUnopened] = useState<string | null>(null);
@@ -167,6 +172,7 @@ export function TerminalView(props: TerminalViewProps) {
       if (connection.closed || unmounted.current) return undefined;
       const then: Record<Settled, () => void> = {
         finished: () => onEndNow.current?.(address, "finished"),
+        ended: () => setEnded(true),
         restarting: () => setRestarting(true),
         reattach: () => attach(ready),
         replaced: () => undefined,
@@ -249,6 +255,11 @@ export function TerminalView(props: TerminalViewProps) {
       <p role="status" className="p-4 text-sm text-muted-foreground">
         The program in this terminal is restarting…
       </p>
+    );
+  }
+  if (ended) {
+    return (
+      <Ended closeLabel={closeLabel} className={className} onClose={() => onEndNow.current?.(address, "finished")} />
     );
   }
   if (unopened !== null) return <Unopened why={unopened} className={className} onRetry={() => setUnopened(null)} />;

@@ -144,6 +144,7 @@ function PhoneTerminal(props: {
           onSend={onSend}
           // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
+          closeLabel="Back to agents"
         />
       )}
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />

@@ -35,8 +35,8 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
   const terminal = ask === null ? undefined : terminals.find((entry) => entry.address === ask.address);
   const live = terminal?.state === "live";
   // A session that stops meanwhile needs no answer, except that a question whose action is still running stays up until
-  // it settles, and one whose action failed stays up to say why, even if the session left the list (a reconnect lists
-  // live terminals only), so the user can try again.
+  // it settles, and one whose action failed stays up to say why, even if the session left the list, so the user can
+  // try again.
   const keep = busy || error !== null;
   const current = terminal === undefined ? null : terminalTitle(terminal);
   const [lastTitle, setLastTitle] = useState("");
