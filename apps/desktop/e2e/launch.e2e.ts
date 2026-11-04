@@ -82,7 +82,9 @@ test("the window opens locked down and reaches a local host", async () => {
   const local = await page.evaluate(async () => {
     const bridge = window.doriface;
     if (bridge === undefined) throw new Error("no window.doriface");
-    const endpoint = await bridge.startLocalHost();
+    const answer = await bridge.startLocalHost();
+    if ("failure" in answer) throw new Error(answer.failure.details);
+    const endpoint = answer;
     const protocol = await new Promise<string>((resolve, reject) => {
       const socket = new WebSocket(endpoint.url, ["doriface.v1", `doriface.token.${endpoint.token}`]);
       socket.addEventListener("open", () => {

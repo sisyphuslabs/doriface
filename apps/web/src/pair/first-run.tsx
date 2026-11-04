@@ -1,23 +1,25 @@
-import { Button, EmptyState, Notice } from "@doriface/ui";
+import { Button, EmptyState } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { Monitor, Server } from "lucide-react";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
-import { desktopBridge, type DesktopBridge } from "../desktop/bridge.ts";
+import { desktopBridge, type DesktopBridge, HostStartError, type HostStartFailure } from "../desktop/bridge.ts";
 import { startThisComputer } from "../desktop/local-host.ts";
+import { HostStartNotice } from "./host-start-notice.tsx";
 import { Steps } from "./steps.tsx";
 
 const HOST_GUIDE = "https://github.com/sisyphuslabs/doriface#readme";
 
 function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<HostStartFailure | null>(null);
+  // The notice stays up while a retry runs, so its Retry button shows the attempt instead of vanishing.
   const start = (): void => {
     setStarting(true);
-    setError(null);
     startThisComputer(bridge, connectionStore).catch((cause: unknown) => {
       setStarting(false);
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setFailure(cause instanceof HostStartError ? cause.failure : { code: "unknown", message, details: message });
     });
   };
   return (
@@ -37,11 +39,7 @@ function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
           </>
         }
       />
-      {error === null ? null : (
-        <Notice tone="error" title="This computer's host did not start" className="w-full max-w-md">
-          {error}
-        </Notice>
-      )}
+      {failure === null ? null : <HostStartNotice failure={failure} retrying={starting} onRetry={start} />}
     </main>
   );
 }
