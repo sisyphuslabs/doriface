@@ -34,6 +34,8 @@ export interface SplitPanesProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Session[];
   readonly layout: Layout;
+  /** Each tab's title as the strip shows it, so its panel is named the same (an unnamed tab takes its pane's title). */
+  readonly titles: ReadonlyMap<string, string>;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
 }
 
@@ -41,7 +43,7 @@ export interface SplitPanesProps {
  * Every tab's tree, each pane placed by its rectangle so a split or a close never remounts a terminal: panes are keyed
  * by id and only move. Hidden tabs stay mounted so their streams and scrollback survive tab switches.
  */
-export function SplitPanes({ connection, terminals, layout, onEnd }: SplitPanesProps) {
+export function SplitPanes({ connection, terminals, layout, titles, onEnd }: SplitPanesProps) {
   const [ref, box] = useBoxSize();
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   return (
@@ -56,7 +58,7 @@ export function SplitPanes({ connection, terminals, layout, onEnd }: SplitPanesP
               key={tab.key}
               id={panelId(tab.key)}
               role="tabpanel"
-              aria-label={tab.name === "" ? "Tab" : tab.name}
+              aria-label={titles.get(tab.key) ?? (tab.name === "" ? "Tab" : tab.name)}
               hidden={!selected}
               className="absolute inset-0"
             >

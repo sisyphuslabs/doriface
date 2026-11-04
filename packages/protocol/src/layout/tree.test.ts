@@ -43,3 +43,24 @@ describe("removing a pane", () => {
     expect(removePane(box("row", "root", [block("a")]), "nope")).toBeNull();
   });
 });
+
+const stack = (active: string, ids: readonly string[]): Node => ({
+  active,
+  children: ids.map((id) => block(id)),
+  id: "st",
+  type: "stack",
+});
+
+describe("closing a stack's tab", () => {
+  test("activates the tab that slides into its place, as herdr-app's remove_inner", () => {
+    expect(removePane(stack("b", ["a", "b", "c"]), "b")?.["active"]).toBe("c");
+  });
+
+  test("activates the last tab when the closed one was last", () => {
+    expect(removePane(stack("c", ["a", "b", "c"]), "c")?.["active"]).toBe("b");
+  });
+
+  test("keeps the active tab when another one closes", () => {
+    expect(removePane(stack("a", ["a", "b", "c"]), "b")?.["active"]).toBe("a");
+  });
+});

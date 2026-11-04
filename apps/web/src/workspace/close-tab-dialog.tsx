@@ -47,14 +47,18 @@ export function CloseTabDialog({ connection, terminals, tab, onKeep, onDone }: C
         if (!open) onDone();
       }}
       title="Close this tab?"
-      description={`Keep its ${count} sessions running and reopen them from the sidebar any time, or end them now.`}
+      description={
+        count === 1
+          ? "Keep its session running and reopen it from the sidebar any time, or end it now."
+          : `Keep its ${count} sessions running and reopen them from the sidebar any time, or end them now.`
+      }
       actions={
         <>
           <Button variant="ghost" onClick={onDone}>
             Cancel
           </Button>
           <Button variant="destructive" loading={busy} onClick={() => void end()}>
-            End {count} sessions
+            {count === 1 ? "End session" : `End ${count} sessions`}
           </Button>
           <Button
             variant="primary"

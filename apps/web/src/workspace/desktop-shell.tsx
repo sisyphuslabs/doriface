@@ -159,7 +159,13 @@ export function DesktopShell(props: DesktopShellProps) {
           }
         />
         {layout.tabs.length === 0 ? <NoTerminal onNew={onNew} /> : null}
-        <SplitPanes connection={connection} terminals={terminals} layout={layout} onEnd={onEnd} />
+        <SplitPanes
+          connection={connection}
+          terminals={terminals}
+          layout={layout}
+          titles={new Map(tabList.map((tab) => [tab.id, tab.title]))}
+          onEnd={onEnd}
+        />
         <StatusBar
           start={
             <>

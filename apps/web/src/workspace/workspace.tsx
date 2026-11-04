@@ -43,7 +43,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     (message: string) => toasts.add({ type: "error", title: "The layout was not saved", description: message }),
     [toasts],
   );
-  const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed);
+  const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
+  const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed, told);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.

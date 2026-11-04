@@ -84,7 +84,13 @@ export function removePane(root: Node, id: string): Node | null {
     typeOf(parent) !== "stack" && heirNode !== undefined && goneWeight !== null && heirWeight !== null
       ? kept.with(heir, withField(heirNode, "size", { weight: heirWeight + goneWeight }))
       : kept;
-  let next = replaceAt(root, parentPath, (node) => ({ ...node, children: inherited }));
+  // As herdr-app's remove_inner: a stack whose active child closed activates the one sliding into its place, or the last.
+  const stackActive = (node: Node): Node => {
+    if (typeOf(node) !== "stack" || node["active"] !== id) return node;
+    const successor = inherited[at] ?? inherited.at(-1);
+    return successor === undefined ? withoutField(node, "active") : { ...node, active: idOf(successor) };
+  };
+  let next = replaceAt(root, parentPath, (node) => stackActive({ ...node, children: inherited }));
   for (let depth = parentPath.length; depth > 0; depth -= 1) {
     const containerPath = path.slice(0, depth);
     const container = nodeAt(next, containerPath);

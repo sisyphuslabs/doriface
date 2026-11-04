@@ -66,6 +66,7 @@ export function useLayout(
   layouts: readonly MachineLayout[],
   terminals: readonly Terminal[],
   failed: (message: string) => void,
+  told: (message: string) => void,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
   useEffect(() => saveView(core, view), [core, view]);
@@ -145,12 +146,21 @@ export function useLayout(
         return show(tabKey(layout.machineId, tab.id), pane);
       }
       const container = freshId("s");
-      void layout.edit((doc) =>
-        doc === null ? null : editTab(doc, active.id, (root) => splitPane(root, focused.id, axis, block, container)),
-      );
+      void layout
+        .edit((doc) =>
+          doc === null ? null : editTab(doc, active.id, (root) => splitPane(root, focused.id, axis, block, container)),
+        )
+        .then((placed) => {
+          // The pane it split closed on another device first: the new terminal still opens, in a tab of its own.
+          if (!placed) {
+            addTab(address);
+            told("The pane you split had closed, so the new terminal opened in a new tab.");
+          }
+          return placed;
+        });
       return show(active.key, pane);
     },
-    [active, addTab, focused, layoutOf, show],
+    [active, addTab, focused, layoutOf, show, told],
   );
 
   const dropPane = useCallback(
