@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import type { Direction } from "../layout/neighbor.ts";
 import type { Rect } from "../layout/rects.ts";
-import type { Bump } from "./use-layout.ts";
+import type { Bump } from "./use-pane-moves.ts";
 
 /** DESIGN.md section 6: a pane moves at Standard (220 ms) and a nudge at Micro (120 ms), both on `--ease-out`. */
 const DURATION = 220;

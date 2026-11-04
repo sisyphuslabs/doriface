@@ -5,8 +5,22 @@ import { GHOSTTY_DEFAULTS } from "./ghostty-defaults.ts";
 import { HERDR_APP_MAC, HERDR_APP_OTHER } from "./herdr-app-defaults.ts";
 import { PLATFORM_RESERVED } from "./platform-reserved.ts";
 
-/** Actions doriface adds on top of herdr-app and Ghostty; their triggers must be free in both, and in the OS and browsers. */
-const DORIFACE_ONLY = ["layout.focus:sidebar"];
+/**
+ * Actions whose keys doriface picks itself on that platform; their triggers must be free in both upstream keymaps, and
+ * in the OS and browsers. Off macOS resize and equalize are doriface's: Ghostty's take Super, which Windows and GNOME
+ * keep for themselves.
+ */
+const DORIFACE_ONLY: Readonly<Record<"mac" | "other", readonly string[]>> = {
+  mac: ["layout.focus:sidebar"],
+  other: [
+    "layout.focus:sidebar",
+    "pane.resize:left",
+    "pane.resize:right",
+    "pane.resize:up",
+    "pane.resize:down",
+    "pane.equalize",
+  ],
+};
 
 describe("doriface-only bindings", () => {
   test.each([
@@ -14,13 +28,13 @@ describe("doriface-only bindings", () => {
     ["other", HERDR_APP_OTHER],
   ] as const)("on %s they take no trigger that herdr-app or Ghostty binds by default", (platform, herdr) => {
     const taken = new Set([...GHOSTTY_DEFAULTS, ...herdr]);
-    const triggers = DORIFACE_ONLY.flatMap((action) => triggersFor(defaultKeymap(platform), action));
+    const triggers = DORIFACE_ONLY[platform].flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.length).toBeGreaterThan(0);
     expect(triggers.filter((trigger) => taken.has(trigger))).toEqual([]);
   });
 
   test.each(["mac", "other"] as const)("on %s they take no chord the OS or a browser reserves", (platform) => {
-    const triggers = DORIFACE_ONLY.flatMap((action) => triggersFor(defaultKeymap(platform), action));
+    const triggers = DORIFACE_ONLY[platform].flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.filter((trigger) => trigger in PLATFORM_RESERVED)).toEqual([]);
   });
 });

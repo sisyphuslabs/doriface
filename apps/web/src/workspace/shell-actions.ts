@@ -13,6 +13,8 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
     "pane.split:right",
     "pane.split:down",
     "pane.close",
+    "pane.equalize",
+    "pane.zoom",
     "tab.close",
     "session.rename",
     "session.end",

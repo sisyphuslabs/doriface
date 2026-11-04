@@ -19,6 +19,8 @@ export interface Divider {
 export interface Arrangement {
   readonly panes: ReadonlyMap<string, Rect>;
   readonly dividers: readonly Divider[];
+  /** Each row's and column's own box: a divider drag measures its move against it. */
+  readonly containers: ReadonlyMap<string, Rect>;
 }
 
 const shown = (node: Node): boolean => node["hidden"] !== true;
@@ -44,7 +46,13 @@ function lengths(children: readonly Node[], total: number): number[] {
   });
 }
 
-function place(node: Node, box: Rect, gap: number, out: { panes: Map<string, Rect>; dividers: Divider[] }): void {
+interface Placed {
+  readonly panes: Map<string, Rect>;
+  readonly dividers: Divider[];
+  readonly containers: Map<string, Rect>;
+}
+
+function place(node: Node, box: Rect, gap: number, out: Placed): void {
   const type = typeOf(node);
   if (type === "block") {
     out.panes.set(idOf(node), box);
@@ -56,6 +64,7 @@ function place(node: Node, box: Rect, gap: number, out: { panes: Map<string, Rec
     return;
   }
   const row = type === "row";
+  out.containers.set(idOf(node), box);
   const total = (row ? box.width : box.height) - gap * Math.max(0, children.length - 1);
   const sizes = lengths(children, Math.max(0, total));
   let offset = row ? box.x : box.y;
@@ -81,8 +90,9 @@ function place(node: Node, box: Rect, gap: number, out: { panes: Map<string, Rec
  * in herdr-app) takes the whole box and no divider is shown.
  */
 export function arrange(root: Node, box: Rect, gap: number, zoomed: string | null = null): Arrangement {
-  const out = { panes: new Map<string, Rect>(), dividers: [] as Divider[] };
+  const out: Placed = { panes: new Map(), dividers: [], containers: new Map() };
   place(root, box, gap, out);
-  if (zoomed !== null && out.panes.has(zoomed)) return { panes: new Map([[zoomed, box]]), dividers: [] };
+  if (zoomed !== null && out.panes.has(zoomed))
+    return { panes: new Map([[zoomed, box]]), dividers: [], containers: out.containers };
   return out;
 }

@@ -14,8 +14,6 @@ import {
   tabsOf,
   terminalBlock,
 } from "@doriface/protocol/layout";
-import { paneMove, type Direction } from "../layout/neighbor.ts";
-import { arrange } from "../layout/rects.ts";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import {
   buildTabs,
@@ -28,9 +26,10 @@ import {
   type LayoutTab,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
+import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
-export interface Layout {
+export interface Layout extends PaneMoves {
   readonly tabs: readonly LayoutTab[];
   readonly active: LayoutTab | null;
   readonly focused: LayoutPane | null;
@@ -44,12 +43,6 @@ export interface Layout {
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
   readonly dropPane: (address: string) => void;
   readonly closeTab: (key: string) => void;
-  /**
-   * Focuses the nearest pane that way in the tab in view. With no pane that way in a split tab it nudges the focused
-   * pane (`bumped`) instead and still takes the key; a lone pane leaves the key to its program (false), as Ghostty does.
-   */
-  readonly go: (direction: Direction) => boolean;
-  readonly bumped: Bump | null;
   /** The pane this screen split off last, which grows in from the pane it came from. */
   readonly fresh: string | null;
 }
@@ -59,14 +52,6 @@ export interface PaneTarget {
   readonly pane: string;
 }
 
-export interface Bump {
-  readonly pane: string;
-  readonly direction: Direction;
-  readonly seq: number;
-}
-
-/** Proportions are all moving focus needs, so it measures the tree in a fixed box with the panes' gap. */
-const MEASURE = { x: 0, y: 0, width: 1600, height: 1000 } as const;
 const HISTORY = 32;
 
 const rootOf = (id: string, children: readonly Node[]): Node => ({ children: [...children], id, type: "row" });
@@ -87,7 +72,6 @@ export function useLayout(
   told: (message: string) => void,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
-  const [bumped, setBumped] = useState<Bump | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   useEffect(() => saveView(core, view), [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
@@ -211,6 +195,17 @@ export function useLayout(
         if (root === null) return null;
         return panesOf(root).length === 0 ? removeTab(doc, found.tab.id) : editTab(doc, found.tab.id, () => root);
       });
+      // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there.
+      const key = found.tab.key;
+      const gone = found.pane.id;
+      const left = (history.current.get(key) ?? []).filter((id) => id !== gone);
+      history.current.set(key, left);
+      const here = new Set(found.tab.panes.map((pane) => pane.id));
+      const before = left.findLast((id) => here.has(id));
+      if (before !== undefined)
+        setView((prev) =>
+          prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev,
+        );
     },
     [layoutOf, tabs],
   );
@@ -225,19 +220,7 @@ export function useLayout(
     [layoutOf, tabs],
   );
 
-  const go = useCallback(
-    (direction: Direction): boolean => {
-      if (active === null || focused === null) return false;
-      const { panes } = arrange(active.root, MEASURE, 8, null);
-      const move = paneMove(focused.id, direction, panes, history.current.get(active.key) ?? []);
-      if (move.kind === "pass") return false;
-      if (move.kind === "bump") setBumped((prev) => ({ pane: focused.id, direction, seq: (prev?.seq ?? 0) + 1 }));
-      else show(active.key, move.to);
-      return true;
-    },
-    [active, focused, show],
-  );
-
+  const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
   return {
@@ -251,9 +234,8 @@ export function useLayout(
     split,
     dropPane,
     closeTab,
-    go,
-    bumped,
     fresh,
+    ...moves,
   };
 }
 

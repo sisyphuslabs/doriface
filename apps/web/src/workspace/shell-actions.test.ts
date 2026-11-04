@@ -43,6 +43,10 @@ const layout: Layout = {
   go: () => false,
   bumped: null,
   fresh: null,
+  resize: noop,
+  resizeFocused: () => false,
+  equalize: () => true,
+  toggleZoom: () => true,
 };
 const handlers = {
   desktop: desktopActions(
