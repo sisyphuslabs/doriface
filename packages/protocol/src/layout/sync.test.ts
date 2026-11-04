@@ -110,8 +110,21 @@ describe("the layout document sync", () => {
     const core = store({ spaces: [{ tabs: [{ root: { type: "grid" } }] }] });
     const { doc } = await ready(core.calls);
     expect(doc.state.phase).toBe("unreadable");
-    expect(await doc.edit((current) => named(current, "mine"))).toBe(false);
+    await expect(doc.edit((current) => named(current, "mine"))).rejects.toThrow("cannot take changes now");
     expect(core.writes).toEqual([]);
+  });
+
+  test("an edit another client beats on every retry rejects, so it is never mistaken for one that no longer applies", async () => {
+    let version = 1;
+    const calls: DocCalls = {
+      get: async () => ({ value: { spaces: [] }, version }),
+      set: async () => {
+        version += 1;
+        throw new HcRpcError({ code: -32000, message: "conflict", data: { kind: "conflict" } });
+      },
+    };
+    const { doc } = await ready(calls);
+    await expect(doc.edit((current) => named(current, "mine"))).rejects.toThrow("kept changing");
   });
 
   test("a doc event for a version it did not write reads the document again", async () => {
