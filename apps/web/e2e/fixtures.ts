@@ -5,15 +5,16 @@ import { clearLayouts } from "./layout-doc.ts";
 import { type HcSocket, routeHcSocket } from "./hc-socket.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
-/** Pages start with loopback dev settings pointing at the e2e host. */
-export const test = base.extend({
-  page: async ({ page }, use) => {
+/** Pages start with loopback dev settings pointing at the e2e host, or at `loopbackUrl` when a spec routes another address there. */
+export const test = base.extend<{ loopbackUrl: string }>({
+  loopbackUrl: [`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, { option: true }],
+  page: async ({ page, loopbackUrl }, use) => {
     const settings = {
       mode: "loopback",
       relayUrl: "wss://relay-doriface.omo.dev",
       directUrl: "",
       hostId: "",
-      loopbackUrl: `ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`,
+      loopbackUrl,
       token: E2E_TOKEN,
     };
     await page.addInitScript((value) => localStorage.setItem("doriface.connection", value), JSON.stringify(settings));

@@ -20,6 +20,7 @@ import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
+import { useArrivalReady, workspaceSettled } from "./use-arrival-ready.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown } from "./layout-store.ts";
 import type { LayoutTab } from "./layout-model.ts";
@@ -115,6 +116,9 @@ export function DesktopShell(props: DesktopShellProps) {
   const focusedTerminal = focusedAddress === null ? undefined : byAddress.get(focusedAddress);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
+  useArrivalReady(
+    workspaceSettled(loaded, { open: layout.tabs.map((tab) => tab.key), restored: layout.restored }, live.length),
+  );
   const splitRightKeys = useActionKeys("pane.split:right");
   const splitDownKeys = useActionKeys("pane.split:down");
   const cannotSplit = focusedTerminal === undefined || layout.active?.readOnly != null;

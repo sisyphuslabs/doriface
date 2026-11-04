@@ -44,6 +44,7 @@ const layout: Layout = {
   bumped: null,
   fresh: null,
   moveTab: noop,
+  restored: true,
   lastMove: null,
 };
 const handlers = {

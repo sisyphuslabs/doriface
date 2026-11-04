@@ -25,6 +25,9 @@ const docCalls = (connection: HcConnection): DocCalls => ({
     ),
 });
 
+/** Why a machine's layout takes no edits while it is still being read. */
+export const LAYOUT_LOADING = "the layout is loading";
+
 /** A machine's edits: through its live document, or refused with why when it has none (not connected). */
 export function docEdit(live: Pick<LayoutDoc, "edit"> | undefined): (change: DocEdit) => Promise<boolean> {
   if (live === undefined)
@@ -83,7 +86,7 @@ export function useLayoutDocs(
           : state.phase === "unreadable"
             ? `this layout has ${state.reason}, which this version of doriface cannot edit`
             : state.phase === "loading"
-              ? "the layout is loading"
+              ? LAYOUT_LOADING
               : state.reason;
     return {
       machine,
