@@ -11,7 +11,7 @@ import { MeshNet } from "./testing/mesh-net.ts";
 const [a, b] = [peer("a"), peer("b")];
 const rename = { type: "name", signPub: b.signPub, name: "b" } as const;
 const KEEP_ALIVE_MS = 10_000;
-/** docs/transport.md: a claimer owes a done, and 30 s without progress closes its session; then 10 minutes ignored. */
+/** docs/transport.md: a claim expires 30 s without its records; the claimer is then ignored for 10 minutes. */
 const CLAIM_MS = 30_000;
 const COOLDOWN_MS = 600_000;
 const CLAIM = { [b.signPub]: Number.MAX_SAFE_INTEGER };
@@ -51,13 +51,15 @@ function meshAtB(seed: number) {
 }
 
 describe("a peer's hello.n claim on this host's counter (section 10.1, M-E1)", () => {
-  test("is resolved by the claimer's next done, even a done that brings no records", async () => {
+  test("a done resolves nothing by itself: a claim none of whose records arrive expires at 30 s", async () => {
     const s = meshAtB(51);
     const session = s.connect();
     session.hello({ [b.signPub]: 7 });
     await s.clock.advance(1);
     expect(s.signs()).toBe(`${a.name} holds counter 7 of this host's key, here 0: syncing before signing`);
     session.done();
+    await s.clock.advance(CLAIM_MS - 2);
+    expect(s.signs()).toBe(`${a.name} holds counter 7 of this host's key, here 0: syncing before signing`);
     await s.clock.advance(1);
     expect(s.signs()).toBe(true);
     expect(s.ownNs()).toEqual([1]);

@@ -38,7 +38,7 @@ export function sessionAtB(
       return options.merge?.(session, batch) ?? mergeBatch(deps, batch);
     },
     heard: () => false,
-    answered: () => undefined,
+    meets: () => false,
     overdue: () => undefined,
     ended: () => undefined,
   };

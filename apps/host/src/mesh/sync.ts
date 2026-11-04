@@ -1,7 +1,7 @@
 import { CloseCode } from "@doriface/crypto";
 import { hashOf, MAX_RECORDS, type Signed } from "@doriface/mesh";
 import { headsOf } from "../state/mesh-tx.ts";
-import { countersOf, missingSince } from "./anti-entropy.ts";
+import { countersOf, missingSince, signerFirst } from "./anti-entropy.ts";
 import type { Clock } from "./clock.ts";
 import { deadline } from "./deadline.ts";
 import { type LineLink, type MeshLine, MeshLines, recordLines, SYNC_EXPECTS } from "./lines.ts";
@@ -29,8 +29,8 @@ export interface SyncHost {
    * claims a counter of this host's key the host now waits on: the peer then owes a `done` like an answer.
    */
   heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean;
-  /** The peer's `done`: what it held for this host has arrived, so a claim its hello made is resolved. */
-  answered(session: SyncSession): void;
+  /** These records carry this host's own records a claim waits on: the line is merged at once (section 10.1). */
+  meets(records: readonly Signed[]): boolean;
   /** The peer owed a `done` past ANSWER_MS with no line of progress; the session closes 4400 right after. */
   overdue(session: SyncSession): void;
   ended(session: SyncSession): void;
@@ -57,6 +57,8 @@ export class SyncSession {
   readonly #sent = new Set<string>();
   readonly #wanted = new Set<string>();
   #incoming: Signed[] = [];
+  /** Records received since the last `done`, merged or not: at most MAX_RECORDS. */
+  #received = 0;
   #saidHello = false;
   #idle: () => void = () => undefined;
   #answerDue: (() => void) | undefined;
@@ -162,19 +164,21 @@ export class SyncSession {
       case "hello":
         return this.#heard(line.mesh, line.heads, line.n);
       case "records":
-        if (this.#incoming.length + line.records.length > MAX_RECORDS) {
+        if (this.#received + line.records.length > MAX_RECORDS) {
           return this.close(CloseCode.CryptoFailure, `more than ${MAX_RECORDS} records before done`);
         }
         this.#incoming.push(...line.records);
+        this.#received += line.records.length;
         if (line.records.length > 0) this.#progress();
+        if (this.#host.meets(line.records)) this.#merge();
         return;
       case "want":
         return this.#answerWant(line.hashes);
       case "done":
         this.#answerDue?.();
         this.#answerDue = undefined;
-        this.#merge();
-        return this.#host.answered(this);
+        this.#received = 0;
+        return this.#merge();
       case "refused":
         return this.close(1000, `the peer refused: ${line.reason}`);
       case "offer":
@@ -199,7 +203,7 @@ export class SyncSession {
     for (const head of heads) this.#peerHeads.add(head);
     if (this.#host.heard(this.peer, heads, n)) this.#owesAnswer();
     if (!this.#saidHello) this.#hello();
-    this.#sendRecords(this.#unsent());
+    this.#sendRecords(...signerFirst(this.#unsent(), this.peer));
   }
 
   #merge(): void {
@@ -232,9 +236,12 @@ export class SyncSession {
     if (found.length > 0) this.#sendRecords(found);
   }
 
-  #sendRecords(records: readonly Signed[]): void {
-    for (const record of records) this.#sent.add(hashOf(record));
-    for (const line of recordLines(records)) this.#send(line);
+  /** Each group in its own lines, in order, then `done`. */
+  #sendRecords(...groups: readonly (readonly Signed[])[]): void {
+    for (const records of groups) {
+      for (const record of records) this.#sent.add(hashOf(record));
+      for (const line of recordLines(records)) this.#send(line);
+    }
     this.#send({ t: "done", mesh: this.#host.meshId });
   }
 

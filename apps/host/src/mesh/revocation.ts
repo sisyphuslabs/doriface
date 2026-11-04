@@ -1,0 +1,32 @@
+import { parseRecord, type Signed } from "@doriface/mesh";
+import type { MeshView } from "./mesh-view.ts";
+import type { SyncSession } from "./sync.ts";
+
+/** The keys the revokes among `records` name (section 5.3 pushes to them last). */
+export function revokedBy(records: readonly Signed[]): ReadonlySet<string> {
+  const revoked = new Set<string>();
+  for (const record of records) {
+    const body = parseRecord(record);
+    const subject = body?.type === "revoke" ? body.subject : undefined;
+    if (subject !== undefined && "signPubs" in subject) for (const key of subject.signPubs) revoked.add(key);
+  }
+  return revoked;
+}
+
+/**
+ * Section 6.2: a revoked member's inbound sessions close at once through LiveSessions; one this host dialed, at the
+ * view change or later (section 5.3's last push to it), retires within the linger.
+ */
+export function retireIfGone(session: SyncSession, view: MeshView, self: string): void {
+  if (session.dialer !== self) return;
+  const reason = retireReason(view, session.peer);
+  if (reason !== undefined) session.retire(reason);
+}
+
+/** Why a sync session this host dialed to `peer` retires; undefined while `peer` is a member. */
+function retireReason(view: MeshView, peer: string): string | undefined {
+  if (view.members.some((member) => member.signPub === peer)) return undefined;
+  return view.overCap.some((member) => member.signPub === peer)
+    ? "past the mesh's 12-member cap"
+    : "revoked from the mesh";
+}

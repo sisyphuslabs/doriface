@@ -74,7 +74,7 @@ function lateSession() {
       throw new Error("no records come in this test");
     },
     heard: () => false,
-    answered: () => undefined,
+    meets: () => false,
     overdue: (session) => void overdue.push(session.peer),
     ended: () => undefined,
   };
