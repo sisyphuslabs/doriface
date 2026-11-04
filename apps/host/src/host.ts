@@ -8,6 +8,7 @@ import { LiveSessions } from "./e2ee/sessions.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
+import { publishHostInfo } from "./host-info.ts";
 import { listenError, StartupError } from "./startup-error.ts";
 import { type StartedPart, stopStarted } from "./stop-started.ts";
 import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
@@ -55,6 +56,8 @@ export interface HostOptions {
   /** For tests: origins of a private push service the host may post web push notices to, besides the browsers' own. */
   readonly pushTestOrigins?: readonly string[] | undefined;
   readonly log: (line: string) => void;
+  /** The OS this host reports on its core (`process.platform` unless a test names another). */
+  readonly platform?: string;
 }
 
 export interface E2eeEndpoint {
@@ -141,6 +144,11 @@ async function serve(
   if (push !== undefined) started("push feed", () => push.stop());
   const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
   started("end sweeper", () => ends.stop());
+  const core = { hc: options.hc, session: options.session, env: options.env };
+  const info = publishHostInfo(core, options.platform ?? process.platform, options.log);
+  started("host info", () => info.stop());
+  // A client that connects next reads the OS already; a core too slow to answer does not hold the start.
+  await settledWithin(info.settled, HOST_INFO_WAIT_MS);
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -233,12 +241,22 @@ async function serve(
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
+        .then(() => info.stop())
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => undefined);
       return stopping;
     },
   };
+}
+
+/** How long a start waits for the host's OS to be on its core before it serves anyway. */
+const HOST_INFO_WAIT_MS = 2_000;
+
+async function settledWithin(work: Promise<void>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([work, new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))]);
+  clearTimeout(timer);
 }
 
 /** The control socket is how `devices revoke` closes live sessions, so a host that cannot open it does not start. */
