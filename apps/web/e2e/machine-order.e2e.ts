@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
 import { getCoreDoc, setCoreDoc } from "./core-doc.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { machineRow } from "./machine-switch.ts";
+import { domOrder, selectedIndex, tabs } from "./tab-strip.ts";
 
 const ORDER_DOC = "doriface";
 const rows = (page: Page) => page.locator("[data-machine-row]");
@@ -112,6 +113,22 @@ test.describe("machine order", () => {
     await page.reload();
     await expect(machineRow(page)).toContainText("connected", { timeout: 30_000 });
     await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+  });
+
+  test("with tabs that could move, the move keys on a focused row move the machine, never a tab", async ({ page }) => {
+    const local = await openWorkspace(page);
+    // The newest tab is selected and sits last, so the tab strip's own move-left would take the key if it could.
+    await openNewTerminal(page);
+    if ((await tabs(page).count()) < 2) await openNewTerminal(page);
+    expect(await selectedIndex(page)).toBeGreaterThan(0);
+    const strip = await domOrder(page);
+    const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
+    const button = machineRow(page);
+    await button.focus();
+    await page.keyboard.press(mac ? "Meta+Shift+ArrowLeft" : "Control+Shift+PageUp");
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await expect(button).toBeFocused();
+    expect(await domOrder(page)).toEqual(strip);
   });
 
   test("the row menu moves a machine down and up, and offers no move past either end", async ({ page }) => {
