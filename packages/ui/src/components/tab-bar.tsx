@@ -14,7 +14,7 @@ export interface WorkspaceTab {
   readonly status?: AgentStatus;
   /** The machine it runs on, for a tab that is not on this one: shown after the title and in its tooltip. */
   readonly machine?: string;
-  /** The shortcut that focuses this tab's pane, as written on this platform: shown in the tooltip. */
+  /** The "Go to tab N" chord that selects this tab by position, as written on this platform: shown in the tooltip. */
   readonly shortcut?: string;
 }
 
@@ -66,20 +66,22 @@ export function TabBar({
 }: TabBarProps) {
   const list = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  // The tabs the strip drew before its last change of tabs: they carry data-arrived, so the DOM move a reorder makes
+  // does not replay their arrival; a tab new to the list draws once without it and arrives.
+  const ids = tabs.map((tab) => tab.id);
+  const key = ids.join("\n");
+  const [drawn, setDrawn] = useState(() => ({ key, before: new Set<string>(), now: new Set(ids) }));
+  if (drawn.key !== key) setDrawn({ key, before: drawn.now, now: new Set(ids) });
   // The strip owns a touch's long press: held and moved it drags the tab, held and let go it opens the tab's menu.
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const { drag, settle, lifted, touching, onPointerDown, onClickCapture } = useTabDrag(
-    list,
-    tabs.map((tab) => tab.id),
-    {
-      onMove,
-      onStart: () => setMenuFor(null),
-      onHoldRelease: (id, x, y) => {
-        const item = list.current?.querySelector(`[data-tab-id="${CSS.escape(id)}"]`);
-        item?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
-      },
+  const { drag, settle, lifted, touching, onPointerDown, onClickCapture } = useTabDrag(list, ids, {
+    onMove,
+    onStart: () => setMenuFor(null),
+    onHoldRelease: (id, x, y) => {
+      const item = list.current?.querySelector(`[data-tab-id="${CSS.escape(id)}"]`);
+      item?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
     },
-  );
+  });
 
   // Said once per move, as the strip stood then: a later title change or a tab opening or closing does not say it again.
   // The count's parity changes the text each time, so a second move to the same place is still read out.
@@ -122,6 +124,7 @@ export function TabBar({
               data-tab-id={tab.id}
               {...(drag?.id === tab.id ? { "data-dragging": "" } : {})}
               {...(lifted === tab.id ? { "data-lifted": "" } : {})}
+              {...(drawn.before.has(tab.id) ? { "data-arrived": "" } : {})}
               onPointerDown={(event) => onPointerDown(event, tab.id, index)}
               onTouchStart={skipMenuHandler}
               onContextMenu={(event) => {
@@ -131,7 +134,7 @@ export function TabBar({
               }}
               style={place.offset === 0 ? undefined : { translate: `${place.offset}px 0` }}
               className={cn(
-                "group relative flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] select-none",
+                "group relative motion-arrive flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
                 active
                   ? "border-border bg-raised text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-hover",

@@ -8,10 +8,12 @@ import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { afterEnd } from "./session-actions.ts";
 import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
+import { useArrivalReady, workspaceSettled } from "./use-arrival-ready.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown } from "./layout-store.ts";
 import type { Tabs } from "./use-tabs.ts";
@@ -72,6 +74,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
+  useArrivalReady(workspaceSettled(loaded, tabs, live.length));
   const toggle = (
     <IconButton
       label="Split"
@@ -145,7 +148,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           active={tabs.active}
           split={tabs.split}
           onFocus={tabs.focus}
-          onEnd={(address, end) => (closesTab(end) ? tabs.drop(address) : undefined)}
+          onEnd={(address, end) => (closesTab(end) ? afterEnd(address, () => tabs.drop(address)) : undefined)}
         />
         <StatusBar
           start={

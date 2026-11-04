@@ -5,13 +5,15 @@ import { parsePairingFragment, type PairingOffer } from "../pair/fragment.ts";
 import { pairingLink } from "../pair/link-capture.ts";
 import { PairStep } from "../pair/pair-step.tsx";
 import { VerifyStep } from "../pair/verify-step.tsx";
+import { useOnline } from "../pwa/use-online.ts";
 
 /** With a captured link (already gone from the URL), verify the host; without, ask for the link or code. */
 export function PairRoute() {
   const link = useSyncExternalStore(pairingLink.subscribe, pairingLink.get);
   const [typed, setTyped] = useState<PairingOffer | null>(null);
+  const online = useOnline();
   if (typed !== null) return <VerifyStep offer={typed} />;
-  if (link === null) return <PairStep onOffer={setTyped} />;
+  if (link === null) return <PairStep onOffer={setTyped} offline={!online} />;
   const parsed = parsePairingFragment(link);
   if (parsed.ok) return <VerifyStep key={link} offer={parsed.offer} />;
   return (
