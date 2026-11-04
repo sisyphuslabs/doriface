@@ -77,3 +77,17 @@ export function selectTab(prev: KeyedTabs, key: string, listed: boolean): KeyedT
     pending: null,
   };
 }
+
+/**
+ * Selects the terminal at `address` against the feed as it is now (`listed`, null before the first answer): New tab
+ * answers after the feed may already list its terminal, and then it opens at once instead of waiting for a later pass.
+ */
+export function selectTerminal(
+  prev: KeyedTabs,
+  address: string,
+  ids: MachineIds,
+  listed: readonly Terminal[] | null,
+): KeyedTabs {
+  const known = listed?.some((terminal) => terminal.address === address) ?? false;
+  return selectTab(prev, tabKey(address, ids), known);
+}

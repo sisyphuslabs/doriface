@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { followTerminals, type KeyedTabs, NO_TABS, selectTab } from "./tab-follow.ts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { followTerminals, type KeyedTabs, NO_TABS, selectTerminal } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 export interface TabsState {
@@ -48,11 +48,15 @@ export function useTabs(
     setState((prev) => followTerminals(prev, terminals, ids, listed));
   }, [terminals, ids, listed]);
 
-  // What the feed lists now: New tab selects a terminal hc has started that the feed may not list yet.
-  const listedNow = useMemo(() => new Set((terminals ?? []).map((terminal) => terminal.address)), [terminals]);
+  // The feed as last rendered, read when a selection lands: New tab selects once terminal.run answers, by which time
+  // the feed may already list the terminal (it opens at once) or not yet (it waits as pending).
+  const feed = useRef(terminals);
+  useEffect(() => {
+    feed.current = terminals;
+  }, [terminals]);
   const select = useCallback(
-    (address: string) => setState((prev) => selectTab(prev, tabKey(address, ids), listedNow.has(address))),
-    [ids, listedNow],
+    (address: string) => setState((prev) => selectTerminal(prev, address, ids, feed.current)),
+    [ids],
   );
 
   const close = useCallback(
@@ -62,7 +66,7 @@ export function useTabs(
         const open = prev.open.filter((entry) => entry !== key);
         const active = prev.active === key ? (open.at(-1) ?? null) : prev.active;
         const split = prev.split === key || prev.split === active ? null : prev.split;
-        return { ...prev, open, active, split };
+        return { ...prev, open, active, split, pending: prev.pending === key ? null : prev.pending };
       });
     },
     [ids],
@@ -82,7 +86,8 @@ export function useTabs(
       const key = tabKey(address, ids);
       setState((prev) => {
         if (prev.active === key || prev.split !== key) return prev;
-        return { ...prev, active: key, split: prev.active };
+        // Moving to the other pane is a choice of its own; a New tab still waiting for the feed no longer takes focus.
+        return { ...prev, active: key, split: prev.active, pending: null };
       });
     },
     [ids],
