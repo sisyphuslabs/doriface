@@ -44,6 +44,7 @@ export class SyncSession {
   #incoming: Signed[] = [];
   #saidHello = false;
   #idle: () => void = () => undefined;
+  #retiring: (() => void) | undefined;
   #closed = false;
 
   constructor(
@@ -81,6 +82,17 @@ export class SyncSession {
       (record) => !this.#sent.has(hashOf(record)),
     );
     if (missing.length > 0) this.#sendRecords(missing);
+  }
+
+  /**
+   * This host dialed the session and its peer is no longer a member: it ends within the linger whatever the peer still
+   * sends (section 6.2). Until then the revoked host can still learn its revoke and the acks after it (section 6.4).
+   */
+  retire(): void {
+    if (this.#closed || this.#retiring !== undefined) return;
+    this.#retiring = this.#clock.after(this.#lingerMs, () =>
+      this.close(CloseCode.UnknownDevice, "revoked from the mesh"),
+    );
   }
 
   close(code = 1000, reason = "sync done"): void {
@@ -208,6 +220,7 @@ export class SyncSession {
     if (this.#closed) return;
     this.#closed = true;
     this.#idle();
+    this.#retiring?.();
     this.#host.ended(this);
   }
 }

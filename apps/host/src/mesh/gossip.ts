@@ -243,6 +243,10 @@ export class Gossip implements SyncHost {
     this.#options.onView?.(result.view, result);
     for (const session of this.#sessions.values()) session.flush();
     if (owedOnwards) this.#push(result);
+    // Section 6.2: inbound sessions of a revoked member close at once through LiveSessions; one this host dialed retires.
+    const members = new Set(result.view.members.map((member) => member.signPub));
+    for (const session of this.#sessions.values())
+      if (session.dialer === this.self && !members.has(session.peer)) session.retire();
   }
 
   /** Section 5.3: a revoke first; the revoked member last, after one ack came back or 10 s. */
