@@ -74,6 +74,26 @@ export class MeshFixture {
     return this.record(by, "admit", { card: cardFor(joiner, this.meshId, by) });
   }
 
+  /**
+   * `by` admits each of `joiners` in order, each admit on the one before, as `admit` one at a time would sign them,
+   * merged in one transaction: one view evaluation and one write for the chain, where one merge per admit re-evaluated
+   * the whole log each time.
+   */
+  admitAll(by: Machine, joiners: readonly Machine[]): readonly Signed[] {
+    const first = this.next(by, "admit");
+    const admits: Signed[] = [];
+    let prev = first.prev;
+    for (const [i, joiner] of joiners.entries()) {
+      const subject = { card: cardFor(joiner, this.meshId, by) };
+      const record = signRecord({ ...first, n: first.n + i, prev, subject }, by.identity.sign.secretKey);
+      admits.push(record);
+      prev = [hashOf(record)];
+    }
+    const { added } = this.store.merge(admits);
+    if (added.length !== admits.length) throw new Error("the fixture's own admits were not all stored");
+    return admits;
+  }
+
   revoke(by: Machine, ...subjects: Machine[]): Signed {
     return this.record(by, "revoke", { signPubs: subjects.map(signPubOf), reason: "revoke" });
   }
