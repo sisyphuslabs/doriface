@@ -2,6 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
 import { Button, Dialog, Notice } from "@doriface/ui";
 import { useEffect, useState } from "react";
+import { terminalInput } from "./focus-targets.ts";
 import { terminalTitle } from "./model.ts";
 import { RenameDialog } from "./rename-dialog.tsx";
 import { endSession, renameSession, sessionCalls, takeBackEnd } from "./session-actions.ts";
@@ -25,6 +26,12 @@ const COPY = {
 export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: SessionDialogsProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Read while the question renders, before it takes focus: the element it gives focus back to when it closes.
+  const [asked, setAsked] = useState<{ readonly ask: SessionAsk | null; readonly opener: Element | null }>({
+    ask: null,
+    opener: null,
+  });
+  if (asked.ask !== ask) setAsked({ ask, opener: document.activeElement });
   const terminal = ask === null ? undefined : terminals.find((entry) => entry.address === ask.address);
   const live = terminal?.state === "live";
   // A session that stops meanwhile needs no answer, except that a question whose action is still running stays up until
@@ -79,12 +86,18 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
       />
     );
   }
+  // Asked with focus on the page body (a terminal whose renderer had not started yet), or from an element that is gone
+  // by now, the question gives focus to the focused pane's terminal instead of leaving keys with nowhere to go.
+  const { opener } = asked;
+  const backTo = (): HTMLElement | true =>
+    opener instanceof HTMLElement && opener !== document.body && opener.isConnected ? true : (terminalInput() ?? true);
   return (
     <Dialog
       open
       onOpenChange={(open) => {
         if (!open) dismiss();
       }}
+      finalFocus={backTo}
       title={ask.kind === "end" ? `End ${title}?` : `Close ${title}?`}
       description={COPY[ask.kind]}
       actions={
