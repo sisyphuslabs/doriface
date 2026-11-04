@@ -160,7 +160,9 @@ export function meshSourcesOf(
 function failClosedFor(facts: readonly FailClosed[], self: string): readonly FailClosed[] {
   const culprits = facts.filter((fact) => fact.removed.includes(self));
   if (culprits.length === 0) return facts;
-  const honest = new Set([self, ...culprits.flatMap((fact) => fact.removed)]);
+  // A key a culprit removed is honest only when it removed this host itself in no fact: two culprits can name each other.
+  const culpritKeys = new Set(culprits.map((fact) => fact.revokedKey));
+  const honest = new Set([self, ...culprits.flatMap((fact) => fact.removed).filter((key) => !culpritKeys.has(key))]);
   return facts.filter((fact) => !honest.has(fact.revokedKey));
 }
 

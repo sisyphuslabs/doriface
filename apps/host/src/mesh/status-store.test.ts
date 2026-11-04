@@ -80,6 +80,35 @@ describe("the stored status is always one the status parser reads (contract v1.5
   });
 });
 
+/** f admits x then y, neither acks, f revokes both in one record; x and y then backdate revokes from their admissions. */
+function twoCulprits(yNamesX: boolean) {
+  const dir = mkdtempSync(join(tmpdir(), "dh-status-two-culprits-"));
+  dirs.push(dir);
+  const f = machine("f"),
+    x = machine("x"),
+    y = machine("y");
+  const mesh = new MeshFixture(dir, f);
+  const xAdmitted = mesh.admit(f, x);
+  const yAdmitted = mesh.admit(f, y);
+  mesh.revoke(f, x, y);
+  const backdate = (by: typeof x, after: typeof xAdmitted, subjects: readonly (typeof x)[]) =>
+    signRecord(
+      {
+        v: 2,
+        mesh: mesh.meshId,
+        type: "revoke",
+        by: signPubOf(by),
+        n: 1,
+        prev: [hashOf(after)],
+        subject: { signPubs: subjects.map(signPubOf), reason: "revoke" },
+      },
+      by.identity.sign.secretKey,
+    );
+  mesh.store.merge([backdate(x, xAdmitted, [f]), backdate(y, yAdmitted, yNamesX ? [f, x] : [f])]);
+  const status = readable(storedMeshStatus(mesh.store, f.identity, IDLE_MESH_HOOKS));
+  return { f, x, y, status };
+}
+
 describe("design 3.7: a host removed by an undecidable revoke says so", () => {
   test("N = 2: f revokes a, and a's backdated revoke of f stands 0:0; f's status names a and stays readable", () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-status-fail-closed-"));
@@ -107,5 +136,18 @@ describe("design 3.7: a host removed by an undecidable revoke says so", () => {
     expect(status?.removed).toEqual([
       { members: [{ hostId: f.identity.hostId, name: "f" }], revokedKey: { hostId: a.identity.hostId, name: "a" } },
     ]);
+  });
+
+  test.each([
+    ["y names f only", false],
+    ["y names f and x", true],
+  ])("two revoked keys each remove f at 0:0 (%s): both are named, and f is removed by each", (_, yNamesX) => {
+    const { f, x, y, status } = twoCulprits(yNamesX);
+    expect(status?.stuck).toContainEqual({ kind: "removed_undecidable" });
+    const culprits = (status?.removed ?? []).filter((fact) => fact.members.some((m) => m.hostId === f.identity.hostId));
+    expect(culprits.map((fact) => fact.revokedKey.hostId).toSorted()).toEqual(
+      [x.identity.hostId, y.identity.hostId].toSorted(),
+    );
+    expect((status?.removed ?? []).some((fact) => fact.revokedKey.hostId === f.identity.hostId)).toBe(false);
   });
 });
