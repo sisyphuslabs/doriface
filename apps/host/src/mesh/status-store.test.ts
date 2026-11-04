@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { signRecord, ViewCache, viewOf } from "@doriface/mesh";
+import { hashOf, signRecord, ViewCache, viewOf } from "@doriface/mesh";
 import { parseMeshStatus } from "@doriface/protocol";
 import { machine, MeshFixture, signPubOf } from "../testing/mesh-history.ts";
 import { planRevoke } from "./revoke-plan.ts";
@@ -77,5 +77,35 @@ describe("the stored status is always one the status parser reads (contract v1.5
       [a.identity.hostId, b.identity.hostId].toSorted(),
     );
     expect(status?.stuck).toContainEqual({ kind: "possibly_revoked" });
+  });
+});
+
+describe("design 3.7: a host removed by an undecidable revoke says so", () => {
+  test("N = 2: f revokes a, and a's backdated revoke of f stands 0:0; f's status names a and stays readable", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-status-fail-closed-"));
+    dirs.push(dir);
+    const f = machine("f"),
+      a = machine("a");
+    const mesh = new MeshFixture(dir, f);
+    const admitted = mesh.admit(f, a);
+    mesh.revoke(f, a);
+    const backdated = signRecord(
+      {
+        v: 2,
+        mesh: mesh.meshId,
+        type: "revoke",
+        by: signPubOf(a),
+        n: 1,
+        prev: [hashOf(admitted)],
+        subject: { signPubs: [signPubOf(f)], reason: "revoke" },
+      },
+      a.identity.sign.secretKey,
+    );
+    mesh.store.merge([backdated]);
+    const status = readable(storedMeshStatus(mesh.store, f.identity, IDLE_MESH_HOOKS));
+    expect(status?.stuck).toContainEqual({ kind: "removed_undecidable" });
+    expect(status?.removed).toEqual([
+      { members: [{ hostId: f.identity.hostId, name: "f" }], revokedKey: { hostId: a.identity.hostId, name: "a" } },
+    ]);
   });
 });

@@ -1,5 +1,6 @@
 export { type DoorMerge, mergeAtDoor } from "./dangling.ts";
 export { door, type DoorReason, type DoorResult, type HoldReason, missingFor, type RefusalReason } from "./door.ts";
+export { type FailClosed, failClosedOf } from "./fail-closed.ts";
 export { checkName, FALLBACK_LENGTHS, fallbacks, idShaped } from "./names.ts";
 export { presentAt, witnessPool } from "./pool.ts";
 export {
