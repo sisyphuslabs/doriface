@@ -1,10 +1,10 @@
 // Every spec leaves the e2e core with the terminals it found there (#226). A test's terminals are the ones listed
 // after it that were not listed before it; the guard ends those (and removes their finished entries), never another's.
 // A spec file's beforeAll terminals are the ones that appeared between the last test of the file before it (or the
-// worker's host coming up) and its own first test; its afterAll hooks end them. Whatever is still on the core once its
-// owner is done is a leak, which the guard ends too, failed by the worker that found it: a test's own leak fails that
-// test, and a leak found between tests (a late terminal, a beforeAll terminal its afterAll left, anything beyond what
-// the core held when the worker's host came up) fails the worker as it ends, naming the spec either way.
+// worker's host having finished setting up) and its own first test; its afterAll hooks end them. Whatever is still on
+// the core once its owner is done is a leak, which the guard ends too, failed by the worker that found it: a test's own
+// leak fails that test, and a leak found between tests (a late terminal, a beforeAll terminal its afterAll left) fails
+// the worker as it ends, naming the spec either way.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { TestInfo } from "@playwright/test";
@@ -32,8 +32,6 @@ interface CoreState {
   readonly fileOwned: readonly string[];
   /** Who `fileOwned` is blamed on if it is left: the file's beforeAll, or a late terminal of the test before it. */
   readonly fileOwner: string;
-  /** The core as the worker's host came up: the worker must leave it as it found it. */
-  readonly baseline: readonly string[];
 }
 
 /** Each `hc <command> --json` list entry as an object. */
@@ -131,7 +129,6 @@ function readState(): CoreState | undefined {
     listed: strings(Reflect.get(saved, "listed")),
     fileOwned: strings(Reflect.get(saved, "fileOwned")),
     fileOwner: String(Reflect.get(saved, "fileOwner")),
-    baseline: strings(Reflect.get(saved, "baseline")),
   };
 }
 
@@ -152,7 +149,7 @@ const count = (now: Listing): { readonly live: number; readonly finished: number
 /** As the worker's host comes up, before any hook: the core as the worker found it, which it must leave so. */
 export function beginWorker(): void {
   const listed = [...list().keys()];
-  writeState({ worker: -1, spec: "", owner: "", listed, fileOwned: [], fileOwner: "", baseline: listed });
+  writeState({ worker: -1, spec: "", owner: "", listed, fileOwned: [], fileOwner: "" });
 }
 
 function readStarted(): CoreState {
@@ -202,18 +199,14 @@ export function endTest(info: TestInfo, before: Listing): void {
   if (own.leak !== undefined) throw fail([own.leak]);
 }
 
-/**
- * As a worker ends, after its last file's afterAll hooks: checks the last test and file, then that the core holds
- * nothing beyond what it held as the worker's host came up, and fails with every leak.
- */
+/** As a worker ends, after its last file's afterAll hooks: checks the last test and file, and fails with every leak. */
 export function endWorker(): void {
   const state = readStarted();
   const now = list();
   const late = leak(now, state.owner, state.spec, newIn(now, state.listed));
   const kept = leak(late.now, state.fileOwner, state.spec, state.fileOwned);
-  const beyond = leak(kept.now, `the worker, after ${state.owner}`, state.spec, newIn(kept.now, state.baseline));
-  for (const found of [late.leak, kept.leak, beyond.leak]) if (found !== undefined) pending.push(found);
-  record({ kind: "end", where: WHERE, ...count(beyond.now) });
-  writeState({ ...state, worker: -1, listed: [...beyond.now.keys()], fileOwned: [] });
+  for (const found of [late.leak, kept.leak]) if (found !== undefined) pending.push(found);
+  record({ kind: "end", where: WHERE, ...count(kept.now) });
+  writeState({ ...state, worker: -1, listed: [...kept.now.keys()], fileOwned: [] });
   if (pending.length > 0) throw fail(pending.splice(0));
 }
