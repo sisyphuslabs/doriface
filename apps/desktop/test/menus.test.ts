@@ -29,8 +29,13 @@ describe("menus", () => {
 
   test("the macOS app menu opens Settings, and the page's keymap owns its shortcut", () => {
     const opened: string[] = [];
-    const menu = menuTemplate({ platform: "darwin", openExternal: noop, openSettings: () => opened.push("settings") });
-    expect(roles(menu)).toEqual(["appMenu", "File", "editMenu", "viewMenu", "windowMenu", "help"]);
+    const menu = menuTemplate({
+      platform: "darwin",
+      openExternal: noop,
+      openSettings: () => opened.push("settings"),
+      zoomWindow: noop,
+    });
+    expect(roles(menu)).toEqual(["appMenu", "File", "editMenu", "View", "windowMenu", "help"]);
     const app = submenuOf(menu[0]);
     expect(roles(app)).toEqual([
       "about",
@@ -52,7 +57,7 @@ describe("menus", () => {
   });
 
   test("macOS Close Window shows Cmd+W but leaves the key to the page, which closes tabs and Settings with it", () => {
-    const menu = menuTemplate({ platform: "darwin", openExternal: noop, openSettings: noop });
+    const menu = menuTemplate({ platform: "darwin", openExternal: noop, openSettings: noop, zoomWindow: noop });
     const close = submenuOf(menu[1]).find((item) => item.label === "Close Window");
     expect(close).toMatchObject({ accelerator: "CommandOrControl+W", registerAccelerator: false });
     const closed: string[] = [];
@@ -62,13 +67,36 @@ describe("menus", () => {
   });
 
   test("Linux and Windows keep the standard roles", () => {
-    expect(roles(menuTemplate({ platform: "linux", openExternal: noop, openSettings: noop }))).toEqual([
-      "fileMenu",
-      "editMenu",
-      "viewMenu",
-      "windowMenu",
-      "help",
-    ]);
+    expect(
+      roles(menuTemplate({ platform: "linux", openExternal: noop, openSettings: noop, zoomWindow: noop })),
+    ).toEqual(["fileMenu", "editMenu", "View", "windowMenu", "help"]);
+  });
+
+  test("View's zoom items zoom the window and leave their keys to the page, which zooms the same way", () => {
+    for (const platform of ["darwin", "linux", "win32"] as const) {
+      const steps: string[] = [];
+      const menu = menuTemplate({ platform, openExternal: noop, openSettings: noop, zoomWindow: (s) => steps.push(s) });
+      const view = submenuOf(menu.find((item) => item.label === "View"));
+      expect(roles(view)).toEqual([
+        "reload",
+        "forceReload",
+        "toggleDevTools",
+        "separator",
+        "Actual Size",
+        "Zoom In",
+        "Zoom Out",
+        "separator",
+        "togglefullscreen",
+      ]);
+      const zoomItems = view.filter((item) => item.id?.startsWith("zoom-"));
+      expect(zoomItems.map((item) => [item.id, item.accelerator, item.registerAccelerator])).toEqual([
+        ["zoom-reset", "CommandOrControl+0", false],
+        ["zoom-in", "CommandOrControl+Plus", false],
+        ["zoom-out", "CommandOrControl+-", false],
+      ]);
+      for (const item of zoomItems) item.click?.(Object.create(null), undefined, Object.create(null));
+      expect(steps).toEqual(["reset", "in", "out"]);
+    }
   });
 });
 
