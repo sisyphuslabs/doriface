@@ -116,8 +116,9 @@ describe("the uplink and relay passes (contract v1.6)", () => {
     const { book, secretKey } = await hostWithBook();
     script = ["serve-pass", "refuse-4412", "no-pass"];
     const passed = new Promise<void>((resolve) => book.onPass(() => resolve()));
-    const states = start(secretKey, book, 6);
+    const firstState = start(secretKey, book, 1);
     await passed;
+    await firstState;
     uplink?.stop();
     script = ["refuse-4412", "no-pass"];
     attempts.length = 0;
@@ -136,7 +137,6 @@ describe("the uplink and relay passes (contract v1.6)", () => {
       });
       return done.promise;
     })();
-    void states;
     expect(attempts[0]?.url.searchParams.has("proof")).toBe(true);
     expect(attempts[1]?.url.searchParams.has("proof")).toBe(false);
     expect(waiting.find((state) => state.state === "waiting")).toEqual({ state: "waiting", code: 4412, retryInMs: 0 });
