@@ -15,9 +15,30 @@ export interface EndSweeper {
  */
 export function endSweeper(core: HcTarget, log: (line: string) => void): EndSweeper {
   let watching: Promise<HcConnection | undefined> | undefined;
+  /** Settles once the latest `hc connect` child has exited, so `stop` leaves no child behind. */
+  let exited: Promise<void> = Promise.resolve();
   let stopped = false;
   const watch = async (): Promise<HcConnection> => {
-    const connection = await HcConnection.open(spawnHcLink(core));
+    const link = spawnHcLink(core);
+    const gone = Promise.withResolvers<void>();
+    link.onClose(() => gone.resolve());
+    exited = gone.promise;
+    let connection: HcConnection;
+    try {
+      connection = await HcConnection.open(link);
+    } catch (error) {
+      link.close();
+      throw error;
+    }
+    try {
+      await follow(connection);
+    } catch (error) {
+      connection.close();
+      throw error;
+    }
+    return connection;
+  };
+  const follow = async (connection: HcConnection): Promise<void> => {
     const finished = new Set<string>();
     const marked = new Set<string>();
     const sweep = (address: string): void => {
@@ -67,7 +88,6 @@ export function endSweeper(core: HcTarget, log: (line: string) => void): EndSwee
     };
     feed.onSnapshot(() => void listAll().catch((error: unknown) => log(`end: listing terminals: ${String(error)}`)));
     await listAll();
-    return connection;
   };
   return {
     ensure: () => {
@@ -90,6 +110,7 @@ export function endSweeper(core: HcTarget, log: (line: string) => void): EndSwee
     stop: async () => {
       stopped = true;
       (await watching)?.close();
+      await exited;
     },
   };
 }
