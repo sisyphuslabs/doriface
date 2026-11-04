@@ -31,7 +31,6 @@ export interface DesktopShellProps {
 }
 
 export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette, onSession }: DesktopShellProps) {
-  useArrivalReady(loaded);
   const [sidebar, setSidebar] = useSidebarShown();
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
@@ -67,6 +66,8 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
+  // The first screen is whole once the list has loaded and its default tab has opened (one render after `loaded`).
+  useArrivalReady(loaded && (tabs.open.length > 0 || live.length === 0));
   const toggle = (
     <IconButton
       label="Split"
