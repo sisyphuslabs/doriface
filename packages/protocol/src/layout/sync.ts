@@ -19,6 +19,8 @@ export type DocEdit = (doc: JsonObject | null) => JsonObject | null;
 const CONFLICT_RETRIES = 8;
 const reasonOf = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
 const isConflict = (cause: unknown): boolean => cause instanceof HcRpcError && cause.kind === "conflict";
+const unwritable = (state: Exclude<DocState, { readonly phase: "ready" }>): string =>
+  state.phase === "loading" ? "it is still loading" : state.reason;
 
 /**
  * One machine's herdr-app document, kept the way herdr-app keeps it (`src/mirror_sync.rs`): read with `doc.get`, every
@@ -84,7 +86,10 @@ export class LayoutDoc {
     return this.#state.phase === "ready" ? this.#state.version : -1;
   }
 
-  /** Applies an edit and writes it; resolves false when it was dropped or the document cannot take writes. */
+  /**
+   * Applies an edit and writes it; resolves false when the edit no longer applies (nothing is written), and rejects with
+   * the reason when the document cannot take it: not readable or loaded, or changed by others past every retry.
+   */
   edit(change: DocEdit): Promise<boolean> {
     const run = this.#queue.then(() => this.#write(change));
     this.#queue = run.catch(() => undefined);
@@ -107,7 +112,8 @@ export class LayoutDoc {
 
   async #attempt(change: DocEdit, left: number): Promise<boolean> {
     const state = this.#state;
-    if (left === 0 || state.phase !== "ready") return false;
+    if (left === 0) throw new Error("The layout kept changing on another device, so this change was not saved");
+    if (state.phase !== "ready") throw new Error(`The layout cannot take changes now: ${unwritable(state)}`);
     const next = change(state.doc);
     if (next === null) return false;
     this.#reads += 1;

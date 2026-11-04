@@ -28,6 +28,7 @@ import {
   type LayoutTab,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
+import { splitLanding } from "./split-landing.ts";
 import { moveTabTo, orderTabs, type TabMove } from "./tab-order.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
@@ -104,14 +105,20 @@ export function useLayout(
     }));
   }, []);
 
+  /** A tab of this screen's own for a terminal its machine's layout could not take. */
+  const keepHere = useCallback(
+    (address: string): void => {
+      setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
+      show(looseKey(address), TRANSIENT);
+    },
+    [show],
+  );
+
   const addTab = useCallback(
     (address: string): void => {
       const machine = machineOf(address) ?? null;
       const layout = layoutOf(machine);
-      if (layout === undefined || layout.readOnly !== null) {
-        setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
-        return show(looseKey(address), TRANSIENT);
-      }
+      if (layout === undefined || layout.readOnly !== null) return keepHere(address);
       const id = freshId("tb");
       const pane = freshId("p");
       const tab: JsonObject = { id, name: "", root: rootOf(id, [terminalBlock(pane, localOf(address))]) };
@@ -125,7 +132,7 @@ export function useLayout(
       });
       show(tabKey(layout.machineId, id), pane);
     },
-    [active, layoutOf, show],
+    [active, keepHere, layoutOf, show],
   );
 
   const openTerminal = useCallback(
@@ -166,16 +173,17 @@ export function useLayout(
           return next;
         })
         .then((placed) => {
-          // The pane it split closed on another device first: the new terminal still opens, in a tab of its own.
-          if (!placed && gone) {
+          const landing = splitLanding(placed, gone);
+          if (landing === "own-tab") {
             addTab(address);
             told("The pane you split had closed, so the new terminal opened in a new tab.");
           }
+          if (landing === "here") keepHere(address);
           return placed;
         });
       return show(active.key, pane);
     },
-    [active, addTab, focused, layoutOf, show, told],
+    [active, addTab, focused, keepHere, layoutOf, show, told],
   );
 
   const dropPane = useCallback(
