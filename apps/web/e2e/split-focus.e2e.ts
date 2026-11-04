@@ -99,6 +99,21 @@ async function expectCellWidth(page: Page, lone: string): Promise<void> {
   await expect.poll(async () => [...new Set(await cellWidths(page))], { timeout: 10_000 }).toEqual([lone]);
 }
 
+/** The terminals whose pane header's buttons reach past its top edge or into its bottom border. */
+const overflowingHeaders = (page: Page): Promise<string[]> =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('section[data-split="true"] > header')]
+      .filter((header) => {
+        const box = header.getBoundingClientRect();
+        const inside = box.bottom - Number.parseFloat(getComputedStyle(header).borderBottomWidth);
+        return [...header.querySelectorAll("button")].some((button) => {
+          const { top, bottom } = button.getBoundingClientRect();
+          return top < box.top || bottom > inside;
+        });
+      })
+      .map((header) => header.parentElement?.querySelector("[data-terminal]")?.getAttribute("data-terminal") ?? ""),
+  );
+
 /** Presses a split key and returns the new pane once it holds the focus, the keys and the selected tab. */
 async function split(page: Page, platform: Platform, side: "right" | "down", from: string): Promise<string> {
   // The tab strip is read once the selected tab is in the document, so ⌘D creating a tab cannot hide behind that write.
@@ -137,6 +152,8 @@ for (const platform of ["mac", "other"] as const) {
     const three = await split(page, platform, "down", two);
     const four = await split(page, platform, "right", three);
     const five = await split(page, platform, "down", four);
+    // Each pane header holds its 24 px buttons inside its border, so nothing in it spills toward the terminal.
+    expect(await overflowingHeaders(page)).toEqual([]);
     await expectCellWidth(page, lone);
     await page.setViewportSize({ width: 820, height: 800 });
     await expectCellWidth(page, lone);
