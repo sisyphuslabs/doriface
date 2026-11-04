@@ -6,7 +6,10 @@ import { useAskSession } from "./session-context.ts";
 export function SessionMenu({ address, title }: { readonly address: string; readonly title: string }) {
   const ask = useAskSession();
   return (
-    <Menu align="end" trigger={<IconButton label={`Session actions for ${title}`} icon={<Ellipsis />} className="size-6" />}>
+    <Menu
+      align="end"
+      trigger={<IconButton label={`Session actions for ${title}`} icon={<Ellipsis />} className="size-6" />}
+    >
       <MenuItem icon={<Pencil />} onClick={() => ask({ kind: "rename", address })}>
         Rename…
       </MenuItem>
