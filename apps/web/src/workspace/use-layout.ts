@@ -29,7 +29,8 @@ import {
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
 import { splitLanding } from "./split-landing.ts";
-import { moveTabTo, orderTabs, type TabMove } from "./tab-order.ts";
+import { orderTabs, type TabMove } from "./tab-order.ts";
+import { useTabMoves } from "./use-tab-moves.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
 export interface Layout {
@@ -256,15 +257,7 @@ export function useLayout(
 
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
-  const [lastMove, setLastMove] = useState<TabMove | null>(null);
-  const shown = useRef(tabs);
-  shown.current = tabs;
-  const moveTab = useCallback((key: string, to: number): void => {
-    const keys = shown.current.map((tab) => tab.key);
-    // Only a move that changes the order is said: `moveTabTo` hands back the same `said` for one that does not.
-    setLastMove((said) => moveTabTo(keys, said, key, to).said);
-    setView((prev) => ({ ...prev, order: moveTabTo(keys, null, key, to).order }));
-  }, []);
+  const { moveTab, lastMove } = useTabMoves(tabs, setView);
 
   return {
     tabs,
