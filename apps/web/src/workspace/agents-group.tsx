@@ -24,6 +24,8 @@ export interface AgentsGroupProps {
   readonly active: string | null;
   readonly onOpen: (address: string) => void;
   readonly rail?: boolean;
+  /** False where the screen's own title already says "Agents" (the phone): the group is labelled, not headed. */
+  readonly heading?: boolean;
 }
 
 function SortMenu() {
@@ -83,40 +85,52 @@ function AgentActions({ agent }: { readonly agent: Agent }) {
  * The agents, first in the sidebar: Pinned, then Needs you, Working, Idle, Done and Offline with counts (or one group
  * per space), each its own list. On the rail the rows are glyphs and the group titles are left to their labels.
  */
-export function AgentsGroup({ terminals, active, onOpen, rail = false }: AgentsGroupProps) {
+export function AgentsGroup({ terminals, active, onOpen, rail = false, heading = true }: AgentsGroupProps) {
   const now = useNow();
   const [sort] = useAgentSort();
   const groups = useMemo(() => agentGroups(terminals, now, sort), [terminals, now, sort]);
+  const list = (
+    <div className="flex flex-col gap-3">
+      {groups.map((group) => (
+        <SidebarSection
+          key={group.key}
+          title={group.title}
+          count={group.agents.length}
+          {...(group.tone === undefined ? {} : { tone: group.tone })}
+          {...(rail ? { className: "[&>header]:sr-only" } : {})}
+        >
+          {group.agents.map((agent) => {
+            const row = (
+              <AgentRow
+                agent={agent}
+                selected={agent.id === active}
+                compactBlocked={group.compactBlocked}
+                onSelect={onOpen}
+                rail={rail}
+              />
+            );
+            return rail ? (
+              <div key={agent.id}>{row}</div>
+            ) : (
+              <RowWithActions key={agent.id} row={row} actions={<AgentActions agent={agent} />} />
+            );
+          })}
+        </SidebarSection>
+      ))}
+    </div>
+  );
+  if (!heading)
+    return (
+      <section aria-label="Agents" className="flex flex-col gap-px">
+        <div className="flex justify-end px-2">
+          <SortMenu />
+        </div>
+        {list}
+      </section>
+    );
   return (
     <SidebarSection title="Agents" {...(rail ? { className: "[&>header]:sr-only" } : { action: <SortMenu /> })}>
-      <div className="flex flex-col gap-3">
-        {groups.map((group) => (
-          <SidebarSection
-            key={group.key}
-            title={group.title}
-            count={group.agents.length}
-            {...(group.tone === undefined ? {} : { tone: group.tone })}
-            {...(rail ? { className: "[&>header]:sr-only" } : {})}
-          >
-            {group.agents.map((agent) => {
-              const row = (
-                <AgentRow
-                  agent={agent}
-                  selected={agent.id === active}
-                  compactBlocked={group.compactBlocked}
-                  onSelect={onOpen}
-                  rail={rail}
-                />
-              );
-              return rail ? (
-                <div key={agent.id}>{row}</div>
-              ) : (
-                <RowWithActions key={agent.id} row={row} actions={<AgentActions agent={agent} />} />
-              );
-            })}
-          </SidebarSection>
-        ))}
-      </div>
+      {list}
     </SidebarSection>
   );
 }

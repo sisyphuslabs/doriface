@@ -62,7 +62,12 @@ export function rovingTarget(root: Element, target: EventTarget | null, key: str
   const section = target.closest("section");
   if (section === null || !root.contains(section)) return undefined;
   const owner = ownRow(target);
-  if (owner !== undefined) return key === "ArrowLeft" ? owner : undefined;
+  if (owner !== undefined) {
+    if (key === "ArrowLeft") return owner;
+    if (key !== "ArrowRight") return undefined;
+    const actions = actionsOf(owner).filter((action) => !action.disabled);
+    return actions[actions.indexOf(target) + 1];
+  }
   const rows = rowsOf(section);
   const index = rows.indexOf(target);
   if (index === -1) return undefined;

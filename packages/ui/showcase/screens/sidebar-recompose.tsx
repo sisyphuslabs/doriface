@@ -37,8 +37,56 @@ function Actions({ agent }: { readonly agent: Agent }) {
   );
 }
 
-function Agents({ rail, hover, groups }: Pick<Options, "rail" | "hover" | "groups">) {
+function Agents({
+  rail,
+  hover,
+  groups,
+  heading = true,
+}: Pick<Options, "rail" | "hover" | "groups"> & { readonly heading?: boolean }) {
   const hidden = rail === true ? "[&>header]:sr-only" : undefined;
+  const list = (
+    <div className="flex flex-col gap-3">
+      {RECOMPOSE_GROUPS.slice(0, groups).map((group) => (
+        <SidebarSection
+          key={group.title}
+          title={group.title}
+          count={group.agents.length}
+          {...(group.tone === undefined ? {} : { tone: group.tone })}
+          {...(hidden === undefined ? {} : { className: hidden })}
+        >
+          {group.agents.map((agent) => {
+            const row = (
+              <AgentRow
+                agent={agent}
+                compactBlocked={group.compact === true}
+                selected={agent.id === "a1"}
+                rail={rail === true}
+              />
+            );
+            return rail === true ? (
+              <div key={agent.id}>{row}</div>
+            ) : (
+              <RowWithActions
+                key={agent.id}
+                row={row}
+                actions={<Actions agent={agent} />}
+                {...(hover === agent.id ? { className: HOVER } : {})}
+              />
+            );
+          })}
+        </SidebarSection>
+      ))}
+    </div>
+  );
+  if (!heading)
+    return (
+      <section aria-label="Agents" className="flex flex-col gap-px">
+        <div className="flex justify-end px-2">
+          <IconButton label="Sort agents" icon={<ArrowDownUp />} />
+        </div>
+        {list}
+      </section>
+    );
   return (
     <SidebarSection
       title="Agents"
@@ -46,38 +94,7 @@ function Agents({ rail, hover, groups }: Pick<Options, "rail" | "hover" | "group
         ? { className: "[&>header]:sr-only" }
         : { action: <IconButton label="Sort agents" icon={<ArrowDownUp />} className="-mr-1" /> })}
     >
-      <div className="flex flex-col gap-3">
-        {RECOMPOSE_GROUPS.slice(0, groups).map((group) => (
-          <SidebarSection
-            key={group.title}
-            title={group.title}
-            count={group.agents.length}
-            {...(group.tone === undefined ? {} : { tone: group.tone })}
-            {...(hidden === undefined ? {} : { className: hidden })}
-          >
-            {group.agents.map((agent) => {
-              const row = (
-                <AgentRow
-                  agent={agent}
-                  compactBlocked={group.compact === true}
-                  selected={agent.id === "a1"}
-                  rail={rail === true}
-                />
-              );
-              return rail === true ? (
-                <div key={agent.id}>{row}</div>
-              ) : (
-                <RowWithActions
-                  key={agent.id}
-                  row={row}
-                  actions={<Actions agent={agent} />}
-                  {...(hover === agent.id ? { className: HOVER } : {})}
-                />
-              );
-            })}
-          </SidebarSection>
-        ))}
-      </div>
+      {list}
     </SidebarSection>
   );
 }
@@ -198,7 +215,7 @@ function PhoneAgents({ machines }: Pick<Options, "machines">) {
       </header>
       <ScrollArea slot="agents-list" className="flex-1">
         <div className="flex flex-col gap-4 px-2 pb-3">
-          <Agents groups={4} />
+          <Agents groups={4} heading={false} />
           <Spaces machines={machines} />
         </div>
       </ScrollArea>

@@ -63,8 +63,8 @@ export function SidebarEdge({ width, rail, railWidth, onChange, onDragging }: Si
       onPointerCancel={end}
       onKeyDown={onKeyDown}
       className={cn(
-        "absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none outline-none",
-        "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:transition-colors after:duration-(--duration-micro)",
+        "absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none outline-none",
+        "after:absolute after:inset-y-0 after:right-0 after:w-px after:transition-colors after:duration-(--duration-micro)",
         "hover:after:bg-ring focus-visible:after:w-0.5 focus-visible:after:bg-ring",
         active && "after:bg-ring",
       )}
