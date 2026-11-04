@@ -1,6 +1,6 @@
 import { base64urlEncode } from "@doriface/crypto";
 import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
-import { type Clock, type Random, uniform } from "./clock.ts";
+import type { Clock, Random } from "./clock.ts";
 import { type DialPolicy, type DialPurpose, type DueReason } from "./dial-policy.ts";
 import { missingSince } from "./anti-entropy.ts";
 import { ownN } from "../state/mesh-tx.ts";
@@ -11,6 +11,7 @@ import type { MeshView } from "./mesh-view.ts";
 import { MemberDialer } from "./member-dialer.ts";
 import { MemberBook, StoredMesh } from "./stored-mesh.ts";
 import { RevokedLast } from "./revoked-last.ts";
+import { Sweeps } from "./sweeps.ts";
 import { ackAdmission, appendOwn, type MergeDeps, type MergeResult, mergeBatch, type RecordDraft } from "./merge.ts";
 import { type SyncHost, SyncSession } from "./sync.ts";
 
@@ -55,12 +56,12 @@ export class Gossip implements SyncHost {
   readonly #sessions = new Map<string, SyncSession>();
   readonly #confirmed = new Map<string, readonly string[]>();
   readonly #lastSync = new Map<string, number>();
+  readonly #sweeps: Sweeps;
   readonly #known = new MemberBook();
   readonly #revokedLast: RevokedLast;
   /** Revoked members whose released revoke push did not get through yet: retried as a revoke push when they are due. */
   readonly #revokeOwed = new Set<string>();
   #view: MeshView;
-  #stopNet: () => void = () => undefined;
 
   constructor(options: GossipOptions) {
     this.#options = options;
@@ -85,6 +86,13 @@ export class Gossip implements SyncHost {
         void this.sync(member, "revoke-push");
       },
     });
+    this.#sweeps = new Sweeps({
+      ...options,
+      timings: this.#timings,
+      members: () => this.#members(),
+      lastSync: (signPub) => this.#lastSync.get(signPub),
+      sync: (member, purpose) => this.sync(member, purpose),
+    });
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
   }
@@ -94,7 +102,7 @@ export class Gossip implements SyncHost {
   }
 
   start(): void {
-    this.#armSafetyNet();
+    this.#sweeps.start();
   }
 
   /** The joiner's ack of its own admission (section 5.5), once, owed to every member; false when nothing was signed. */
@@ -105,7 +113,7 @@ export class Gossip implements SyncHost {
   }
 
   stop(): void {
-    this.#stopNet();
+    this.#sweeps.stop();
     this.#revokedLast.stop();
     for (const session of this.#sessions.values()) session.close(1000, "host stopping");
   }
@@ -190,7 +198,8 @@ export class Gossip implements SyncHost {
   }
 
   answered(session: SyncSession): void {
-    if (this.#sessions.get(session.peer) === session) this.#claims.delete(session.peer);
+    if (this.#sessions.get(session.peer) !== session) return;
+    this.#claims.delete(session.peer);
   }
 
   /**
@@ -237,14 +246,7 @@ export class Gossip implements SyncHost {
 
   /** This host's uplink answered again; after a drop of more than 2 minutes it sweeps with one member. */
   uplinkReturned(downMs: number): void {
-    const others = this.#members();
-    const downSince = this.#options.clock.now() - downMs;
-    this.#options.policy.uplinkReturned(() => this.#members().map((member) => member.signPub), downSince);
-    if (downMs <= this.#timings.sweepAfterDownMs) return;
-    const recent = others.toSorted(
-      (a, b) => (this.#lastSync.get(b.signPub) ?? -1) - (this.#lastSync.get(a.signPub) ?? -1),
-    );
-    void this.#sweep(recent);
+    this.#sweeps.uplinkReturned(downMs);
   }
 
   sync(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
@@ -256,10 +258,6 @@ export class Gossip implements SyncHost {
     if (open === undefined || open.closed) return false;
     open.flush();
     return true;
-  }
-
-  async #sweep(candidates: readonly MemberEntry[]): Promise<void> {
-    for (const member of candidates) if (await this.sync(member, "sweep")) return;
   }
 
   /**
@@ -287,19 +285,6 @@ export class Gossip implements SyncHost {
     for (const member of this.owed()) {
       if (!this.#revokedLast.holds(member.signPub)) void this.sync(member, purpose);
     }
-  }
-
-  #armSafetyNet(): void {
-    const { safetyNetMs, safetyNetJitterMs } = this.#timings;
-    const delay = uniform(this.#options.random, safetyNetMs - safetyNetJitterMs, safetyNetMs + safetyNetJitterMs);
-    this.#stopNet = this.#options.clock.after(delay, () => {
-      const online = this.#members().filter((member) => this.#options.policy.gate(member.signPub) === undefined);
-      const oldest = online.toSorted(
-        (a, b) => (this.#lastSync.get(a.signPub) ?? -1) - (this.#lastSync.get(b.signPub) ?? -1),
-      );
-      void this.#sweep(oldest.slice(0, 1));
-      this.#armSafetyNet();
-    });
   }
 
   #members(): readonly MemberEntry[] {
