@@ -90,6 +90,12 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   });
   const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
   const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
+  // As on the phone: a focused terminal that is gone or whose machine is offline has nothing to type into, so a dictation
+  // under way ends (its recognizer aborted) rather than listening on under a pane that can't take it (#254).
+  const nothingToType = focusedTerminal === undefined || focusedTerminal.offline === true;
+  useEffect(() => {
+    if (nothingToType) dictation.close();
+  }, [dictation, nothingToType]);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   useArrivalReady(workspaceSettled(loaded, tabs, live.length));
@@ -172,7 +178,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, () => tabs.drop(address)) : undefined)}
           sends={sends}
           dock={
-            focusedTerminal === undefined ? null : (
+            focusedTerminal === undefined || focusedTerminal.offline === true ? null : (
               <VoiceDock
                 voice={voice}
                 target={terminalTitle(focusedTerminal)}
