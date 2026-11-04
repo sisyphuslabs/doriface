@@ -1,18 +1,31 @@
-import { linkSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const DEFAULT_LOCK_TIMEOUT_MS = 2000;
 const RETRY_MS = 5;
 /** An empty lock can only be left by a writer from before locks were published whole; past this age it is abandoned. */
 const EMPTY_LOCK_STALE_MS = 5000;
+/** What a release publishes as the next generation: no holder. */
+const FREE = "free";
+const GENERATION = /^[1-9][0-9]{0,14}$/;
+
+/**
+ * A step of taking or releasing the lock, with the generation it concerns: found it held by a live process and about to
+ * wait (`waiting`), found it free or its holder dead and about to publish the next one (`observed`), published it
+ * (`published`), lost it to a newer one and removed it (`stale`), holds it (`acquired`), published the free one after it
+ * (`released`).
+ */
+export type LockStep = "waiting" | "observed" | "published" | "stale" | "acquired" | "released";
+export type LockStepHook = (step: LockStep, generation: number) => void;
 
 const errorCode = (error: unknown): unknown => (error instanceof Error && "code" in error ? error.code : undefined);
 
+/** The file's content, or undefined if it is gone or is a directory. */
 function readLock(path: string): string | undefined {
   try {
     return readFileSync(path, "utf8");
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return undefined;
+    if (errorCode(error) === "ENOENT" || errorCode(error) === "EISDIR") return undefined;
     throw error;
   }
 }
@@ -26,10 +39,8 @@ function emptyLockIsFresh(path: string): boolean {
   }
 }
 
-/** Whether the lock with this content may still be held. Anything that does not name a dead pid counts as held. */
-function isHeld(path: string, content: string): boolean {
-  const pid = Number(content.split(" ")[0]);
-  if (content.trim() === "") return emptyLockIsFresh(path);
+/** Whether `pid` may still be running. Anything that is not a valid pid counts as running. */
+function pidIsLive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return true;
   try {
     process.kill(pid, 0);
@@ -37,6 +48,12 @@ function isHeld(path: string, content: string): boolean {
   } catch (error) {
     return errorCode(error) === "EPERM";
   }
+}
+
+/** Whether the lock with this content may still be held. Anything that does not name a dead pid counts as held. */
+function isHeld(path: string, content: string): boolean {
+  if (content.trim() === "") return emptyLockIsFresh(path);
+  return pidIsLive(Number(content.split(" ")[0]));
 }
 
 function tryAcquire(path: string, content: string): boolean {
@@ -54,13 +71,11 @@ function tryAcquire(path: string, content: string): boolean {
 }
 
 /**
- * Removes the stale lock whose content was `observed`, if it is still that lock; returns false while another breaker
- * is at it. Breakers take `state.lock.break` first, so between this check and the unlink nobody can replace the lock:
- * acquirers fail while it exists, its holder is dead, and other breakers wait. A lock is never moved, so a live one
- * is never off its path, and a breaker never removes a lock that was published after it looked.
- *
- * A guard whose breaker died is removed the same way, unserialized: only a breaker crashing inside its few
- * microseconds here, and three more processes racing that window, could let two breakers in at once.
+ * Removes the stale v0.1.0 lock file whose content was `observed`, if it is still that file, the way v0.1.0 breaks it, so
+ * a v0.1.0 process racing the upgrade is serialized with this one. Returns false while another breaker is at it.
+ * Breakers take `state.lock.break` first; a guard whose breaker died is removed unserialized, which is #23: a breaker
+ * crashing inside that window with three more processes racing it could let two breakers in at once. Only a v0.1.0
+ * process can then be the second holder, since the generations below never live in this file.
  */
 function breakStaleLock(path: string, observed: string): boolean {
   const guard = `${path}.break`;
@@ -79,24 +94,114 @@ function breakStaleLock(path: string, observed: string): boolean {
 }
 
 /**
- * Runs `fn` holding `state.lock` in the state dir, so the host and the CLI never interleave a read-modify-write of
- * devices.json or pairing.json. The lock names its holder's pid and a token. A lock whose holder is gone is broken; a
- * live holder is waited for up to `timeoutMs`. The holds are a few milliseconds of synchronous file work.
+ * Makes `path` the lock directory, replacing the lock file v0.1.0 kept at the same path; false while that file is held
+ * by a live process. Once the directory exists it is never removed, and a v0.1.0 process fails on it (EISDIR) instead of
+ * taking the lock beside the holder of a generation.
  */
-export function withStateLock<T>(stateDir: string, fn: () => T, timeoutMs = DEFAULT_LOCK_TIMEOUT_MS): T {
-  const path = join(stateDir, "state.lock");
+function ensureLockDir(path: string): boolean {
+  for (;;) {
+    let isDirectory: boolean;
+    try {
+      isDirectory = lstatSync(path).isDirectory();
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") throw error;
+      try {
+        mkdirSync(path, { mode: 0o700 });
+        return true;
+      } catch (mkdirError) {
+        if (errorCode(mkdirError) === "EEXIST") continue;
+        throw mkdirError;
+      }
+    }
+    if (isDirectory) return true;
+    const legacy = readLock(path);
+    if (legacy === undefined) continue;
+    if (isHeld(path, legacy) || !breakStaleLock(path, legacy)) return false;
+  }
+}
+
+/** The highest generation in the lock directory, 0 for none. */
+function highest(dir: string): number {
+  let top = 0;
+  for (const name of readdirSync(dir)) if (GENERATION.test(name)) top = Math.max(top, Number(name));
+  return top;
+}
+
+/** Removes the generations below `mine`, and the temp files of processes that died publishing one. */
+function sweep(dir: string, mine: number): void {
+  for (const name of readdirSync(dir)) {
+    const stale = GENERATION.test(name)
+      ? Number(name) < mine
+      : name.endsWith(".tmp") && !pidIsLive(Number(name.split(".")[1]));
+    if (stale) rmSync(join(dir, name), { force: true });
+  }
+}
+
+/**
+ * One try at publishing the generation after the highest one: the generation now held, `wait` while a live process
+ * holds the highest one, or `retry` after losing a race to a process that has moved the lock on.
+ */
+function attempt(dir: string, content: string, step: LockStepHook): number | "wait" | "retry" {
+  const top = highest(dir);
+  if (top > 0) {
+    const holder = readLock(join(dir, String(top)));
+    if (holder === undefined) return "retry";
+    if (holder !== FREE && isHeld(join(dir, String(top)), holder)) {
+      step("waiting", top);
+      return "wait";
+    }
+  }
+  step("observed", top);
+  const mine = top + 1;
+  if (!tryAcquire(join(dir, String(mine)), content)) return "retry";
+  step("published", mine);
+  if (highest(dir) !== mine) {
+    rmSync(join(dir, String(mine)), { force: true });
+    step("stale", mine);
+    return "retry";
+  }
+  sweep(dir, mine);
+  return mine;
+}
+
+/**
+ * Runs `fn` holding the state lock in the state dir, so the host and the CLI never interleave a read-modify-write of
+ * devices.json or pairing.json. The holds are a few milliseconds of synchronous file work; a live holder is waited for
+ * up to `timeoutMs`.
+ *
+ * The lock is the directory `state.lock`, whose entries are numbered generations, each published whole with `link`
+ * (so exactly one process wins each number) and never rewritten: `<pid> <token>` for a holder, `free` after a release.
+ * The highest generation is the lock's state. A process takes the lock by publishing the next number over a highest
+ * one that is free or names a dead pid, then checking that nothing newer exists; if something does, it was late (the
+ * number it won had been taken, released and removed), so it removes its own and tries again. Nothing is ever deleted
+ * to break a lock: only numbers below an existing higher one are removed, so the highest never goes back, and no
+ * process can publish over a live holder. A process that dies at any step leaves at most a dead highest generation,
+ * which the next one publishes over, and leftovers the next holder sweeps. See #23.
+ *
+ * `step` is called at each step of the protocol; tests use it to stop a process there.
+ */
+export function withStateLock<T>(
+  stateDir: string,
+  fn: () => T,
+  timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+  step: LockStepHook = () => {},
+): T {
+  const dir = join(stateDir, "state.lock");
   const content = `${process.pid} ${crypto.randomUUID()}`;
   const deadline = Date.now() + timeoutMs;
-  while (!tryAcquire(path, content)) {
-    const holder = readLock(path);
-    if (holder === undefined) continue;
-    if (!isHeld(path, holder) && breakStaleLock(path, holder)) continue;
-    if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${path})`);
-    Bun.sleepSync(RETRY_MS);
+  let mine: number | "wait" | "retry";
+  for (;;) {
+    mine = ensureLockDir(dir) ? attempt(dir, content, step) : "wait";
+    if (typeof mine === "number") break;
+    if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${dir})`);
+    if (mine === "wait") Bun.sleepSync(RETRY_MS);
   }
+  step("acquired", mine);
   try {
     return fn();
   } finally {
-    if (readLock(path) === content) rmSync(path, { force: true });
+    tryAcquire(join(dir, String(mine + 1)), FREE);
+    step("released", mine + 1);
+    rmSync(join(dir, String(mine)), { force: true });
   }
 }

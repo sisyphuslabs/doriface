@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LiveSessions } from "../e2ee/sessions.ts";
+import { stateLockHolder } from "../testing/lock-steps.ts";
 import { type Machine, machine, MeshFixture } from "../testing/mesh-history.ts";
 import { DeviceStore } from "./devices.ts";
 import { KnownHosts } from "./known-hosts.ts";
@@ -61,7 +62,7 @@ describe("H-4: join and revoke cleanup of devices.json and known-hosts.json", ()
     const held: boolean[] = [];
     const original = DeviceStore.prototype.removeKeysHeld;
     const spy = spyOn(DeviceStore.prototype, "removeKeysHeld").mockImplementation(function (this: DeviceStore, keys) {
-      held.push(existsSync(join(dir, "state.lock")));
+      held.push(stateLockHolder(dir)?.startsWith(`${process.pid} `) === true);
       return original.call(this, keys);
     });
     mesh.admit(founder, joiner);
