@@ -111,7 +111,7 @@ function PhoneTerminal(props: {
     <div className="flex h-dvh min-h-0 flex-col bg-card">
       <header
         data-titlebar
-        className="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
+        className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
       >
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
         <div className="flex min-w-0 flex-1 flex-col">
