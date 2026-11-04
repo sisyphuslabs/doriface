@@ -25,8 +25,14 @@ test("a pane has no title bar: the tab names the terminal and the status bar nam
   await openNewTerminal(page);
   await expect(pane(page).getByRole("heading")).toHaveCount(0);
   await expect(pane(page).getByRole("button", { name: "Session actions" })).toHaveCount(0);
-  const title = (await pane(page).getAttribute("aria-label"))?.replace(/ terminal$/, "") ?? "";
-  await expect(page.getByRole("button", { name: `Session actions for ${title}`, exact: true })).toBeVisible();
+  // A new shell's title moves from its argv (/bin/sh) to the program's name (sh): read the pane and the button together.
+  const sessionActions = page.getByRole("button", { name: /^Session actions for / });
+  await expect
+    .poll(async () => {
+      const title = (await pane(page).getAttribute("aria-label"))?.replace(/ terminal$/, "");
+      return (await sessionActions.getAttribute("aria-label")) === `Session actions for ${title}`;
+    })
+    .toBe(true);
   // Which chord: tab-shortcuts.e2e.ts presses each tab's and checks it selects that tab.
   await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", /\((⌘|Ctrl\+)\d\)$/);
   await expect(page.getByRole("contentinfo").locator("[data-status-space]")).not.toBeEmpty();
