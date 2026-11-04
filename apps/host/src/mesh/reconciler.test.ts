@@ -47,14 +47,15 @@ describe("a member that could not be added (section 8.1, H-54-1)", () => {
     expect(reconcile.status.get(b.hostId)?.state).toBe("ok");
   });
 
-  test("an add refused for the dial budget keeps the first backoff: the budget's own due re-adds, not a doubled clock", async () => {
+  test("an add refused for the dial budget arms no clock: only the budget's own due re-adds it (M-E2)", async () => {
     const { clock, machines, reconcile } = reconciler();
     machines.failAdds.set("b", [budget(), budget()]);
     await reconcile.reconcile(viewOf(b));
     await reconcile.reconcile(viewOf(b));
     await clock.advance(30 * 60_000);
     await reconcile.idle();
-    expect(machines.calls).toEqual(["0 add b", "0 add b", "30000 add b"]);
+    expect(machines.calls).toEqual(["0 add b", "0 add b"]);
+    expect(reconcile.status.get(b.hostId)?.state).toBe("retrying");
   });
 
   test("presence of a member with no machine entry adds it at once", async () => {
