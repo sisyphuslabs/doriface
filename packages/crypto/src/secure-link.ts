@@ -34,7 +34,7 @@ export interface InitiatorOptions extends CommonOptions {
   readonly pairing?: PairingSecret | undefined;
   /** Session only: the first stream bytes (at most 4096), sent inside message 1. */
   readonly early?: Uint8Array | undefined;
-  /** What the session carries: absent or `"hc"` (the hc stream) or `"mesh"`; a pairing takes only `"mesh"`. */
+  /** What the session carries: absent or `"hc"` (the hc stream), `"mesh"` or `"push"`; a pairing takes only `"mesh"`. */
   readonly stream?: Stream | undefined;
   /** For tests only: fixed randomness. */
   readonly testRandomness?: ClientFlightTestOptions | undefined;

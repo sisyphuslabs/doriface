@@ -78,6 +78,19 @@ describe("H-1: section 9.2's authorization table", () => {
     expect(await outcome(sync)).toEqual({ code: CloseCode.UnknownDevice, sent: 0 });
   });
 
+  test("the push stream admits a paired device and refuses a member and an outsider, unanswered", async () => {
+    const { host, member } = meshed();
+    const phone = generateX25519();
+    host.deps.devices.add(phone.publicKey, "phone");
+    const push = (staticKey: ReturnType<typeof rawStaticKey>) =>
+      outcome(runSession(host, { kind: "lan" }, undefined, { staticKey, stream: "push" }));
+    const refused = { code: CloseCode.UnknownDevice, sent: 0 };
+    expect(await push(rawStaticKey(phone))).toBe("accepted");
+    expect(await push(keyOf(member))).toEqual(refused);
+    expect(await push(rawStaticKey(generateX25519()))).toEqual(refused);
+    expect(host.logs).toContain("mesh: refused a session: a mesh member has no push stream");
+  });
+
   test("a device presenting a member's device key is refused 4401 even with a devices.json entry", async () => {
     const { host, member } = meshed();
     host.deps.devices.add(member.device.publicKey, "member's laptop");

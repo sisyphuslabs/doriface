@@ -1,4 +1,4 @@
-# doriface transport contract v1.6
+# doriface transport contract v1.7
 
 This is the binding wire contract for every doriface package. Each rule below is the current one; the change log at the end records what each revision changed.
 
@@ -61,7 +61,7 @@ Message sizes: a client's first message is at most 4449 bytes for kind `0x01`, 4
 ### Handshake payloads
 
 - Every handshake payload starts with one JSON line: a UTF-8 JSON object followed by LF (0x0A), at most 256 bytes including the LF, whose `v` member is the number `1`. Receivers ignore unknown members. A payload that breaks a rule below fails the handshake with 4400.
-- Message 1 may carry `stream`. On a session (`0x01`): absent or `"hc"` (the plaintext after the handshake is the `hc connect` byte stream; up to 4096 early stream bytes) or `"mesh"` (the mesh stream; no early bytes, else 4400). On a pairing (`0x02`, `0x03`): absent (a device pairing) or `"mesh"` (a machine join). Any other value, or `"hc"` on a pairing, is 4400.
+- Message 1 may carry `stream`. On a session (`0x01`): absent or `"hc"` (the plaintext after the handshake is the `hc connect` byte stream; up to 4096 early stream bytes), `"mesh"` (the mesh stream; no early bytes, else 4400) or `"push"` (a device's push stream, see "Push stream"; no early bytes, else 4400). On a pairing (`0x02`, `0x03`): absent (a device pairing) or `"mesh"` (a machine join). Any other value, or `"hc"` or `"push"` on a pairing, is 4400.
 - Message 1 of a pairing: `{"v":1,"name":"<name>"}` or `{"v":1,"name":"<mesh name>","stream":"mesh"}` and nothing after the line. A device name is checked after trimming leading and trailing white space (ECMAScript `String.prototype.trim`): the trimmed name is 1 to 64 UTF-16 code units, well-formed (no lone surrogates), and contains no character of the Unicode categories Cc, Cf, Zl or Zp, otherwise the handshake fails with 4400. The host stores the trimmed name. A mesh name follows herdr-core's machine-name rule: 1 to 32 characters of `a-z`, `0-9`, `-`, `_`, `.`, starting with a letter or digit, and not shaped like a terminal id (`t` followed by `1`-`9` and then only `0123456789bcdfghjkmnpqrstvwxyz`).
 - Message 2 (every kind): `{"v":1,"lan":[...]}` and nothing after the line. `lan` holds at most 8 strings, each `ws://<IPv4 literal or bracketed IPv6 literal>:<port 1-65535>/v1/e2ee` that parses as a WHATWG URL; never a host name. The host sends the longest leading run of its LAN URLs that keeps the line within 256 bytes. A client refuses the whole reply if any entry breaks this rule.
 - A handshake that has not completed within 10 s is closed with 4408, and so is one that buffers more than 4 MiB of unread bytes.
@@ -287,6 +287,17 @@ membership(S, eff):
 
 - Which hostIds open sessions to which, from which addresses, and when; not the records, names or rules, and nothing it can forge, replay or splice.
 
+## Push stream
+
+Web push notices (v1.7). The relay is not on the push path and does not change: `stream` sits inside the Noise payload.
+
+- A session (`0x01`) with `stream:"push"` admits only a key in the paired-devices store that is no mesh member's key (4401 otherwise). The loopback plaintext path serves the same stream at `/v1/push`, behind the same token subprotocol as `/v1/hc`.
+- Its plaintext is UTF-8 JSON lines, each one object with a string member `t` and at most 4096 bytes including the LF. The host answers each client line with exactly one line, in order. A line that is longer or not such an object closes the session with 4400; an unknown `t` is answered `{"t":"error"}`.
+- Client lines: `hello`; `subscribe` (`subscription`: the browser's endpoint and its `p256dh` and `auth` keys, `events`, `muted`); `prefs`; `unsubscribe`; `test`; `focus` (`terminal` or null: the pane this device shows focused and visible); `notice` (`id`); `answer` (`id`, `answer`: `"allow"` or `"deny"`). Host lines: `ready` (`vapidKey`, the subscription it holds for this device and endpoint, if any), `ok`, `notice` (`terminal` or null), `answered` or `stale` (`terminal`), `error` (`reason`).
+- Subscriptions belong to the session's device key; revoking the device removes them. The host sends each push straight to the subscription's push service (RFC 8291 `aes128gcm`, RFC 8292 VAPID with a host-held P-256 key) and only to `https` endpoints of known push services. A push payload is exactly `{"v":1,"n":"<notice id>","k":"input"|"permission"|"done"|"error"|"test","h":"<hostId>"}`; the notice id is 22 base64url characters from 16 random bytes and maps to a terminal only on the host, for 24 h.
+- An `answer` is revalidated on the host against the live terminal: its status record must still be the `blocked`/`permission` record of the notice (same `status_ms` and turn), and its screen must be the screen hashed when the notice was made. Only then are the agent's own keys sent; otherwise the reply is `stale` and nothing is sent.
+- A device whose push stream is open and reports `focus` on a terminal gets no push about that terminal.
+
 ## Close codes
 
 - 4400: crypto failure, including an unknown session kind, a malformed first message, an invalid CPace share, or a key confirmation that does not decrypt; an unknown or misplaced `stream`, early bytes on a mesh session, a malformed or oversize mesh stream line, a sync peer that sends no `records` or `done` line for 30 s after a `hello`, a mesh name that breaks the mesh-name rule, or an hc line before the framed `hello` that breaks the rule under Session kinds
@@ -303,6 +314,7 @@ membership(S, eff):
 
 ## Change log
 
+- v1.7: the push stream (`stream:"push"`, `/v1/push` on loopback) and web push notices sent by the host; no relay change.
 - v1.6: relay passes. A host whose uplink passed its challenge gets a relay-made pass (PASS frame, type 7, on an uplink dialed with `?pass=1`), and every later upgrade carries a fresh signed proof (`?proof=`) that skips the per-source upgrade limit and is charged to a per-key limit instead, so any number of hosts behind one address keep their full dial budget. Close code 4412 refuses a bad proof. Pending eviction groups proven sessions by host key. Old hosts and old relays ignore all of it.
 - v1.5: a machine mesh over the relay with no relay change. Membership is a grow-only set of signed, hash-linked, per-signer-chained records (`found`, `admit`, `revoke`, `name`, `rekey`, `ack`) whose admissions embed the subject's self-signed card; the view is a total function of the set (rule R3, two levels), conflicts between a record and a concurrent revoke of its signer are decided by the signed testimony (automatic acks) of the members of their common past who are neither party nor a party's post-fork admitter, only revokes with standing may accuse, an undecidable conflict fails closed, and every set has exactly one view. A host joins through the existing pairing flow against one member, with that member's fingerprint confirmation, and is then trusted by every member, which shows a new-member notice. Gossip runs over on-demand sync sessions; each core adds every other member through `doriface-host connect --mesh`, dialed by the host with its own key, under a per-host dial budget sized for the relay's per-address limit. Revocation from any member, including `--compromised` subtree revocation, closes sessions with 4401 and removes the member from every paired-devices store. New: the `stream` payload member, `&m=1`, the mesh stream lines, `mesh.json`, `line.sock`, the 12-member cap and the `mesh pair|join|status|revoke|rename|leave` commands.
 - v1.4 (documentation, no wire change): the relay section now states rules the relay already enforced and the public suites check, so another server can stand in: the per-source rates (60 upgrades, 20 lookups per minute), the `cf-connecting-ip` source and its IPv4 / IPv6 /64 key, the 4404 for a replaced uplink's sessions, no PAIR_SLOT_ACK for a clear without a slot, and the test-only timeout variables.
