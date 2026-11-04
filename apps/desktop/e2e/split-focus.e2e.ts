@@ -58,6 +58,14 @@ const selectedTabHolds = (page: Page, address: string): Promise<boolean> =>
     return panel?.querySelector(`[data-terminal="${target}"]`) !== null && panel !== null;
   }, address);
 
+/** Whether the selected tab is one the layout document holds, not the first terminal shown alone before it is written. */
+const selectedTabWritten = (page: Page): Promise<boolean> =>
+  page.evaluate(() => {
+    const tab = document.querySelector('[role="tablist"][aria-label="Tabs"] [role="tab"][aria-selected="true"]');
+    const panel = tab?.getAttribute("aria-controls") ?? "";
+    return panel !== "" && panel !== "tab-panel-transient" && !panel.startsWith("tab-panel-loose:");
+  });
+
 async function boxOf(page: Page, address: string): Promise<{ x: number; y: number; width: number; height: number }> {
   const box = await page.locator("section", { has: page.locator(`[data-terminal="${address}"]`) }).boundingBox();
   if (box === null) throw new Error(`${address} has no box`);
@@ -66,12 +74,17 @@ async function boxOf(page: Page, address: string): Promise<{ x: number; y: numbe
 
 /** Presses a split key and returns the new pane once it holds the focus, the keys and the selected tab. */
 async function splitFrom(page: Page, side: "right" | "down", from: string): Promise<string> {
+  // The tab strip is read once the selected tab is in the document, so ⌘D creating a tab cannot hide behind that write.
+  await expect.poll(() => selectedTabWritten(page), { timeout: 15_000 }).toBe(true);
+  const strip = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+  const tabCount = await strip.count();
   await page.keyboard.press(SPLIT[side]);
   await expect.poll(() => focusedAddress(page), { timeout: 30_000 }).not.toBe(from);
   const created = (await focusedAddress(page)) ?? "";
   await expect.poll(() => keyboardAddress(page), { timeout: 15_000 }).toBe(created);
   await expect.poll(() => selectedTabHolds(page, created), { timeout: 5_000 }).toBe(true);
   await expect.poll(() => selectedTabHolds(page, from), { timeout: 5_000 }).toBe(true);
+  await expect(strip).toHaveCount(tabCount);
   const [box, before] = await Promise.all([boxOf(page, created), boxOf(page, from)]);
   if (side === "right") expect(box.x).toBeGreaterThanOrEqual(before.x + before.width - 1);
   else expect(box.y).toBeGreaterThanOrEqual(before.y + before.height - 1);
