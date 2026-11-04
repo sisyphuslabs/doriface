@@ -104,6 +104,14 @@ describe("a claim is only as true as what happened after it", () => {
     expect(await readApprovalRecord(core, mark)).toMatchObject({ by: laptop.by, outcome: "sent" });
   });
 
+  test("while the key is being pressed the record still says claimed, not sent", async () => {
+    const { core, mark } = claudeAt("t3");
+    expect(await answerApproval(core, mark, "allow", phone, 1)).toEqual({ kind: "sent" });
+    const atPress = JSON.stringify(core.docsAtPress[0]?.get(":approval.t3"));
+    expect(atPress).toContain('"outcome":"claimed"');
+    expect(atPress).not.toContain('"outcome":"sent"');
+  });
+
   test("a key press that fails is never recorded as sent", async () => {
     const { core, mark } = claudeAt("t3");
     core.failNext("keys");

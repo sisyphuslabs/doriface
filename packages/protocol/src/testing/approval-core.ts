@@ -10,6 +10,8 @@ import type { JsonValue } from "../json.ts";
  */
 export class MemoryApprovalCore implements ApprovalCore {
   readonly pressed: { readonly address: string; readonly keys: readonly string[] }[] = [];
+  /** Every document as it stood at the moment of each key press. */
+  readonly docsAtPress: ReadonlyMap<string, JsonValue>[] = [];
   readonly #docs = new Map<string, { value: JsonValue; version: number }>();
   #terminal: Terminal;
   #screen: string;
@@ -54,6 +56,7 @@ export class MemoryApprovalCore implements ApprovalCore {
 
   async keys(address: string, keys: readonly string[]): Promise<void> {
     await Promise.resolve();
+    this.docsAtPress.push(new Map([...this.#docs].map(([key, doc]) => [key, doc.value])));
     this.#fail("keys");
     this.pressed.push({ address, keys });
   }
