@@ -79,6 +79,36 @@ describe("#90: a Noise key that another signing key names authorizes nobody", ()
     expect(mesh.store.authorizeIndex()?.member(noiseOf(b))?.signPub).toBe(signPubOf(b));
   });
 
+  test("a member's rekey onto another member's key is void and contests nothing: that member keeps its key", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-twin-key-"));
+    dirs.push(dir);
+    const [a, b, x] = [machine("alpha"), machine("beta"), machine("xray")];
+    const mesh = new MeshFixture(dir, a);
+    mesh.admit(a, b);
+    mesh.admit(a, x);
+    // R1 voids X's rekey, but its card is stored: only effective cards may contest a key.
+    mesh.rekey(x, b.identity.noise);
+    expect(mesh.store.authorizeIndex()?.member(noiseOf(b))?.signPub).toBe(signPubOf(b));
+    mesh.revoke(a, x);
+    expect(mesh.store.authorizeIndex()?.member(noiseOf(b))?.signPub).toBe(signPubOf(b));
+  });
+
+  test("a card a revoked host publishes after its revoke contests nothing: the member it names keeps its key", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-twin-key-"));
+    dirs.push(dir);
+    const [a, b, r] = [machine("alpha"), machine("beta"), machine("rogue")];
+    const mesh = new MeshFixture(dir, a);
+    mesh.admit(a, b);
+    mesh.admit(a, r);
+    mesh.revoke(a, r);
+    const card = cardFor(r, mesh.meshId, r, { ...r.identity, noise: b.identity.noise });
+    const { refused } = mesh.store.merge([signRecord(mesh.next(r, "rekey", { card }), r.identity.sign.secretKey)]);
+    expect(refused).toEqual([]);
+    const index = mesh.store.authorizeIndex();
+    expect(index?.member(noiseOf(b))?.signPub).toBe(signPubOf(b));
+    expect(index?.member(noiseOf(r))).toBeUndefined();
+  });
+
   test("key rotation moves authorization to the new key, and a rotation back to the member's own old key works", () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-twin-key-"));
     dirs.push(dir);
