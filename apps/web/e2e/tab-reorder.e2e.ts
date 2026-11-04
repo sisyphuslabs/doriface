@@ -31,8 +31,19 @@ async function order(page: Page): Promise<string[]> {
   return addresses;
 }
 
+/** The strip's tab ids in DOM order, read without pressing a key. */
+const domOrder = (page: Page) =>
+  strip(page)
+    .locator("[data-tab-id]")
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-tab-id") ?? ""));
+
 /** Four tabs, the last of them new and selected: the workspace opens one on its own when the core has a live one. */
 async function fourTabs(page: Page): Promise<string[]> {
+  await openFour(page);
+  return order(page);
+}
+
+async function openFour(page: Page): Promise<void> {
   await page.goto("/");
   await openNewTerminal(page);
   const missing = 4 - (await tabs(page).count());
@@ -41,7 +52,6 @@ async function fourTabs(page: Page): Promise<string[]> {
     Promise.resolve(),
   );
   await expect(tabs(page)).toHaveCount(4);
-  return order(page);
 }
 
 const centre = async (locator: Locator) => {
@@ -155,23 +165,34 @@ async function touch(page: Page, from: Locator, x: number | null, hold: boolean)
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 5_000);
   const cdp = await page.context().newCDPSession(page);
   const at = (px: number) => [{ x: px, y: start.y }];
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x) });
+  // Every event carries the touch's own time (8 ms a step, the moves after the hold when held), so the browser's
+  // gesture recognition sees the same finger whatever this machine's load makes the calls take.
+  const t0 = Date.now() / 1000;
+  const stamp = (ms: number) => t0 + ms / 1000;
+  const movesFrom = hold ? TOUCH_LIFT_MS : 0;
+  const steps = x === null ? 0 : 12;
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x), timestamp: stamp(0) });
   if (hold) {
     await page.clock.runFor(TOUCH_LIFT_MS);
     await expect(strip(page).locator("[data-lifted]")).toHaveCount(1);
   }
   const target = x ?? start.x;
-  await Array.from({ length: x === null ? 0 : 12 }, (_unused, index) => index + 1).reduce<Promise<unknown>>(
+  await Array.from({ length: steps }, (_unused, index) => index + 1).reduce<Promise<unknown>>(
     (previous, step) =>
       previous.then(() =>
         cdp.send("Input.dispatchTouchEvent", {
           type: "touchMove",
           touchPoints: at(start.x + ((target - start.x) * step) / 12),
+          timestamp: stamp(movesFrom + step * 8),
         }),
       ),
     Promise.resolve(),
   );
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+    timestamp: stamp(movesFrom + (steps + 1) * 8),
+  });
   await cdp.detach();
   await page.clock.resume();
 }
@@ -199,4 +220,75 @@ test.describe("touch", () => {
     await expect(tabs(page).nth(selected)).toHaveAttribute("aria-selected", "true");
     expect(await order(page)).toEqual(after);
   });
+});
+
+test("on macOS the move chord stays with a text field, so the palette keeps its text editing, and from the terminal it moves the tab", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" });
+  });
+  await openFour(page);
+  const before = await domOrder(page);
+  await page.keyboard.press("Meta+Shift+P");
+  const field = page.getByRole("combobox");
+  await expect(field).toBeFocused();
+  await field.fill("hello world");
+  // What the field itself sees of the chord: on a Mac an untouched ⌘⇧← selects to the start of the line.
+  await field.evaluate((element) => {
+    element.addEventListener("keydown", (event) => {
+      if (event instanceof KeyboardEvent && event.key === "ArrowLeft" && element instanceof HTMLElement)
+        element.dataset["seen"] = `prevented=${String(event.defaultPrevented)}`;
+    });
+  });
+  await page.keyboard.press("Meta+Shift+ArrowLeft");
+  await expect(field).toHaveAttribute("data-seen", "prevented=false");
+  await expect(field).toHaveValue("hello world");
+  expect(await domOrder(page)).toEqual(before);
+
+  await page.keyboard.press("Escape");
+  await expect(field).toBeHidden();
+  await page.locator('[data-focused="true"] [data-terminal]').getByRole("textbox").focus();
+  await page.keyboard.press("Meta+Shift+ArrowLeft");
+  await expect.poll(() => domOrder(page)).toEqual(rearranged(before, [0, 1, 3, 2]));
+});
+
+test("a drop let go below the strip leaves the next Enter on a tab alone, and a drop onto itself never selects", async ({
+  page,
+}) => {
+  await openFour(page);
+  const before = await domOrder(page);
+  const from = await centre(tabs(page).nth(0));
+  const past = await centre(tabs(page).nth(2));
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(past.right - 4, past.y, { steps: 12 });
+  await page.mouse.move(past.right - 4, past.y + 250, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(() => domOrder(page)).toEqual(rearranged(before, [1, 2, 0, 3]));
+  await tabs(page).nth(0).focus();
+  await page.keyboard.press("Enter");
+  await expect(tabs(page).nth(0)).toHaveAttribute("aria-selected", "true");
+
+  const own = await centre(tabs(page).nth(1));
+  await page.mouse.move(own.x, own.y);
+  await page.mouse.down();
+  await page.mouse.move(own.x + 30, own.y, { steps: 6 });
+  await page.mouse.move(own.x, own.y, { steps: 6 });
+  await page.mouse.up();
+  await expect(tabs(page).nth(0)).toHaveAttribute("aria-selected", "true");
+  await expect(tabs(page).nth(1)).toHaveAttribute("aria-selected", "false");
+});
+
+test("a move is said once: a tab opened afterwards does not change what the strip said", async ({ page }) => {
+  await openFour(page);
+  const mac = await page.evaluate(() => navigator.platform.startsWith("Mac"));
+  await tabs(page).nth(0).focus();
+  await page.keyboard.press(mac ? "Meta+Shift+ArrowRight" : "Control+Shift+PageDown");
+  const said = page.getByRole("status").filter({ hasText: /^Moved / });
+  await expect(said).toHaveText(/^Moved .+ to position 2 of 4/);
+  const text = await said.textContent();
+  await openNewTerminal(page);
+  await expect(tabs(page)).toHaveCount(5);
+  expect(await said.textContent()).toBe(text);
 });

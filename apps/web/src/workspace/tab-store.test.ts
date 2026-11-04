@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { NO_TABS } from "./tab-follow.ts";
 import { loadTabs, saveTabs, TABS_KEY } from "./tab-store.ts";
 
@@ -37,5 +37,21 @@ describe("tab store", () => {
     }
     const odd = JSON.stringify({ core: { open: ["a", 7, "b", "a"], active: "gone", split: "a" } });
     expect(loadTabs("core", memoryStorage(odd))).toEqual({ ...NO_TABS, open: ["a", "b"], active: "a", split: null });
+  });
+
+  test("a storage that refuses the write (full or denied) is reported, and saving does not throw", () => {
+    const refusing: Pick<Storage, "getItem" | "setItem"> = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+      },
+    };
+    const report = spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(() => saveTabs("core", { ...NO_TABS, open: ["a"], active: "a" }, refusing)).not.toThrow();
+      expect(report).toHaveBeenCalledTimes(1);
+    } finally {
+      report.mockRestore();
+    }
   });
 });
