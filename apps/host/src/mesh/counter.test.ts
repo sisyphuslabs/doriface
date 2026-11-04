@@ -53,7 +53,7 @@ describe("a host restored from an older backup (section 10.1)", () => {
     expect(store.read()?.records.length).toBe(peerHolds.length);
   });
 
-  test("a peer's hello claiming n = 2^53 for this host does not silence it: the next admit is acked", async () => {
+  test("a peer's hello claiming n = 2^53 for this host does not silence it: the admit is acked once the claim lapses", async () => {
     const clock = new FakeClock();
     const net = new MeshNet(clock, seededRandom(29));
     const { records } = meshOf([a, b]);
@@ -66,6 +66,8 @@ describe("a host restored from an older backup (section 10.1)", () => {
     send({ t: "records", records: [new Signer(a, records).admit(peer("c"), headsOfRecords(records))] });
     send({ t: "done", mesh: host.gossip.meshId });
     await settle();
+    expect(acksBy(host.store, b.signPub)).toBe(0);
+    await clock.advance(30_001);
     expect(acksBy(host.store, b.signPub)).toBe(1);
   });
 
