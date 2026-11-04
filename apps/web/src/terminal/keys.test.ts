@@ -44,12 +44,18 @@ test.each([
   expect(applyModifiers(data, latched(...mods), "other")).toEqual({ kind: "write", data: bytes });
 });
 
-test("the paste chord of the host's platform pastes the device clipboard", () => {
+test("cmd+v on a mac host and ctrl+shift+v elsewhere paste the device clipboard", () => {
   expect(applyModifiers("v", latched("cmd"), "mac")).toEqual({ kind: "paste" });
-  expect(applyModifiers("V", latched("ctrl"), "other")).toEqual({ kind: "paste" });
-  // On a mac host ctrl+v stays the terminal's literal-next.
-  expect(applyModifiers("v", latched("ctrl"), "mac")).toEqual({ kind: "write", data: "\u0016" });
+  expect(applyModifiers("v", latched("ctrl", "shift"), "other")).toEqual({ kind: "paste" });
 });
+
+test.each(["mac", "other"] as const)(
+  "ctrl+v on a %p host sends ^V (vim's visual block, bash's quoted insert)",
+  (host) => {
+    expect(applyModifiers("v", latched("ctrl"), host)).toEqual({ kind: "write", data: "\u0016" });
+    expect(applyModifiers("V", latched("ctrl"), host)).toEqual({ kind: "write", data: "\u0016" });
+  },
+);
 
 test.each([
   ["buildMac", "mac"],

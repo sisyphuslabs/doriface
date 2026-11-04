@@ -73,13 +73,52 @@ test("Paste and the ctrl+v chord paste the device clipboard", async ({ page, con
   await page.keyboard.type("\r");
   await expect(terminal).toContainText("pasted-42", { timeout: 10_000 });
 
-  // The core here is not a mac, so ctrl+v is the paste chord.
+  // The core here is not a mac, so ctrl+shift+v is the paste chord.
   await clipboard("echo chord-$((5+5))");
   await key(page, "Control").click();
+  await key(page, "Shift").click();
   await page.keyboard.type("v");
   await expect(terminal).toContainText("echo chord-$((5+5))", { timeout: 10_000 });
   await page.keyboard.type("\r");
   await expect(terminal).toContainText("chord-10", { timeout: 10_000 });
+});
+
+test("ctrl then v sends ^V, never a paste", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const terminal = await openPhoneTerminal(page);
+  await page.evaluate(() => navigator.clipboard.writeText("CLIPBOARD-TEXT"));
+  // -iexten keeps the tty from taking ^V as its own literal-next, so cat -v prints the byte it reads.
+  await page.keyboard.type("stty -iexten; cat -v\r");
+  await key(page, "Control").click();
+  await page.keyboard.type("v");
+  await page.keyboard.type("q\r");
+  await expect(terminal).toContainText(/\^Vq[\s\S]*\^Vq/, { timeout: 10_000 });
+  await expect(terminal).not.toContainText("CLIPBOARD-TEXT");
+});
+
+test("a latched modifier does not follow Switch session to another terminal", async ({ page }) => {
+  const first = await openPhoneTerminal(page);
+  const address = await first.getAttribute("data-terminal");
+  if (address === null) throw new Error("the first terminal has no address");
+  hc("label", address, `herdr.name=latch-a-${address}`);
+  await page.keyboard.type("cat -v\r");
+  await page.getByRole("button", { name: "Back to agents" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "New tab" }).click();
+  await expect(page.locator("[data-terminal]")).not.toHaveAttribute("data-terminal", address, { timeout: 15_000 });
+  await expect(page.locator("[data-terminal]")).toContainText("$", { timeout: 15_000 });
+
+  const ctrl = key(page, "Control");
+  await ctrl.click();
+  await expect(ctrl).toHaveAttribute("aria-pressed", "true");
+  await key(page, "Switch session").click();
+  await page.getByRole("menuitem", { name: new RegExp(`latch-a-${address}`) }).click();
+  const a = page.locator(`[data-terminal="${address}"]`);
+  await expect(a.locator("textarea")).toBeFocused({ timeout: 15_000 });
+  await expect(ctrl).toHaveAttribute("aria-pressed", "false");
+  // cat -v prints xq as typed; a ctrl still latched from the other terminal would make it ^Xq.
+  await page.keyboard.type("xq\r");
+  await expect(a).toContainText(/xq[\s\S]*xq/, { timeout: 10_000 });
+  await expect(a).not.toContainText("^X");
 });
 
 test("Switch session lists the terminals and opens the one picked", async ({ page }) => {

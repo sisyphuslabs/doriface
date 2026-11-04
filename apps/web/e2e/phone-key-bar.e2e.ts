@@ -61,6 +61,24 @@ test("the bar rides on the soft keyboard; with the keyboard down only a keyboard
   await expect(show).toBeVisible();
 });
 
+test("a browser that shrinks the layout viewport for the keyboard shows the bar too", async ({ page }) => {
+  await openPhoneTerminal(page, 390, "resize");
+  const bar = keysBar(page);
+  await expect(page.locator("[data-terminal] textarea")).toBeFocused();
+  await expect(bar).toHaveCount(0);
+
+  // The keyboard opens: the page itself is 336 px shorter, and the visual viewport is all of it.
+  await page.setViewportSize({ width: 390, height: 844 - 336 });
+  await expect(bar).toBeVisible();
+  const box = await bar.boundingBox();
+  expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(844 - 336);
+
+  // It closes by its own key: the page grows back and the bar goes with it.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(bar).toHaveCount(0);
+  await expect(key(page, "Show keyboard")).toBeVisible();
+});
+
 test("the D-pad toggle lays a 3x3 pad over the terminal", async ({ page }) => {
   await openPhoneTerminal(page);
   const toggle = key(page, "Arrow keys");

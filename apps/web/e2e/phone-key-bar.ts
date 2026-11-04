@@ -42,8 +42,16 @@ export async function showKeyboard(page: Page, px: number): Promise<void> {
   await page.evaluate((height) => (Reflect.get(window, "softKeyboard") as (px: number) => void)(height), px);
 }
 
-export async function openPhoneTerminal(page: Page, width = 390): Promise<Locator> {
-  await fakeSoftKeyboard(page);
+/**
+ * `overlay`: the soft keyboard covers the page and shrinks only the visual viewport (iOS Safari, Chrome's default).
+ * `resize`: the browser shrinks the layout viewport for it instead; the spec resizes the page to open it.
+ */
+export async function openPhoneTerminal(
+  page: Page,
+  width = 390,
+  keyboard: "overlay" | "resize" = "overlay",
+): Promise<Locator> {
+  if (keyboard === "overlay") await fakeSoftKeyboard(page);
   await page.setViewportSize({ width, height: 844 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
