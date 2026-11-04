@@ -76,6 +76,30 @@ describe("session actions", () => {
     expect(left).toEqual(["t5", "t4"]);
   });
 
+  test("an End whose kill is refused takes its mark back; one whose removal fails after the kill keeps it", async () => {
+    const calls: { readonly method: string; readonly params: unknown }[] = [];
+    const failing = (fails: "kill" | "rm"): SessionCalls => {
+      const answer =
+        (method: "label" | "kill" | "rm") =>
+        (params: unknown): Promise<{ readonly state: "finished" }> => {
+          calls.push({ method, params });
+          return method === fails
+            ? Promise.reject(new HcRpcError({ code: -32000, message: `${method}: busy`, data: { kind: "busy" } }))
+            : Promise.resolve({ state: "finished" });
+        };
+      return { label: answer("label"), kill: answer("kill"), rm: answer("rm") };
+    };
+    await expect(endSession(failing("kill"), "t10")).rejects.toThrow("kill: busy");
+    expect(calls.filter((call) => call.method === "label").map((call) => call.params)).toEqual([
+      { terminal: "t10", labels: { "herdr.end": "1" } },
+      { terminal: "t10", labels: { "herdr.end": "" } },
+    ]);
+    calls.length = 0;
+    // The program was killed: the host still removes it, so the mark stays.
+    await expect(endSession(failing("rm"), "t11")).rejects.toThrow("rm: busy");
+    expect(calls.filter((call) => call.method === "label")).toHaveLength(1);
+  });
+
   test("a terminal already gone when End's kill or rm lands counts as ended; any other refusal does not", async () => {
     await endSession(refusing("rm", "not_found"), "t8");
     await endSession(refusing("kill", "not_found"), "t8");

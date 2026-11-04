@@ -1,33 +1,45 @@
-import { HcConnection } from "@doriface/client";
+import { type ByteLink, HcConnection } from "@doriface/client";
 import { END_LABEL, eventAddress, type HcEvent, HcRpcError, type Terminal } from "@doriface/protocol";
 import { type HcTarget, spawnHcLink } from "./mesh/hc-machines.ts";
 
 export interface EndSweeper {
-  /** Watches the core unless already watching; called as a client connects, so a restarted core is watched again. */
-  ensure(): void;
+  /**
+   * Watches the core unless a watch is open already, and settles once that watch has read the core. Called as a client
+   * connects, so a watch whose connection closed (the core restarted) is opened again.
+   */
+  ensure(): Promise<void>;
   stop(): Promise<void>;
 }
 
+/** hc's reason for a program that `terminal.kill` ended, as End's kill does; a program that exits by itself is "exited". */
+const KILLED = "killed";
+
 /**
- * Removes every finished terminal that carries END_LABEL: an End that marked and killed a terminal finishes on the core
- * even when the page that asked closed before its own terminal.rm went out. Watches over one connection of its own,
- * opened by `ensure` and again by the next `ensure` once that connection has closed.
+ * Removes every terminal whose program was killed and that carries END_LABEL: an End that marked and killed a terminal
+ * finishes on the core even when the page that asked closed before its own terminal.rm went out. A marked program that
+ * exits by itself is left alone: its End did not happen (the kill never landed), so its output stays. Watches over one
+ * connection of its own, through `link` (an `hc connect` child).
  */
-export function endSweeper(core: HcTarget, log: (line: string) => void): EndSweeper {
+export function endSweeper(
+  core: HcTarget,
+  log: (line: string) => void,
+  link: (core: HcTarget) => ByteLink = spawnHcLink,
+): EndSweeper {
   let watching: Promise<HcConnection | undefined> | undefined;
+  let open: HcConnection | undefined;
   /** Settles once the latest `hc connect` child has exited, so `stop` leaves no child behind. */
   let exited: Promise<void> = Promise.resolve();
   let stopped = false;
   const watch = async (): Promise<HcConnection> => {
-    const link = spawnHcLink(core);
+    const child = link(core);
     const gone = Promise.withResolvers<void>();
-    link.onClose(() => gone.resolve());
+    child.onClose(() => gone.resolve());
     exited = gone.promise;
     let connection: HcConnection;
     try {
-      connection = await HcConnection.open(link);
+      connection = await HcConnection.open(child);
     } catch (error) {
-      link.close();
+      child.close();
       throw error;
     }
     try {
@@ -39,11 +51,11 @@ export function endSweeper(core: HcTarget, log: (line: string) => void): EndSwee
     return connection;
   };
   const follow = async (connection: HcConnection): Promise<void> => {
-    const finished = new Set<string>();
+    const killed = new Set<string>();
     const marked = new Set<string>();
     const sweep = (address: string): void => {
-      if (!finished.has(address) || !marked.has(address)) return;
-      finished.delete(address);
+      if (!killed.has(address) || !marked.has(address)) return;
+      killed.delete(address);
       connection.call("terminal.rm", { terminal: address }).catch((error: unknown) => {
         // not_found: the page's own End or another client got there first.
         if (!(error instanceof HcRpcError && error.kind === "not_found"))
@@ -51,7 +63,7 @@ export function endSweeper(core: HcTarget, log: (line: string) => void): EndSwee
       });
     };
     const learn = (terminal: Terminal): void => {
-      if (terminal.state === "finished") finished.add(terminal.address);
+      if (terminal.state === "finished" && terminal.reason === KILLED) killed.add(terminal.address);
       if (Object.hasOwn(terminal.labels ?? {}, END_LABEL)) marked.add(terminal.address);
       sweep(terminal.address);
     };
@@ -61,14 +73,14 @@ export function endSweeper(core: HcTarget, log: (line: string) => void): EndSwee
       switch (event.type) {
         case "created":
         case "restarted":
-          finished.delete(address);
+          killed.delete(address);
           break;
         case "removed":
-          finished.delete(address);
+          killed.delete(address);
           marked.delete(address);
           break;
         case "finished":
-          finished.add(address);
+          if (event.data.reason === KILLED) killed.add(address);
           sweep(address);
           break;
         case "labels":
@@ -91,21 +103,23 @@ export function endSweeper(core: HcTarget, log: (line: string) => void): EndSwee
   };
   return {
     ensure: () => {
-      if (stopped || watching !== undefined) return;
-      const started = watch().then(
-        (connection) => {
-          connection.onClose(() => {
+      if (stopped) return Promise.resolve();
+      if (watching === undefined || open?.closed === true) {
+        open = undefined;
+        const started: Promise<HcConnection | undefined> = watch().then(
+          (connection) => {
+            open = connection;
+            return connection;
+          },
+          (error: unknown) => {
+            log(`end: not watching the core: ${String(error)}`);
             if (watching === started) watching = undefined;
-          });
-          return connection;
-        },
-        (error: unknown) => {
-          log(`end: not watching the core: ${String(error)}`);
-          if (watching === started) watching = undefined;
-          return undefined;
-        },
-      );
-      watching = started;
+            return undefined;
+          },
+        );
+        watching = started;
+      }
+      return watching.then(() => undefined);
     },
     stop: async () => {
       stopped = true;

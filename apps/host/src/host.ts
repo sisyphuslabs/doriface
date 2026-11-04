@@ -117,7 +117,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
     log: options.log,
     directIdleMs: options.directIdleMs,
     openPipe: () => {
-      ends.ensure();
+      void ends.ensure();
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });

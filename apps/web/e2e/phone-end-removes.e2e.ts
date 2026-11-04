@@ -21,6 +21,26 @@ function onCore(address: string): boolean {
   return terminals.some((terminal) => JSON.stringify(terminal).includes(`"${address}"`));
 }
 
+/** The core's view of one terminal: its state, why it finished, and whether it carries End's mark. */
+function terminalOf(address: string) {
+  const shown: unknown = JSON.parse(hc("get", address, "--json"));
+  if (typeof shown !== "object" || shown === null) throw new Error(`hc get ${address} printed no terminal`);
+  const labels: unknown = Reflect.get(shown, "labels");
+  return {
+    state: Reflect.get(shown, "state"),
+    reason: Reflect.get(shown, "reason"),
+    marked: typeof labels === "object" && labels !== null && Object.hasOwn(labels, "herdr.end"),
+  };
+}
+
+/** A terminal started with hc, outside the page; returns its address. */
+function hcRun(...argv: string[]): string {
+  const started: unknown = JSON.parse(hc("run", "--bg", "--json", "--", ...argv));
+  const address = typeof started === "object" && started !== null ? Reflect.get(started, "address") : undefined;
+  if (typeof address !== "string") throw new Error("hc run printed no address");
+  return address;
+}
+
 // By tag, not role: an open dialog marks the page behind it aria-hidden, which a role query would read as absent.
 const agentsList = (page: Page) => page.locator("h1", { hasText: /^Agents$/ });
 const screenTitle = (page: Page) => page.locator("header h1");
@@ -162,4 +182,44 @@ test("a session the host removes while End's own removal is held closes the ques
   await expect(ask).toHaveCount(0, { timeout: 15_000 });
   await expect(agentsList(page)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+/** Holds End's kill, lets its mark reach the core, then drops the link: End fails and the program runs on. */
+async function endFailsAfterMark(page: Page, link: HcSocket, name: string, address: string) {
+  await endHolding(page, link, name, "terminal.kill");
+  await expect.poll(() => terminalOf(address).marked).toBe(true);
+  const sockets = link.opened();
+  await link.drop(false);
+  const ask = page.getByRole("dialog", { name: `End ${name}?` });
+  await expect(ask.getByRole("alert")).toContainText("The session did not end", { timeout: 15_000 });
+  return { ask, sockets };
+}
+
+test("a session whose End failed after its mark keeps its output when its program later exits by itself", async ({
+  page,
+}) => {
+  const { link, name, address } = await phoneWithTerminal(page, "end-then-exit");
+  await endFailsAfterMark(page, link, name, address);
+  hc("send", address, `echo kept-${address}; exit 3`);
+  await expect.poll(() => terminalOf(address).state, { timeout: 15_000 }).toBe("finished");
+  // A marked terminal killed after it: once the host has removed that one, it has seen this one finish.
+  const killed = hcRun("sh", "-c", "exec sleep 600");
+  hc("label", killed, "herdr.end=1");
+  hc("kill", killed);
+  await expect.poll(() => onCore(killed), { timeout: 10_000 }).toBe(false);
+  expect(terminalOf(address)).toMatchObject({ state: "finished", reason: "exited" });
+  expect(hc("read", address)).toContain(`kept-${address}`);
+});
+
+test("dismissing a failed End takes its mark off the session, which runs on", async ({ page }) => {
+  const { link, name, address } = await phoneWithTerminal(page, "end-dismissed");
+  const { ask, sockets } = await endFailsAfterMark(page, link, name, address);
+  await expect.poll(link.opened, { timeout: 15_000 }).toBeGreaterThan(sockets);
+  await expect(page.locator('[role="status"]', { hasText: /Reconnecting|Offline/ })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toHaveCount(0);
+  await expect.poll(() => terminalOf(address).marked).toBe(false);
+  expect(terminalOf(address).state).toBe("live");
 });
