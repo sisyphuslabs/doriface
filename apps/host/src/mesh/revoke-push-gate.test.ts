@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Signed } from "@doriface/mesh";
+import { hashOf, type Signed } from "@doriface/mesh";
 import { GOSSIP_TIMINGS } from "./gossip.ts";
 import { FakeClock, seededRandom, settle } from "./testing/fake-clock.ts";
 import { meshOf, peer } from "./testing/mesh-peers.ts";
@@ -30,6 +30,19 @@ describe("the revoke push to a member that just went offline (section 5.3)", () 
     await settle();
     expect(holds(a, ack)()).toBe(true);
     expect(a.gossip.owed().map((member) => member.name)).toEqual([]);
+  });
+
+  test("records the door refuses never count as held, so the held set stays within the stored set", async () => {
+    const { a, b } = pair();
+    await b.gossip.sync(a.member, "push");
+    await settle();
+    const session = a.gossip.session(b.member.signPub);
+    if (session === undefined) throw new Error("no session from b");
+    const junk = Array.from({ length: 64 }, (_, index) => ({ body: `not a record ${index}`, sig: "AA" }));
+    a.gossip.merge(session, junk);
+    const held = new Set(a.gossip.held(b.member.signPub));
+    expect(junk.map(hashOf).filter((hash) => held.has(hash))).toEqual([]);
+    expect(held.size).toBeLessThanOrEqual(a.records().length);
   });
 
   test("a member offline right after its ack still gets the revoke at its release, once it is back", async () => {

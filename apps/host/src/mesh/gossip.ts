@@ -186,10 +186,19 @@ export class Gossip implements SyncHost {
     if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
   }
 
-  /** A record a peer sent, and its past, is one it holds (section 5.3: owed is what it is not known to hold). */
+  /**
+   * A stored record a peer sent, and its past, is one it holds (section 5.3: owed is what it is not known to hold).
+   * Only stored hashes are kept, as the session's own set does: refused ones would grow it without bound.
+   */
   #heldBy(peer: string, batch: readonly Signed[]): void {
-    const confirmed = this.#confirmed.get(peer) ?? [];
-    this.#confirmed.set(peer, [...new Set([...confirmed, ...batch.map(hashOf)])]);
+    const stored = new Set(this.records().map(hashOf));
+    const held = batch.map(hashOf).filter((hash) => stored.has(hash));
+    this.#confirmed.set(peer, [...new Set([...(this.#confirmed.get(peer) ?? []), ...held])]);
+  }
+
+  /** The heads and records `peer` is known to hold: its last `hello`, and the stored records it sent since. */
+  held(peer: string): readonly string[] {
+    return this.#confirmed.get(peer) ?? [];
   }
 
   ended(session: SyncSession): void {
