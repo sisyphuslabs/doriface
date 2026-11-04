@@ -25,6 +25,9 @@ for (const width of [390, 320]) {
     // At 390 the left part shows Ctrl Shift Tab Esc without a swipe; 320 shows what fits and swipes the rest.
     if (width === 390) expect(shown).toEqual(expect.arrayContaining(["Control", "Shift", "Tab", "Escape"]));
     const box = await bar.boundingBox();
+    // With the keyboard up the header stays above the bar: the terminal keeps the room between them.
+    const head = await page.getByRole("banner").boundingBox();
+    expect((head?.y ?? 0) + (head?.height ?? Infinity)).toBeLessThanOrEqual(box?.y ?? 0);
     expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
     expect((box?.x ?? 0) + (box?.width ?? Infinity)).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
