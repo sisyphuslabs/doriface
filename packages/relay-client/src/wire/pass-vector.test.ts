@@ -3,7 +3,8 @@ import { proofMessage } from "./pass.ts";
 
 /**
  * The proof layout as fixed bytes (contract v1.6, "Relay passes"). The expected hex was written from the contract's
- * layout, not produced by this code; the relay's own suite pins the same bytes, so the two sides cannot drift.
+ * layout, not produced by this code. The relay's suite pins the same bytes only from relay PR #7 on, which the pinned
+ * relay (`relay-pin.json`) does not include yet; until the pin moves past it, nothing on the relay side checks them.
  */
 const VECTOR = {
   relayOrigin: "wss://r.example",

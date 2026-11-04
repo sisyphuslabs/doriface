@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { connectRelayClient } from "./connector.ts";
+import { RelayCloseError } from "./link.ts";
 import { relaySocketUrl } from "./socket.ts";
 
 const urls: URL[] = [];
@@ -21,6 +22,17 @@ async function untilClosed(connecting: Promise<{ onClose(listener: () => void): 
 }
 
 const hostId = "a".repeat(26);
+
+/**
+ * A socket that closes with Normal (1000) before it opens: that close carries no RelayCloseError, so the connector writes
+ * the error itself. The close is dispatched once the connector has subscribed; the real socket's later failure is
+ * ignored by the already closed link.
+ */
+function closedNormallyBeforeOpen(url: string): WebSocket {
+  const ws = new WebSocket(url);
+  queueMicrotask(() => ws.dispatchEvent(new CloseEvent("close", { code: 1000 })));
+  return ws;
+}
 
 describe("relay URLs", () => {
   test("a relay URL without a scheme is reported as such", () => {
@@ -49,15 +61,21 @@ describe("relay passes on client sessions (contract v1.6)", () => {
     expect(refused).toEqual([[origin, `client.aaaa.${origin.length}`]]);
   });
 
-  test("a session that fails before opening names no proof in its error, so no log can carry one", async () => {
+  test("a session closed normally before opening names only its path in the error, so no log can carry the proof", async () => {
     const gone = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("gone") });
-    const relayUrl = `http://127.0.0.1:${gone.port}`;
+    const { port } = gone;
     await gone.stop(true);
     const proofs = { proof: () => "SECRET-PROOF-TEXT", refused: () => undefined };
-    const error = await connectRelayClient({ relayUrl, hostId, proofs }).catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(Error);
-    expect(String(error)).not.toContain("SECRET-PROOF-TEXT");
-    expect(String(error)).not.toContain("proof=");
+    const error = await connectRelayClient({
+      relayUrl: `http://127.0.0.1:${port}`,
+      hostId,
+      proofs,
+      createSocket: closedNormallyBeforeOpen,
+    }).catch((caught: unknown) => caught);
+    expect(error).not.toBeInstanceOf(RelayCloseError);
+    expect(String(error)).toBe(
+      `Error: relay socket to ws://127.0.0.1:${port}/v1/client/${hostId} closed before opening`,
+    );
   });
 
   test("only a 4412 is a refusal: a session closed for any other reason marks no pass", async () => {

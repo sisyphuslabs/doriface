@@ -64,7 +64,6 @@ export interface PassBookOptions {
   readonly log?: (line: string) => void;
 }
 
-/** A host's relay passes: validates what relays send, keeps the newest per relay, and builds proofs from them. */
 /** The pass a base64url proof carries (bytes 1..59), or undefined when the text is no proof. */
 function passOfProof(proof: string): Uint8Array | undefined {
   const bytes = fromBase64Url(proof);
@@ -77,6 +76,7 @@ function samePass(held: Uint8Array, refused: Uint8Array | undefined): boolean {
   );
 }
 
+/** A host's relay passes: validates what relays send, keeps the newest per relay, and builds proofs from them. */
 export class PassBook implements RelayProofs {
   readonly #secretKey: Uint8Array;
   readonly #signPub: Uint8Array;
