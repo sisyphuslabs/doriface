@@ -12,6 +12,10 @@ export type { Tap } from "./tap.ts";
 const READY = /Ready on (http:\/\/\S+)/;
 const START_TIMEOUT_MS = 90_000;
 const STOP_MS = 15_000;
+/** How long a started relay may take to answer its first `GET /healthz`. */
+const ANSWER_MS = 15_000;
+/** The longest {@link MeshRelay.restart} may take: the stop, the start and the first answer after it. */
+export const RESTART_BUDGET_MS = STOP_MS + START_TIMEOUT_MS + ANSWER_MS;
 
 export interface MeshRelay {
   /** The relay itself, for dials that are not a mesh host (an outsider's). */
@@ -25,7 +29,10 @@ export interface MeshRelay {
   /** When each proven upgrade's log line (`"ev":"proven"`) arrived, in ms: the peak per 60 s is countable from it. */
   provenAt(): readonly number[];
   stop(): Promise<void>;
-  /** Restarts the relay in place: same port, same persisted Durable Object state (design E-RELAY, E-IP). */
+  /**
+   * Restarts the relay in place: same port, same persisted Durable Object state (design E-RELAY, E-IP). Resolves once
+   * the relay answers `GET /healthz` again, the moment a recovery bound counts from.
+   */
   restart(): Promise<void>;
 }
 
@@ -40,6 +47,13 @@ interface Launched {
 async function stopLaunch({ proc, drained }: Launched): Promise<void> {
   await stopProcessGroup(proc);
   await within(drained, "the relay's processes exiting", STOP_MS);
+}
+
+/** Resolves once the relay at `url` answers `GET /healthz` with 200, not merely once wrangler printed its banner. */
+async function answers(url: string): Promise<void> {
+  const response = await within(fetch(`${url}/healthz`), "the relay answering GET /healthz", ANSWER_MS);
+  await response.body?.cancel();
+  if (response.status !== 200) throw new Error(`the relay answered GET /healthz with ${response.status}`);
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
@@ -158,7 +172,7 @@ export async function startMeshRelay(): Promise<MeshRelay> {
       async restart() {
         await stopLaunch(current);
         current = launch();
-        await current.ready;
+        await answers(await current.ready);
       },
       tapFor() {
         const tap = makeTap(port, ip);

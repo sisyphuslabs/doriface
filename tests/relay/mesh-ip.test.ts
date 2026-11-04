@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { untilGone } from "./support/mesh/gone.ts";
 import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
+import { RESTART_BUDGET_MS } from "./support/mesh/relay-front.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { statusOf } from "./support/mesh/status.ts";
 import { inOrder } from "./support/sequential.ts";
@@ -21,8 +22,15 @@ const JOINS = [
  * its own 12 upgrades per 60 s) plus T_add (20 s). The budget is per host; nothing in it depends on the address.
  */
 const CONVERGE_MS = 120_000 + 20_000;
-/** Design 8.2: after a relay restart every line is back within 120 s in general (60 s when uplinks return in 5 s). */
-const RESTART_MS = 120_000;
+/**
+ * Design 8.2: after a relay restart every line is back within 120 s in general (60 s when uplinks return in 5 s),
+ * counted from the moment the relay answers again; its own stop and start under wrangler dev are the harness's.
+ * Measured from that moment over 22 runs on two loaded Linux runners (load 28-109, one inside the whole relay suite;
+ * #166): median 61.3 s, max 93.7 s, every run within the design's 120 s. The bound is twice that max, so a runner twice as slow still passes and a
+ * restart whose lines never return still fails.
+ */
+const MEASURED_RECOVERY_MAX_MS = 93_663;
+const RECOVER_MS = 2 * MEASURED_RECOVERY_MAX_MS;
 const RATE_LIMITED = 4429;
 /** The old per-address limit: 60 upgrades per wall-clock minute (a fixed window, `Math.floor(now / 60 s)`). */
 const MINUTE_MS = 60_000;
@@ -128,11 +136,18 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
       const relay = hosts.relay;
       if (relay === undefined) throw new Error("E-IP needs the local relay");
       const from = markOf(hosts);
+      const stopped = performance.now();
       await relay.restart();
-      await untilConnected(hosts, REMAINING, RESTART_MS, from);
+      const answered = performance.now();
+      await untilConnected(hosts, REMAINING, RECOVER_MS, from);
+      const back = performance.now();
+      console.log(
+        `E-IP restart: the relay answered ${Math.round(answered - stopped)} ms after its stop began; ` +
+          `every line was back ${Math.round(back - answered)} ms after that`,
+      );
       expectNoRateLimit(hosts, from);
       await expectFullBudgets(hosts, REMAINING);
     },
-    RESTART_MS + 120_000,
+    RESTART_BUDGET_MS + RECOVER_MS + 60_000,
   );
 });

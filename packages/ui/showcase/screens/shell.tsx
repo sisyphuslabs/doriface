@@ -128,7 +128,7 @@ export function WorkspaceBody() {
             <StatusBarItem icon={<Monitor aria-hidden />}>studio</StatusBarItem>
             <StatusBarItem icon={<Folder aria-hidden />}>doriface</StatusBarItem>
             <StatusBarItem>
-              5 agents <span className="text-status-blocked-text">· 1 needs you</span>
+              5 terminals <span className="text-status-blocked-text">· 1 needs you</span>
             </StatusBarItem>
           </>
         }
