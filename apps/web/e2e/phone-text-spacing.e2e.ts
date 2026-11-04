@@ -27,8 +27,10 @@ for (const width of [390, 320]) {
   }) => {
     await page.setViewportSize({ width, height: 800 });
     await openPhoneTerminal(page);
-    await page.addStyleTag({ content: TEXT_SPACING });
     const bar = header(page);
+    // Without overrides the header keeps its 48 px: the min-height only lets it grow when its content needs more.
+    expect((await bar.boundingBox())?.height).toBeCloseTo(48, 0);
+    await page.addStyleTag({ content: TEXT_SPACING });
     await expect(bar.getByRole("heading", { level: 1 })).toBeVisible();
 
     // Nothing in the header spills out of its own box vertically: the header itself, and each of its text rows.
