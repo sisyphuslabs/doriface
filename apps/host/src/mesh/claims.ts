@@ -1,4 +1,5 @@
 import type { Clock } from "./clock.ts";
+import { deadline } from "./deadline.ts";
 
 /** Section 10.1: how long a peer's claim on this host's counter holds its own records back without a `done`. */
 export const CLAIM_MS = 30_000;
@@ -35,7 +36,7 @@ export class Claims {
   claim(peer: string, n: number): void {
     if (this.#clock.now() < (this.#ignoredUntil.get(peer) ?? Number.NEGATIVE_INFINITY)) return;
     const held = this.#held.get(peer);
-    const cancel = held?.cancel ?? this.#clock.after(CLAIM_MS, () => this.unanswered(peer));
+    const cancel = held?.cancel ?? deadline(this.#clock, CLAIM_MS, () => this.unanswered(peer));
     this.#held.set(peer, { n: Math.max(n, held?.n ?? 0), cancel });
   }
 

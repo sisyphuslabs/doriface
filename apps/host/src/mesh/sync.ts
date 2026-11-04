@@ -3,6 +3,7 @@ import { hashOf, MAX_RECORDS, type Signed } from "@doriface/mesh";
 import { headsOf } from "../state/mesh-tx.ts";
 import { countersOf, missingSince } from "./anti-entropy.ts";
 import type { Clock } from "./clock.ts";
+import { deadline } from "./deadline.ts";
 import { type LineLink, type MeshLine, MeshLines, recordLines, SYNC_EXPECTS } from "./lines.ts";
 import type { MergeResult } from "./merge.ts";
 
@@ -122,7 +123,7 @@ export class SyncSession {
   }
 
   #owesAnswer(): void {
-    this.#answerDue ??= this.#clock.after(ANSWER_MS, () => {
+    this.#answerDue ??= deadline(this.#clock, ANSWER_MS, () => {
       this.#answerDue = undefined;
       this.#host.overdue(this);
       this.close(CloseCode.CryptoFailure, "no done after hello");

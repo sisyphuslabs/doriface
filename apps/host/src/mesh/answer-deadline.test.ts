@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { CloseCode } from "@doriface/crypto";
 import { type MemoryEnd, memoryLinkPair } from "@doriface/crypto/testing";
 import { hashOf, type Signed } from "@doriface/mesh";
+import type { Clock } from "./clock.ts";
+import { LATE_MS } from "./deadline.ts";
 import type { MeshLine } from "./lines.ts";
-import { ANSWER_MS } from "./sync.ts";
+import { ANSWER_MS, type SyncHost, SyncSession } from "./sync.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
-import { headsOfRecords, meshOf, peer, Signer } from "./testing/mesh-peers.ts";
+import { headsOfRecords, meshIdOfRecords, meshOf, peer, Signer } from "./testing/mesh-peers.ts";
 import { MeshNet } from "./testing/mesh-net.ts";
 
 const [a, b] = [peer("a"), peer("b")];
@@ -55,5 +57,46 @@ describe("the answer a hello is owed (section 5.2, H-1)", () => {
     expect(s.ours.closeCode).toBeUndefined();
     await s.clock.advance(1);
     expect(s.ours.closeCode).toBe(CloseCode.CryptoFailure);
+  });
+});
+
+/** A sync session b opened by saying hello, on a clock whose timers can fire late, as behind a blocked event loop. */
+function lateSession() {
+  const fake = new FakeClock();
+  const skew = { ms: 0 };
+  const clock: Clock = { now: () => fake.now() + skew.ms, after: (ms, run) => fake.after(ms, run) };
+  const { records } = meshOf([a, b]);
+  const overdue: string[] = [];
+  const host: SyncHost = {
+    meshId: meshIdOfRecords(records),
+    records: () => records,
+    merge: () => {
+      throw new Error("no records come in this test");
+    },
+    heard: () => undefined,
+    answered: () => undefined,
+    overdue: (session) => void overdue.push(session.peer),
+    ended: () => undefined,
+  };
+  const [ours, theirs] = memoryLinkPair(true);
+  new SyncSession({ peer: a.signPub, dialer: a.signPub, sweeping: false }, ours, host, clock).start();
+  return { fake, skew, ours, overdue, done: () => say(theirs, { t: "done", mesh: host.meshId }) };
+}
+
+describe("a deadline whose timer fires late (the event loop was blocked, e.g. by a long merge on another session)", () => {
+  test("reads the done that arrived during the block before it closes anything", async () => {
+    const s = lateSession();
+    s.skew.ms = 5_000;
+    await s.fake.advance(ANSWER_MS);
+    s.done();
+    await s.fake.advance(LATE_MS);
+    expect([s.ours.closeCode, s.overdue]).toEqual([undefined, []]);
+  });
+
+  test("still closes 4400 once the grace passes with no done", async () => {
+    const s = lateSession();
+    s.skew.ms = 5_000;
+    await s.fake.advance(ANSWER_MS + LATE_MS);
+    expect([s.ours.closeCode, s.overdue]).toEqual([CloseCode.CryptoFailure, [a.signPub]]);
   });
 });
