@@ -1,6 +1,7 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
+import { Button } from "./button.tsx";
 import { backdropClass } from "./overlay.ts";
 
 const SIDE = {
@@ -9,6 +10,10 @@ const SIDE = {
   bottom:
     "inset-x-0 bottom-0 max-h-[85dvh] rounded-t-xl border-t pb-[env(safe-area-inset-bottom)] data-starting-style:translate-y-full data-ending-style:translate-y-full",
 } as const;
+
+/** The title and a visible Done that closes the sheet; it is not dragged, so it draws no grabber. */
+const TITLE_ROW = "flex items-center gap-2 pt-2 pr-2 pb-1 pl-4";
+const DONE = "font-semibold text-foreground";
 
 export interface SheetProps {
   readonly title: ReactNode;
@@ -31,8 +36,12 @@ export function SheetPanel({ title, side = "bottom", children }: Pick<SheetProps
         side === "bottom" ? "rounded-t-xl border-t" : "border-l",
       )}
     >
-      {side === "bottom" ? <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-input" /> : null}
-      <p className="px-4 pt-3 pb-2 text-base font-semibold">{title}</p>
+      <div className={TITLE_ROW}>
+        <p className="min-w-0 flex-1 text-base font-semibold">{title}</p>
+        <Button variant="ghost" size="sm" className={DONE}>
+          Done
+        </Button>
+      </div>
       <div className="px-4 pb-4">{children}</div>
     </div>
   );
@@ -54,8 +63,10 @@ export function Sheet({ title, side = "right", children, trigger, open, onOpenCh
             SIDE[side],
           )}
         >
-          {side === "bottom" ? <div aria-hidden className="mx-auto mt-2 h-1 w-9 rounded-full bg-input" /> : null}
-          <BaseDialog.Title className="px-4 pt-3 pb-2 text-base font-semibold">{title}</BaseDialog.Title>
+          <div className={TITLE_ROW}>
+            <BaseDialog.Title className="min-w-0 flex-1 text-base font-semibold">{title}</BaseDialog.Title>
+            <BaseDialog.Close render={<Button variant="ghost" size="sm" className={DONE} />}>Done</BaseDialog.Close>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
         </BaseDialog.Popup>
       </BaseDialog.Portal>
