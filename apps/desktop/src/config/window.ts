@@ -18,8 +18,12 @@ export const TRAFFIC_LIGHTS = { ...TRAFFIC_LIGHT_POSITION, ...WINDOW_BUTTONS_SIZ
 /** Where content beside the window buttons may start, one button-gap past the last button. */
 export const TITLEBAR_INSET_START = TRAFFIC_LIGHTS.x + TRAFFIC_LIGHTS.width + 12;
 
-/** Controls inside a titlebar row that must keep taking clicks instead of moving the window. */
-const TITLEBAR_CONTROLS = 'a, button, input, select, textarea, [role="tab"], [role="button"], [tabindex]';
+/**
+ * Controls inside a titlebar row that must keep taking clicks instead of moving the window; a whole tab pill
+ * (`data-tab-id`) is one, so pressing anywhere on it drags the tab, not the window.
+ */
+const TITLEBAR_CONTROLS =
+  'a, button, input, select, textarea, [role="tab"], [role="button"], [tabindex], [data-tab-id]';
 
 /**
  * Under the hidden-inset titlebar the band above the traffic lights still has to move the window, whether or not the
