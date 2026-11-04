@@ -51,9 +51,11 @@ export function rememberStop(target: EventTarget | null): void {
   }
 }
 
+/** The row whose action this is: the first button of the list item (a direct child of the section) that holds it. */
 function ownRow(target: HTMLButtonElement): HTMLButtonElement | undefined {
-  const first = target.parentElement?.firstElementChild;
-  return isButton(first) && first !== target && actionsOf(first).includes(target) ? first : undefined;
+  const holder = target.closest("section > div");
+  const row = holder === null ? undefined : rowOf(holder);
+  return row !== undefined && row !== target && actionsOf(row).includes(target) ? row : undefined;
 }
 
 /** The element an unmodified arrow, Home or End key moves focus to, or undefined when the key is not ours. */

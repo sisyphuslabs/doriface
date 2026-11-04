@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { machineCause } from "./machine-cause.ts";
 import { stateLabel, type MachineEntry } from "./machines.ts";
-import { firstInSpace, machineId, spaceId, toSpaces } from "./model.ts";
+import { firstInSpace, spaceId, toSpaces } from "./model.ts";
 import { RetryButton } from "./retry-button.tsx";
 import { machineGroups } from "./sidebar-model.ts";
 import { useSpaceColors } from "./sidebar-prefs.ts";
@@ -47,7 +47,6 @@ export function SpacesGroup({ terminals, active, onOpen, rail = false }: SpacesG
   });
   const activeTerminal = terminals.find((terminal) => terminal.address === active);
   const activeSpace = activeTerminal === undefined ? undefined : spaceId(activeTerminal);
-  const activeMachine = active === null ? undefined : machineId(active);
   const openSpace = (id: string): void => {
     const address = firstInSpace(terminals, id);
     if (address !== undefined) onOpen(address);
@@ -76,7 +75,6 @@ export function SpacesGroup({ terminals, active, onOpen, rail = false }: SpacesG
       state={machine.local ? "this machine" : stateLabel(machine.state)}
       alarm={ALARM.has(machine.state)}
       live={machine.live}
-      selected={machine.id === activeMachine}
       connected={machine.state === "connected"}
       rail={rail}
       onNewSpace={() => (machine.local ? machines.start({}) : machines.newTerminalOn(machine.name))}

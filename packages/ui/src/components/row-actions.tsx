@@ -15,7 +15,7 @@ const MASKED = "[&:is(:hover,:focus-within,:has([data-popup-open]))_[data-row-me
 /** A sidebar row with a few trailing actions that take the place of its meta (age, machine, count) when shown. */
 export function RowWithActions({ row, actions, className }: RowWithActionsProps) {
   return (
-    <div className={cn("group/row relative flex min-w-0 items-center", MASKED, className)}>
+    <div className={cn("group/row relative min-w-0", MASKED, className)}>
       {row}
       <span className={cn("invisible absolute inset-y-0 right-1 flex items-center gap-0.5", SHOWN)}>{actions}</span>
     </div>
