@@ -40,8 +40,17 @@ export function switchTo(mode: "off" | "login" | "drop"): void {
   });
   if (lines.length === 0) throw new Error(`no live line among ${pids.join(", ")}`);
   for (const pid of lines) {
-    for (const child of childrenOf(pid)) process.kill(child, "SIGTERM");
+    for (const child of childrenOf(pid)) terminate(child);
+    terminate(pid);
+  }
+}
+
+/** SIGTERM; a process that exited meanwhile (dash's `sh -c` ends once its line does) is already stopped. */
+function terminate(pid: number): void {
+  try {
     process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
   }
 }
 

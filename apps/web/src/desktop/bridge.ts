@@ -1,10 +1,55 @@
 /**
  * The desktop shell's `window.doriface`, mirrored from apps/desktop/src/shared/bridge.ts (DorifaceBridge,
- * LocalHostEndpoint). The web app reads it at runtime as an untrusted boundary, so it checks the shape.
+ * LocalHostEndpoint, LocalHostFailure). The web app reads it at runtime as an untrusted boundary, so it checks the shape.
  */
 export interface LocalHostEndpoint {
   readonly url: string;
   readonly token: string;
+}
+
+/** Why this computer's host did not start; `details` is its raw output, shown only on request. */
+export interface HostStartFailure {
+  readonly code: string;
+  readonly message: string;
+  readonly path?: string;
+  readonly address?: string;
+  readonly details: string;
+}
+
+export class HostStartError extends Error {
+  override readonly name = "HostStartError";
+  readonly failure: HostStartFailure;
+
+  constructor(failure: HostStartFailure) {
+    super(failure.message);
+    this.failure = failure;
+  }
+}
+
+const optionalString = (value: object, key: string): string | undefined | null => {
+  const field: unknown = Reflect.get(value, key);
+  return field === undefined || typeof field === "string" ? field : null;
+};
+
+/** The failure in a `{ failure }` answer, or undefined when the answer is not one. */
+function failureOf(value: unknown): HostStartFailure | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const failure: unknown = Reflect.get(value, "failure");
+  if (typeof failure !== "object" || failure === null) return undefined;
+  const code: unknown = Reflect.get(failure, "code");
+  const message: unknown = Reflect.get(failure, "message");
+  const details: unknown = Reflect.get(failure, "details");
+  const path = optionalString(failure, "path");
+  const address = optionalString(failure, "address");
+  if (typeof code !== "string" || typeof message !== "string" || typeof details !== "string") return undefined;
+  if (path === null || address === null) return undefined;
+  return {
+    code,
+    message,
+    details,
+    ...(path === undefined ? {} : { path }),
+    ...(address === undefined ? {} : { address }),
+  };
 }
 
 export interface DesktopBridge {
@@ -85,9 +130,11 @@ export function desktopBridge(scope: object = globalThis): DesktopBridge | null 
   if (typeof start !== "function") return null;
   return {
     startLocalHost: async () => {
-      const endpoint: unknown = await Reflect.apply(start, bridge, []);
-      if (!isEndpoint(endpoint)) throw new Error("the desktop app returned no local host address");
-      return endpoint;
+      const answer: unknown = await Reflect.apply(start, bridge, []);
+      const failure = failureOf(answer);
+      if (failure !== undefined) throw new HostStartError(failure);
+      if (!isEndpoint(answer)) throw new Error("the desktop app returned no local host address");
+      return answer;
     },
   };
 }

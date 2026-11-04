@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, openNewTerminal } from "./fixtures.ts";
+import { expect, laidOutBox, openNewTerminal } from "./fixtures.ts";
 
 export const strip = (page: Page) => page.getByRole("tablist", { name: "Tabs" });
 export const tabs = (page: Page) => strip(page).getByRole("tab");
@@ -52,8 +52,7 @@ export async function openFour(page: Page): Promise<void> {
 }
 
 export const centre = async (locator: Locator) => {
-  const box = await locator.boundingBox();
-  if (box === null) throw new Error("the tab has no box");
+  const box = await laidOutBox(locator);
   return { x: box.x + box.width / 2, y: box.y + box.height / 2, right: box.x + box.width };
 };
 

@@ -4,9 +4,11 @@ import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useScreenAwake } from "../device/keep-awake.ts";
 import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
+import { mayTakeFocus } from "./may-take-focus.ts";
 import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
@@ -50,6 +52,7 @@ export function TerminalView(props: TerminalViewProps) {
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
+  useScreenAwake();
   const [core, setCore] = useState<GhosttyCore | null>(null);
   const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,6 +152,10 @@ export function TerminalView(props: TerminalViewProps) {
   useEffect(() => {
     isFocused.current = focused;
   }, [focused]);
+  /** The view in use takes keyboard focus once it is ready, unless a modal is open over it. */
+  const focusWhenFree = (ready: WTerm): void => {
+    if (isFocused.current && mayTakeFocus(ready.element)) ready.focus();
+  };
   // Read when the stream ends, not when it attached, so an end acts on the tabs as they are by then.
   const onEndNow = useRef(onEnd);
   useEffect(() => {
@@ -223,8 +230,7 @@ export function TerminalView(props: TerminalViewProps) {
             if (end === "lost") settle(ready, null);
           });
           for (const data of pending.current.splice(0)) attached.write(data);
-          // An open overlay takes focus straight back (useOverlayFocus), so the terminal can always ask for it.
-          if (isFocused.current) ready.focus();
+          focusWhenFree(ready);
           return attached;
         },
         (cause: unknown) => {
@@ -260,7 +266,11 @@ export function TerminalView(props: TerminalViewProps) {
         data-slot="terminal-viewport"
         data-terminal={address}
         className={cn("min-h-0 flex-1 bg-term-bg", options.hollowCursor && "cursor-hollow", className)}
-        onReady={attach}
+        onReady={(ready) => {
+          // The renderer no longer focuses itself as it starts (patches/@wterm%2Fdom@0.5.8.patch); the view decides.
+          focusWhenFree(ready);
+          attach(ready);
+        }}
         onData={(data) => send(transformInput === undefined ? data : transformInput(data))}
         onResize={(cols, rows) => stream.current?.resize(cols, rows)}
         onFocus={() => stream.current?.focus(true)}

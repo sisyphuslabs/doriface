@@ -43,9 +43,12 @@ export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: Sideba
       data-rail={rail || undefined}
       style={style}
       className={cn(
-        "relative flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar",
+        "motion-arrive relative flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar [--arrive-from:none]",
         rail ? "w-(--sidebar-rail-width)" : "w-(--sidebar-width)",
-        !dragging && "transition-[width] duration-(--duration-standard) ease-out",
+        // One transition list: the arrival's opacity and transform (motion-arrive) and, unless a drag is under way, the width.
+        dragging
+          ? "transition-[opacity,transform] duration-(--duration-standard) ease-out"
+          : "transition-[width,opacity,transform] duration-(--duration-standard) ease-out",
         "motion-reduce:transition-none motion-reduce:duration-0",
       )}
     >
