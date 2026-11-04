@@ -7,7 +7,6 @@ import {
   editTab,
   freshId,
   type Node,
-  removeTab,
   splitPane,
   tabsOf,
   terminalBlock,
@@ -29,7 +28,7 @@ import {
 import { machineOf } from "./model.ts";
 import { splitLanding } from "./split-landing.ts";
 import { moveTabTo, orderTabs, type TabMove } from "./tab-order.ts";
-import { useDropPane } from "./use-drop-pane.ts";
+import { useTabClose } from "./use-tab-close.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
 export interface Layout {
@@ -211,17 +210,7 @@ export function useLayout(
     [active, addTab, focused, keepHere, layoutOf, show, told],
   );
 
-  const dropPane = useDropPane(tabs, layoutOf, setLoose);
-
-  const closeTab = useCallback(
-    (key: string): void => {
-      const tab = tabs.find((each) => each.key === key);
-      if (tab === undefined) return;
-      if (tab.transient) return setLoose((prev) => prev.filter((address) => address !== tab.panes[0]?.address));
-      void layoutOf(tab.machine)?.edit((doc) => (doc === null ? null : removeTab(doc, tab.id)));
-    },
-    [layoutOf, tabs],
-  );
+  const { dropPane, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView);
 
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
