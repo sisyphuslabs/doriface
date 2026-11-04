@@ -11,6 +11,13 @@ export interface WorkspaceTab {
   readonly status?: AgentStatus;
   /** The machine it runs on, for a tab that is not on this one: shown after the title and in its tooltip. */
   readonly machine?: string;
+  /** The shortcut that focuses this tab's pane, as written on this platform: shown in the tooltip. */
+  readonly shortcut?: string;
+}
+
+function tooltipOf(tab: WorkspaceTab): string {
+  const named = tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`;
+  return tab.shortcut === undefined ? named : `${named} (${tab.shortcut})`;
 }
 
 export interface TabBarProps {
@@ -65,15 +72,12 @@ export function TabBar({
                 type="button"
                 role="tab"
                 aria-selected={active}
-                title={tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`}
+                title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
-                <span
-                  title={tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`}
-                  className="truncate"
-                >
+                <span title={tooltipOf(tab)} className="truncate">
                   {tab.title}
                 </span>
                 {tab.machine === undefined ? null : (
