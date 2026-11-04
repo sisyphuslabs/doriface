@@ -25,6 +25,8 @@ export interface Status {
   readonly members: readonly Member[];
   /** `stuck[].kind`, e.g. `removed_undecidable` (section 3.7). */
   readonly stuck: readonly string[];
+  /** `budget.halvedUntil`: null while the host's dial budget is whole (section 8.2), undefined when not printed. */
+  readonly halvedUntil: number | null | undefined;
 }
 
 const memberOf = (value: unknown): readonly Member[] => {
@@ -54,6 +56,8 @@ export async function statusOf(host: MeshHost): Promise<Status> {
   );
   const removed = listOf(parsed["removed"]).flatMap((entry) => (isRecord(entry) ? hostIdsOf(entry["members"]) : []));
   const out = new Set([...removed, ...hostIdsOf(parsed["revoked"])]);
+  const budget = parsed["budget"];
+  const halved = isRecord(budget) ? budget["halvedUntil"] : undefined;
   return {
     sync: String(parsed["sync"]),
     members: parsed["members"]
@@ -61,6 +65,7 @@ export async function statusOf(host: MeshHost): Promise<Status> {
       .filter((member) => !out.has(member.hostId))
       .toSorted((x, y) => x.hostId.localeCompare(y.hostId)),
     stuck,
+    halvedUntil: halved === null || typeof halved === "number" ? halved : undefined,
   };
 }
 
