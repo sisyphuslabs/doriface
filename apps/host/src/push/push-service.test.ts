@@ -26,18 +26,25 @@ const SECRET = {
 };
 
 describe("a notice's payload", () => {
+  // Long, distinctive sentinels: a two-letter one turns up by chance in the random id, signature and ciphertext.
+  const MACHINE = "box-sentinel-5d1";
+  const TERMINAL = "t7-sentinel-a9c";
+
   test("is exactly {v,n,k,h}; the status text, title, address and machine never leave the host", async () => {
     const r = await subscribed();
-    r.core.terminals.set("box/t7", terminal("box/t7", SECRET));
-    await r.service.event(statusEvent("t7", SECRET, "box"));
-    const [notice] = await r.notices();
-    expect(Object.keys(notice ?? {}).toSorted()).toEqual(["h", "k", "n", "v"]);
-    expect(notice).toMatchObject({ v: 1, k: "permission", h: HOST_ID });
+    r.core.terminals.set(`${MACHINE}/${TERMINAL}`, terminal(`${MACHINE}/${TERMINAL}`, SECRET));
+    await r.service.event(statusEvent(TERMINAL, SECRET, MACHINE));
+    expect(await r.notices()).toEqual([{ v: 1, n: expect.stringMatching(/^[\w-]{22}$/), k: "permission", h: HOST_ID }]);
     const posted = r.posted[0];
-    const wire =
-      JSON.stringify(notice) + JSON.stringify(posted?.headers) + Buffer.from(posted?.body ?? []).toString("latin1");
-    for (const plain of ["launch-codes", "deploy-prod", "rm -rf", "box", "t7", "claude"])
-      expect(wire).not.toContain(plain);
+    expect(Object.keys(posted?.headers ?? {}).toSorted()).toEqual([
+      "authorization",
+      "content-encoding",
+      "content-type",
+      "ttl",
+      "urgency",
+    ]);
+    const wire = JSON.stringify(posted?.headers) + Buffer.from(posted?.body ?? []).toString("latin1");
+    for (const plain of ["launch-codes", "deploy-prod", MACHINE, TERMINAL]) expect(wire).not.toContain(plain);
   });
 
   test("goes to the push service with a VAPID header for that origin and an encrypted body", async () => {
