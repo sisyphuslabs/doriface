@@ -41,16 +41,19 @@ const arrivals = (page: Page) =>
 const sample = (page: Page, selector: string, ceiling = 15_000) =>
   page.evaluate(
     ([sel, limit]) =>
-      new Promise<{ opacity: number; transform: string }[]>((resolve) => {
-        const frames: { opacity: number; transform: string }[] = [];
+      new Promise<{ opacity: number; transform: string; duration: number }[]>((resolve) => {
+        // `duration` is the longest running animation's, in ms (0 when none runs).
+        const frames: { opacity: number; transform: string; duration: number }[] = [];
         let animated = false;
         const start = performance.now();
         const step = () => {
           const el = document.querySelector(sel);
           if (el !== null) {
             const style = getComputedStyle(el);
-            frames.push({ opacity: Number(style.opacity), transform: style.transform });
-            const running = el.getAnimations().length > 0;
+            const animations = el.getAnimations();
+            const durations = animations.map((animation) => Number(animation.effect?.getComputedTiming().duration ?? 0));
+            frames.push({ opacity: Number(style.opacity), transform: style.transform, duration: Math.max(0, ...durations) });
+            const running = animations.length > 0;
             animated ||= running;
             if (animated && !running) return resolve(frames);
           }
@@ -154,6 +157,8 @@ test("a new tab scales and fades in, and settles at rest", async ({ page }) => {
   expect(seen.length).toBeGreaterThan(0);
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
   expect(seen.some((frame) => frame.transform !== "none")).toBe(true);
+  // A tab arrives on the micro duration (120 ms), not the standard one.
+  expect([...new Set(seen.flatMap((frame) => (frame.duration > 0 ? [frame.duration] : [])))]).toEqual([120]);
   expect(seen.at(-1)?.opacity).toBeCloseTo(1, 2);
   expect(seen.at(-1)?.transform).toBe("none");
 });
