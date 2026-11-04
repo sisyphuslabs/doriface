@@ -145,7 +145,10 @@ test.describe("phone", () => {
     });
 
     for (const width of [390, 320]) {
-      test(`at ${width} px the offline line shows its whole sentence, wrapped, not cut off`, async ({ page, context }) => {
+      test(`at ${width} px the offline line shows its whole sentence, wrapped, not cut off`, async ({
+        page,
+        context,
+      }) => {
         await page.setViewportSize({ width, height: 800 });
         await routeLanToHost(page);
         await openPhoneTerminal(page);
@@ -154,8 +157,8 @@ test.describe("phone", () => {
         await expect(line).toBeVisible({ timeout: 2_000 });
         await expect(line).toHaveText("Offline. Reconnects when the network is back.");
         // Every part of the line fits its box: nothing is clipped behind an ellipsis.
-        const clipped = await line.evaluate((el) =>
-          [el, ...el.querySelectorAll("*")].filter((node) => node.scrollWidth > node.clientWidth + 1).length,
+        const clipped = await line.evaluate(
+          (el) => [el, ...el.querySelectorAll("*")].filter((node) => node.scrollWidth > node.clientWidth + 1).length,
         );
         expect(clipped).toBe(0);
         const box = await line.boundingBox();
