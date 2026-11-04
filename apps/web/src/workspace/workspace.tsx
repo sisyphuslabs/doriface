@@ -148,7 +148,10 @@ export function Workspace({ connection }: WorkspaceProps) {
           terminals={terminals}
           host={connection.hello.core.name}
           route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
-          actions={availableActions(narrow ? "phone" : "desktop", inView !== null, layout.active?.readOnly ?? null)}
+          actions={availableActions(narrow ? "phone" : "desktop", inView !== null, layout.active?.readOnly ?? null, {
+            keys: layout.tabs.map((tab) => tab.key),
+            active: layout.active?.key ?? null,
+          })}
           onOpenTerminal={openTerminal}
           onClose={() => setPalette(false)}
         />

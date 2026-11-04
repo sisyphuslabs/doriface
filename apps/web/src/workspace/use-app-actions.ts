@@ -1,5 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { useNavigate } from "@tanstack/react-router";
+import { type ZoomStep, zoomDesktopWindow } from "../desktop/bridge.ts";
 import { terminalConfigStore } from "../ghostty/config-store.ts";
 import { single, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
 import { KEY_BY_NAME } from "../ghostty/keys.ts";
@@ -21,6 +22,8 @@ export interface AppActionTargets {
   readonly onFocusSidebar: () => void;
   /** Renames or ends the session in view; false when there is none. */
   readonly onSession: SessionVerb;
+  /** The tab that has keyboard focus, which a key moves instead of the active one; none when focus is elsewhere. */
+  readonly focusedTab?: () => string | null;
 }
 
 export type SessionVerb = (verb: "rename" | "end") => boolean;
@@ -58,11 +61,22 @@ export function neighbour(list: readonly string[], current: string | null, step:
   return target === current ? null : target;
 }
 
+const ZOOM_STEPS: Readonly<Record<string, ZoomStep>> = {
+  "app.zoom_in": "in",
+  "app.zoom_out": "out",
+  "app.zoom_reset": "reset",
+};
+
+const FONT_DELTA: Readonly<Record<ZoomStep, number | null>> = { in: FONT_STEP, out: -FONT_STEP, reset: null };
+
+/**
+ * The desktop app zooms its whole window, as its View menu does; a browser keeps its own page zoom, which a page cannot
+ * set, so there the keys step the terminal text size.
+ */
 function zoomAction(verb: string): boolean {
-  if (verb === "app.zoom_in") zoom(FONT_STEP);
-  else if (verb === "app.zoom_out") zoom(-FONT_STEP);
-  else if (verb === "app.zoom_reset") zoom(null);
-  else return false;
+  const step = ZOOM_STEPS[verb];
+  if (step === undefined) return false;
+  if (!zoomDesktopWindow(step)) zoom(FONT_DELTA[step]);
   return true;
 }
 
@@ -91,6 +105,16 @@ export function useAppActions(targets: AppActionTargets): void {
   );
 }
 
+/** Moves a tab one place; at an end of the strip the key is left to the terminal, as with nothing to select. */
+function moveTab(layout: Layout, key: string | null, side: string): boolean {
+  const keys = layout.tabs.map((tab) => tab.key);
+  const from = key === null ? -1 : keys.indexOf(key);
+  const to = from + (side === "left" ? -1 : 1);
+  if (key === null || from === -1 || to < 0 || to >= keys.length) return false;
+  layout.moveTab(key, to);
+  return true;
+}
+
 function selectTab(layout: Layout, key: string | null): boolean {
   // Nothing to do leaves the key to the terminal (ctrl+tab in a shell with one tab open).
   if (key === null || !shouldSelect(key, layout.active?.key ?? null)) return false;
@@ -115,6 +139,7 @@ export function desktopActions(
     onToggleSidebar,
     onFocusSidebar,
     onSession,
+    focusedTab,
   }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
@@ -138,6 +163,8 @@ export function desktopActions(
         return selectTab(layout, keys[Number(argument) - 1] ?? null);
       case "tab.last":
         return selectTab(layout, keys.at(-1) ?? null);
+      case "tab.move":
+        return moveTab(layout, focusedTab?.() ?? active, argument);
       case "pane.split":
         return focused === null ? false : (onSplit(), true);
       case "pane.close":

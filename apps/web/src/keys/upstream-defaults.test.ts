@@ -6,7 +6,11 @@ import { HERDR_APP_MAC, HERDR_APP_OTHER } from "./herdr-app-defaults.ts";
 import { PLATFORM_RESERVED } from "./platform-reserved.ts";
 
 /** Actions doriface adds on top of herdr-app and Ghostty; their triggers must be free in both, and in the OS and browsers. */
-const DORIFACE_ONLY = ["layout.focus:sidebar"];
+const DORIFACE_ONLY: Readonly<Record<"mac" | "other", readonly string[]>> = {
+  // Ghostty binds move_tab by default only on Linux and Windows; there doriface takes the same chord (below).
+  mac: ["layout.focus:sidebar", "tab.move:left", "tab.move:right"],
+  other: ["layout.focus:sidebar"],
+};
 
 describe("doriface-only bindings", () => {
   test.each([
@@ -14,14 +18,22 @@ describe("doriface-only bindings", () => {
     ["other", HERDR_APP_OTHER],
   ] as const)("on %s they take no trigger that herdr-app or Ghostty binds by default", (platform, herdr) => {
     const taken = new Set([...GHOSTTY_DEFAULTS, ...herdr]);
-    const triggers = DORIFACE_ONLY.flatMap((action) => triggersFor(defaultKeymap(platform), action));
+    const triggers = DORIFACE_ONLY[platform].flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.length).toBeGreaterThan(0);
     expect(triggers.filter((trigger) => taken.has(trigger))).toEqual([]);
   });
 
   test.each(["mac", "other"] as const)("on %s they take no chord the OS or a browser reserves", (platform) => {
-    const triggers = DORIFACE_ONLY.flatMap((action) => triggersFor(defaultKeymap(platform), action));
+    const triggers = DORIFACE_ONLY[platform].flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.filter((trigger) => trigger in PLATFORM_RESERVED)).toEqual([]);
+  });
+
+  test("on Linux and Windows moving a tab takes Ghostty's move_tab chord, not its previous/next tab", () => {
+    const keymap = defaultKeymap("other");
+    expect([triggersFor(keymap, "tab.move:left"), triggersFor(keymap, "tab.move:right")]).toEqual([
+      ["ctrl+shift+page_up"],
+      ["ctrl+shift+page_down"],
+    ]);
   });
 });
 

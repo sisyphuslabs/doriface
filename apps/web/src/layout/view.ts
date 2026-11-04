@@ -2,15 +2,17 @@ import { isJsonObject } from "@doriface/protocol";
 
 /**
  * What this screen looks at, kept out of the shared document as herdr-app keeps its `view.json` (`src/mirror.rs`
- * `View`): the selected tab and, per tab, the focused and zoomed pane. Keyed by tab key (`tabKey`), per core.
+ * `View`): the selected tab and, per tab, the focused and zoomed pane. Keyed by tab key (`tabKey`), per core. `order` is
+ * the tab strip's order as this screen arranged it; the strip mixes every machine's tabs, so no one document holds it.
  */
 export interface View {
   readonly active: string | null;
   readonly focused: Readonly<Record<string, string>>;
   readonly zoomed: Readonly<Record<string, string>>;
+  readonly order: readonly string[];
 }
 
-export const NO_VIEW: View = { active: null, focused: {}, zoomed: {} };
+export const NO_VIEW: View = { active: null, focused: {}, zoomed: {}, order: [] };
 
 const storageKey = (core: string): string => `doriface.view.${core}`;
 
@@ -19,6 +21,10 @@ function strings(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
+}
+
+function keys(value: unknown): string[] {
+  return Array.isArray(value) ? [...new Set(value.filter((key): key is string => typeof key === "string"))] : [];
 }
 
 export function loadView(core: string, storage: Pick<Storage, "getItem"> = localStorage): View {
@@ -34,6 +40,7 @@ export function loadView(core: string, storage: Pick<Storage, "getItem"> = local
     active: typeof active === "string" ? active : null,
     focused: strings(parsed["focused"]),
     zoomed: strings(parsed["zoomed"]),
+    order: keys(parsed["order"]),
   };
 }
 

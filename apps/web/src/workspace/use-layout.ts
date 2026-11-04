@@ -1,5 +1,5 @@
 import type { JsonObject, Terminal } from "@doriface/protocol";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addTab as addDocTab,
   type Axis,
@@ -28,6 +28,7 @@ import {
   type LayoutTab,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
+import { moveTabTo, orderTabs, type TabMove } from "./tab-order.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
 export interface Layout {
@@ -46,6 +47,10 @@ export interface Layout {
   readonly closeTab: (key: string) => void;
   /** Focuses the nearest pane that way in the tab in view; false when none lies that way, so the key stays the program's. */
   readonly go: (direction: Direction) => boolean;
+  /** Moves a tab so it ends at index `to` of `tabs`; panes and focus stay as they are. */
+  readonly moveTab: (key: string, to: number) => void;
+  /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
+  readonly lastMove: TabMove | null;
 }
 
 /** Proportions are all moving focus needs, so it measures the tree in a fixed box. */
@@ -72,7 +77,10 @@ export function useLayout(
   useEffect(() => saveView(core, view), [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
   const [loose, setLoose] = useState<readonly string[]>([]);
-  const tabs = useMemo(() => buildTabs(layouts, terminals, loose), [layouts, terminals, loose]);
+  const tabs = useMemo(
+    () => orderTabs(buildTabs(layouts, terminals, loose), view.order),
+    [layouts, terminals, loose, view.order],
+  );
   const { active, focused, zoomed } = pick(tabs, view);
   const layoutOf = useCallback(
     (machine: string | null) => {
@@ -210,7 +218,31 @@ export function useLayout(
     [active, focused, show],
   );
 
-  return { tabs, active, focused, zoomed, selectTab, focusPane, openTerminal, split, dropPane, closeTab, go };
+  const [lastMove, setLastMove] = useState<TabMove | null>(null);
+  const shown = useRef(tabs);
+  shown.current = tabs;
+  const moveTab = useCallback((key: string, to: number): void => {
+    const keys = shown.current.map((tab) => tab.key);
+    // Only a move that changes the order is said: `moveTabTo` hands back the same `said` for one that does not.
+    setLastMove((said) => moveTabTo(keys, said, key, to).said);
+    setView((prev) => ({ ...prev, order: moveTabTo(keys, null, key, to).order }));
+  }, []);
+
+  return {
+    tabs,
+    active,
+    focused,
+    zoomed,
+    selectTab,
+    focusPane,
+    openTerminal,
+    split,
+    dropPane,
+    closeTab,
+    go,
+    moveTab,
+    lastMove,
+  };
 }
 
 function spaceOf(doc: JsonObject | null): string | null {

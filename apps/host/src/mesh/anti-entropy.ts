@@ -1,11 +1,31 @@
 import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
 
+interface RecordIndex {
+  readonly prevOf: ReadonlyMap<string, readonly string[]>;
+  readonly hashes: readonly string[];
+}
+
+const indexes = new WeakMap<readonly Signed[], RecordIndex>();
+
+/** Each record's hash and `prev`, computed once per stored set (the store hands out the same array until it changes). */
+export function indexOf(records: readonly Signed[]): RecordIndex {
+  const known = indexes.get(records);
+  if (known !== undefined) return known;
+  const hashes = records.map(hashOf);
+  const index = {
+    prevOf: new Map(records.map((record, i) => [hashes[i] ?? "", parseRecord(record)?.prev ?? []])),
+    hashes,
+  };
+  indexes.set(records, index);
+  return index;
+}
+
 /**
  * The stored records outside the past of `peerHeads` (section 5.2), in stored order, which the door keeps
  * topological. Heads this host does not hold are ignored: they say nothing about what the peer lacks here.
  */
 export function missingSince(records: readonly Signed[], peerHeads: Iterable<string>): readonly Signed[] {
-  const prevOf = new Map(records.map((record) => [hashOf(record), parseRecord(record)?.prev ?? []]));
+  const { prevOf, hashes } = indexOf(records);
   const past = new Set<string>();
   const stack = [...peerHeads].filter((hash) => prevOf.has(hash));
   for (let hash = stack.pop(); hash !== undefined; hash = stack.pop()) {
@@ -13,7 +33,7 @@ export function missingSince(records: readonly Signed[], peerHeads: Iterable<str
     past.add(hash);
     stack.push(...(prevOf.get(hash) ?? []));
   }
-  return records.filter((record) => !past.has(hashOf(record)));
+  return records.filter((_, index) => !past.has(hashes[index] ?? ""));
 }
 
 /** The highest counter of each signer in `records`: a `hello`'s `n` (section 5.2). */
@@ -24,4 +44,23 @@ export function countersOf(records: readonly Signed[]): Record<string, number> {
     if (body !== undefined) n[body.by] = Math.max(n[body.by] ?? 0, body.n);
   }
   return n;
+}
+
+/**
+ * `missing` split into the records `signer` signed, with their past, and the rest, each in their order (section 10.1):
+ * an answer sends a hello's sender its own records first, so a claim it made on them is met by the first lines.
+ */
+export function signerFirst(missing: readonly Signed[], signer: string): readonly [Signed[], Signed[]] {
+  const { prevOf, hashes } = indexOf(missing);
+  const first = new Set<string>();
+  const stack = missing.flatMap((record, i) => (parseRecord(record)?.by === signer ? [hashes[i] ?? ""] : []));
+  for (let hash = stack.pop(); hash !== undefined; hash = stack.pop()) {
+    if (first.has(hash)) continue;
+    first.add(hash);
+    stack.push(...(prevOf.get(hash) ?? []).filter((prev) => prevOf.has(prev)));
+  }
+  const own: Signed[] = [];
+  const rest: Signed[] = [];
+  missing.forEach((record, i) => (first.has(hashes[i] ?? "") ? own : rest).push(record));
+  return [own, rest];
 }
