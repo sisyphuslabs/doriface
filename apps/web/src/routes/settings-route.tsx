@@ -1,5 +1,5 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
-import { ArrowLeft, Keyboard, Link2, Mic, Network, Palette, Server, SquareTerminal } from "lucide-react";
+import { ArrowLeft, Bell, Keyboard, Link2, Mic, Network, Palette, Server, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import { currentPlatform, triggerKeys } from "../keys/trigger.ts";
@@ -10,6 +10,7 @@ import { DevicesSection } from "../settings/devices-section.tsx";
 import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { MeshSection } from "../settings/mesh-section.tsx";
 import { MachinesSection } from "../settings/machines-section.tsx";
+import { NotificationsSection } from "../settings/notifications-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 import { useCloseSettings } from "../settings/use-close-settings.ts";
 import { VoiceSection } from "../settings/voice-section.tsx";
@@ -21,6 +22,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: <Palette /> },
   { id: "device", label: "Device", icon: <MonitorSmartphone /> },
   { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
+  { id: "notifications", label: "Notifications", icon: <Bell /> },
   { id: "keybindings", label: "Keybindings", icon: <Keyboard /> },
   { id: "voice", label: "Voice input", icon: <Mic /> },
 ] as const;
@@ -119,6 +121,10 @@ export function SettingsRoute() {
           ) : section === "terminal" ? (
             <Group title="Terminal">
               <TerminalSection />
+            </Group>
+          ) : section === "notifications" ? (
+            <Group title="Notifications">
+              <NotificationsSection />
             </Group>
           ) : section === "keybindings" ? (
             <Group title="Keybindings">

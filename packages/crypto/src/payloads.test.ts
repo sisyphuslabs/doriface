@@ -55,8 +55,20 @@ describe("handshake payloads: one JSON line, then raw stream bytes", () => {
     expect(() => encodeSessionHello(bytes("x"), "mesh")).toThrow("no early bytes");
   });
 
+  test("stream: a session may carry a device's push stream, with no early bytes", () => {
+    expect(text(encodeSessionHello(undefined, "push"))).toBe('{"v":1,"stream":"push"}\n');
+    expect(decodeHello("IK", encodeSessionHello(undefined, "push"))).toEqual({
+      kind: "session",
+      early: new Uint8Array(0),
+      stream: "push",
+    });
+    expect(() => encodeSessionHello(bytes("x"), "push")).toThrow("no early bytes");
+  });
+
   test.each([
     ["IK", '{"v":1,"stream":"mesh"}\nearly'],
+    ["IK", '{"v":1,"stream":"push"}\nearly'],
+    ["IKpsk2", '{"v":1,"name":"a","stream":"push"}\n'],
     ["IK", '{"v":1,"stream":"other"}\n'],
     ["IK", '{"v":1,"stream":7}\n'],
     ["IKpsk2", '{"v":1,"name":"a","stream":"hc"}\n'],
