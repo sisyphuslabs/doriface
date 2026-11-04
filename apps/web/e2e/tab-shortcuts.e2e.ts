@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { endOwnTerminals } from "./own-terminals.ts";
+
+endOwnTerminals();
 
 test.use({ serviceWorkers: "block" });
 
