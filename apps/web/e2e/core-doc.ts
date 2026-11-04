@@ -31,6 +31,11 @@ function call(core: CoreEnv, method: string, params: unknown): unknown {
   throw new Error(`${method}: no reply`);
 }
 
+/** A document on the e2e host's own core as `doc.get` returns it. */
+export function coreDoc(name: string): unknown {
+  return call(coreEnv(), "doc.get", { name });
+}
+
 export function setCoreDoc(name: string, value: unknown): void {
   const core = coreEnv();
   const current = call(core, "doc.get", { name });

@@ -57,7 +57,9 @@ export async function clientFlight(
     );
     return finishing(SessionKind.Session, handshake, first);
   }
-  if (opts.stream === "hc") throw new PayloadError('stream "hc" is not valid on a pairing');
+  if (opts.stream === "hc" || opts.stream === "push") {
+    throw new PayloadError(`stream "${opts.stream}" is not valid on a pairing`);
+  }
   const hello = encodePairingHello(pairing.name, opts.stream);
   if (pairing.mode === "link") {
     const prologue = prologueFor(opts.hostId, SessionKind.PairLink);
