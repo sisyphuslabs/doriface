@@ -16,23 +16,22 @@ async function openNewTerminal(page: Page): Promise<void> {
   await expect(header(page).getByRole("button", { name: "Back to agents" })).toBeVisible();
 }
 
-async function sessionAction(page: Page, title: string, item: string): Promise<void> {
-  await header(page)
-    .getByRole("button", { name: `Session actions for ${title}` })
-    .click();
+/** The header's one session-actions button; its name carries the title, which a new shell changes from /bin/sh to sh. */
+const sessionActions = (page: Page) => header(page).getByRole("button", { name: /^Session actions for / });
+
+async function sessionAction(page: Page, item: string): Promise<void> {
+  await sessionActions(page).click();
   await page.getByRole("menuitem", { name: item }).click();
 }
 
 test("on a phone the open terminal's header renames its session", async ({ page }) => {
   await openNewTerminal(page);
-  const title = (await header(page).getByRole("heading").innerText()).trim();
-  const actions = header(page).getByRole("button", { name: `Session actions for ${title}` });
   // A touch target, not the desktop tab strip's 24 px glyph button.
-  const box = await actions.boundingBox();
+  const box = await sessionActions(page).boundingBox();
   expect(box?.width).toBeGreaterThanOrEqual(44);
   expect(box?.height).toBeGreaterThanOrEqual(44);
 
-  await sessionAction(page, title, "Rename…");
+  await sessionAction(page, "Rename…");
   const dialog = page.getByRole("dialog", { name: /^Rename / });
   await dialog.getByRole("textbox", { name: "Name" }).fill("phone-rename-check");
   await page.keyboard.press("Enter");
@@ -45,7 +44,7 @@ test("on a phone the open terminal's header renames its session", async ({ page 
 
 test("on a phone the open terminal's header ends its session and returns to the list without it", async ({ page }) => {
   await openNewTerminal(page);
-  await sessionAction(page, (await header(page).getByRole("heading").innerText()).trim(), "Rename…");
+  await sessionAction(page, "Rename…");
   await page
     .getByRole("dialog", { name: /^Rename / })
     .getByRole("textbox", { name: "Name" })
@@ -53,7 +52,7 @@ test("on a phone the open terminal's header ends its session and returns to the 
   await page.keyboard.press("Enter");
   await expect(header(page).getByRole("heading", { name: "phone-end-check" })).toBeVisible();
 
-  await sessionAction(page, "phone-end-check", "End session…");
+  await sessionAction(page, "End session…");
   const ask = page.getByRole("dialog", { name: "End phone-end-check?" });
   // Destructive and asked first: Enter is not its default.
   await expect(ask.getByRole("button", { name: "End session" })).not.toBeFocused();
