@@ -118,7 +118,6 @@
   --sidebar-width: 16.75rem;
   --tabbar-height: 2.625rem;
   --statusbar-height: 1.75rem;
-  --pane-header-height: 1.875rem;
   /* Device safe areas; a preview frame sets them to a real device's insets. */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);

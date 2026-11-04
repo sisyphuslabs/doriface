@@ -9,9 +9,10 @@ test.describe("machines added with hc machine add", () => {
     await newOn(page).click({ force: true });
     const focused = page.locator('[data-focused="true"] [data-terminal]');
     await expect(focused).toHaveAttribute("data-terminal", new RegExp(`^${MACHINE_NAME}/t\\d+$`), { timeout: 15_000 });
-    // The tab and the status bar name the machine; the hc address (machine/tN) is an internal id the UI never prints.
+    const address = await focused.getAttribute("data-terminal");
+    // The tab names the machine; the status bar's machine item carries the full hc address the old pane header showed.
     await expect(page.getByRole("tab", { selected: true })).toContainText(MACHINE_NAME);
-    await expect(page.getByRole("contentinfo")).toContainText(MACHINE_NAME);
+    await expect(page.getByRole("contentinfo").locator("[data-status-machine] [title]")).toHaveText(address ?? "missing");
     await focused.click();
     await page.keyboard.type("echo on-build-box-$((40 + 2))\r");
     await expect(focused).toContainText("on-build-box-42", { timeout: 15_000 });
