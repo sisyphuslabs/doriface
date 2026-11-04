@@ -107,7 +107,20 @@ describe("the herdr-app document", () => {
     expect(JSON.stringify(edited)).toBe(JSON.stringify(setAt(WITH_FIELDS, [...DEEP_COLUMN, "children", 1], wrapped)));
   });
 
-  test("closing a deep pane keeps every field of the containers, tab, space and document it rewrites", () => {
+  test("closing a pane of a three-pane row keeps every field of that row, the tab, the space and the document", () => {
+    const split = splitRight(ok(WITH_FIELDS), FIRST);
+    const edited = editTab(split, TAB, (root) => removePane(root, "pnew"));
+    if (edited === null) throw new Error("the close was refused");
+    const ROOT = ["spaces", 0, "tabs", 0, "root"] as const;
+    for (const key of ["gap", "divider", "title", "x-future"]) {
+      expect(at(edited, ...ROOT, key)).toEqual(at(WITH_FIELDS, ...ROOT, key));
+    }
+    expect(JSON.stringify(at(edited, ...ROOT, "children", 1))).toBe(
+      JSON.stringify(at(WITH_FIELDS, ...ROOT, "children", 1)),
+    );
+  });
+
+  test("closing a deep pane keeps every field of the containers above the one that collapses, the tab, space and document", () => {
     const edited = editTab(ok(WITH_FIELDS), TAB, (root) => removePane(root, DEEPEST));
     if (edited === null) throw new Error("the close was refused");
     const kept = ["gap", "divider", "title", "x-future"] as const;

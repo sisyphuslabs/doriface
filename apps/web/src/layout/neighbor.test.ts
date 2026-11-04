@@ -33,6 +33,15 @@ describe("moving focus by direction", () => {
     expect(nearest("two", "up", panes)).toBeNull();
   });
 
+  test("a nearer pane that does not overlap across the other axis is passed over", () => {
+    const diagonal = new Map([
+      ["from", { x: 0, y: 0, width: 100, height: 100 }],
+      ["below-right", { x: 110, y: 200, width: 50, height: 50 }],
+      ["right", { x: 150, y: 0, width: 100, height: 100 }],
+    ]);
+    expect(nearest("from", "right", diagonal)).toBe("right");
+  });
+
   test("among panes equally close, the one focused last wins, as in herdr-app", () => {
     expect(nearest("one", "right", panes)).toBe("two");
     expect(nearest("one", "right", panes, ["three", "two"])).toBe("two");

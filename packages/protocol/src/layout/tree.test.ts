@@ -39,6 +39,12 @@ describe("removing a pane", () => {
     expect(panesOf(next ?? {}).map((pane) => pane.id)).toEqual(["b"]);
   });
 
+  test("a container emptied by the close leaves its parent with every field it had, unknown ones included", () => {
+    const parent = (children: Node[]): Node => ({ ...box("row", "root", children), gap: 2, "x-future": { added: 1 } });
+    const root = parent([block("a"), block("b"), box("column", "c", [block("z")])]);
+    expect(removePane(root, "z")).toEqual(parent([block("a"), block("b")]));
+  });
+
   test("returns null for a pane that is not in the tree", () => {
     expect(removePane(box("row", "root", [block("a")]), "nope")).toBeNull();
   });
