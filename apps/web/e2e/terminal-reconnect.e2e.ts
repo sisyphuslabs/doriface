@@ -26,9 +26,10 @@ test("a connection blip keeps the terminal on screen and runs what was typed mea
   await expect(terminal).toContainText("before-10", { timeout: 15_000 });
   // Rows are virtualized, so the buffer's length is read from the scroll height.
   const lines = () =>
-    terminal.evaluate((el) =>
-      Math.round(el.scrollHeight / Number.parseFloat(getComputedStyle(el).getPropertyValue("--term-row-height"))),
-    );
+    terminal.evaluate((el) => {
+      const row = el.querySelector(".term-row:not(.term-scrollback-row)");
+      return Math.round(el.scrollHeight / (row?.getBoundingClientRect().height ?? Number.NaN));
+    });
   const linesBefore = await lines();
   expect(linesBefore).toBeGreaterThan(200);
   const opened = socket.opened();
