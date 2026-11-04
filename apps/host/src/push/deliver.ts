@@ -7,13 +7,23 @@ import { encryptPushPayload, type VapidKey, vapidAuthorization } from "./web-pus
  */
 const PUSH_SERVICES = ["fcm.googleapis.com", "push.services.mozilla.com", "push.apple.com", "notify.windows.com"];
 
-/** `extraOrigins` is for tests: a private push service the host may also post to (`--push-test-origin`). */
+/**
+ * `extraOrigins` is for tests: a private push service the host may also post to (`--push-test-origin`). Port 0
+ * stands for any port on that scheme and host, so a test service can bind a free port of its own.
+ */
 export function pushEndpointAllowed(endpoint: string, extraOrigins: readonly string[] = []): boolean {
   if (!URL.canParse(endpoint)) return false;
   const url = new URL(endpoint);
-  if (extraOrigins.includes(url.origin)) return true;
+  if (extraOrigins.some((origin) => sameTestOrigin(origin, url))) return true;
   if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || url.port !== "") return false;
   return PUSH_SERVICES.some((service) => url.hostname === service || url.hostname.endsWith(`.${service}`));
+}
+
+function sameTestOrigin(origin: string, url: URL): boolean {
+  if (!URL.canParse(origin)) return false;
+  const allowed = new URL(origin);
+  if (allowed.protocol !== url.protocol || allowed.hostname !== url.hostname) return false;
+  return allowed.port === "0" || allowed.port === url.port;
 }
 
 export type Delivery = "sent" | "gone" | "failed";

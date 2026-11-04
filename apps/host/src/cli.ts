@@ -31,7 +31,7 @@ const USAGE = `usage: doriface-host [options]
   --state-dir <dir>     host keys and paired devices (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --relay <url>         the relay this host keeps an encrypted-only uplink to (default ${DEFAULT_RELAY_URL})
   --no-relay            keep no relay uplink: reach this host only directly
-  --push-test-origin <origin>  for tests: also post web push notices to this push service origin
+  --push-test-origin <origin>  for tests: also post web push notices to this push service origin (port 0: any port)
   -h, --help            show this help`;
 
 const log = (line: string): void => {

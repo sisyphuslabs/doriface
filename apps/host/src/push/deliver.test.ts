@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decryptPushBody, receiverKeys } from "../testing/push-receiver.ts";
-import { deliverPush, type PushFetch } from "./deliver.ts";
+import { deliverPush, type PushFetch, pushEndpointAllowed } from "./deliver.ts";
 import { loadVapidKey } from "./vapid-key.ts";
 
 describe("what the push service can learn from a notice's size", () => {
@@ -41,5 +41,21 @@ describe("what the push service can learn from a notice's size", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("a test push service's origin (--push-test-origin)", () => {
+  test("port 0 allows any port on that scheme and host, and nothing else", () => {
+    const allowed = ["http://127.0.0.1:0"];
+    expect(pushEndpointAllowed("http://127.0.0.1:45123/push/x", allowed)).toBe(true);
+    expect(pushEndpointAllowed("http://127.0.0.1:7796/push/x", allowed)).toBe(true);
+    expect(pushEndpointAllowed("http://127.0.0.2:45123/push/x", allowed)).toBe(false);
+    expect(pushEndpointAllowed("https://127.0.0.1:45123/push/x", allowed)).toBe(false);
+    expect(pushEndpointAllowed("http://127.0.0.1:45123/push/x")).toBe(false);
+  });
+
+  test("a set port allows only that port", () => {
+    expect(pushEndpointAllowed("http://127.0.0.1:7796/push/x", ["http://127.0.0.1:7796"])).toBe(true);
+    expect(pushEndpointAllowed("http://127.0.0.1:7797/push/x", ["http://127.0.0.1:7796"])).toBe(false);
   });
 });

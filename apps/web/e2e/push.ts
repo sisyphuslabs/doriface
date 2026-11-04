@@ -3,7 +3,7 @@
 import { decryptPushBody, type ReceiverKeys, receiverKeys, verifyVapid } from "@doriface/host/testing/push-receiver";
 import { type BrowserContext, expect, type Page, type Worker } from "@playwright/test";
 import { createServer, type Server } from "node:http";
-import { E2E_HOST_PORT, E2E_PUSH_PORT, E2E_TOKEN, E2E_WEB_PORT } from "./config.ts";
+import { E2E_HOST_PORT, E2E_TOKEN, E2E_WEB_PORT } from "./config.ts";
 
 export interface Posted {
   readonly path: string;
@@ -37,12 +37,15 @@ export class TestPushService {
 
   static async start(): Promise<TestPushService> {
     const service = new TestPushService(await receiverKeys());
-    await new Promise<void>((resolve) => service.#server.listen(E2E_PUSH_PORT, "127.0.0.1", resolve));
+    // Port 0: the system picks a free port, so parallel workers never collide; the hosts allow any loopback port.
+    await new Promise<void>((resolve) => service.#server.listen(0, "127.0.0.1", resolve));
     return service;
   }
 
   get endpoint(): string {
-    return `http://127.0.0.1:${E2E_PUSH_PORT}/push/e2e-device`;
+    const address = this.#server.address();
+    if (address === null || typeof address === "string") throw new Error("the test push service is not listening");
+    return `http://127.0.0.1:${address.port}/push/e2e-device`;
   }
 
   /** The next notice not yet taken. */
