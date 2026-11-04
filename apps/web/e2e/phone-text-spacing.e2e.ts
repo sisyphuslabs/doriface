@@ -1,6 +1,6 @@
 import { devices, type Page } from "@playwright/test";
 import { endAgent, startAgent } from "./agents.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -57,9 +57,9 @@ async function giveAction(page: Page): Promise<void> {
 async function expectHeaderHolds(page: Page, width: number, withAction: boolean): Promise<void> {
   const bar = header(page);
   await expect(bar.getByRole("heading", { level: 1 })).toBeVisible();
-  const box = await bar.boundingBox();
-  const bottom = (box?.y ?? 0) + (box?.height ?? 0);
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(48 - 0.5);
+  const box = await laidOutBox(bar);
+  const bottom = box.y + box.height;
+  expect(box.height).toBeGreaterThanOrEqual(48 - 0.5);
 
   // Every item of the header ends inside it, and none of its rows spills out of its own box vertically. (The header's
   // own scrollHeight is not compared: the buttons' larger hit areas reach past it by design, and nothing there is cut.)
@@ -85,35 +85,32 @@ async function expectHeaderHolds(page: Page, width: number, withAction: boolean)
     bar.locator("[data-tab-position]"),
     bar.locator("[data-agent-counts]"),
   ];
-  const placed = await Promise.all(
-    parts.map((part) =>
-      part.evaluate((el) => {
-        const rect = el.getBoundingClientRect();
-        return { bottom: rect.bottom, right: rect.right, cut: el.scrollWidth > el.clientWidth + 1 };
-      }),
-    ),
-  );
+  const placed = await Promise.all(parts.map(laidOutBox));
   for (const part of placed) {
-    expect(part.bottom).toBeLessThanOrEqual(bottom + 0.5);
-    expect(part.right).toBeLessThanOrEqual(width + 0.5);
+    expect(part.y + part.height).toBeLessThanOrEqual(bottom + 0.5);
+    expect(part.x + part.width).toBeLessThanOrEqual(width + 0.5);
   }
-  expect(placed.slice(2).map((part) => part.cut)).toEqual([false, false]);
+  const cut = await Promise.all(
+    parts.slice(2).map((part) => part.evaluate((el) => el.scrollWidth > el.clientWidth + 1)),
+  );
+  expect(cut).toEqual([false, false]);
 
-  // The terminal begins below the header, never under it.
-  const terminal = await page.locator("[data-terminal]").boundingBox();
-  expect(terminal?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
-  const firstRow = await page.locator("[data-terminal] .term-row").first().boundingBox();
-  expect(firstRow?.y ?? 0).toBeGreaterThanOrEqual(bottom - 0.5);
+  // The terminal begins below the header, never under it. It can hold its prompt text before it lays out its first
+  // row, so each box is read once laid out.
+  const terminal = await laidOutBox(page.locator("[data-terminal]"));
+  expect(terminal.y).toBeGreaterThanOrEqual(bottom - 0.5);
+  const firstRow = await laidOutBox(page.locator("[data-terminal] .term-row").first());
+  expect(firstRow.y).toBeGreaterThanOrEqual(bottom - 0.5);
 
   // Every button stays a full touch target inside the header and the screen.
   const names = [/^Back to agents$/, /^Switch space or tab$/, /^Session actions for /];
   if (withAction) names.push(new RegExp(`^${ACTION}$`));
-  const targets = await Promise.all(names.map((name) => bar.getByRole("button", { name }).boundingBox()));
+  const targets = await Promise.all(names.map((name) => laidOutBox(bar.getByRole("button", { name }))));
   for (const target of targets) {
-    expect(target?.width ?? 0).toBeGreaterThanOrEqual(44);
-    expect(target?.height ?? 0).toBeGreaterThanOrEqual(44);
-    expect((target?.x ?? 0) + (target?.width ?? 0)).toBeLessThanOrEqual(width + 0.5);
-    expect((target?.y ?? 0) + (target?.height ?? 0)).toBeLessThanOrEqual(bottom + 0.5);
+    expect(target.width).toBeGreaterThanOrEqual(44);
+    expect(target.height).toBeGreaterThanOrEqual(44);
+    expect(target.x + target.width).toBeLessThanOrEqual(width + 0.5);
+    expect(target.y + target.height).toBeLessThanOrEqual(bottom + 0.5);
   }
 }
 
