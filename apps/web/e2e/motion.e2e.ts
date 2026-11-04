@@ -36,7 +36,7 @@ const listedOnCore = (): string[] => {
     String(typeof terminal === "object" && terminal !== null ? Reflect.get(terminal, "address") : ""),
   );
 };
-/** Ends every terminal started since `before` on the core that runs it, so no later spec counts it (one worker). */
+/** Ends every terminal started since `before` on the core that runs it (one worker, so only this test's). */
 const endStartedSince = (before: ReadonlySet<string>) => {
   const remote = `${MACHINE_NAME}/`;
   for (const address of listedOnCore()) {
@@ -93,6 +93,14 @@ const sample = (page: Page, selector: string, ceiling = 15_000) =>
     [selector, ceiling] as const,
   );
 
+// Each test ends every terminal it started (the New tab clicks, openNewTerminal, the added machine's shell), even when it
+// fails, so no later spec has to exit them: phone-empty ends every listed shell inside its own time budget.
+let started: ReadonlySet<string> = new Set();
+test.beforeEach(() => {
+  started = new Set(listedOnCore());
+});
+test.afterEach(() => endStartedSince(started));
+
 test("the first screen does not animate in: nothing arrives on load, and a later new tab does", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
@@ -110,44 +118,39 @@ test("the first screen does not animate in: nothing arrives on load, and a later
 test("a kept tab on an added machine does not arrive late on the way back from Settings while machine.list is slow", async ({
   page,
 }) => {
-  const before = new Set(listedOnCore());
   startShell("machine", "faraway");
-  try {
-    const socket = await routeHcSocket(page);
-    await page.goto("/");
-    // A local tab beside the remote one: the local tab shows at once, the remote one only once machine.list names its
-    // machine (its tab is kept by machine id).
-    await openNewTerminal(page);
-    await agentRow(page, "faraway", true).click({ timeout: 20_000 });
-    const remoteTab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: /faraway/ });
-    await expect(remoteTab).toBeVisible({ timeout: 20_000 });
-    await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
-    await watchArrivals(page);
-    const release = socket.hold("machine.list");
-    await page.getByRole("link", { name: "Settings" }).click();
-    await expect(page.getByRole("heading", { name: "Connection", level: 2 })).toBeVisible();
-    await page.goBack();
-    await expect(page.getByRole("contentinfo").getByText(/^\d+ terminals?\b/)).toBeVisible({ timeout: 20_000 });
-    await twoFrames(page);
-    await expect(remoteTab).toHaveCount(0);
-    release();
-    await expect(remoteTab).toBeVisible({ timeout: 20_000 });
-    await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
-    await twoFrames(page);
-    expect(await arrivals(page)).toEqual([]);
-    // New tab opens on the focused pane's machine: focus a local tab, so the control opens nothing on the added machine.
-    await page
-      .getByRole("tablist", { name: "Tabs" })
-      .getByRole("tab")
-      .filter({ hasNotText: "faraway" })
-      .first()
-      .click();
-    await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", /^[^/]+$/);
-    await page.getByRole("button", { name: "New tab", exact: true }).click();
-    await expect.poll(() => arrivals(page)).toContain("div:opacity");
-  } finally {
-    endStartedSince(before);
-  }
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  // A local tab beside the remote one: the local tab shows at once, the remote one only once machine.list names its
+  // machine (its tab is kept by machine id).
+  await openNewTerminal(page);
+  await agentRow(page, "faraway", true).click({ timeout: 20_000 });
+  const remoteTab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: /faraway/ });
+  await expect(remoteTab).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  await watchArrivals(page);
+  const release = socket.hold("machine.list");
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Connection", level: 2 })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("contentinfo").getByText(/^\d+ terminals?\b/)).toBeVisible({ timeout: 20_000 });
+  await twoFrames(page);
+  await expect(remoteTab).toHaveCount(0);
+  release();
+  await expect(remoteTab).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  await twoFrames(page);
+  expect(await arrivals(page)).toEqual([]);
+  // New tab opens on the focused pane's machine: focus a local tab, so the control opens nothing on the added machine.
+  await page
+    .getByRole("tablist", { name: "Tabs" })
+    .getByRole("tab")
+    .filter({ hasNotText: "faraway" })
+    .first()
+    .click();
+  await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", /^[^/]+$/);
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
 test("coming back from Settings is not an arrival: the workspace returns without animating", async ({ page }) => {
