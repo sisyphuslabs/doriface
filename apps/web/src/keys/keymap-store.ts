@@ -3,7 +3,16 @@ import { deviceStore, memoryStore, type KeyValueStore } from "../storage/idb.ts"
 import { checkBinding, NO_OVERRIDES, type Overrides } from "./keymap.ts";
 
 const KEY = "keymap";
-export const KEYMAP_VERSION = 1;
+/** 2: `pane.split` became `pane.split:right` when split down arrived, so a build before that leaves this keymap alone. */
+export const KEYMAP_VERSION = 2;
+
+/** The stored keymap is a newer build's: this one reads its defaults and writes nothing. */
+export class NewerKeymapError extends Error {
+  constructor() {
+    super("The keymap was saved by a newer version of doriface; it is left as it is.");
+    this.name = "NewerKeymapError";
+  }
+}
 
 interface Stored {
   readonly version: number;
@@ -20,22 +29,39 @@ function isStored(value: unknown): value is Stored {
 /** Actions renamed since a binding was saved: split became split right when split down arrived. */
 const RENAMED: Readonly<Record<string, string>> = { "pane.split": "pane.split:right" };
 
+/** Bindings to actions this build does not know (a newer build's), kept so the next save writes them back. */
+type Foreign = ReadonlyMap<string, string>;
+
+interface Read {
+  readonly overrides: Overrides;
+  readonly foreign: Foreign;
+}
+
 /** Older layouts are read through here; a shape this version cannot read keeps the defaults. */
-function migrate(stored: Stored): Overrides {
+function migrate(layout: Stored): Read {
   const overrides = new Map<string, string | null>();
-  for (const entry of stored.bindings) {
+  const foreign = new Map<string, string>();
+  for (const entry of layout.bindings) {
     if (!Array.isArray(entry)) continue;
     const [trigger, saved] = entry;
     if (typeof trigger !== "string" || (typeof saved !== "string" && saved !== null)) continue;
     const action = saved === null ? null : (RENAMED[saved] ?? saved);
     const checked = checkBinding(trigger, action);
     if (checked.ok) overrides.set(checked.trigger, action);
+    else if (action !== null && checkBinding(trigger, null).ok) foreign.set(trigger, action);
   }
-  return overrides;
+  return { overrides, foreign };
+}
+
+/** What is saved: this build's bindings, then the unknown ones on keys it does not bind itself. */
+function stored(overrides: Overrides, foreign: Foreign): Stored {
+  const kept = [...foreign].filter(([trigger]) => !overrides.has(trigger));
+  return { version: KEYMAP_VERSION, bindings: [...overrides, ...kept] };
 }
 
 export class KeymapStore {
   #overrides: Overrides = NO_OVERRIDES;
+  #foreign: Foreign = new Map();
   #queue: Promise<void>;
   #error: Error | null = null;
   #listeners = new Set<() => void>();
@@ -80,23 +106,21 @@ export class KeymapStore {
       if (!checked.ok) throw new Error(checked.reason);
     }
     this.#set(next);
-    const stored: Stored = { version: KEYMAP_VERSION, bindings: [...next] };
-    await this.#storage.put(KEY, stored);
+    await this.#storage.put(KEY, stored(next, this.#foreign));
   }
 
   async #load(): Promise<void> {
     const raw = await this.#storage.get(KEY);
     if (!isStored(raw)) return;
-    // A newer build's keymap is left as it is, so going back a version never rewrites it.
-    if (raw.version > KEYMAP_VERSION) return;
+    // A newer build's keymap is left as it is, so going back a version never rewrites it: this build takes no writes.
+    if (raw.version > KEYMAP_VERSION) throw new NewerKeymapError();
+    const read = migrate(raw);
     if (raw.version < KEYMAP_VERSION) {
       await this.#storage.put(`${KEY}.backup.v${raw.version}`, raw);
-      const migrated = migrate(raw);
-      await this.#storage.put(KEY, { version: KEYMAP_VERSION, bindings: [...migrated] });
-      this.#set(migrated);
-      return;
+      await this.#storage.put(KEY, stored(read.overrides, read.foreign));
     }
-    this.#set(migrate(raw));
+    this.#foreign = read.foreign;
+    this.#set(read.overrides);
   }
 
   #set(overrides: Overrides): void {

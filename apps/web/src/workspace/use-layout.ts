@@ -14,7 +14,7 @@ import {
   tabsOf,
   terminalBlock,
 } from "@doriface/protocol/layout";
-import { nearest, type Direction } from "../layout/neighbor.ts";
+import { paneMove, type Direction } from "../layout/neighbor.ts";
 import { arrange } from "../layout/rects.ts";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import {
@@ -40,7 +40,7 @@ export interface Layout {
   /** Focuses the pane that shows the terminal, or opens it in a new tab. */
   readonly openTerminal: (address: string) => void;
   /** Puts a terminal started for a pane (the focused one unless `target` names another) beside it, and focuses it. */
-  readonly split: (axis: Axis, address: string, target?: PaneTarget) => void;
+  readonly split: (axis: Axis, address: string, target?: PaneTarget, pane?: string) => void;
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
   readonly dropPane: (address: string) => void;
   readonly closeTab: (key: string) => void;
@@ -156,13 +156,14 @@ export function useLayout(
   );
 
   const split = useCallback(
-    (axis: Axis, address: string, target?: PaneTarget): void => {
+    (axis: Axis, address: string, target?: PaneTarget, made: string = freshId("p")): void => {
       const tab = target === undefined ? active : (tabs.find((each) => each.key === target.tab) ?? null);
-      const from = target === undefined ? focused : (tab?.panes.find((pane) => pane.id === target.pane) ?? null);
+      // A named pane may not be on screen yet (a split still being written); the document edit finds it.
+      const from = target === undefined ? focused : { id: target.pane };
       if (tab === null || from === null) return addTab(address);
       const layout = layoutOf(tab.machine);
       if (layout === undefined || layout.readOnly !== null) return undefined;
-      const pane = freshId("p");
+      const pane = made;
       const block = terminalBlock(pane, localOf(address));
       if (tab.transient) {
         const copy = written(tab);
@@ -226,11 +227,12 @@ export function useLayout(
 
   const go = useCallback(
     (direction: Direction): boolean => {
-      if (active === null || focused === null || active.panes.length < 2) return false;
+      if (active === null || focused === null) return false;
       const { panes } = arrange(active.root, MEASURE, 8, null);
-      const to = nearest(focused.id, direction, panes, history.current.get(active.key) ?? []);
-      if (to === null) setBumped((prev) => ({ pane: focused.id, direction, seq: (prev?.seq ?? 0) + 1 }));
-      else show(active.key, to);
+      const move = paneMove(focused.id, direction, panes, history.current.get(active.key) ?? []);
+      if (move.kind === "pass") return false;
+      if (move.kind === "bump") setBumped((prev) => ({ pane: focused.id, direction, seq: (prev?.seq ?? 0) + 1 }));
+      else show(active.key, move.to);
       return true;
     },
     [active, focused, show],

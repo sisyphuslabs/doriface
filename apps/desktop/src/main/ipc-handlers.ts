@@ -33,12 +33,13 @@ export interface IpcHandlers {
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
 
+/** The entries the menu can show; one it cannot (another action, or trigger text it does not take) is left out alone. */
 function menuKeys(candidate: unknown): Map<string, string> | undefined {
   if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return undefined;
   const keys = new Map<string, string>();
   for (const [action, trigger] of Object.entries(candidate)) {
-    if (!SHELL_MENU_ACTIONS.has(action) || typeof trigger !== "string" || !TRIGGER.test(trigger)) return undefined;
-    keys.set(action, trigger);
+    if (SHELL_MENU_ACTIONS.has(action) && typeof trigger === "string" && TRIGGER.test(trigger))
+      keys.set(action, trigger);
   }
   return keys;
 }

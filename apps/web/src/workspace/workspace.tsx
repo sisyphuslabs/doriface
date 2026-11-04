@@ -21,6 +21,7 @@ import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 import { findTerminal } from "./layout-model.ts";
 import { useLayout, type PaneTarget } from "./use-layout.ts";
+import { SplitChain } from "./split-chain.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
 
@@ -70,6 +71,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
   const [closingTab, setClosingTab] = useState<string | null>(null);
   const runs = useMachineRuns(connection, opened, refresh);
+  const [splits] = useState(() => new SplitChain());
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   const newTerminal = (): void => runs.start(runParamsFor(terminals.find((terminal) => terminal.address === inView)));
   const split = (axis: Axis, target?: PaneTarget): void => {
@@ -78,7 +80,15 @@ export function Workspace({ connection }: WorkspaceProps) {
         ? inView
         : layout.tabs.find((tab) => tab.key === target.tab)?.panes.find((pane) => pane.id === target.pane)?.address;
     const near = terminals.find((terminal) => terminal.address === from);
-    runs.start(runParamsFor(near), (address) => layout.split(axis, address, target));
+    const tab = target === undefined ? layout.active : layout.tabs.find((each) => each.key === target.tab);
+    const focused = layout.focused?.id;
+    if (tab === undefined || tab === null || tab.transient || focused === undefined) {
+      return runs.start(runParamsFor(near), (address) => layout.split(axis, address, target));
+    }
+    const link = splits.next(tab.key, focused, target?.pane ?? null);
+    const place = (address: string): void =>
+      link.place((pane) => layout.split(axis, address, { tab: tab.key, pane }, link.pane));
+    return runs.start(runParamsFor(near), place, link.fail);
   };
   const openTerminal = (address: string): void => {
     layout.openTerminal(address);
