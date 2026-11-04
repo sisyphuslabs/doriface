@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHcSession, type HcSession } from "../../host/src/testing/hc-session.ts";
-import { LocalHost } from "../src/main/local-host.ts";
+import { LocalHost, LocalHostStartError } from "../src/main/local-host.ts";
+import type { LocalHostFailure } from "../src/shared/bridge.ts";
 
 const cli = join(import.meta.dir, "..", "..", "host", "src", "cli.ts");
 const logs: string[] = [];
@@ -22,7 +25,7 @@ beforeAll(() => {
   session = createHcSession("doriface-desktop-test");
   host = new LocalHost({
     command: { file: process.execPath, args: [cli] },
-    hc: session.hc,
+    hc: () => session.hc,
     env: session.env,
     log: (line) => logs.push(line),
   });
@@ -70,7 +73,7 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
   test("a host that dies before listening rejects with its stderr, and the next start retries", async () => {
     const broken = new LocalHost({
       command: { file: process.execPath, args: ["-e", "console.error('boom'); process.exit(3)"] },
-      hc: undefined,
+      hc: () => undefined,
       env: process.env,
       log: () => {},
     });
@@ -91,7 +94,7 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
     const child = `Bun.spawn([process.execPath, "-e", ${JSON.stringify(lateWriter)}], { stdio: ["ignore", "ignore", "inherit"] }); process.exit(3);`;
     const dying = new LocalHost({
       command: { file: process.execPath, args: ["-e", child] },
-      hc: undefined,
+      hc: () => undefined,
       env: process.env,
       log: (line) => {
         if (!line.startsWith("doriface-host exited")) return;
@@ -104,5 +107,51 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
     } finally {
       gate.stop(true);
     }
+  });
+});
+
+describe("LocalHost when doriface-host cannot start", () => {
+  let stateDir: string;
+  beforeAll(() => {
+    stateDir = mkdtempSync(join(tmpdir(), "dd-local-fail-"));
+  });
+  afterAll(() => rmSync(stateDir, { recursive: true, force: true }));
+
+  const failureOf = async (
+    command: { file: string; args: string[] },
+    hc: string | undefined,
+  ): Promise<LocalHostFailure> => {
+    const starting = new LocalHost({
+      command,
+      hc: () => hc,
+      env: { ...process.env, DORIFACE_HOST_STATE_DIR: stateDir },
+      log: () => {},
+    });
+    const error: unknown = await starting.start().then(
+      () => new Error("the host started"),
+      (reason: unknown) => reason,
+    );
+    if (!(error instanceof LocalHostStartError))
+      throw new Error(`expected a LocalHostStartError, got ${String(error)}`);
+    return error.failure;
+  };
+
+  test("a missing hc rejects with hc-binary-missing and the path it tried, and no usage text", async () => {
+    const missing = join(stateDir, "no-such-hc");
+    const failure = await failureOf({ file: process.execPath, args: [cli] }, missing);
+    expect(failure).toMatchObject({ code: "hc-binary-missing", path: missing });
+    expect(failure.details).not.toContain("usage:");
+  });
+
+  test("a command line the host refuses keeps its error line but never its usage text", async () => {
+    const failure = await failureOf({ file: process.execPath, args: [cli, "--no-such-flag"] }, undefined);
+    expect(failure.code).toBe("host-exited");
+    expect(failure.details).toContain("no-such-flag");
+    expect(failure.details).not.toContain("usage:");
+  });
+
+  test("a doriface-host that cannot be run at all is host-spawn-failed", async () => {
+    const failure = await failureOf({ file: join(stateDir, "no-such-host"), args: [] }, undefined);
+    expect(failure.code).toBe("host-spawn-failed");
   });
 });

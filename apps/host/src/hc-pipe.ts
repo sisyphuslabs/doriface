@@ -1,5 +1,6 @@
 import type { Subprocess } from "bun";
 import type { DataHandler, Link } from "./link.ts";
+import { errnoOf, StartupError } from "./startup-error.ts";
 
 export interface HcPipeOptions {
   readonly hc: string;
@@ -86,13 +87,27 @@ export class HcPipe implements Link {
   }
 }
 
+/** Why `hc` could not be run at all: not there (a path, or a bare name not on PATH), not runnable, or anything else. */
+function hcSpawnError(hc: string, error: unknown): StartupError {
+  const errno = errnoOf(error);
+  const reason = error instanceof Error ? error.message : String(error);
+  if (errno === "ENOENT" || errno === "ENOTDIR") {
+    const where = /[\\/]/.test(hc) ? `at ${hc}` : `on PATH (${hc})`;
+    return new StartupError("hc-binary-missing", `herdr-core was not found ${where}`, { path: hc }, { cause: error });
+  }
+  if (errno === "EACCES" || errno === "EPERM") {
+    return new StartupError("permission-denied", `may not run ${hc} (${reason})`, { path: hc }, { cause: error });
+  }
+  return new StartupError("hc-version-failed", `cannot run ${hc}: ${reason}`, { path: hc }, { cause: error });
+}
+
 /** Runs `hc --version` and returns the bare version, e.g. "0.1.17". */
 export async function readHcVersion(hc: string): Promise<string> {
   let proc: Subprocess<"ignore", "pipe", "pipe">;
   try {
     proc = Bun.spawn([hc, "--version"], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   } catch (error) {
-    throw new Error(`cannot run ${hc}: is herdr-core installed? (${String(error)})`, { cause: error });
+    throw hcSpawnError(hc, error);
   }
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -101,7 +116,9 @@ export async function readHcVersion(hc: string): Promise<string> {
   ]);
   const version = /^hc (\S+)/.exec(out.trim())?.[1];
   if (code !== 0 || version === undefined) {
-    throw new Error(`\`${hc} --version\` failed (exit ${code}): ${(out + err).trim()}`);
+    throw new StartupError("hc-version-failed", `\`${hc} --version\` failed (exit ${code}): ${(out + err).trim()}`, {
+      path: hc,
+    });
   }
   return version;
 }
