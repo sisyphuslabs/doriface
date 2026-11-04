@@ -1,6 +1,6 @@
 import { devices, type Page } from "@playwright/test";
 import { agentRow, endAgent, startShell } from "./agents.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 import { removeSpeech, stubSpeech } from "./speech-stub.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
@@ -32,7 +32,23 @@ for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 800 });
     await openShell(page);
     const bar = header(page);
-    expect((await bar.boundingBox())?.height).toBeCloseTo(48, 0);
+    // One line at 390; at 320 the mic may push #207's second row to wrap, and the header grows instead of hiding it (#207).
+    const held = await laidOutBox(bar);
+    if (width === 390) expect(held.height).toBeCloseTo(48, 0);
+    else expect(held.height).toBeGreaterThanOrEqual(48 - 0.5);
+    // Its rows never spill; the header's own scrollHeight is not compared, as in #207's check: the buttons' 44 px hit
+    // areas reach past it by design, and nothing there is cut.
+    const spills = await bar.evaluate((el) =>
+      [...el.querySelectorAll("h1, p, div")]
+        .filter((node) => node.scrollHeight > node.clientHeight + 1)
+        .map((node) => `${node.tagName.toLowerCase()} ${node.scrollHeight}>${node.clientHeight}`),
+    );
+    expect(spills).toEqual([]);
+    const firstRow = await laidOutBox(page.locator("[data-terminal] .term-row").first());
+    expect(firstRow.y).toBeGreaterThanOrEqual(held.y + held.height - 0.5);
+    await expect(
+      bar.locator("[data-header-action]").getByRole("button", { name: `Dictate into ${NAME}` }),
+    ).toBeVisible();
     const mic = await bar.getByRole("button", { name: `Dictate into ${NAME}` }).boundingBox();
     const actions = await bar.getByRole("button", { name: /^Session actions for / }).boundingBox();
     for (const box of [mic, actions]) {
