@@ -23,7 +23,7 @@ const PRIORITY: Readonly<Record<DialPurpose, number>> = { "revoke-push": 0, push
 export type DueReason = "presence" | "probe" | "added" | "settle" | "budget";
 
 export type Grant =
-  | { readonly ok: true }
+  | { readonly ok: true; readonly chargedAt: number | undefined }
   | { readonly ok: false; readonly reason: "offline"; readonly misses: number; readonly nextInMs: number }
   | { readonly ok: false; readonly reason: "rate-limited"; readonly nextInMs: number }
   | { readonly ok: false; readonly reason: "settling"; readonly nextInMs: number }
@@ -113,7 +113,7 @@ export class DialPolicy {
     if (purpose === "line" && !this.#present.has(member) && now < this.#settleUntil) {
       return Promise.resolve({ ok: false, reason: "settling", nextInMs: this.#settleUntil - now });
     }
-    if (options.direct === true) return Promise.resolve({ ok: true });
+    if (options.direct === true) return Promise.resolve({ ok: true, chargedAt: undefined });
     const taken = this.#take(PRIORITY[purpose], options.waitMs);
     if (purpose !== "line") return taken;
     return taken.then((grant) => {
@@ -146,9 +146,14 @@ export class DialPolicy {
     });
   }
 
-  /** A granted dial that was not needed after all (a session came up while it waited) gives its token back. */
-  release(): void {
-    this.#charged.pop();
+  /**
+   * A granted dial that was not needed after all (a session came up while it waited) gives its own token back: the
+   * charge made when it was granted, so the window's expiry stays exact.
+   */
+  release(chargedAt: number | undefined): void {
+    const index = chargedAt === undefined ? -1 : this.#charged.indexOf(chargedAt);
+    if (index === -1) return;
+    this.#charged.splice(index, 1);
     this.#serve();
   }
 
@@ -228,7 +233,7 @@ export class DialPolicy {
   #take(priority: number, waitMs: number | undefined): Promise<Grant> {
     if (this.#waiters.length === 0 && this.#used() < this.budget) {
       this.#charged.push(this.#clock.now());
-      return Promise.resolve({ ok: true });
+      return Promise.resolve({ ok: true, chargedAt: this.#clock.now() });
     }
     const { promise, resolve } = Promise.withResolvers<Grant>();
     const waiter: Waiter = { priority, seq: this.#seq++, resolve, cancel: () => undefined };
@@ -256,7 +261,7 @@ export class DialPolicy {
       if (waiter === undefined) break;
       waiter.cancel();
       this.#charged.push(this.#clock.now());
-      waiter.resolve({ ok: true });
+      waiter.resolve({ ok: true, chargedAt: this.#clock.now() });
     }
     this.#schedule();
     this.#budgetWake?.();

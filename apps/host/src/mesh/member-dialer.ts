@@ -44,7 +44,7 @@ export class MemberDialer {
       return false;
     }
     if (this.#options.flushOpen(member.signPub)) {
-      policy.release();
+      policy.release(grant.chargedAt);
       return true;
     }
     let link: LineLink;

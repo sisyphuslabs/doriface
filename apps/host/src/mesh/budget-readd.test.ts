@@ -94,13 +94,15 @@ describe("re-adding a line the dial budget refused (section 8.2, M-E2)", () => {
     const due: string[] = [];
     const onDue = (member: string, reason: string): void => void due.push(`${clock.now()} ${member} ${reason}`);
     const policy = new DialPolicy({ clock, random: seededRandom(5), onDue });
-    await Promise.all(Array.from({ length: DIAL_LIMITS.budget }, (_, i) => policy.acquire(`m${i}`, "push")));
+    const [given] = await Promise.all(
+      Array.from({ length: DIAL_LIMITS.budget }, (_, i) => policy.acquire(`m${i}`, "push")),
+    );
     const refused = policy.acquire("late", "line", { waitMs: DIAL_LIMITS.lineWaitMs });
     await clock.advance(DIAL_LIMITS.lineWaitMs);
     expect((await refused).ok).toBe(false);
     await clock.advance(5_000);
     expect(due).toEqual([]);
-    policy.release();
+    policy.release(given?.ok === true ? given.chargedAt : undefined);
     await clock.advance(0);
     expect(due).toEqual(["15000 late budget"]);
   });
