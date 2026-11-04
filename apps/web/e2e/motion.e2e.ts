@@ -142,12 +142,7 @@ test("a kept tab on an added machine does not arrive late on the way back from S
   await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
   // New tab opens on the focused pane's machine: focus a local tab, so the control opens nothing on the added machine.
-  await page
-    .getByRole("tablist", { name: "Tabs" })
-    .getByRole("tab")
-    .filter({ hasNotText: "faraway" })
-    .first()
-    .click();
+  await page.getByRole("tablist", { name: "Tabs" }).getByRole("tab").filter({ hasNotText: "faraway" }).first().click();
   await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", /^[^/]+$/);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
