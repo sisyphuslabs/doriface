@@ -1,5 +1,5 @@
 import { base64urlEncode } from "@doriface/crypto";
-import { parseRecord, type Signed } from "@doriface/mesh";
+import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
 import { type Clock, type Random, uniform } from "./clock.ts";
 import { type DialPolicy, type DialPurpose, type DueReason } from "./dial-policy.ts";
 import { missingSince } from "./anti-entropy.ts";
@@ -139,6 +139,7 @@ export class Gossip implements SyncHost {
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult {
     this.#claims.delete(session.peer);
     const result = mergeBatch(this.#options, batch);
+    this.#heldBy(session.peer, batch);
     for (const refusal of result.refused) {
       this.#options.log(
         `mesh: refused record ${refusal.hash} from ${this.#known.nameOf(session.peer)}: ${refusal.reason}`,
@@ -179,6 +180,12 @@ export class Gossip implements SyncHost {
     this.#confirmed.set(peer, heads);
     const claim = n[this.self];
     if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
+  }
+
+  /** A record a peer sent, and its past, is one it holds (section 5.3: owed is what it is not known to hold). */
+  #heldBy(peer: string, batch: readonly Signed[]): void {
+    const confirmed = this.#confirmed.get(peer) ?? [];
+    this.#confirmed.set(peer, [...new Set([...confirmed, ...batch.map(hashOf)])]);
   }
 
   ended(session: SyncSession): void {
