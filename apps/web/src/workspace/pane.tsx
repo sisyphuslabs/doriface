@@ -76,7 +76,7 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onS
       {split ? (
         <header
           className={cn(
-            "flex h-6 shrink-0 items-center gap-1 border-b border-border pr-0.5 pl-2.5 text-xs transition-colors duration-(--duration-micro)",
+            "flex h-7 shrink-0 items-center gap-1 border-b border-border pr-0.5 pl-2.5 text-xs transition-colors duration-(--duration-micro)",
             focused ? "bg-raised text-foreground" : "text-muted-foreground",
           )}
         >
