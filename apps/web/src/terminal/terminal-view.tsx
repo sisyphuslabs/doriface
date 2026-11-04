@@ -3,7 +3,7 @@ import { cn, useToastManager } from "@doriface/ui";
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
@@ -42,6 +42,17 @@ export interface TerminalViewProps {
 const HISTORY_LINES = 2_000;
 /** RIS: clears the screen and scrollback before an attach replay draws them again. */
 const FULL_RESET = "\u001bc";
+
+/**
+ * Gives a focus event's focus back to the element that had it, unless that sits in a pane no longer focused (focus
+ * moved on while this terminal started; the focused pane takes it as it attaches), or drops it when nothing had.
+ */
+function handBack(event: FocusEvent<HTMLElement>): void {
+  const from = event.relatedTarget;
+  const stale = from instanceof HTMLElement && from.closest('[data-focused="false"]') !== null;
+  if (from instanceof HTMLElement && from.isConnected && !stale) from.focus();
+  else if (event.target instanceof HTMLElement) event.target.blur();
+}
 
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
@@ -173,9 +184,6 @@ export function TerminalView(props: TerminalViewProps) {
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
-    // wterm focuses every terminal as it starts (@wterm/dom 0.5.8 wterm.js:410); only the focused pane's keeps it.
-    const active = document.activeElement;
-    if (!isFocused.current && active instanceof HTMLElement && ready.element.contains(active)) active.blur();
     attachedTo.current = connection;
     // wterm starts every grid at 80x24 and fits it later; the pty starts at the size the view renders.
     ready.fit();
@@ -260,7 +268,12 @@ export function TerminalView(props: TerminalViewProps) {
         onReady={attach}
         onData={(data) => send(transformInput === undefined ? data : transformInput(data))}
         onResize={(cols, rows) => stream.current?.resize(cols, rows)}
-        onFocus={() => stream.current?.focus(true)}
+        onFocus={(event) => {
+          // wterm focuses every terminal as it starts (@wterm/dom 0.5.8 wterm.js:410). Only the focused pane's keeps
+          // it; any other hands it back to where it was, so a pane another device adds never takes the keyboard.
+          if (wt === null && !isFocused.current) return handBack(event);
+          stream.current?.focus(true);
+        }}
         onBlur={() => stream.current?.focus(false)}
       />
       <PasteDialog
