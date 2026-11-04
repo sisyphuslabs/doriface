@@ -2,7 +2,7 @@ import { IconButton, Menu, MenuItem } from "@doriface/ui";
 import { Ellipsis, Pencil, Power } from "lucide-react";
 import { useAskSession } from "./session-context.ts";
 
-/** The pane header's actions on its session: rename it, or end its program. */
+/** The tab strip's actions on the focused terminal's session: rename it, or end its program. */
 export function SessionMenu({ address }: { readonly address: string }) {
   const ask = useAskSession();
   return (

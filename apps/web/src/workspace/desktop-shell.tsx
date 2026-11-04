@@ -1,12 +1,14 @@
 import type { HcConnection } from "@doriface/client";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
-import { Columns2, Monitor, PanelLeft } from "lucide-react";
+import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
+import { currentPlatform } from "../keys/trigger.ts";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
-import { agentStatus, machineOf, type Session, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
@@ -32,6 +34,10 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
+  // macOS writes shortcuts as joined glyphs (⌘1); elsewhere they read Ctrl+1.
+  const joiner = currentPlatform() === "mac" ? "" : "+";
+  const firstKeys = useActionKeys("tab.select:1")?.join(joiner);
+  const secondKeys = useActionKeys("tab.select:2")?.join(joiner);
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   useAppActions({
     terminals,
@@ -45,11 +51,20 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
     const terminal = byAddress.get(address);
     if (terminal === undefined) return [];
-    const tab: WorkspaceTab = { id: address, title: terminalTitle(terminal), status: agentStatus(terminal) };
+    const shortcut = address === tabs.active ? firstKeys : address === tabs.split ? secondKeys : undefined;
     const machine = machineOf(address);
-    return [machine === undefined ? tab : { ...tab, machine }];
+    return [
+      {
+        id: address,
+        title: terminalTitle(terminal),
+        status: agentStatus(terminal),
+        ...(machine === undefined ? {} : { machine }),
+        ...(shortcut === undefined ? {} : { shortcut }),
+      },
+    ];
   });
   const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
+  const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   const toggle = (
@@ -98,7 +113,12 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
               />
             )
           }
-          trailing={toggle}
+          trailing={
+            <>
+              {focusedTerminal === undefined ? null : <SessionMenu address={focusedTerminal.address} />}
+              {toggle}
+            </>
+          }
         />
         {tabs.open.length === 0 ? <NoTerminal onNew={onNew} /> : null}
         <Panes
@@ -114,6 +134,11 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           start={
             <>
               <StatusBarItem icon={<Monitor aria-hidden />}>{focusedMachine}</StatusBarItem>
+              {focusedTerminal === undefined ? null : (
+                <StatusBarItem icon={<Folder aria-hidden />}>
+                  <span data-status-space>{spaceName(focusedTerminal)}</span>
+                </StatusBarItem>
+              )}
               {loaded ? (
                 <StatusBarItem>
                   {live.length} {live.length === 1 ? "terminal" : "terminals"}
