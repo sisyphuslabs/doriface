@@ -106,7 +106,7 @@ export async function runAttack(run: ShapeRun): Promise<AttackResult> {
       async () => {
         const seen = await Promise.all(judges.map((judge) => statusOf(judge)));
         for (const [index, judge] of judges.entries())
-          statuses.set(judge.name, seen[index] ?? { sync: "", members: [], stuck: [] });
+          statuses.set(judge.name, seen[index] ?? { sync: "", members: [], revoked: [], stuck: [] });
         return seen.every((status) => JSON.stringify(status.members.map((member) => member.hostId)) === want);
       },
       MEMBERS_MS,

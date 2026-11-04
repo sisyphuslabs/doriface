@@ -6,7 +6,7 @@ import { untilGone } from "./support/mesh/gone.ts";
 import { identityOf, mintIdentity } from "./support/mesh/identity.ts";
 import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
 import { scenario } from "./support/mesh/present.ts";
-import { machineIds, meshFileOf } from "./support/mesh/status.ts";
+import { machineIds, meshFileOf, statusOf } from "./support/mesh/status.ts";
 
 /** Four hosts behind the harness's one IP, within section 8.2's per-IP arithmetic. */
 const NAMES = ["a", "b", "c", "d"] as const;
@@ -63,6 +63,15 @@ scenario(
       const hosts = running();
       expect((await hosts.host("a").cli("mesh", "revoke", "d", "--yes")).exit).toBe(0);
       await untilGone(hosts, ["a", "b", "c"], ["d"]);
+      // Read as printed: the revoked host is listed under revoked, never under members (section 8.6).
+      const statuses = await Promise.all(["a", "b", "c"].map((name) => statusOf(hosts.host(name))));
+      const revokedId = hosts.host("d").hostId;
+      expect(statuses.map((status) => status.members.some((member) => member.hostId === revokedId))).toEqual([
+        false,
+        false,
+        false,
+      ]);
+      expect(statuses.map((status) => status.revoked.includes(revokedId))).toEqual([true, true, true]);
       await refusedBy(hosts, "d", ["a", "b", "c"]);
       await hosts.until(
         "d removes its own mesh machines (6.4)",
