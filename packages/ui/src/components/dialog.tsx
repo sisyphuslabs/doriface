@@ -12,6 +12,8 @@ export interface DialogProps {
   readonly trigger?: ReactElement;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
+  /** Where focus goes once it closes: an element, or true for the element that had focus when it opened. */
+  readonly finalFocus?: () => HTMLElement | true;
   readonly className?: string;
 }
 
@@ -29,7 +31,17 @@ function Body({ children, actions }: Pick<DialogProps, "children" | "actions">) 
 }
 
 /** A modal question. Title states the situation; the description is at most two short sentences. */
-export function Dialog({ title, description, children, actions, trigger, open, onOpenChange, className }: DialogProps) {
+export function Dialog({
+  title,
+  description,
+  children,
+  actions,
+  trigger,
+  open,
+  onOpenChange,
+  finalFocus,
+  className,
+}: DialogProps) {
   return (
     <BaseDialog.Root
       {...(open === undefined ? {} : { open })}
@@ -39,6 +51,7 @@ export function Dialog({ title, description, children, actions, trigger, open, o
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className={backdropClass} />
         <BaseDialog.Popup
+          {...(finalFocus === undefined ? {} : { finalFocus })}
           className={cn(
             overlaySurface,
             "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",

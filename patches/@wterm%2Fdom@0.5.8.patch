@@ -134,3 +134,15 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae
          }
          this.rowParts.set(row, parts);
      }
+diff --git a/dist/wterm.js b/dist/wterm.js
+index 848e1c3f7880842c4439541fc4565ff4a42c0201..4a169079bd6e4b88fce9fbb07150e4bcb51e90e5 100644
+--- a/dist/wterm.js
++++ b/dist/wterm.js
+@@ -407,7 +407,6 @@ export class WTerm {
+             if (!this.autoResize) {
+                 this._lockHeight();
+             }
+-            this.input.focus();
+             this._initialRender();
+             this._registerWebMCP();
+             if (this.cols !== initialCols || this.rows !== initialRows)
