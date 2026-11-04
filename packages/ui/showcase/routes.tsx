@@ -6,6 +6,7 @@ import { PaletteScreen } from "./screens/palette.tsx";
 import { PrimitivesScreen } from "./screens/primitives.tsx";
 import {
   SettingsAppearanceScreen,
+  SettingsDeviceScreen,
   SettingsKeyboardScreen,
   SettingsScreen,
   SettingsTerminalScreen,
@@ -21,6 +22,7 @@ export const ROUTES = [
   { id: "palette", title: "Command palette", render: PaletteScreen },
   { id: "settings", title: "Settings", render: SettingsScreen },
   { id: "settings-appearance", title: "Settings: appearance", render: SettingsAppearanceScreen },
+  { id: "settings-device", title: "Settings: device", render: SettingsDeviceScreen },
   { id: "settings-terminal", title: "Settings: terminal", render: SettingsTerminalScreen },
   { id: "settings-keyboard", title: "Settings: keyboard", render: SettingsKeyboardScreen },
   { id: "mobile", title: "Phone", render: MobileScreen },
