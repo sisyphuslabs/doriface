@@ -10,16 +10,26 @@ import { syncHooks } from "./sync-hooks.ts";
 import { FakeMachines, hcError } from "./testing/fake-machines.ts";
 import { hostIdFor } from "./testing/hc-mesh.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
+import type { MeshView } from "./mesh-view.ts";
 import { MeshNet } from "./testing/mesh-net.ts";
 import { meshOf, peer } from "./testing/mesh-peers.ts";
 
 /** a, b and c on one in-memory relay; `MeshCommands` on a, its pushes and confirmations through a's own gossip. */
-function threeMembers() {
+function threeMembers(closeRevokedOnMerge = false) {
   const [a, b, c] = [peer("a"), peer("b"), peer("c")];
   const clock = new FakeClock();
   const net = new MeshNet(clock, seededRandom(78));
   const { records } = meshOf([a, b, c]);
-  const [atA, atB, atC] = [a, b, c].map((member) => net.add(member, records));
+  // As #105's HostSync does: every merge closes, at once, the sessions of keys the new view no longer holds.
+  const closeOnMerge = (name: string) => (view: MeshView) => {
+    const gossip = net.host(name).gossip;
+    for (const key of [a, b, c].map((member) => member.signPub)) {
+      if (!view.members.some((member) => member.signPub === key)) gossip.session(key)?.close(4401, "revoked");
+    }
+  };
+  const [atA, atB, atC] = [a, b, c].map((member) =>
+    net.add(member, records, closeRevokedOnMerge ? closeOnMerge(member.name) : undefined),
+  );
   if (atA === undefined || atB === undefined || atC === undefined) throw new Error("no hosts");
   const sync = { gossip: atA.gossip, runtime: undefined, changed: () => undefined, stop: () => atA.gossip.stop() };
   const stateDir = mkdtempSync(join(tmpdir(), "dh-sync-hooks-"));
@@ -66,6 +76,16 @@ describe("mesh revoke, rename and leave reach the other members through sync (de
       const { value } = await underClock(clock, commands.leave(), 40_000);
       expect(value?.confirmed.map((member) => member.hostId).toSorted()).toEqual([b.hostId, c.hostId].toSorted());
       expect(value?.revokeCommand).toBeNull();
+    } finally {
+      cleanup();
+    }
+  });
+
+  test("leave is still confirmed when the members close its sessions as they merge its self-revoke (#105, L31)", async () => {
+    const { b, c, clock, commands, cleanup } = threeMembers(true);
+    try {
+      const { value } = await underClock(clock, commands.leave(), 40_000);
+      expect(value?.confirmed.map((member) => member.hostId).toSorted()).toEqual([b.hostId, c.hostId].toSorted());
     } finally {
       cleanup();
     }
