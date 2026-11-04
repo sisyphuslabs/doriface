@@ -22,7 +22,7 @@ export const TITLEBAR_INSET_START = TRAFFIC_LIGHTS.x + TRAFFIC_LIGHTS.width + 12
  * Controls inside a titlebar row that must keep taking clicks instead of moving the window; a whole tab pill
  * (`data-tab-id`) is one, so pressing anywhere on it drags the tab, not the window.
  */
-const TITLEBAR_CONTROLS =
+export const TITLEBAR_CONTROLS =
   'a, button, input, select, textarea, [role="tab"], [role="button"], [tabindex], [data-tab-id]';
 
 /**
