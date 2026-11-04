@@ -37,7 +37,8 @@ export function sessionAtB(
       batchSizes.push(batch.length);
       return options.merge?.(session, batch) ?? mergeBatch(deps, batch);
     },
-    heard: () => undefined,
+    heard: () => false,
+    answered: () => undefined,
     ended: () => undefined,
   };
   const [ours, theirs] = memoryLinkPair(true);

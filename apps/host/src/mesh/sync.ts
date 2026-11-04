@@ -9,6 +9,13 @@ import type { MergeResult } from "./merge.ts";
 /** Section 5.1: a sync session closes after 60 s without a line. */
 export const LINGER_MS = 60_000;
 
+/**
+ * A peer answers a hello with `done` (records first, when it holds any the hello's heads lack). Our own hello, or the
+ * peer's hello claiming a counter of this host's key, leaves a `done` owed; one not sent within 30 s is a protocol
+ * fault (4400), so a claim cannot hold this host's own records back for longer.
+ */
+export const ANSWER_MS = 30_000;
+
 /** A merge that threw (a counter behind, the state lock, mesh.json gone): this session ends, the host goes on. */
 const INTERNAL_ERROR = 1011;
 
@@ -16,8 +23,13 @@ export interface SyncHost {
   readonly meshId: string;
   records(): readonly Signed[];
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult;
-  /** The peer said which heads it holds, and the highest `n` it holds of each signer (its `hello`). */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void;
+  /**
+   * The peer said which heads it holds, and the highest `n` it holds of each signer (its `hello`). True when that
+   * claims a counter of this host's key above its own: the claim stands until the peer's next `done`.
+   */
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean;
+  /** The peer's `done`: what it held for this host has arrived, so a claim its hello made is resolved. */
+  answered(session: SyncSession): void;
   ended(session: SyncSession): void;
 }
 
@@ -44,6 +56,7 @@ export class SyncSession {
   #incoming: Signed[] = [];
   #saidHello = false;
   #idle: () => void = () => undefined;
+  #answerDue: (() => void) | undefined;
   #closed = false;
 
   constructor(
@@ -77,9 +90,7 @@ export class SyncSession {
   /** Sends every stored record the peer's known heads do not cover and that this session has not sent yet. */
   flush(): void {
     if (this.#closed) return;
-    const missing = missingSince(this.#host.records(), this.#peerHeads).filter(
-      (record) => !this.#sent.has(hashOf(record)),
-    );
+    const missing = this.#unsent();
     if (missing.length > 0) this.#sendRecords(missing);
   }
 
@@ -108,6 +119,15 @@ export class SyncSession {
     this.#saidHello = true;
     const records = this.#host.records();
     this.#send({ t: "hello", v: 2, mesh: this.#host.meshId, heads: headsOf(records), n: countersOf(records) });
+    this.#owesAnswer();
+  }
+
+  #owesAnswer(): void {
+    this.#answerDue ??= this.#clock.after(ANSWER_MS, () => this.close(CloseCode.CryptoFailure, "no done after hello"));
+  }
+
+  #unsent(): readonly Signed[] {
+    return missingSince(this.#host.records(), this.#peerHeads).filter((record) => !this.#sent.has(hashOf(record)));
   }
 
   #receive(line: MeshLine): void {
@@ -125,7 +145,10 @@ export class SyncSession {
       case "want":
         return this.#answerWant(line.hashes);
       case "done":
-        return this.#merge();
+        this.#answerDue?.();
+        this.#answerDue = undefined;
+        this.#merge();
+        return this.#host.answered(this);
       case "refused":
         return this.close(1000, `the peer refused: ${line.reason}`);
       case "offer":
@@ -148,9 +171,9 @@ export class SyncSession {
       return this.close(CloseCode.CryptoFailure, `a peer claimed more than ${MAX_RECORDS} heads`);
     }
     for (const head of heads) this.#peerHeads.add(head);
-    this.#host.heard(this.peer, heads, n);
+    if (this.#host.heard(this.peer, heads, n)) this.#owesAnswer();
     if (!this.#saidHello) this.#hello();
-    this.flush();
+    this.#sendRecords(this.#unsent());
   }
 
   #merge(): void {
@@ -208,6 +231,7 @@ export class SyncSession {
     if (this.#closed) return;
     this.#closed = true;
     this.#idle();
+    this.#answerDue?.();
     this.#host.ended(this);
   }
 }

@@ -3,6 +3,7 @@ import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
 import { type Clock, type Random, uniform } from "./clock.ts";
 import { type DialPolicy, type DialPurpose, type DueReason } from "./dial-policy.ts";
 import { missingSince } from "./anti-entropy.ts";
+import { ownN } from "../state/mesh-tx.ts";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshStore } from "../state/mesh.ts";
 import type { LineLink } from "./lines.ts";
@@ -141,7 +142,6 @@ export class Gossip implements SyncHost {
   }
 
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult {
-    this.#claims.delete(session.peer);
     const result = mergeBatch(this.#options, batch);
     this.#heldBy(session.peer, batch);
     for (const refusal of result.refused) {
@@ -176,15 +176,21 @@ export class Gossip implements SyncHost {
   }
 
   /**
-   * A peer's `hello`: the heads it holds, and the highest counter it holds of this host's own key. Until that peer's
-   * batch arrives (or its session ends) this host signs no own record below that counter (section 10.1); at `done`
-   * the claim is resolved, since the batch carries every record of this host's the peer holds.
+   * A peer's `hello`: the heads it holds, and the highest counter it holds of this host's own key. Above this host's
+   * own, it signs no own record below that counter (section 10.1) until the peer's next `done`, which carries every
+   * record of this host's the peer holds, or its session ends; a `done` not sent in time closes the session.
    */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void {
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean {
     this.#confirmed.set(peer, heads);
     if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
-    const claim = n[this.self];
-    if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
+    const claim = n[this.self] ?? 0;
+    if (claim <= ownN(this.records(), this.self)) return false;
+    this.#claims.set(peer, claim);
+    return true;
+  }
+
+  answered(session: SyncSession): void {
+    if (this.#sessions.get(session.peer) === session) this.#claims.delete(session.peer);
   }
 
   /**
