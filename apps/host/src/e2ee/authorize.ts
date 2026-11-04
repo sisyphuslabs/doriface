@@ -26,8 +26,9 @@ export const devicePeer = (devices: DeviceStore, key: Uint8Array): Peer =>
   devices.has(key) ? { kind: "device" } : { kind: "refused", reason: "unknown device" };
 
 /**
- * A session (`0x01`) by its stream: the mesh stream admits only a current member; the hc stream (absent or `"hc"`)
- * admits a member, else a paired device that is no member's key.
+ * A session (`0x01`) by its stream: the mesh stream admits only a current member; the push stream only a paired device
+ * that is no member's key (a member has no browser to notify); the hc stream (absent or `"hc"`) admits a member, else
+ * such a device.
  */
 export function sessionPeer(
   stream: Stream | undefined,
@@ -38,6 +39,11 @@ export function sessionPeer(
   const mesh = meshPeer(index, base64urlEncode(key));
   if (stream === "mesh")
     return mesh?.kind === "member" ? mesh : (mesh ?? { kind: "refused", reason: "not a mesh member" });
+  if (stream === "push") {
+    return mesh?.kind === "member"
+      ? { kind: "refused", reason: "a mesh member has no push stream" }
+      : (mesh ?? devicePeer(devices, key));
+  }
   return mesh ?? devicePeer(devices, key);
 }
 

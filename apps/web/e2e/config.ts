@@ -26,5 +26,10 @@ export const E2E_WEB_PORT = port("E2E_WEB_PORT", 4173);
 /** A second e2e host whose names, titles and paths are long, Korean or unbroken, for the layout spec. */
 export const E2E_LAYOUT_PORT = port("E2E_LAYOUT_PORT", 7798);
 export const E2E_LAYOUT_MACHINE_DIR = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-machine`);
+/**
+ * The test push services the e2e hosts may post web push notices to (`--push-test-origin`): any port on loopback,
+ * since each worker's service binds a free port of its own.
+ */
+export const E2E_PUSH_ORIGIN = "http://127.0.0.1:0";
 /** A throwaway token for a loopback-only test host. */
 export const E2E_TOKEN = "doriface-e2e-loopback-token-0000";

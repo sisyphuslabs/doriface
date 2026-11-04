@@ -1,3 +1,4 @@
+import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { useId, type ReactElement, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
@@ -15,6 +16,8 @@ export interface DialogProps {
   /** Where focus goes once it closes: an element, or true for the element that had focus when it opened. */
   readonly finalFocus?: () => HTMLElement | true;
   readonly className?: string;
+  /** A statement to acknowledge (`alertdialog`): read out as it opens, and a click outside leaves it up. */
+  readonly alert?: boolean;
 }
 
 const popupClass = "w-[min(28rem,calc(100%-2rem))] p-5";
@@ -41,31 +44,41 @@ export function Dialog({
   onOpenChange,
   finalFocus,
   className,
+  alert = false,
 }: DialogProps) {
+  const state = { ...(open === undefined ? {} : { open }), ...(onOpenChange === undefined ? {} : { onOpenChange }) };
+  const popup = (
+    <BaseDialog.Portal>
+      <BaseDialog.Backdrop className={backdropClass} />
+      <BaseDialog.Popup
+        {...(finalFocus === undefined ? {} : { finalFocus })}
+        className={cn(
+          overlaySurface,
+          "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
+          popupClass,
+          className,
+        )}
+      >
+        <BaseDialog.Title className={titleClass}>{title}</BaseDialog.Title>
+        {description === undefined ? null : (
+          <BaseDialog.Description className={descriptionClass}>{description}</BaseDialog.Description>
+        )}
+        <Body actions={actions}>{children}</Body>
+      </BaseDialog.Popup>
+    </BaseDialog.Portal>
+  );
+  if (alert) {
+    return (
+      <BaseAlertDialog.Root {...state}>
+        {trigger === undefined ? null : <BaseAlertDialog.Trigger render={trigger} />}
+        {popup}
+      </BaseAlertDialog.Root>
+    );
+  }
   return (
-    <BaseDialog.Root
-      {...(open === undefined ? {} : { open })}
-      {...(onOpenChange === undefined ? {} : { onOpenChange })}
-    >
+    <BaseDialog.Root {...state}>
       {trigger === undefined ? null : <BaseDialog.Trigger render={trigger} />}
-      <BaseDialog.Portal>
-        <BaseDialog.Backdrop className={backdropClass} />
-        <BaseDialog.Popup
-          {...(finalFocus === undefined ? {} : { finalFocus })}
-          className={cn(
-            overlaySurface,
-            "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
-            popupClass,
-            className,
-          )}
-        >
-          <BaseDialog.Title className={titleClass}>{title}</BaseDialog.Title>
-          {description === undefined ? null : (
-            <BaseDialog.Description className={descriptionClass}>{description}</BaseDialog.Description>
-          )}
-          <Body actions={actions}>{children}</Body>
-        </BaseDialog.Popup>
-      </BaseDialog.Portal>
+      {popup}
     </BaseDialog.Root>
   );
 }

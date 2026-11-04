@@ -1,6 +1,6 @@
 import { base64urlEncode, type SecureLink, SessionKind } from "@doriface/crypto";
 import type { WebSocketHandler } from "bun";
-import { Hono } from "hono";
+import { type Context, Hono, type Next } from "hono";
 import { type BunWebSocketData, upgradeWebSocket } from "hono/bun";
 import type { WSEvents } from "hono/ws";
 import { checkHandshake } from "./auth.ts";
@@ -12,6 +12,8 @@ import { type E2eeWire, plaintextLink, WsByteLink } from "./e2ee/links.ts";
 import type { LiveSessions } from "./e2ee/sessions.ts";
 import type { Link } from "./link.ts";
 import type { AuthorizeIndex } from "./mesh/authorize-index.ts";
+import type { PushLink } from "./push/push-stream.ts";
+import { LOOPBACK_OWNER } from "./push/subscriptions.ts";
 import { DIRECT_IDLE_MS, WsLink } from "./ws-link.ts";
 
 /** A link backed by a child process; `exited` settles once the child is gone. */
@@ -34,6 +36,8 @@ export interface GatewayOptions {
     | undefined;
   /** For tests: the direct-path idle close (default {@link DIRECT_IDLE_MS}). */
   readonly directIdleMs?: number | undefined;
+  /** Serves a device's push stream (`stream:"push"`, and `/v1/push` on loopback); without it both are refused. */
+  readonly push?: ((link: PushLink, owner: string) => void) | undefined;
 }
 
 /** Serves a session whose plaintext is the mesh stream (a member's sync session, or a machine join). */
@@ -59,6 +63,7 @@ export function createGateway(options: GatewayOptions): Gateway {
   const sockets = new Set<WsLink<BunWebSocketData>>();
   const children = new Set<Promise<unknown>>();
   const e2eeEvents = new WeakSet<WSEvents>();
+  const pushEvents = new WeakSet<WSEvents>();
   const { log, e2ee } = options;
 
   const app = new Hono();
@@ -80,17 +85,28 @@ export function createGateway(options: GatewayOptions): Gateway {
       }),
     );
   }
+  const tokenGate = async (c: Context, next: Next) => {
+    if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.text("websocket upgrade required", 426);
+    const verdict = checkHandshake(c.req.header("sec-websocket-protocol"), options.token);
+    if (!verdict.ok) return c.text(verdict.reason, verdict.status);
+    await next();
+    return undefined;
+  };
+  // A fresh events object per upgrade identifies the connection in the Bun handler below.
   app.get(
     "/v1/hc",
-    async (c, next) => {
-      if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.text("websocket upgrade required", 426);
-      const verdict = checkHandshake(c.req.header("sec-websocket-protocol"), options.token);
-      if (!verdict.ok) return c.text(verdict.reason, verdict.status);
-      await next();
-      return undefined;
-    },
-    // A fresh events object per upgrade identifies the connection in the Bun handler below.
+    tokenGate,
     upgradeWebSocket(() => ({})),
+  );
+  // The loopback client's push stream, behind the same token as its hc stream.
+  app.get(
+    "/v1/push",
+    tokenGate,
+    upgradeWebSocket(() => {
+      const events: WSEvents = {};
+      pushEvents.add(events);
+      return events;
+    }),
   );
 
   const pipeTo = (link: Link, closeClient: (code: number, reason: string) => void): void => {
@@ -113,6 +129,7 @@ export function createGateway(options: GatewayOptions): Gateway {
     if (secure === undefined) return;
     e2ee.meshPresence?.(secure);
     if (secure.stream === "mesh") return serveMesh(secure);
+    if (secure.stream === "push") return servePush(secure);
     e2ee.sessions.add(secure);
     const gate = hcGate(secure);
     if (gate === undefined) return;
@@ -125,6 +142,13 @@ export function createGateway(options: GatewayOptions): Gateway {
     if (secure.kind === SessionKind.Session) e2ee.sessions.add(secure);
     if (e2ee.meshStream === undefined) secure.close(1000, "this host serves no mesh stream");
     else e2ee.meshStream(secure);
+  };
+
+  /** A device's push stream: registered so a revoke closes it, then served as that device's key. */
+  const servePush = (secure: SecureLink): void => {
+    if (e2ee === undefined || !e2ee.sessions.add(secure)) return;
+    if (options.push === undefined) secure.close(1011, "this host sends no push notices");
+    else options.push(secure, base64urlEncode(secure.remoteStatic));
   };
 
   /**
@@ -161,6 +185,11 @@ export function createGateway(options: GatewayOptions): Gateway {
       links.set(ws.data.events, link);
       sockets.add(link);
       link.onClose(() => sockets.delete(link));
+      if (pushEvents.has(ws.data.events)) {
+        if (options.push === undefined) link.close(1011, "this host sends no push notices");
+        else options.push(link, LOOPBACK_OWNER);
+        return;
+      }
       if (direct) {
         serveE2ee(new WsByteLink(link), { kind: "lan" }).catch((error: unknown) => {
           log(`e2ee session failed: ${String(error)}`);
