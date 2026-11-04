@@ -25,7 +25,8 @@ const codeOf = (error: unknown): number | undefined => (error instanceof Error ?
 /**
  * Contract v1.6, 3.6: a dial whose pass the relay refused (4412) waits up to 2 s for the new pass the uplink asked for,
  * then redials once, with a proof if one arrived. The dial itself (`connectRelayClient`) reports the refusal, bound to
- * the proof it carried, so a late refusal of an older pass never marks the newer one. An address limit an unproven
+ * the proof it carried, so a late refusal of an older pass never marks the newer one, and the redial goes at once with
+ * the newer pass when the host still presents one. An address limit an unproven
  * redial meets is the refused pass's doing, not the target's, so the caller sees the original 4412: no gate and no
  * halving.
  */
@@ -41,7 +42,7 @@ export async function withPassRetry<T>(
     return await dial();
   } catch (error) {
     if (proofs === undefined || !proven || codeOf(error) !== CloseCode.PassRefused) throw error;
-    await newPass(proofs, relayUrl, waitMs);
+    if (!proofs.presents(relayOriginOf(relayUrl))) await newPass(proofs, relayUrl, waitMs);
     return dial().catch((again: unknown) => {
       throw codeOf(again) === CloseCode.RateLimited ? error : again;
     });
