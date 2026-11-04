@@ -29,11 +29,7 @@ export function Panes({ connection, terminals, open, active, split, onFocus, onE
           <div
             key={address}
             hidden={!shown}
-            className={
-              address === split
-                ? "motion-arrive order-last flex min-w-0 flex-1 [--arrive-from:none]"
-                : "flex min-w-0 flex-1"
-            }
+            className={address === split ? "order-last flex min-w-0 flex-1" : "flex min-w-0 flex-1"}
           >
             <Pane
               connection={connection}
