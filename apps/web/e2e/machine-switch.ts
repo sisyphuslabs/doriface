@@ -9,7 +9,7 @@ import { readSavedEnv } from "./saved-env.ts";
 export const STATE_BOUND_MS = 25_000;
 
 export const machineRow = (page: Page) => page.getByRole("button", { name: new RegExp(`^${MACHINE_NAME}\\b`) });
-export const newOn = (page: Page) => page.getByRole("button", { name: `New terminal on ${MACHINE_NAME}` });
+export const newOn = (page: Page) => page.getByRole("button", { name: `New space on ${MACHINE_NAME}` });
 
 /** Runs hc against the e2e core (`host`) or the added machine's own core (`machine`); returns its stdout. */
 export function hcOn(core: "host" | "machine", args: readonly string[], input?: string): string {

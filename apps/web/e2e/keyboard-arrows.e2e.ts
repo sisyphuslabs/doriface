@@ -20,11 +20,11 @@ test("the arrow keys, Home and End stay inside the focused list", async ({ page 
   await expect(idle.last()).toBeFocused();
   await page.keyboard.press("Home");
   await expect(idle.first()).toBeFocused();
-  const machines = sidebar.getByRole("region", { name: "Machines" });
-  const studio = machines.locator(":scope > div > button").first();
+  const machines = sidebar.getByRole("region", { name: "Spaces" });
+  const studio = machines.locator("[data-machine-header]").first();
   await studio.focus();
   await page.keyboard.press("ArrowRight");
-  await expect(machines.getByRole("button", { name: /^New terminal on / }).first()).toBeFocused();
+  await expect(machines.getByRole("button", { name: /^New space on / }).first()).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(studio).toBeFocused();
 });

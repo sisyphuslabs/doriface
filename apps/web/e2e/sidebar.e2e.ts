@@ -172,8 +172,8 @@ for (const { name, use } of VIEWPORTS) {
       const phoneList = name === "390";
       // Two narrow texts and a narrow machine always fit five, and so does everything on a phone.
       await expectRowsKeepFloors(page, true, (narrow) => narrow || phoneList);
-      const machines = page.getByRole("region", { name: "Machines" });
-      await expect(machines.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+      const machines = page.getByRole("region", { name: "Spaces" });
+      await expect(machines.getByTitle(LONG_MACHINE, { exact: true }).first()).toHaveText(LONG_MACHINE);
 
       // Narrower than where the floors were fitted: without a refit the parts keep widths the row no longer holds and run
       // past its edge.
