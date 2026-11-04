@@ -66,6 +66,21 @@ async function boxOf(page: Page, address: string): Promise<Box> {
   return box;
 }
 
+/** Pane frames still moving (split motion), not the terminals' own animations such as a blinking cursor. */
+const paneMotions = (page: Page): Promise<number> =>
+  page.evaluate(
+    () =>
+      document.getAnimations().filter((animation) => {
+        const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+        return (
+          animation.playState === "running" &&
+          target instanceof Element &&
+          target.closest('[role="tabpanel"]') !== null &&
+          target.closest(".wterm") === null
+        );
+      }).length,
+  );
+
 async function boxes(page: Page, addresses: readonly string[]): Promise<Record<string, Box>> {
   return Object.fromEntries(await Promise.all(addresses.map(async (address) => [address, await boxOf(page, address)])));
 }
@@ -205,7 +220,9 @@ test("two split keys pressed back to back split the pane the first one makes, as
   const three = fresh.find((address) => address !== last) ?? "";
   expect(fresh).toContain(last);
   await expect.poll(() => keyboardAddress(page), { timeout: 5_000 }).toBe(last);
-  // three split off two to the right, and the down key split three, not the pane in focus when it was pressed.
+  // three split off two to the right, and the down key split three, not the pane in focus when it was pressed. Boxes
+  // are read once the panes have stopped moving: mid-motion a pane is drawn translated from where it lies.
+  await expect.poll(() => paneMotions(page), { timeout: 5_000 }).toBe(0);
   expect(lies(await boxOf(page, three), await boxOf(page, two), "right")).toBe(true);
   expect(lies(await boxOf(page, last), await boxOf(page, three), "down")).toBe(true);
   expect((await boxOf(page, two)).height).toBeCloseTo(before.height, 0);
