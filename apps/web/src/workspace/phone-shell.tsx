@@ -23,6 +23,8 @@ export interface PhoneShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Session[];
   readonly open: string | null;
+  /** The terminal an End is removing: its screen stays up when its program ends, until the End goes back itself. */
+  readonly ending: string | null;
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   readonly onNew: () => void;
@@ -32,7 +34,7 @@ export interface PhoneShellProps {
 
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
 export function PhoneShell(props: PhoneShellProps) {
-  const { connection, terminals, open, onOpen, onBack, onNew, onPalette, onSession } = props;
+  const { connection, terminals, open, ending, onOpen, onBack, onNew, onPalette, onSession } = props;
   usePhoneActions(onNew, onSession);
   const machines = useMachinesContext();
   const terminal = terminals.find((entry) => entry.address === open);
@@ -71,15 +73,18 @@ export function PhoneShell(props: PhoneShellProps) {
       </div>
     );
   }
-  return <PhoneTerminal connection={connection} terminal={terminal} onBack={onBack} />;
+  return (
+    <PhoneTerminal connection={connection} terminal={terminal} ending={terminal.address === ending} onBack={onBack} />
+  );
 }
 
 function PhoneTerminal(props: {
   readonly connection: HcConnection;
   readonly terminal: Session;
+  readonly ending: boolean;
   readonly onBack: () => void;
 }) {
-  const { connection, terminal, onBack } = props;
+  const { connection, terminal, ending, onBack } = props;
   const send = useRef<((data: TerminalInput) => void) | null>(null);
   const [latched, setLatched] = useState<ReadonlySet<string>>(new Set());
   const onSend = useCallback((next: ((data: TerminalInput) => void) | null) => {
@@ -141,7 +146,7 @@ function PhoneTerminal(props: {
           label={`${title} output`}
           transformInput={transform}
           onSend={onSend}
-          onEnd={(_address, end) => (closesTab(end) ? onBack() : undefined)}
+          onEnd={(_address, end) => (closesTab(end) && !ending ? onBack() : undefined)}
         />
       )}
       <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />

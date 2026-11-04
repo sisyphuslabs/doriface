@@ -6,7 +6,7 @@ import { AddMachineDialog } from "./add-machine-dialog.tsx";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
 import { SessionContext, type SessionAsk } from "./session-context.ts";
-import { SessionDialogs } from "./session-dialogs.tsx";
+import { type EndPhase, SessionDialogs } from "./session-dialogs.tsx";
 import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
 import type { SessionVerb } from "./use-app-actions.ts";
@@ -68,6 +68,15 @@ export function Workspace({ connection }: WorkspaceProps) {
   // Closing a tab of a live session asks keep or end; the dialog drops the tab itself once the session is gone.
   const desktopTabs: Tabs = { ...tabs, close: (address) => setAsk({ kind: "close", address }) };
   const done = useCallback(() => setAsk(null), []);
+  // The phone stays on a terminal an End is removing until hc has removed it, then goes back to the list (#168).
+  const [ending, setEnding] = useState<string | null>(null);
+  const onEnding = useCallback(
+    (address: string, phase: EndPhase): void => {
+      setEnding(phase === "running" ? address : null);
+      if (phase === "ended") setPhoneKey((key) => (key === tabKey(address, ids) ? null : key));
+    },
+    [ids],
+  );
 
   const openAddMachine = useCallback(() => setAdding(true), []);
   const machines = useMemo(
@@ -82,6 +91,7 @@ export function Workspace({ connection }: WorkspaceProps) {
             connection={connection}
             terminals={terminals}
             open={phoneOpen}
+            ending={ending}
             onOpen={showOnPhone}
             onBack={() => setPhoneKey(null)}
             onNew={() => newTerminal()}
@@ -101,7 +111,14 @@ export function Workspace({ connection }: WorkspaceProps) {
         )}
       </SessionContext>
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
-      <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={tabs.drop} />
+      <SessionDialogs
+        connection={connection}
+        terminals={terminals}
+        ask={ask}
+        onDone={done}
+        onEnding={onEnding}
+        onKeep={tabs.drop}
+      />
       {palette ? (
         <Palette
           terminals={terminals}
