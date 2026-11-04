@@ -36,7 +36,9 @@ export function useTerminals(connection: HcConnection | null): TerminalsState {
     const fail = (cause: unknown): void => {
       if (!disposed) setState((prev) => ({ ...prev, error: String(cause) }));
     };
-    connection.call("terminal.list").then((list) => {
+    // Finished terminals too, as the feed's snapshot lists them: an ended terminal that dropped out of the first picture
+    // and came back with the snapshot would remount its view, which then no longer knows the page had it open (#164).
+    connection.call("terminal.list", { all: true }).then((list) => {
       machines = machineCount(list);
       if (map.size === 0) map = new Map(list.terminals.map((terminal) => [terminal.address, terminal]));
       publish();
