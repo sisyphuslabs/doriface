@@ -11,6 +11,7 @@ import type { MeshView } from "./mesh-view.ts";
 import { MemberDialer } from "./member-dialer.ts";
 import { MemberBook, StoredMesh } from "./stored-mesh.ts";
 import { RevokedLast } from "./revoked-last.ts";
+import { Claims } from "./claims.ts";
 import { Sweeps } from "./sweeps.ts";
 import { ackAdmission, appendOwn, type MergeDeps, type MergeResult, mergeBatch, type RecordDraft } from "./merge.ts";
 import { type SyncHost, SyncSession } from "./sync.ts";
@@ -50,8 +51,7 @@ export class Gossip implements SyncHost {
   readonly #options: GossipOptions;
   readonly #timings: GossipTimings;
   readonly #stored: StoredMesh;
-  /** Per peer, the counter of this host's key its `hello` claimed, until its batch arrives. */
-  readonly #claims = new Map<string, number>();
+  readonly #claims: Claims;
   readonly #dialer: MemberDialer;
   readonly #sessions = new Map<string, SyncSession>();
   readonly #confirmed = new Map<string, readonly string[]>();
@@ -93,6 +93,11 @@ export class Gossip implements SyncHost {
       lastSync: (signPub) => this.#lastSync.get(signPub),
       sync: (member, purpose) => this.sync(member, purpose),
     });
+    this.#claims = new Claims(options.clock, (peer, n) =>
+      options.log(
+        `mesh: ${this.#known.nameOf(peer)} claimed counter ${n} of this host's key and sent no done within 30 s: its claims are ignored for 10 minutes`,
+      ),
+    );
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
   }
@@ -177,8 +182,9 @@ export class Gossip implements SyncHost {
 
   /** Signs and pushes one record of this host's own (a revoke, a leave, a rename). */
   append(draft: RecordDraft): MergeResult {
-    const counterFloor = Math.max(0, ...this.#claims.values());
-    const result = appendOwn({ ...this.#options, counterFloor }, draft);
+    const floor = this.#claims.floor();
+    const counterFloor = floor === undefined ? undefined : { n: floor.n, peer: this.#known.nameOf(floor.peer) };
+    const result = appendOwn({ ...this.#options, ...(counterFloor === undefined ? {} : { counterFloor }) }, draft);
     this.#changed(result, true);
     return result;
   }
@@ -186,20 +192,27 @@ export class Gossip implements SyncHost {
   /**
    * A peer's `hello`: the heads it holds, and the highest counter it holds of this host's own key. Above this host's
    * own, it signs no own record below that counter (section 10.1) until the peer's next `done`, which carries every
-   * record of this host's the peer holds, or its session ends; a `done` not sent in time closes the session.
+   * record of this host's the peer holds, for at most 30 s (see Claims).
    */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean {
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void {
     this.#confirmed.set(peer, heads);
     if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self] ?? 0;
-    if (claim <= ownN(this.records(), this.self)) return false;
-    this.#claims.set(peer, claim);
-    return true;
+    if (claim > ownN(this.records(), this.self)) this.#claims.claim(peer, claim);
+  }
+
+  /** The peer owed a `done` for 30 s without a line of progress: its session closes 4400 and its claim is unanswered. */
+  overdue(session: SyncSession): void {
+    if (this.#sessions.get(session.peer) !== session) return;
+    this.#options.log(
+      `mesh: closing the sync session with ${this.#known.nameOf(session.peer)}: no done within 30 s (4400)`,
+    );
+    this.#claims.unanswered(session.peer);
   }
 
   answered(session: SyncSession): void {
     if (this.#sessions.get(session.peer) !== session) return;
-    this.#claims.delete(session.peer);
+    this.#claims.drop(session.peer);
   }
 
   /**
@@ -220,7 +233,7 @@ export class Gossip implements SyncHost {
   ended(session: SyncSession): void {
     if (this.#sessions.get(session.peer) !== session) return;
     this.#sessions.delete(session.peer);
-    this.#claims.delete(session.peer);
+    this.#claims.drop(session.peer);
   }
 
   /** Members that are owed records: their confirmed heads do not cover this host's set. */

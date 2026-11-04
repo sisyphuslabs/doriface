@@ -25,7 +25,7 @@ export interface MergeDeps {
    * The highest `n` of this host's key that a peer's `hello` claims and whose records have not arrived yet (section
    * 10.1): below it this host signs no record of its own. A merge needs none: at `done` the claim is resolved.
    */
-  readonly counterFloor?: number;
+  readonly counterFloor?: { readonly n: number; readonly peer: string };
 }
 
 export interface Refusal {
@@ -164,10 +164,10 @@ export function mergeBatch(deps: MergeDeps, batch: readonly Signed[]): MergeResu
 export function appendOwn(deps: MergeDeps, draft: RecordDraft): MergeResult {
   return deps.store.transact((tx) => {
     const own = ownN(tx.records, selfOf(deps));
-    const floor = deps.counterFloor ?? 0;
-    if (own < floor) {
+    const floor = deps.counterFloor;
+    if (floor !== undefined && own < floor.n) {
       throw new CounterBehindError(
-        `a peer holds counter ${floor} of this host's key, here ${own}: syncing before signing`,
+        `${floor.peer} holds counter ${floor.n} of this host's key, here ${own}: syncing before signing`,
       );
     }
     const before = tx.records.length;

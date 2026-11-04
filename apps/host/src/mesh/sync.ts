@@ -10,9 +10,9 @@ import type { MergeResult } from "./merge.ts";
 export const LINGER_MS = 60_000;
 
 /**
- * A peer answers a hello with `done` (records first, when it holds any the hello's heads lack). Our own hello, or the
- * peer's hello claiming a counter of this host's key, leaves a `done` owed; one not sent within 30 s is a protocol
- * fault (4400), so a claim cannot hold this host's own records back for longer.
+ * A peer answers a hello with `done` (records first, when it holds any the hello's heads lack). After this host's
+ * hello, 30 s without a `records` or `done` line from the peer is a protocol fault (4400): a slow answer that keeps
+ * delivering is never cut, and an idle one cannot keep the session past the deadline.
  */
 export const ANSWER_MS = 30_000;
 
@@ -23,13 +23,12 @@ export interface SyncHost {
   readonly meshId: string;
   records(): readonly Signed[];
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult;
-  /**
-   * The peer said which heads it holds, and the highest `n` it holds of each signer (its `hello`). True when that
-   * claims a counter of this host's key above its own: the claim stands until the peer's next `done`.
-   */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean;
+  /** The peer said which heads it holds, and the highest `n` it holds of each signer (its `hello`). */
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void;
   /** The peer's `done`: what it held for this host has arrived, so a claim its hello made is resolved. */
   answered(session: SyncSession): void;
+  /** The peer owed a `done` past ANSWER_MS with no line of progress; the session closes 4400 right after. */
+  overdue(session: SyncSession): void;
   ended(session: SyncSession): void;
 }
 
@@ -123,7 +122,19 @@ export class SyncSession {
   }
 
   #owesAnswer(): void {
-    this.#answerDue ??= this.#clock.after(ANSWER_MS, () => this.close(CloseCode.CryptoFailure, "no done after hello"));
+    this.#answerDue ??= this.#clock.after(ANSWER_MS, () => {
+      this.#answerDue = undefined;
+      this.#host.overdue(this);
+      this.close(CloseCode.CryptoFailure, "no done after hello");
+    });
+  }
+
+  /** A `records` line while a `done` is owed: the answer is still arriving, so its 30 s start again. */
+  #progress(): void {
+    if (this.#answerDue === undefined) return;
+    this.#answerDue();
+    this.#answerDue = undefined;
+    this.#owesAnswer();
   }
 
   #unsent(): readonly Signed[] {
@@ -141,7 +152,7 @@ export class SyncSession {
           return this.close(CloseCode.CryptoFailure, `more than ${MAX_RECORDS} records before done`);
         }
         this.#incoming.push(...line.records);
-        return;
+        return this.#progress();
       case "want":
         return this.#answerWant(line.hashes);
       case "done":
@@ -171,7 +182,7 @@ export class SyncSession {
       return this.close(CloseCode.CryptoFailure, `a peer claimed more than ${MAX_RECORDS} heads`);
     }
     for (const head of heads) this.#peerHeads.add(head);
-    if (this.#host.heard(this.peer, heads, n)) this.#owesAnswer();
+    this.#host.heard(this.peer, heads, n);
     if (!this.#saidHello) this.#hello();
     this.#sendRecords(this.#unsent());
   }
