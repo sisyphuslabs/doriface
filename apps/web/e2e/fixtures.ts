@@ -24,7 +24,7 @@ export const test = base.extend<{ loopbackUrl: string }>({
 export { expect } from "@playwright/test";
 
 /** How many live terminals the e2e core holds, this machine's and the added machine's, as hc lists them. */
-export function liveOnCore(): number {
+function liveOnCore(): number {
   const { hc, env } = readSavedEnv(E2E_HOST_ENV);
   const listed: unknown = JSON.parse(
     execFileSync(hc, ["ls", "--json"], { env: { ...process.env, ...env }, encoding: "utf8" }),
