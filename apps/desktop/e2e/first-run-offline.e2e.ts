@@ -53,6 +53,10 @@ test("a first launch while the OS reports no network still offers Use this compu
   const use = page.getByRole("button", { name: "Use this computer" });
   await expect(use).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("You are offline")).toHaveCount(0);
+  // Pairing is the one network step: offered, but disabled, and it says why.
+  const pair = page.getByRole("button", { name: "Pair a host" });
+  await expect(pair).toBeDisabled();
+  await expect(pair).toHaveAccessibleDescription("Pairing a host needs a network.");
   await use.click();
   await page
     .getByRole("button", { name: "New tab" })

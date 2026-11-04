@@ -47,6 +47,25 @@ test("with nothing configured yet, the first-run screen keeps its next steps and
   await osOfflineFromStart(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Connect to a host" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("link", { name: "Pair a host" })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: OFFLINE_NOTICE })).toBeVisible();
+  // Pairing needs a network, so it is not the enabled first step while offline.
+  await expect(page.getByRole("link", { name: "Pair a host" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Pair a host" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Pair a host" })).toHaveAccessibleDescription(/needs a network/);
+});
+
+test("the pairing page says the device is offline, and a lookup that cannot reach the relay promises no QR scan", async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.removeItem("doriface.connection"));
+  await osOfflineFromStart(page);
+  await page.route(/\/v1\/pair\//, (route) => route.abort("internetdisconnected"));
+  await page.goto("/pair");
+  await expect(page.getByRole("heading", { name: "Pair this device" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("status").filter({ hasText: OFFLINE_NOTICE })).toBeVisible();
+  await page.getByRole("textbox", { name: "Pairing code" }).fill("ABCD2345");
+  await page.getByRole("button", { name: "Pair" }).click();
+  const reason = page.getByText(/relay cannot be reached/);
+  await expect(reason).toBeVisible({ timeout: 15_000 });
+  await expect(reason).not.toContainText(/scan/i);
 });
