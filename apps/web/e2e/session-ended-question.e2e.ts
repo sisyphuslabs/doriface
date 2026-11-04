@@ -75,8 +75,9 @@ test("Cmd+W's question whose session ends under it says the session ended, and o
   await expect(ask).toBeVisible();
 
   // The feed's word that the terminal finished waits, so the session ends under the open question in a known order:
-  // its stream closes first (the tab goes), then the feed lists it as gone.
-  const release = socket.holdFromHost(`"${address}"`);
+  // its stream closes first (the tab goes), then the feed lists it as gone. The whole feed waits, not that one event:
+  // closing the tab writes the layout document, and the feed drops an event older than that write's once it has seen it.
+  const release = socket.holdFromHost('"method":"event"', '"method":"heartbeat"', '"method":"missed"');
   hc("kill", address);
   await expect(page.locator(`[data-terminal="${address}"]`)).toHaveCount(0, { timeout: 15_000 });
   await expect(ask).toBeVisible();
