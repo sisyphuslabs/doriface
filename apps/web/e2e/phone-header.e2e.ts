@@ -1,6 +1,6 @@
 import { devices, type Page } from "@playwright/test";
 import { agentRow, endAgent } from "./agents.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 import { hcOn } from "./machine-switch.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
@@ -75,18 +75,18 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
 
     // The switch button opens the spaces and their tabs; picking another tab opens it and moves the position.
     const switcher = header(page).getByRole("button", { name: "Switch space or tab" });
-    const box = await switcher.boundingBox();
-    expect(box?.width).toBeGreaterThanOrEqual(44);
-    expect(box?.height).toBeGreaterThanOrEqual(44);
+    const box = await laidOutBox(switcher);
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
     await switcher.click();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
     await expect(sheet).toBeVisible();
     // A visible Done closes the sheet and hands focus back to the switch.
     // Exact: an agent row's name also carries its state, "Done" among them.
     const done = sheet.getByRole("button", { name: "Done", exact: true });
-    const doneBox = await done.boundingBox();
-    expect(doneBox?.width).toBeGreaterThanOrEqual(44);
-    expect(doneBox?.height).toBeGreaterThanOrEqual(44);
+    const doneBox = await laidOutBox(done);
+    expect(doneBox.width).toBeGreaterThanOrEqual(44);
+    expect(doneBox.height).toBeGreaterThanOrEqual(44);
     await done.click();
     await expect(sheet).toBeHidden();
     await expect(switcher).toBeFocused();
