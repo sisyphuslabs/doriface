@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -130,9 +130,27 @@ test("clicking Split moves keyboard focus into the new pane, and clicking it aga
   page,
 }) => {
   await page.goto("/");
+  // A worker's core outlives its tests, and the page opens the core's first live terminal (an earlier test's, whose
+  // shell may hold that test's unsent keys) as a tab. Split pairs the focused tab with the first other open tab, so
+  // that inherited tab is closed (its terminal keeps running) and the panes are this test's own two terminals.
+  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+  const { before } = await terminalCount(page);
+  await expect(tabs).toHaveCount(before > 0 ? 1 : 0);
   await openNewTerminal(page);
   const first = await openNewTerminal(page);
   const firstAddress = await first.getAttribute("data-terminal");
+  if (before > 0) {
+    await tabs.first().click();
+    await page
+      .getByRole("tab", { selected: true })
+      .locator("xpath=..")
+      .getByRole("button", { name: /^Close / })
+      .click();
+    const ask = page.getByRole("dialog", { name: /^Close .+\?$/ });
+    await ask.getByRole("button", { name: "Keep running" }).click();
+    await expect(tabs).toHaveCount(2);
+    await expect(first).toBeVisible();
+  }
   const split = page.getByRole("button", { name: "Split" });
 
   await split.click();
