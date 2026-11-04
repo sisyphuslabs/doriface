@@ -8,7 +8,13 @@ export {
   type SubscribeOptions,
 } from "./connection.ts";
 export { EventFeed, type FeedClose } from "./event-feed.ts";
-export { HcConnectionClosedError, HcHandshakeError, HcProtocolError, HcTimeoutError } from "./errors.ts";
+export {
+  HcConnectionClosedError,
+  HcHandshakeError,
+  HcLinkSilentError,
+  HcProtocolError,
+  HcTimeoutError,
+} from "./errors.ts";
 export { HELLO_REQUEST_LINE } from "./hello.ts";
 export { createMemoryLinkPair, LinkClosedError, type ByteLink } from "./link.ts";
 export type { Unsubscribe } from "./listeners.ts";
