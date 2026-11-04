@@ -142,10 +142,10 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
               )}
               {loaded ? (
                 <span className="flex shrink-0">
-                <StatusBarItem>
-                  {live.length} {live.length === 1 ? "terminal" : "terminals"}
-                  {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
-                </StatusBarItem>
+                  <StatusBarItem>
+                    {live.length} {live.length === 1 ? "terminal" : "terminals"}
+                    {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
+                  </StatusBarItem>
                 </span>
               ) : null}
               <ReconnectStatus />
