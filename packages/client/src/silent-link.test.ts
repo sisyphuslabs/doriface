@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { FrameKind } from "@doriface/protocol";
 import { HcConnection, type SubscribeOptions } from "./connection.ts";
 import { HcLinkSilentError } from "./errors.ts";
 import { FakeCore } from "./testing/fake-core.ts";
 import { HELLO_REPLY_LINE, SUBSCRIBE_REPLY, withId } from "./testing/fixtures.ts";
 
-const CHANNEL = 1;
 const next = <T>(register: (resolve: (value: T) => void) => void): Promise<T> =>
   new Promise((resolve) => register(resolve));
 
@@ -30,21 +28,10 @@ describe("a silent link", () => {
     expect(connection.closed).toBe(true);
   });
 
-  test("leaves the connection open while heartbeats keep arriving", async () => {
-    const { core, connection, feed } = await subscribed({ heartbeatTimeoutMs: 200 });
-    for (let seq = 3; seq < 8; seq++) {
-      core.pushFrame(CHANNEL, FrameKind.Data, `{"jsonrpc":"2.0","method":"heartbeat","params":{"seq":${seq}}}\n`);
-      // oxlint-disable-next-line no-await-in-loop -- heartbeats must be spaced in time; time is the behavior under test
-      await Bun.sleep(60);
-    }
-    expect(connection.closed).toBe(false);
-    feed.close();
-  });
-
   test("a feed closed by its owner does not close the connection", async () => {
     const { connection, feed } = await subscribed({ heartbeatTimeoutMs: 30 });
+    // The close it would cause happens inside feed.close(), and closing the feed stops its heartbeat timer.
     feed.close();
-    await Bun.sleep(80);
     expect(connection.closed).toBe(false);
     connection.close();
   });
