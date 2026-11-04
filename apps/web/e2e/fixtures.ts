@@ -90,3 +90,18 @@ export async function openNewTerminalBehindLatency(
   link.delay(ms);
   return { terminal: await openNewTerminal(page), link };
 }
+
+type Box = NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
+
+/** The element's box once it is laid out: read before its first layout, boundingBox() is null and a measure reads 0. */
+export async function laidOutBox(locator: Locator): Promise<Box> {
+  await expect
+    .poll(async () => {
+      const box = await locator.boundingBox();
+      return box !== null && box.width > 0 && box.height > 0;
+    })
+    .toBe(true);
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error("the element lost its box right after it was laid out");
+  return box;
+}

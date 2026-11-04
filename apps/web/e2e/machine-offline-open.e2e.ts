@@ -1,5 +1,5 @@
 import { agentRow, endAgent, startAgent } from "./agents.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { machineRow, reconnect, STATE_BOUND_MS, switchOn, switchTo } from "./machine-switch.ts";
 
@@ -41,7 +41,7 @@ test.describe("opening a session on a machine that went offline", () => {
     await expect(page.getByRole("region", { name: "Offline" })).toBeVisible({ timeout: STATE_BOUND_MS });
     await agentRow(page, "crunch", true).click();
     await expect(page.getByRole("heading", { name: OFFLINE })).toBeVisible({ timeout: 15_000 });
-    const keys = await page.getByRole("toolbar", { name: "Terminal keys" }).boundingBox();
-    expect((keys?.y ?? 0) + (keys?.height ?? 0)).toBeGreaterThan(844 - 2);
+    const keys = await laidOutBox(page.getByRole("toolbar", { name: "Terminal keys" }));
+    expect(keys.y + keys.height).toBeGreaterThan(844 - 2);
   });
 });
