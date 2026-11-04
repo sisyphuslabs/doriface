@@ -133,9 +133,15 @@ export const SHOTS: readonly Shot[] = [
       await page.getByRole("button", { name: "Split" }).click();
       // Hidden tabs stay mounted, so only the two shown panes count.
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
-      // Both shown panes must have drawn something before the shot; which tab is the split partner depends on the
-      // seeded tab order, so wait for content in each rather than for a particular prompt.
-      await expect(page.locator("[data-terminal]:visible").filter({ hasText: /\S/ })).toHaveCount(2);
+      // Split pairs the active tab (deploy) with the first other tab in the strip: pin that partner, so the shot is
+      // the same every run, and wait until both panes have drawn a row of output (the hidden help line does not count).
+      const partner = (await page.getByRole("tab").filter({ hasNotText: "deploy" }).first().getAttribute("title")) ?? "";
+      const shown = page.locator("section[data-split='true']:visible");
+      await expect(shown.filter({ has: page.locator('[data-terminal]').getByText("Waiting for approval") })).toHaveCount(1);
+      await expect(shown.and(page.locator(`[aria-label^="${partner.split(" ")[0]} "]`))).toHaveCount(1);
+      await expect(
+        page.locator("[data-terminal]:visible").filter({ has: page.locator(".term-row", { hasText: /\S/ }) }),
+      ).toHaveCount(2);
     },
   },
   {
