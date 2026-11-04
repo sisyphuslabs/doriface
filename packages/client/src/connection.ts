@@ -15,7 +15,13 @@ import {
   type TerminalAttachParams,
 } from "@doriface/protocol";
 import { raceDeadline } from "./deadline.ts";
-import { HcConnectionClosedError, HcHandshakeError, HcProtocolError, HcTimeoutError } from "./errors.ts";
+import {
+  HcConnectionClosedError,
+  HcHandshakeError,
+  HcLinkSilentError,
+  HcProtocolError,
+  HcTimeoutError,
+} from "./errors.ts";
 import type { ByteLink } from "./link.ts";
 import type { Unsubscribe } from "./listeners.ts";
 import { EventFeed } from "./event-feed.ts";
@@ -128,6 +134,11 @@ export class HcConnection {
       const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS;
       const feed = new EventFeed(this.#wire, channel, snapshot, heartbeatTimeoutMs);
       this.#wire.register(channel, feed);
+      // The core beats on every feed; when the beats stop, the link under them is gone even if no reset arrived
+      // (Wi-Fi gone, a NAT timeout): close the connection, so its owner reconnects instead of waiting on TCP.
+      feed.onClose((info) => {
+        if (info.reason === "heartbeat_timeout") this.#wire.close(new HcLinkSilentError(heartbeatTimeoutMs));
+      });
       return feed;
     });
   }
