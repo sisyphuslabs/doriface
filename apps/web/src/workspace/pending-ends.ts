@@ -1,9 +1,15 @@
 import type { Terminal } from "@doriface/protocol";
 
-/** An End the user confirmed that this browser has not seen through yet: the program, by address and pid. */
+/**
+ * An End the user confirmed that this browser has not seen through yet. The address alone is not the terminal: an added
+ * machine's name can come to name another machine, so the record also keeps the program's pid and hc's creation time of
+ * the terminal, and acts only where both still match.
+ */
 export interface PendingEnd {
   readonly address: string;
   readonly pid: number | null;
+  /** The terminal's `created_ms`. */
+  readonly created: number;
   /** When it was asked, in ms since the epoch. */
   readonly at: number;
 }
@@ -26,6 +32,7 @@ const isPendingEnd = (value: unknown): value is PendingEnd =>
   value !== null &&
   typeof Reflect.get(value, "address") === "string" &&
   typeof Reflect.get(value, "at") === "number" &&
+  typeof Reflect.get(value, "created") === "number" &&
   (Reflect.get(value, "pid") === null || typeof Reflect.get(value, "pid") === "number");
 
 /** Reads `core`'s pending Ends from `storage`; a store that cannot be read or written keeps nothing (a private window). */
@@ -58,14 +65,15 @@ export function pendingEnds(core: string, storage: Storage | undefined = globalT
 
 /**
  * What to do with a pending End once the core says what it holds at that address:
- * - `end`: the program it was asked for still runs; end it again.
- * - `remove`: it ended, but the terminal was not removed; remove it.
- * - `drop`: nothing left to do (gone, or another program runs there now, which the End was never about).
+ * - `end`: the very terminal it was asked about still runs its program; end it again.
+ * - `remove`: that terminal's program ended, but the terminal was not removed; remove it.
+ * - `drop`: anything else: the terminal is gone, another terminal or program is there now, or the record cannot say
+ *   which program it was about. A pending End never acts on a terminal it cannot prove is the one asked about.
  */
 export type Resume = "end" | "remove" | "drop";
 
-export function resumeOf(end: PendingEnd, terminal: Pick<Terminal, "state" | "pid"> | null): Resume {
-  if (terminal === null) return "drop";
-  if (terminal.state !== "live") return "remove";
-  return end.pid === null || terminal.pid === end.pid ? "end" : "drop";
+export function resumeOf(end: PendingEnd, terminal: Pick<Terminal, "state" | "pid" | "created_ms"> | null): Resume {
+  if (terminal === null || end.pid === null) return "drop";
+  if (terminal.pid !== end.pid || terminal.created_ms !== end.created) return "drop";
+  return terminal.state === "live" ? "end" : "remove";
 }

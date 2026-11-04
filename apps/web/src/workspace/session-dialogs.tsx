@@ -6,6 +6,7 @@ import { terminalInput } from "./focus-targets.ts";
 import { terminalTitle } from "./model.ts";
 import { RenameDialog } from "./rename-dialog.tsx";
 import { pendingEnds } from "./pending-ends.ts";
+import { recordedEnd } from "./resume-ends.ts";
 import { endSession, renameSession, sessionCalls, takeBackEnd } from "./session-actions.ts";
 import type { SessionAsk } from "./session-context.ts";
 
@@ -120,9 +121,15 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
   // Kept in local storage until it settles, so a page closed before End's calls leave it has the next page finish it.
   const end = (): void => {
     const { address } = ask;
-    const ends = pendingEnds(connection.hello.core.id);
-    ends.add({ address, pid: terminal?.pid ?? null, at: Date.now() });
-    run(() => endSession(sessionCalls(connection), address).finally(() => ends.remove(address)), onDone);
+    const calls = sessionCalls(connection);
+    const record = terminal === undefined ? null : { address, pid: terminal.pid ?? null, created: terminal.created_ms };
+    run(
+      () =>
+        record === null
+          ? endSession(calls, address)
+          : recordedEnd(pendingEnds(connection.hello.core.id), { ...record, at: Date.now() }, calls),
+      onDone,
+    );
   };
   // Left after a failed End, the session runs on: it must not keep End's mark, which a dropped link may have kept.
   const dismiss = (): void => {
