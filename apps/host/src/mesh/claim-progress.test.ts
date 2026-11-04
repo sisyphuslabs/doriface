@@ -180,14 +180,14 @@ describe("a claim's 30 s run on only while its claimer delivers this host's own 
     const h = hostB(records, 15);
     const session = h.connect(a, heads);
     session.hello({ [b.signPub]: 3 });
-    for (const [time, record] of [
-      [20_000, chain[0]],
-      [45_000, chain[1]],
-      [70_000, chain[2]],
-    ] as const) {
-      await h.at(time);
-      if (record !== undefined) session.send(record);
-    }
+    const [first, second, third] = chain;
+    if (first === undefined || second === undefined || third === undefined) throw new Error("no chain");
+    await h.at(20_000);
+    session.send(first);
+    await h.at(45_000);
+    session.send(second);
+    await h.at(70_000);
+    session.send(third);
     session.done();
     await h.at(75_000);
     expect(h.cooldowns()).toBe(0);
@@ -202,17 +202,20 @@ describe("a claim's 30 s run on only while its claimer delivers this host's own 
     const session = h.connect(a, heads);
     session.hello({ [b.signPub]: steps });
     const signedEarly: number[] = [];
-    for (let time = 5_000; time <= steps * 25_000 + 10_000; time += 5_000) {
+    const step = async (time: number): Promise<void> => {
+      if (time > steps * 25_000 + 10_000) return;
       await h.at(time);
-      const step = time / 25_000;
-      const record = Number.isInteger(step) ? chain[step - 1] : undefined;
+      const k = time / 25_000;
+      const record = Number.isInteger(k) ? chain[k - 1] : undefined;
       if (record !== undefined) {
         // Each line brings an admit too, so only the claim keeps b from acking it on a stale counter.
-        session.send(record, signer.admit(peer(`x${step}`), [hashOf(record)]));
+        session.send(record, signer.admit(peer(`x${k}`), [hashOf(record)]));
         session.done();
         await h.at(time + 1);
       } else if (time < steps * 25_000 && h.signs()) signedEarly.push(time);
-    }
+      return step(time + 5_000);
+    };
+    await step(5_000);
     const ns = h.ownNs();
     expect(signedEarly).toEqual([]);
     expect(h.cooldowns()).toBe(0);
