@@ -3,15 +3,12 @@ import { startShell } from "./agents.ts";
 import { getCoreDoc, setCoreDoc } from "./core-doc.ts";
 import { expect, test } from "./fixtures.ts";
 import { LAYOUT_DOC } from "./layout-doc.ts";
-import { hcOn } from "./machine-switch.ts";
+import { endOwnTerminals } from "./own-terminals.ts";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 
 test.use({ serviceWorkers: "block" });
 
-const shells: string[] = [];
-test.afterEach(() => {
-  for (const address of shells.splice(0)) hcOn("host", ["kill", address]);
-});
+endOwnTerminals();
 
 /** A second device: its own browser context (its own storage, so its own focus and selected tab) on the same host. */
 async function secondDevice(browser: Browser): Promise<Page> {
@@ -41,7 +38,6 @@ test("a split on one device shows on another without a reload, and edits of two 
   browser,
 }) => {
   const [one, two] = [startShell("host", "sync-one"), startShell("host", "sync-two")];
-  shells.push(one, two);
   // Written the way herdr-app writes it, with fields doriface does not use: they must come back untouched.
   setCoreDoc(LAYOUT_DOC, {
     spaces: [

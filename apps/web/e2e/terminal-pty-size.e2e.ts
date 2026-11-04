@@ -2,6 +2,9 @@ import type { Locator, Page } from "@playwright/test";
 import { coreSize, gridSize } from "./core-size.ts";
 import { expect, openNewTerminal, openNewTerminalBehindLatency, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
+import { endOwnTerminals } from "./own-terminals.ts";
+
+endOwnTerminals();
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
