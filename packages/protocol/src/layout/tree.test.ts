@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type Node } from "./node.ts";
-import { panesOf, removePane } from "./tree.ts";
+import { panesOf, removePane, splitPane } from "./tree.ts";
 
 const block = (id: string, weight?: number): Node => ({
   content: { terminal: `t-${id}` },
@@ -62,5 +62,23 @@ describe("closing a stack's tab", () => {
 
   test("keeps the active tab when another one closes", () => {
     expect(removePane(stack("a", ["a", "b", "c"]), "b")?.["active"]).toBe("a");
+  });
+});
+
+describe("splitting along the parent's own axis", () => {
+  test("keeps every field of the parent it rebuilds, herdr-app's and unknown ones", () => {
+    const parent: Node = {
+      ...box("row", "r", [block("a", 0.5), block("b", 0.5)], 0.5),
+      gap: 2,
+      "x-future-container": { added: "later" },
+    };
+    const root = box("column", "root", [block("top", 0.5), parent]);
+    const next = splitPane(root, "a", "row", block("n"), "unused");
+    expect(next).toEqual(
+      box("column", "root", [
+        block("top", 0.5),
+        { ...parent, children: [block("a", 0.25), block("n", 0.25), block("b", 0.5)] },
+      ]),
+    );
   });
 });
