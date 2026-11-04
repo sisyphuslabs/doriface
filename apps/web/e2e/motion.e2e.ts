@@ -27,7 +27,9 @@ const recordArrivals = (page: Page) => page.addInitScript(listen);
 const watchArrivals = (page: Page) => page.evaluate(listen);
 /** An arrival starts when its region mounts, before it is visible; two frames let transitionstart dispatch. */
 const twoFrames = (page: Page) =>
-  page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))));
+  page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
+  );
 const arrivals = (page: Page) =>
   page.evaluate(() => {
     const seen: unknown = Reflect.get(window, "__arrivals");
@@ -51,8 +53,14 @@ const sample = (page: Page, selector: string, ceiling = 15_000) =>
           if (el !== null) {
             const style = getComputedStyle(el);
             const animations = el.getAnimations();
-            const durations = animations.map((animation) => Number(animation.effect?.getComputedTiming().duration ?? 0));
-            frames.push({ opacity: Number(style.opacity), transform: style.transform, duration: Math.max(0, ...durations) });
+            const durations = animations.map((animation) =>
+              Number(animation.effect?.getComputedTiming().duration ?? 0),
+            );
+            frames.push({
+              opacity: Number(style.opacity),
+              transform: style.transform,
+              duration: Math.max(0, ...durations),
+            });
             const running = animations.length > 0;
             animated ||= running;
             if (animated && !running) return resolve(frames);
