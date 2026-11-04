@@ -11,6 +11,7 @@ import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
 import { readThemeColors } from "./theme-colors.ts";
+import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
@@ -48,6 +49,7 @@ export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onSend, onEnd } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
+  const dark = useDarkScheme();
   const [core, setCore] = useState<GhosttyCore | null>(null);
   const [wt, setWt] = useState<WTerm | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -91,17 +93,19 @@ export function TerminalView(props: TerminalViewProps) {
   // The default cursor shape is the terminal's own state, set locally; programs still override it.
   useEffect(() => handle.current?.write(options.cursorSequence), [wt, options.cursorSequence]);
 
-  // After the stylesheet changes, tell libghostty and the core the colors programs may query.
+  // After the stylesheet or the system's light/dark changes, tell libghostty and the core the colors programs
+  // may query. The colors set last are inline on the element and would shadow the page's new ones, so they go first.
   useEffect(() => {
     if (wt === null) return undefined;
     const frame = requestAnimationFrame(() => {
+      wt.setThemeColors(null);
       const colors = readThemeColors(wt.element);
       if (colors !== null) wt.setThemeColors(colors);
       stream.current?.facts(readDisplay(wt.element));
       wt.fit();
     });
     return () => cancelAnimationFrame(frame);
-  }, [wt, config]);
+  }, [wt, config, dark]);
 
   const onUnsafePaste = useCallback((pending: PendingPaste) => setPaste(pending), []);
   // Input while no stream is open (attaching, or the connection dropped) waits here for the next stream.
