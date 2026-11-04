@@ -7,6 +7,7 @@ import { MeshCommands } from "./commands.ts";
 import type { MemberEntry } from "./authorize-index.ts";
 import { Reconciler } from "./reconciler.ts";
 import { syncHooks } from "./sync-hooks.ts";
+import { NOT_RUNNING } from "./live-facts.ts";
 import { FakeMachines, hcError } from "./testing/fake-machines.ts";
 import { hostIdFor } from "./testing/hc-mesh.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
@@ -31,14 +32,20 @@ function threeMembers(closeRevokedOnMerge = false) {
     net.add(member, records, closeRevokedOnMerge ? closeOnMerge(member.name) : undefined),
   );
   if (atA === undefined || atB === undefined || atC === undefined) throw new Error("no hosts");
-  const sync = { gossip: atA.gossip, runtime: undefined, changed: () => undefined, stop: () => atA.gossip.stop() };
+  const sync = {
+    gossip: atA.gossip,
+    runtime: undefined,
+    changed: () => undefined,
+    stop: () => atA.gossip.stop(),
+    live: () => NOT_RUNNING,
+  };
   const stateDir = mkdtempSync(join(tmpdir(), "dh-sync-hooks-"));
   const commands = new MeshCommands({
     store: atA.store,
     stateDir,
     identity: a.machine.identity,
     closeRevoked: () => undefined,
-    hooks: syncHooks(sync, clock),
+    hooks: syncHooks(sync, clock, () => []),
     log: () => undefined,
   });
   const cleanup = () => rmSync(stateDir, { recursive: true, force: true });
@@ -145,12 +152,13 @@ async function coreWithMachines(machines: FakeMachines) {
     gossip: undefined,
     runtime,
     changed: () => undefined,
+    live: () => NOT_RUNNING,
     stop: () => {
       stopped.push("sync");
       return Promise.resolve();
     },
   };
-  return { left: () => syncHooks(sync, clock).left(), stopped };
+  return { left: () => syncHooks(sync, clock, () => []).left(), stopped };
 }
 
 /** A core whose `machine.rm` of b fails, as an unreachable or restarting herdr would. */

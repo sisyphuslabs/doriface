@@ -4,6 +4,8 @@ export interface PendingJoin {
   readonly name: string;
   readonly hostId: string;
   readonly fingerprint: string;
+  /** The joiner's Noise key, from its card. */
+  readonly noisePub: string;
   /** Milliseconds since the epoch: the offer's expiry, which the pending join shares. */
   readonly expiresAt: number;
 }
