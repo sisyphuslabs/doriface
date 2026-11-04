@@ -38,3 +38,15 @@ test.describe("the first-connect screen while the OS reports no network", () => 
     });
   });
 });
+
+test("with nothing configured yet, the first-run screen keeps its next steps and says the device is offline", async ({
+  page,
+}) => {
+  // No host chosen: the fixture's loopback settings are removed again before the app reads them.
+  await page.addInitScript(() => localStorage.removeItem("doriface.connection"));
+  await osOfflineFromStart(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Connect to a host" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "Pair a host" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: OFFLINE_NOTICE })).toBeVisible();
+});
