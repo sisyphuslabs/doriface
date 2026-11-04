@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures.ts";
 import { hcOn } from "./machine-switch.ts";
 import { askHost, deliverPush, heldSubscriptions, serviceWorker, subscribedKey, tapNotification } from "./push.ts";
-import { finishingAgent, openSettings, press, pushState, pushSuite, turnOn } from "./push-suite.ts";
+import { finishingAgent, openSettings, press, pushButton, pushState, pushSuite, turnOn } from "./push-suite.ts";
 
 const suite = pushSuite();
 
@@ -12,17 +12,17 @@ test("Turn on is the only thing that asks; the host then holds the subscription,
   await openSettings(page);
   await expect(pushState(page)).toHaveAttribute("data-push-state", "off");
   expect(await page.evaluate(() => Reflect.get(globalThis, "permissionAsks"))).toBe(0);
-  await page.getByRole("button", { name: "Turn on" }).click();
+  await pushButton(page, "Turn on").click();
   await expect(pushState(page)).toHaveAttribute("data-push-state", "on");
   expect(await page.evaluate(() => Reflect.get(globalThis, "permissionAsks"))).toBe(1);
   expect(await heldSubscriptions()).toEqual([expect.objectContaining({ endpoint: service.endpoint })]);
 
-  await page.getByRole("button", { name: "Send test" }).click();
+  await pushButton(page, "Send test").click();
   const tested = await service.next();
   expect(tested.notice).toMatchObject({ v: 1, k: "test" });
   expect(tested.vapidKey).toBe(await subscribedKey(page));
 
-  await page.getByRole("button", { name: "Turn off" }).click();
+  await pushButton(page, "Turn off").click();
   await expect(pushState(page)).toHaveAttribute("data-push-state", "off");
   expect(await heldSubscriptions()).toEqual([]);
   expect(await subscribedKey(page)).toBeNull();
@@ -68,7 +68,7 @@ test("no notice about the pane this device shows; the other panes still send the
   });
   await page.goto("/");
   await page
-    .getByRole("button", { name: /push-shown/ })
+    .getByRole("button", { name: /^push-shown(?![\w-])/ })
     .first()
     .click();
   await expect(page.locator(`[data-focused="true"] [data-terminal="${shown}"]`)).toBeVisible({ timeout: 15_000 });

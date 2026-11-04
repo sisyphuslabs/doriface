@@ -54,15 +54,30 @@ export async function openSettings(page: Page): Promise<void> {
   await page.goto("/settings");
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Notifications" }).first().click();
+  await settingsSection(page, "Notifications").click();
 }
 
 export const pushState = (page: Page) => page.locator("[data-push-state]");
 
+/**
+ * Locators scoped to their own surface with exact names: a page-wide name match is a substring match, so a terminal or
+ * tab another spec left running (`end-dismissed-t3`) could otherwise collide with a button such as Dismiss.
+ */
+export const pushButton = (page: Page, name: string) => pushState(page).getByRole("button", { name, exact: true });
+
+/** A Settings section's entry: the side navigation from `md` up, the tab strip below it. */
+export const settingsSection = (page: Page, name: string) =>
+  page
+    .getByRole("navigation", { name: "Settings", exact: true })
+    .getByRole("button", { name, exact: true })
+    .or(page.getByRole("tablist").getByRole("tab", { name, exact: true }))
+    // Both exist in the DOM at every width; only one is shown.
+    .filter({ visible: true });
+
 export async function turnOn(page: Page): Promise<void> {
   await openSettings(page);
   await expect(pushState(page)).toHaveAttribute("data-push-state", "off");
-  await page.getByRole("button", { name: "Turn on" }).click();
+  await pushButton(page, "Turn on").click();
   await expect(pushState(page)).toHaveAttribute("data-push-state", "on");
 }
 

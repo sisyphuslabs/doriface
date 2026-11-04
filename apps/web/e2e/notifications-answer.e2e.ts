@@ -45,7 +45,7 @@ test("a permission notice is opaque; Allow opens the pane and the page answers o
   await page.screenshot({ path: info.outputPath("allow-answered.png") });
 
   // The same notice again: the prompt is answered, so nothing is typed and the banner says so.
-  await page.getByRole("button", { name: "Dismiss" }).click();
+  await banner(page).getByRole("button", { name: "Dismiss", exact: true }).click();
   await deliverPush(context, JSON.stringify(posted.notice));
   await tapNotification(worker, tag, "allow");
   await expect(banner(page)).toHaveAttribute("data-prompt-answer", "stale", { timeout: 15_000 });

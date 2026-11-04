@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { expect, test } from "./fixtures.ts";
 import { askHost, stubPushManager, TestPushService } from "./push.ts";
+import { pushButton, settingsSection } from "./push-suite.ts";
 
 const OUT = join(import.meta.dirname, "../../../docs/design/app");
 const SHOTS = [
@@ -55,12 +56,8 @@ async function openSection(
   await page.goto("/settings");
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await page.goto("/settings");
-  await page
-    .getByRole("tab", { name: "Notifications" })
-    .or(page.getByRole("button", { name: "Notifications" }))
-    .first()
-    .click();
-  await expect(page.getByRole("heading", { name: "Notifications", level: 2 })).toBeVisible();
+  await settingsSection(page, "Notifications").click();
+  await expect(page.getByRole("heading", { name: "Notifications", level: 2, exact: true })).toBeVisible();
   return { page, close: () => context.close() };
 }
 
@@ -83,11 +80,11 @@ test("notifications, off and on", async ({ browser }) => {
     const state = page.locator("[data-push-state]");
     await expect(state).toHaveAttribute("data-push-state", "off");
     await shoot(page, shot, "notifications-off");
-    await page.getByRole("button", { name: "Turn on" }).click();
+    await pushButton(page, "Turn on").click();
     await expect(state).toHaveAttribute("data-push-state", "on");
-    await expect(page.getByRole("switch", { name: /^Notifications from / }).first()).toBeVisible();
+    await expect(state.getByRole("switch", { name: /^Notifications from / }).first()).toBeVisible();
     await shoot(page, shot, "notifications-on");
-    await page.getByRole("button", { name: "Turn off" }).click();
+    await pushButton(page, "Turn off").click();
     await expect(state).toHaveAttribute("data-push-state", "off");
     await close();
   });

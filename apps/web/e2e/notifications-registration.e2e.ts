@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import { E2E_HOST_PORT, E2E_LAYOUT_PORT } from "./config.ts";
 import { expect, test } from "./fixtures.ts";
 import { askHost, heldSubscriptions, serviceWorker, subscribedKey } from "./push.ts";
-import { openSettings, pushState, pushSuite, turnOn } from "./push-suite.ts";
+import { openSettings, pushState, pushSuite, settingsSection, turnOn } from "./push-suite.ts";
 
 const suite = pushSuite();
 
@@ -71,8 +71,8 @@ test("a connection moved to another host takes notifications along; the old host
   const service = suite.service();
   await turnOn(page);
   expect(await savedRoute(page)).toMatchObject({ pushUrl: `ws://127.0.0.1:${E2E_HOST_PORT}/v1/push` });
-  await page.getByRole("button", { name: "Connections" }).first().click();
-  const gateway = page.getByLabel("Gateway");
+  await settingsSection(page, "Connections").click();
+  const gateway = page.getByLabel("Gateway", { exact: true });
   await gateway.fill(`ws://127.0.0.1:${E2E_LAYOUT_PORT}/v1/hc`);
   await gateway.press("Enter");
   await expect.poll(() => endpoints(E2E_LAYOUT_PORT)).toEqual([service.endpoint]);
