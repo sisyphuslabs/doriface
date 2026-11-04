@@ -123,6 +123,16 @@ describe("KeymapStore", () => {
     expect(await storage.get("keymap")).toEqual({ version: KEYMAP_VERSION, bindings: [["super+j", "tab.close"]] });
   });
 
+  test("a key this build binds again replaces the unknown action saved on it under another spelling of that key", async () => {
+    const storage = memoryStore();
+    await storage.put("keymap", { version: KEYMAP_VERSION, bindings: [["Alt+Super+J", "pane.future"]] });
+    const store = new KeymapStore(storage);
+    const key = checkBinding("super+alt+j", null);
+    if (!key.ok) throw new Error(key.reason);
+    await store.update((current) => new Map([...current, [key.trigger, "tab.close"]]));
+    expect(await storage.get("keymap")).toEqual({ version: KEYMAP_VERSION, bindings: [[key.trigger, "tab.close"]] });
+  });
+
   test("a keymap saved before split down arrived reads split as split right, once, and is saved at this version", async () => {
     const storage = memoryStore();
     const old = { version: 1, bindings: [["super+k", "pane.split"]] };
@@ -131,7 +141,10 @@ describe("KeymapStore", () => {
     await store.loaded;
     expect([...store.overrides]).toEqual([["super+k", "pane.split:right"]]);
     expect(KEYMAP_VERSION).toBeGreaterThan(1);
-    expect(await storage.get("keymap")).toEqual({ version: KEYMAP_VERSION, bindings: [["super+k", "pane.split:right"]] });
+    expect(await storage.get("keymap")).toEqual({
+      version: KEYMAP_VERSION,
+      bindings: [["super+k", "pane.split:right"]],
+    });
     expect(await storage.get("keymap.backup.v1")).toEqual(old);
   });
 
