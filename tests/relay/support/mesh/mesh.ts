@@ -109,6 +109,21 @@ async function portListens(port: number): Promise<boolean> {
   );
 }
 
+/** How long an owned process may take to exit once its owner stopped it: an hc core closes its socket while it exits. */
+const EXIT_MS = 10_000;
+const EXIT_STEP_MS = 50;
+
+/**
+ * The owned processes still alive `EXIT_MS` after their teardown. The hc cores are daemons this process did not spawn,
+ * so no exit event reaches it: their exit is read from the process table until each is gone or the bound passes.
+ */
+async function outliving(owned: readonly Owned[], deadline = Date.now() + EXIT_MS): Promise<readonly Owned[]> {
+  const alive = owned.filter((own) => isAlive(own.pid));
+  if (alive.length === 0 || Date.now() >= deadline) return alive;
+  await Bun.sleep(EXIT_STEP_MS);
+  return outliving(alive, deadline);
+}
+
 export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
   const names = options.names ?? HOST_NAMES;
   const relay = options.relayUrl === undefined ? await startMeshRelay() : undefined;
@@ -142,7 +157,7 @@ export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
     await relay?.stop();
     const ports = hosts.flatMap((host) => (host.tap === undefined ? [] : [host.tap.port]));
     const listening = (await Promise.all(ports.map(async (port) => ((await portListens(port)) ? [port] : [])))).flat();
-    return { owned: owns, alive: owns.filter((own) => isAlive(own.pid)), listening };
+    return { owned: owns, alive: await outliving(owns), listening };
   };
   // An interrupt of the runner (SIGTERM, SIGINT) tears the mesh down first: the hc cores are daemons in no group.
   const unhook = onInterrupt(async () => void (await dispose()));
