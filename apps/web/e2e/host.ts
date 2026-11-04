@@ -7,6 +7,7 @@ import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_PUSH_ORIGIN, E2E_TOKE
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
+import { writeSavedEnv } from "./saved-env.ts";
 import { seed } from "./seed.ts";
 
 const layout = process.argv[2] === "layout";
@@ -42,7 +43,7 @@ writeFileSync(
 // The pid lets the run's leftover check stop a host that outlived its worker. The file is saved again with `ready` once
 // setup has finished: a worker waits for that, so the core it first sees already holds every seed (#226).
 const saved = { hc, env: own, pid: process.pid };
-if (!layout) writeFileSync(E2E_HOST_ENV, JSON.stringify(saved));
+if (!layout) writeSavedEnv(E2E_HOST_ENV, saved);
 const host = Bun.spawn(
   [
     "bun",
@@ -97,7 +98,7 @@ try {
     if (capture) await seed(hc, env, join(dir, "work"));
     await seedMeshDoc(hc, session, env);
     stopMachine = await addMachine(hc, env, join(dir, "machine"), capture);
-    writeFileSync(E2E_HOST_ENV, JSON.stringify({ ...saved, ready: true }));
+    writeSavedEnv(E2E_HOST_ENV, { ...saved, ready: true });
   }
 } catch (error) {
   console.error(`e2e host setup failed: ${String(error)}`);

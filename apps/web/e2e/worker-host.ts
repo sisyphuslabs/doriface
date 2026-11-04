@@ -2,11 +2,10 @@
 // that count the core's terminals never see another worker's. The playwright runner is Node, so this uses child_process.
 import { type ChildProcess, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { E2E_LAYOUT_PORT, E2E_SLOT, E2E_WEB_PORT, hostEnvOf, hostPortOf } from "./config.ts";
 import { coresLeftUnder } from "./core-processes.ts";
-import { readSavedEnv } from "./saved-env.ts";
+import { readSavedEnv, readSavedEnvIfWhole } from "./saved-env.ts";
 import { beginWorker, endWorker, WHERE } from "./terminal-guard.ts";
 import { record } from "./terminal-ledger.ts";
 
@@ -40,7 +39,7 @@ async function healthy(
     );
     // Another process can answer on this port (a second checkout's host): ready means the host saved here is this child,
     // and that it has finished seeding its core and adding its machine.
-    const saved = ok && existsSync(envFile) ? readSavedEnv(envFile) : undefined;
+    const saved = ok ? readSavedEnvIfWhole(envFile) : undefined;
     if (saved !== undefined && saved.pid === child.pid && saved.ready === true) return;
     if (Date.now() > deadline)
       throw new Error(
@@ -67,7 +66,7 @@ const alive = (pid: number): boolean => {
  * deletes its saved environment as it exits; until then its pid there is the one to wait out.
  */
 async function previousGone(envFile: string): Promise<void> {
-  const pid = existsSync(envFile) ? readSavedEnv(envFile).pid : undefined;
+  const pid = readSavedEnvIfWhole(envFile)?.pid;
   if (pid === undefined) return;
   const deadline = Date.now() + READY_WITHIN_MS;
   while (alive(pid)) {

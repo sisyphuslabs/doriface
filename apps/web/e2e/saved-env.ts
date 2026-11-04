@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
 /**
  * A core's hc binary and environment, as the e2e host saved them for the specs, the host's pid when it saved one, and
@@ -9,6 +9,16 @@ export interface SavedEnv {
   readonly env: Readonly<Record<string, string>>;
   readonly pid?: number;
   readonly ready?: boolean;
+}
+
+/**
+ * Saves `saved` to `file` whole: it is written beside `file` and then renamed over it, which replaces the file in one
+ * step, so a reader polling `file` sees the old contents or the new ones, never a truncated or half-written file.
+ */
+export function writeSavedEnv(file: string, saved: SavedEnv): void {
+  const partial = `${file}.${process.pid}.partial`;
+  writeFileSync(partial, JSON.stringify(saved));
+  renameSync(partial, file);
 }
 
 export function readSavedEnv(file: string): SavedEnv {
@@ -25,4 +35,18 @@ export function readSavedEnv(file: string): SavedEnv {
     ...(Reflect.get(value, "ready") === true ? { ready: true } : {}),
   };
   return typeof pid === "number" ? { ...saved, pid } : saved;
+}
+
+/**
+ * The saved environment while a host may still be writing or removing `file`: undefined when it is not there or does
+ * not parse, which a caller waiting for the host reads as "not ready yet" and asks again.
+ */
+export function readSavedEnvIfWhole(file: string): SavedEnv | undefined {
+  try {
+    return readSavedEnv(file);
+  } catch (error) {
+    const missing = error instanceof Error && "code" in error && error.code === "ENOENT";
+    if (missing || error instanceof SyntaxError) return undefined;
+    throw error;
+  }
 }
