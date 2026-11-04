@@ -1,10 +1,13 @@
 import { isNoticeId } from "@doriface/protocol";
 import { useEffect, useSyncExternalStore } from "react";
 import { pushChannel } from "./push-channel.ts";
+import { allowFromPage, whenVisible } from "./prompt-answer.ts";
 
 export interface PendingNotice {
   readonly id: string;
   readonly host: string;
+  /** Allow was tapped on the notification: the page sends it once visible, after the pane opens. */
+  readonly allow: boolean;
 }
 
 let pending: PendingNotice | null = null;
@@ -14,10 +17,11 @@ const set = (next: PendingNotice | null): void => {
   for (const listener of listeners) listener();
 };
 
-/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>`), or null. */
+/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow]`), or null. */
 export function noticeOf(url: URL): PendingNotice | null {
   const id = url.searchParams.get("notice");
-  return isNoticeId(id) ? { id, host: url.searchParams.get("host") ?? "" } : null;
+  if (!isNoticeId(id)) return null;
+  return { id, host: url.searchParams.get("host") ?? "", allow: url.searchParams.get("answer") === "allow" };
 }
 
 /** Reads a tapped notice from the address once and takes it out of the address bar and history. */
@@ -27,6 +31,7 @@ export function captureNotice(): void {
   if (notice === null) return;
   url.searchParams.delete("notice");
   url.searchParams.delete("host");
+  url.searchParams.delete("answer");
   history.replaceState(history.state, "", url.pathname + url.search + url.hash);
   set(notice);
 }
@@ -64,15 +69,24 @@ export function useNoticeOpen(hostId: string | undefined, open: (address: string
     if (notice === null) return;
     set(null);
     if (hostId !== undefined && notice.host !== hostId) return;
-    void openNotice(notice.id, open);
+    void openNotice(notice, open);
   }, [notice, hostId, open]);
 }
 
-async function openNotice(id: string, open: (address: string) => void): Promise<void> {
+async function openNotice(notice: PendingNotice, open: (address: string) => void): Promise<void> {
+  let terminal: string | null = null;
   try {
-    const reply = await pushChannel.request({ t: "notice", id });
-    if (reply.t === "notice" && reply.terminal !== null) open(reply.terminal);
+    const reply = await pushChannel.request({ t: "notice", id: notice.id });
+    if (reply.t === "notice") terminal = reply.terminal;
   } catch {
     // Without the push stream the app stays where it opened; the notice itself says what happened.
   }
+  if (terminal === null) return;
+  open(terminal);
+  if (!notice.allow) return;
+  await allowFromPage(
+    terminal,
+    () => pushChannel.request({ t: "answer", id: notice.id, answer: "allow" }),
+    () => whenVisible(document),
+  );
 }

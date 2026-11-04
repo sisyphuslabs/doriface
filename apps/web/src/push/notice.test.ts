@@ -41,22 +41,28 @@ describe("what a tap does", () => {
     expect(host.asked).toEqual([]);
   });
 
-  test("Allow that the host carried out opens nothing", async () => {
+  test("Allow never answers from the notification: it opens the pane with the answer for the page to send", async () => {
     const host = replies({ t: "answered", terminal: "t3" });
-    expect(await planClick("allow", notice("permission"), host.answer)).toEqual({ open: null, answered: "t3" });
-    expect(host.asked).toEqual(["AAAAAAAAAAAAAAAAAAAAAA:allow"]);
+    expect(await planClick("allow", notice("permission"), host.answer)).toEqual({ open: `${URL_OF}&answer=allow` });
+    expect(host.asked).toEqual([]);
   });
 
-  test("a stale prompt, or a host that cannot be reached, opens the pane instead", async () => {
+  test("Deny that the host carried out opens nothing", async () => {
+    const host = replies({ t: "answered", terminal: "t3" });
+    expect(await planClick("deny", notice("permission"), host.answer)).toEqual({ open: null, answered: "t3" });
+    expect(host.asked).toEqual(["AAAAAAAAAAAAAAAAAAAAAA:deny"]);
+  });
+
+  test("a stale Deny, or a host that cannot be reached, opens the pane instead", async () => {
     expect(await planClick("deny", notice("permission"), replies({ t: "stale", terminal: "t3" }).answer)).toEqual({
       open: URL_OF,
     });
-    expect(await planClick("allow", notice("permission"), unreachable)).toEqual({ open: URL_OF });
+    expect(await planClick("deny", notice("permission"), unreachable)).toEqual({ open: URL_OF });
   });
 
   test("an action on a notice that is no permission prompt answers nothing", async () => {
     const host = replies({ t: "answered", terminal: "t3" });
-    expect(await planClick("allow", notice("done"), host.answer)).toEqual({ open: URL_OF });
+    expect(await planClick("deny", notice("done"), host.answer)).toEqual({ open: URL_OF });
     expect(host.asked).toEqual([]);
   });
 

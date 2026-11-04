@@ -19,6 +19,7 @@ import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
+import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
 
 export interface WorkspaceProps {
   readonly connection: HcConnection;
@@ -100,6 +101,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           />
         )}
       </SessionContext>
+      <PromptAnswerBanner />
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
       <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={tabs.drop} />
       {palette ? (
