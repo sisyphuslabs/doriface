@@ -1,25 +1,33 @@
 import type { Page } from "@playwright/test";
+import { agentRow, endAgent, startShell } from "./agents.ts";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { routeHcSocket } from "./hc-socket.ts";
 
 test.use({ serviceWorkers: "block" });
 
 const SIDEBAR = 'aside[aria-label="Workspace"]';
 
-/** Records, from the page's very first script, every transition an arrival region starts: "tag:property". */
-const recordArrivals = (page: Page) =>
-  page.addInitScript(() => {
-    const seen: string[] = [];
-    Object.defineProperty(window, "__arrivals", { value: seen });
-    document.addEventListener(
-      "transitionstart",
-      (event) => {
-        if (event.target instanceof Element && event.target.classList.contains("motion-arrive")) {
-          seen.push(`${event.target.tagName.toLowerCase()}:${event.propertyName}`);
-        }
-      },
-      true,
-    );
-  });
+/** Collects every transition an arrival region starts, as "tag:property". */
+const listen = () => {
+  const seen: string[] = [];
+  Object.defineProperty(window, "__arrivals", { value: seen });
+  document.addEventListener(
+    "transitionstart",
+    (event) => {
+      if (event.target instanceof Element && event.target.classList.contains("motion-arrive")) {
+        seen.push(`${event.target.tagName.toLowerCase()}:${event.propertyName}`);
+      }
+    },
+    true,
+  );
+};
+/** Records arrivals from the page's very first script, so a load-time one cannot slip past. */
+const recordArrivals = (page: Page) => page.addInitScript(listen);
+/** Records arrivals from now on in the current document, which in-app navigation keeps. */
+const watchArrivals = (page: Page) => page.evaluate(listen);
+/** An arrival starts when its region mounts, before it is visible; two frames let transitionstart dispatch. */
+const twoFrames = (page: Page) =>
+  page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))));
 const arrivals = (page: Page) =>
   page.evaluate(() => {
     const seen: unknown = Reflect.get(window, "__arrivals");
@@ -62,13 +70,44 @@ test("the first screen does not animate in: nothing arrives on load, and a later
   await expect(page.locator(SIDEBAR)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("tab").first()).toBeVisible();
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
-  // A load-time arrival starts when its region mounts, before it is visible; two frames let transitionstart dispatch.
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
-  );
+  await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
+});
+
+test("a kept tab on an added machine does not arrive late on the way back from Settings while machine.list is slow", async ({
+  page,
+}) => {
+  const remote = startShell("machine", "faraway");
+  try {
+    const socket = await routeHcSocket(page);
+    await page.goto("/");
+    // A local tab beside the remote one: the local tab shows at once, the remote one only once machine.list names its
+    // machine (its tab is kept by machine id).
+    await openNewTerminal(page);
+    await agentRow(page, "faraway", true).click({ timeout: 20_000 });
+    const remoteTab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: /faraway/ });
+    await expect(remoteTab).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+    await watchArrivals(page);
+    const release = socket.hold("machine.list");
+    await page.getByRole("link", { name: "Settings" }).click();
+    await expect(page.getByRole("heading", { name: "Connection", level: 2 })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole("contentinfo").getByText(/^\d+ terminals?\b/)).toBeVisible({ timeout: 20_000 });
+    await twoFrames(page);
+    await expect(remoteTab).toHaveCount(0);
+    release();
+    await expect(remoteTab).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+    await twoFrames(page);
+    expect(await arrivals(page)).toEqual([]);
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await expect.poll(() => arrivals(page)).toContain("div:opacity");
+  } finally {
+    endAgent("machine", remote);
+  }
 });
 
 test("coming back from Settings is not an arrival: the workspace returns without animating", async ({ page }) => {
@@ -83,10 +122,10 @@ test("coming back from Settings is not an arrival: the workspace returns without
   await page.goBack();
   await expect(page.locator(SIDEBAR)).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
-  await page.evaluate(
-    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
-  );
+  await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
 test("showing the sidebar fades it in without moving it", async ({ page }) => {
