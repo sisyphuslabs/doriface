@@ -2,7 +2,9 @@ import type { Clock } from "./clock.ts";
 import type { Gossip } from "./gossip.ts";
 import type { MeshView } from "./mesh-view.ts";
 import type { Reconciler } from "./reconciler.ts";
-import { IDLE_MESH_HOOKS, type MeshHooks } from "./host-hooks.ts";
+import type { MeshHooks } from "./host-hooks.ts";
+import type { SyncFacts } from "./live-facts.ts";
+import type { PendingJoinFact } from "./status-sources.ts";
 
 /** The part of `HostSync` the mesh commands drive: its gossip and runtime once sync runs, starting it, stopping it. */
 export interface SyncHandle {
@@ -12,6 +14,8 @@ export interface SyncHandle {
     | undefined;
   changed(): void;
   stop(): void | Promise<void>;
+  /** The running mesh's live facts. */
+  live(): SyncFacts;
 }
 
 /** The view with no member: a reconcile against it removes every mesh machine from this host's core. */
@@ -25,7 +29,7 @@ const CONFIRM_STEP_MS = 250;
  * `gossip.stored`, which sends it on open sessions and dials every member still owed it. A member confirms once its
  * `hello` names heads that cover this host's records, which drops it out of `gossip.owed()`.
  */
-export function syncHooks(sync: SyncHandle, clock: Clock): MeshHooks {
+export function syncHooks(sync: SyncHandle, clock: Clock, pending: () => readonly PendingJoinFact[]): MeshHooks {
   const wait = (ms: number): Promise<void> => new Promise((resolve) => void clock.after(ms, resolve));
   return {
     push(records) {
@@ -62,6 +66,6 @@ export function syncHooks(sync: SyncHandle, clock: Clock): MeshHooks {
         await sync.stop();
       }
     },
-    live: IDLE_MESH_HOOKS.live,
+    live: () => ({ ...sync.live(), pending: pending() }),
   };
 }
