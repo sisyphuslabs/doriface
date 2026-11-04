@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
-import { ContextMenu, MenuItem } from "./menu.tsx";
+import { ContextMenu, MenuItem, skipMenuHandler } from "./menu.tsx";
 import { StatusIndicator, type AgentStatus } from "./status.tsx";
 import { useTabDrag } from "./tab-drag.ts";
 import { DropCaret, DropIndicator, placement } from "./tab-drop.tsx";
@@ -67,13 +67,19 @@ export function TabBar({
   const list = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const focused = useRef<string | null>(null);
-  // A held touch opens the tab's menu, and moving on from there drags the tab: the menu closes as the drag starts.
+  // The strip owns a touch's long press: held and moved it drags the tab, held and let go it opens the tab's menu.
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const { drag, settle, lifted, onPointerDown, onClickCapture } = useTabDrag(
+  const { drag, settle, lifted, touching, onPointerDown, onClickCapture } = useTabDrag(
     list,
     tabs.map((tab) => tab.id),
-    onMove,
-    () => setMenuFor(null),
+    {
+      onMove,
+      onStart: () => setMenuFor(null),
+      onHoldRelease: (id, x, y) => {
+        const item = list.current?.querySelector(`[data-tab-id="${CSS.escape(id)}"]`);
+        item?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+      },
+    },
   );
 
   // Reordering moves the focused button in the DOM, which drops its focus; it goes straight back.
@@ -120,6 +126,12 @@ export function TabBar({
               {...(drag?.id === tab.id ? { "data-dragging": "" } : {})}
               {...(lifted === tab.id ? { "data-lifted": "" } : {})}
               onPointerDown={(event) => onPointerDown(event, tab.id, index)}
+              onTouchStart={skipMenuHandler}
+              onContextMenu={(event) => {
+                if (!touching()) return;
+                skipMenuHandler(event);
+                event.preventDefault();
+              }}
               style={place.offset === 0 ? undefined : { translate: `${place.offset}px 0` }}
               className={cn(
                 "group relative flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] select-none",

@@ -36,19 +36,26 @@ export interface TabDrag {
   /** The tab a held touch has lifted, before it moves. */
   readonly lifted: string | null;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLElement>, id: string, index: number) => void;
+  /** Whether a touch press is under way, so the strip can keep the browser's own long-press menu out of it. */
+  readonly touching: () => boolean;
   /** Swallows the click that ends a drag, so dropping a tab never selects it. */
   readonly onClickCapture: (event: { stopPropagation(): void; preventDefault(): void }) => void;
 }
 
-/**
- * Pointer drag for a horizontal strip whose items carry `data-tab-id`; `onMove` gets the item and its new index, and
- * `onStart` runs once a press becomes a drag.
- */
+export interface TabDragOptions {
+  /** Gets the item and its new index; without it nothing drags. */
+  readonly onMove: ((id: string, to: number) => void) | undefined;
+  /** Runs once a press becomes a drag. */
+  readonly onStart?: () => void;
+  /** A held touch let go without moving: where the finger was, for the item's menu. */
+  readonly onHoldRelease?: (id: string, x: number, y: number) => void;
+}
+
+/** Pointer drag for a horizontal strip whose items carry `data-tab-id`. */
 export function useTabDrag(
   list: RefObject<HTMLElement | null>,
   ids: readonly string[],
-  onMove: ((id: string, to: number) => void) | undefined,
-  onStart?: () => void,
+  { onMove, onStart, onHoldRelease }: TabDragOptions,
 ): TabDrag {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [settle, setSettle] = useState<Settle | null>(null);
@@ -60,6 +67,8 @@ export function useTabDrag(
   latestMove.current = onMove;
   const latestStart = useRef(onStart);
   latestStart.current = onStart;
+  const latestHoldRelease = useRef(onHoldRelease);
+  latestHoldRelease.current = onHoldRelease;
 
   const end = useCallback(() => stop.current(), []);
 
@@ -159,7 +168,12 @@ export function useTabDrag(
         update();
       };
       const onUp = (up: PointerEvent): void => {
-        if (up.pointerId === current.pointerId) finish(true);
+        if (up.pointerId !== current.pointerId) return;
+        if (!current.touch || !current.armed || current.dragging !== null) return finish(true);
+        // A lifted tab let go where it was: its menu opens instead of a tap selecting it.
+        swallowClick.current = true;
+        end();
+        latestHoldRelease.current?.(current.id, up.clientX, up.clientY);
       };
       const onCancel = (cancel: PointerEvent): void => {
         if (cancel.pointerId === current.pointerId) finish(false);
@@ -221,5 +235,7 @@ export function useTabDrag(
     event.preventDefault();
   }, []);
 
-  return { drag, settle, lifted, onPointerDown, onClickCapture };
+  const touching = useCallback(() => press.current?.touch === true, []);
+
+  return { drag, settle, lifted, touching, onPointerDown, onClickCapture };
 }

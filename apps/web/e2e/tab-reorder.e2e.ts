@@ -145,35 +145,57 @@ test("under reduced motion neighbours stay put and a caret marks where the tab l
   await page.mouse.up();
 });
 
-/** A one-finger touch through CDP: held until the tab lifts when `hold` is set, then moved to `x`, then lifted. */
-async function touchDrag(page: Page, from: Locator, x: number, hold: boolean): Promise<void> {
+/**
+ * One finger through CDP, on a paused page clock so only the test decides when the hold has lasted: held
+ * (`hold`, the clock runs past the lift) or not, then moved to `x` (or left in place), then lifted.
+ */
+async function touch(page: Page, from: Locator, x: number | null, hold: boolean): Promise<void> {
   const start = await centre(from);
+  await page.clock.pauseAt(await page.evaluate(() => Date.now()));
   const cdp = await page.context().newCDPSession(page);
   const at = (px: number) => [{ x: px, y: start.y }];
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(start.x) });
-  if (hold) await expect(strip(page).locator("[data-lifted]")).toHaveCount(1);
-  await Array.from({ length: 12 }, (_unused, index) => index + 1).reduce<Promise<unknown>>(
+  if (hold) {
+    await page.clock.runFor(TOUCH_LIFT_MS);
+    await expect(strip(page).locator("[data-lifted]")).toHaveCount(1);
+  }
+  const target = x ?? start.x;
+  await Array.from({ length: x === null ? 0 : 12 }, (_unused, index) => index + 1).reduce<Promise<unknown>>(
     (previous, step) =>
       previous.then(() =>
         cdp.send("Input.dispatchTouchEvent", {
           type: "touchMove",
-          touchPoints: at(start.x + ((x - start.x) * step) / 12),
+          touchPoints: at(start.x + ((target - start.x) * step) / 12),
         }),
       ),
     Promise.resolve(),
   );
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await cdp.detach();
+  await page.clock.resume();
 }
+
+/** Past the 300 ms hold that lifts a tab under a finger. */
+const TOUCH_LIFT_MS = 350;
 
 test.describe("touch", () => {
   test.use({ hasTouch: true });
 
-  test("a held touch drags a tab; a quick swipe does not move it", async ({ page }) => {
+  test("a held touch drags a tab, a quick swipe does not, and a hold let go opens the tab's menu", async ({ page }) => {
+    await page.clock.install();
     const before = await fourTabs(page);
-    await touchDrag(page, tabs(page).nth(0), (await centre(tabs(page).nth(2))).right - 4, false);
+    const selected = await selectedIndex(page);
+    const past = async () => (await centre(tabs(page).nth(2))).right - 4;
+    await touch(page, tabs(page).nth(0), await past(), false);
     expect(await order(page)).toEqual(before);
-    await touchDrag(page, tabs(page).nth(0), (await centre(tabs(page).nth(2))).right - 4, true);
-    expect(await order(page)).toEqual(rearranged(before, [1, 2, 0, 3]));
+    await touch(page, tabs(page).nth(0), await past(), true);
+    const after = rearranged(before, [1, 2, 0, 3]);
+    expect(await order(page)).toEqual(after);
+
+    await touch(page, tabs(page).nth(0), null, true);
+    await expect(page.getByRole("menuitem", { name: "Move tab right" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(tabs(page).nth(selected)).toHaveAttribute("aria-selected", "true");
+    expect(await order(page)).toEqual(after);
   });
 });
