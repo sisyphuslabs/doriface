@@ -1,11 +1,18 @@
 import { describe, expect, test } from "bun:test";
 import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../json.ts";
 import { editTab, readDocument, tabsOf } from "./document.ts";
-import { panesOf, splitPane, terminalBlock } from "./tree.ts";
+import { panesOf, splitPane, terminalBlock, removePane } from "./tree.ts";
 
 // Written by herdr-app 0.1.12 against hc 0.1.17: ⌘D ⌘⇧D ⌘D ⌘⇧D in one tab, a second tab split down then beside a
 // herdr-app panel. Only the folder path was replaced.
 const FIXTURE = parseJson(await Bun.file(new URL("./fixtures/herdr-app-0.1.12.json", import.meta.url)).text());
+/**
+ * The same document with herdr-app fields doriface does not use (`gap`, `divider`, `title`) and an unknown key on the
+ * document, the space, the tab and every container a deep edit rewrites (the tab root and its three nested containers).
+ */
+const WITH_FIELDS = parseJson(
+  await Bun.file(new URL("./fixtures/herdr-app-0.1.12-fields.json", import.meta.url)).text(),
+);
 
 type Step = string | number;
 
@@ -85,6 +92,34 @@ describe("the herdr-app document", () => {
       type: "row",
     };
     expect(JSON.stringify(edited)).toBe(JSON.stringify(setAt(FIXTURE, [...DEEP_COLUMN, "children", 1], wrapped)));
+  });
+
+  test("a deep split keeps every field of the document, space, tab and containers it rewrites, byte for byte", () => {
+    const edited = splitRight(ok(WITH_FIELDS), DEEPEST);
+    const wrapped = {
+      children: [
+        at(WITH_FIELDS, ...DEEP_COLUMN, "children", 1),
+        { content: { terminal: "t8" }, id: "pnew", type: "block" },
+      ],
+      id: "snew",
+      type: "row",
+    };
+    expect(JSON.stringify(edited)).toBe(JSON.stringify(setAt(WITH_FIELDS, [...DEEP_COLUMN, "children", 1], wrapped)));
+  });
+
+  test("closing a deep pane keeps every field of the containers, tab, space and document it rewrites", () => {
+    const edited = editTab(ok(WITH_FIELDS), TAB, (root) => removePane(root, DEEPEST));
+    if (edited === null) throw new Error("the close was refused");
+    const kept = ["gap", "divider", "title", "x-future"] as const;
+    const fields = (path: readonly Step[]) => kept.map((key) => at(edited, ...path, key));
+    const read = (path: readonly Step[]) => kept.map((key) => at(WITH_FIELDS, ...path, key));
+    const ROOT = ["spaces", 0, "tabs", 0, "root"] as const;
+    for (const path of [ROOT, [...ROOT, "children", 1], [...ROOT, "children", 1, "children", 1]]) {
+      expect(fields(path)).toEqual(read(path));
+    }
+    for (const path of [[], ["spaces", 0], ["spaces", 0, "tabs", 0]] as const) {
+      expect(at(edited, ...path, "x-future")).toEqual({ added: "later" });
+    }
   });
 
   test("splitting along the parent's own axis adds a sibling and halves the target's share, as herdr-app does", () => {

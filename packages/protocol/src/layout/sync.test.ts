@@ -8,22 +8,34 @@ function store(initial: JsonValue) {
   let value = initial;
   let version = initial === null ? 0 : 1;
   const writes: JsonValue[] = [];
+  const attempts: number[] = [];
   let before: (() => void) | undefined;
+  let after: (() => void) | undefined;
   const calls: DocCalls = {
     get: async () => ({ value, version }),
     set: async (_on, next, at) => {
+      attempts.push(at);
       before?.();
       before = undefined;
       if (at !== version) throw new HcRpcError({ code: -32000, message: "conflict", data: { kind: "conflict" } });
       value = next;
       version += 1;
       writes.push(next);
-      return { version };
+      const written = version;
+      after?.();
+      after = undefined;
+      return { version: written };
     },
   };
   return {
     calls,
     writes,
+    /** The version each compare-and-set was made at, in order. */
+    attempts,
+    /** Runs once right after our next write lands and before its reply reaches us. */
+    afterOurs: (run: () => void) => {
+      after = run;
+    },
     current: () => value,
     other: (next: JsonValue) => {
       before = () => {
@@ -64,6 +76,25 @@ describe("the layout document sync", () => {
     core.other({ spaces: [], theirs: true });
     expect(await doc.edit((current) => named(current, "mine"))).toBe(true);
     expect(core.current()).toEqual({ spaces: [], theirs: true, mine: true });
+  });
+
+  test("another client's write between our read and our edit fails our compare-and-set at the version we read, and both edits stay", async () => {
+    const core = store({ spaces: [] });
+    const { doc } = await ready(core.calls);
+    core.write({ spaces: [], theirs: true });
+    expect(await doc.edit((current) => named(current, "mine"))).toBe(true);
+    expect(core.attempts).toEqual([1, 2]);
+    expect(core.current()).toEqual({ spaces: [], theirs: true, mine: true });
+  });
+
+  test("a doc event that arrives while our write is in flight is read once the write is done", async () => {
+    const core = store({ spaces: [] });
+    const { doc } = await ready(core.calls);
+    core.afterOurs(() => {
+      void doc.heard(core.write({ spaces: [], mine: true, theirs: true }));
+    });
+    expect(await doc.edit((current) => named(current, "mine"))).toBe(true);
+    expect(doc.state).toEqual({ phase: "ready", doc: { spaces: [], mine: true, theirs: true }, version: 3 });
   });
 
   test("drops an edit that no longer applies to the other client's document", async () => {
