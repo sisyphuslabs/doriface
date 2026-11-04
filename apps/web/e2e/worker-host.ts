@@ -7,7 +7,7 @@ import { dirname } from "node:path";
 import { E2E_LAYOUT_PORT, E2E_SLOT, E2E_WEB_PORT, hostEnvOf, hostPortOf } from "./config.ts";
 import { coresLeftUnder } from "./core-processes.ts";
 import { readSavedEnv } from "./saved-env.ts";
-import { endWorker, WHERE } from "./terminal-guard.ts";
+import { beginWorker, endWorker, WHERE } from "./terminal-guard.ts";
 import { record } from "./terminal-ledger.ts";
 
 const HOST_SCRIPT = fileURLToPath(new URL("./host.ts", import.meta.url));
@@ -100,6 +100,8 @@ export async function startWorkerHost(): Promise<() => Promise<void>> {
   const exited = exitOf(child);
   await healthy(url, hostEnvOf(port), child, exited);
   const dir = dirname(readSavedEnv(hostEnvOf(port)).env["XDG_STATE_HOME"] ?? "");
+  // Before any hook runs: the first file's beforeAll terminals are then told apart from what the host started with.
+  beginWorker();
   return async () => {
     // The worker's last terminal check reads this host's core, so it runs first; a leak it finds fails once the host
     // has stopped. Then no hc process the host started may still run (#226).

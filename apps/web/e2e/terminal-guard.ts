@@ -1,9 +1,10 @@
 // Every spec leaves the e2e core with the terminals it found there (#226). A test's terminals are the ones listed
 // after it that were not listed before it; the guard ends those (and removes their finished entries), never another's.
-// A spec file's beforeAll terminals are the ones that appeared between the last test of the file before it (or a new
-// worker's start) and its own first test; its afterAll hooks end them. Whatever is still on the core once its owner is
-// done is a leak, which the guard ends too, failed by the worker that found it: a test's own leak fails that test, and a leak found between tests
-// (a late terminal, a beforeAll terminal its afterAll left) fails the worker as it ends, naming the spec either way.
+// A spec file's beforeAll terminals are the ones that appeared between the last test of the file before it (or the
+// worker's host coming up) and its own first test; its afterAll hooks end them. Whatever is still on the core once its
+// owner is done is a leak, which the guard ends too, failed by the worker that found it: a test's own leak fails that
+// test, and a leak found between tests (a late terminal, a beforeAll terminal its afterAll left, anything beyond what
+// the core held when the worker's host came up) fails the worker as it ends, naming the spec either way.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { TestInfo } from "@playwright/test";
@@ -29,6 +30,10 @@ interface CoreState {
   readonly listed: readonly string[];
   /** Terminals the current spec file's beforeAll hooks started; its afterAll hooks end them. */
   readonly fileOwned: readonly string[];
+  /** Who `fileOwned` is blamed on if it is left: the file's beforeAll, or a late terminal of the test before it. */
+  readonly fileOwner: string;
+  /** The core as the worker's host came up: the worker must leave it as it found it. */
+  readonly baseline: readonly string[];
 }
 
 /** Each `hc <command> --json` list entry as an object. */
@@ -125,6 +130,8 @@ function readState(): CoreState | undefined {
     owner: String(Reflect.get(saved, "owner")),
     listed: strings(Reflect.get(saved, "listed")),
     fileOwned: strings(Reflect.get(saved, "fileOwned")),
+    fileOwner: String(Reflect.get(saved, "fileOwner")),
+    baseline: strings(Reflect.get(saved, "baseline")),
   };
 }
 
@@ -142,25 +149,41 @@ const count = (now: Listing): { readonly live: number; readonly finished: number
   return { live, finished: now.size - live };
 };
 
+/** As the worker's host comes up, before any hook: the core as the worker found it, which it must leave so. */
+export function beginWorker(): void {
+  const listed = [...list().keys()];
+  writeState({ worker: -1, spec: "", owner: "", listed, fileOwned: [], fileOwner: "", baseline: listed });
+}
+
+function readStarted(): CoreState {
+  const state = readState();
+  if (state === undefined) throw new Error(`terminal guard (${WHERE}): no baseline, so the worker's host never came up`);
+  return state;
+}
+
 /** Before a test: checks what appeared since the last test, and returns the core as the test finds it. */
 export function beginTest(info: TestInfo): Listing {
   let now = list();
-  const state = readState();
+  const state = readStarted();
   const spec = specOf(info);
-  let fileOwned = state?.fileOwned ?? [];
-  if (state !== undefined && state.spec === spec && state.worker === info.workerIndex) {
+  let { fileOwned, fileOwner } = state;
+  if (state.spec === spec && state.worker === info.workerIndex) {
     // Nothing runs between two tests of one file in one worker: a terminal that appeared came from the test before.
     const late = leak(now, state.owner, state.spec, newIn(now, state.listed));
     now = late.now;
     if (late.leak !== undefined) pending.push(late.leak);
-  } else if (state !== undefined) {
-    const kept = leak(now, `${state.spec} beforeAll`, state.spec, state.fileOwned);
+  } else {
+    const kept = leak(now, state.fileOwner, state.spec, state.fileOwned);
     now = kept.now;
     if (kept.leak !== undefined) pending.push(kept.leak);
+    // What appeared since the last test is this file's beforeAll terminals, unless the test before left a late one:
+    // nothing runs between the two to tell them apart, so a leak among them names both.
     fileOwned = newIn(now, state.listed);
+    fileOwner = state.owner === "" ? `${spec} beforeAll` : `${spec} beforeAll, or a late terminal of ${state.owner}`;
   }
   record({ kind: "before", owner: ownerOf(info), ...count(now) });
-  writeState({ worker: info.workerIndex, spec, owner: ownerOf(info), listed: [...now.keys()], fileOwned });
+  const listed = [...now.keys()];
+  writeState({ ...state, worker: info.workerIndex, spec, owner: ownerOf(info), listed, fileOwned, fileOwner });
   return now;
 }
 
@@ -174,20 +197,22 @@ export function endTest(info: TestInfo, before: Listing): void {
     record({ kind: "ended", owner, spec, count: opened.length });
   }
   const own = leak(now, owner, spec, opened);
-  const fileOwned = readState()?.fileOwned ?? [];
-  writeState({ worker: info.workerIndex, spec, owner, listed: [...own.now.keys()], fileOwned });
+  writeState({ ...readStarted(), worker: info.workerIndex, spec, owner, listed: [...own.now.keys()] });
   if (own.leak !== undefined) throw fail([own.leak]);
 }
 
-/** As a worker ends, after its last file's afterAll hooks: checks the last test and file, and fails with every leak. */
+/**
+ * As a worker ends, after its last file's afterAll hooks: checks the last test and file, then that the core holds
+ * nothing beyond what it held as the worker's host came up, and fails with every leak.
+ */
 export function endWorker(): void {
-  const state = readState();
-  if (state === undefined) return;
+  const state = readStarted();
   const now = list();
   const late = leak(now, state.owner, state.spec, newIn(now, state.listed));
-  const kept = leak(late.now, `${state.spec} beforeAll`, state.spec, state.fileOwned);
-  for (const found of [late.leak, kept.leak]) if (found !== undefined) pending.push(found);
-  record({ kind: "end", where: WHERE, ...count(kept.now) });
-  writeState({ ...state, worker: -1, listed: [...kept.now.keys()], fileOwned: [] });
+  const kept = leak(late.now, state.fileOwner, state.spec, state.fileOwned);
+  const beyond = leak(kept.now, `the worker, after ${state.owner}`, state.spec, newIn(kept.now, state.baseline));
+  for (const found of [late.leak, kept.leak, beyond.leak]) if (found !== undefined) pending.push(found);
+  record({ kind: "end", where: WHERE, ...count(beyond.now) });
+  writeState({ ...state, worker: -1, listed: [...beyond.now.keys()], fileOwned: [] });
   if (pending.length > 0) throw fail(pending.splice(0));
 }
