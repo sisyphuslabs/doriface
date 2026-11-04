@@ -3,7 +3,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
-import { E2E_SLOT, hostEnvOf, hostPortOf } from "./config.ts";
+import { E2E_LAYOUT_PORT, E2E_SLOT, E2E_WEB_PORT, hostEnvOf, hostPortOf } from "./config.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
 const HOST_SCRIPT = fileURLToPath(new URL("./host.ts", import.meta.url));
@@ -50,6 +50,11 @@ async function healthy(
 export async function startWorkerHost(): Promise<() => Promise<void>> {
   // The host reads its port from E2E_HOST_PORT; without a worker slot of its own it takes that port as is.
   const port = hostPortOf(E2E_SLOT);
+  if (port === E2E_LAYOUT_PORT || port === E2E_WEB_PORT) {
+    throw new Error(
+      `worker ${E2E_SLOT}'s host port ${port} is the layout or web port: keep those outside E2E_HOST_PORT..+workers-1`,
+    );
+  }
   const env: NodeJS.ProcessEnv = { ...process.env, E2E_HOST_PORT: String(port) };
   delete env["TEST_PARALLEL_INDEX"];
   const url = `http://127.0.0.1:${port}/healthz`;

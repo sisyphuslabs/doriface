@@ -1,6 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_LAYOUT_PORT, E2E_WEB_PORT } from "./e2e/config.ts";
 
+// Playwright stops its web servers and workers (and with them every e2e host and core) on SIGINT, not on SIGTERM, which
+// would leave the layout host, its cores and vite preview running: the runner answers SIGTERM with its own SIGINT.
+if (process.env["TEST_WORKER_INDEX"] === undefined) process.once("SIGTERM", () => process.kill(process.pid, "SIGINT"));
+
 export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
