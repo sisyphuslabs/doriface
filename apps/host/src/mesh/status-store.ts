@@ -1,6 +1,8 @@
 import { base64urlEncode, type HostIdentity } from "@doriface/crypto";
 import {
   type CardBody,
+  type FailClosed,
+  failClosedOf,
   hashOf,
   parseRecord,
   type RecordBody,
@@ -140,7 +142,7 @@ export function meshSourcesOf(
       name: view.name,
     },
     revocations: revocationsOf(parsed, view),
-    failClosed: [],
+    failClosed: failClosedFor(failClosedOf(file.records, cache), self),
     local: { ...localOf(file, view, self, live), possiblyRevoked: live.possiblyRevoked || !inView },
     pending: live.pending,
     peers: live.peers,
@@ -148,6 +150,18 @@ export function meshSourcesOf(
     budget: live.budget,
     witnessPool: (subject) => witnessFacts(file.records, view, self, subject, cache),
   };
+}
+
+/**
+ * The fail-closed removals as this host reports them (design 3.7). At 0:0 the record set cannot tell the sides
+ * apart, but this host knows it is honest: a revoked key that removed it is the culprit, so the mirror facts, by this
+ * host or by the keys that culprit removed, are the honest side's own revokes and are left out.
+ */
+function failClosedFor(facts: readonly FailClosed[], self: string): readonly FailClosed[] {
+  const culprits = facts.filter((fact) => fact.removed.includes(self));
+  if (culprits.length === 0) return facts;
+  const honest = new Set([self, ...culprits.flatMap((fact) => fact.removed)]);
+  return facts.filter((fact) => !honest.has(fact.revokedKey));
 }
 
 /** This host's mesh status now, or undefined while it is in no mesh: the host's `meshStatus`. */
