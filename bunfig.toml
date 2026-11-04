@@ -2,4 +2,5 @@
 # The relay suites need the private relay checkout; `bun run relay:test` fetches it and runs them.
 pathIgnorePatterns = ["tests/relay/**"]
 # Stops, once every file has run, any relay a test left running (`bun test` emits no process exit event).
-preload = ["./tests/relay/support/teardown.ts"]
+# Fails the run when a scratch herdr core a test started is still serving once every file has run.
+preload = ["./tests/relay/support/teardown.ts", "./apps/host/src/testing/core-guard.ts"]

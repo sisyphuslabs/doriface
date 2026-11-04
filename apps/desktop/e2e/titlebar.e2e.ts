@@ -2,7 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TRAFFIC_LIGHTS } from "../src/config/window.ts";
+import { TITLEBAR_CONTROLS, TRAFFIC_LIGHTS } from "../src/config/window.ts";
 import { scratchHcSession } from "./hc-session.ts";
 import { launchOptions } from "./launch.ts";
 
@@ -57,24 +57,26 @@ const running = (): ElectronApplication => {
 
 /** Every control and every piece of text drawn where the window buttons sit. */
 function underWindowButtons(page: Page): Promise<string[]> {
-  return page.evaluate((lights) => {
-    const controls = 'a, button, input, select, textarea, [role="tab"], [role="button"], [tabindex]';
-    const hits: string[] = [];
-    for (const element of document.querySelectorAll<HTMLElement>("body *")) {
-      const text = element.childElementCount === 0 && (element.textContent ?? "").trim() !== "";
-      if (!text && !element.matches(controls)) continue;
-      const box = element.getBoundingClientRect();
-      if (box.width === 0 || box.height === 0 || getComputedStyle(element).visibility === "hidden") continue;
-      const overlaps =
-        box.left < lights.x + lights.width &&
-        lights.x < box.right &&
-        box.top < lights.y + lights.height &&
-        lights.y < box.bottom;
-      if (overlaps)
-        hits.push(`${element.tagName.toLowerCase()} "${(element.textContent ?? element.ariaLabel ?? "").trim()}"`);
-    }
-    return hits;
-  }, TRAFFIC_LIGHTS);
+  return page.evaluate(
+    ({ lights, controls }) => {
+      const hits: string[] = [];
+      for (const element of document.querySelectorAll<HTMLElement>("body *")) {
+        const text = element.childElementCount === 0 && (element.textContent ?? "").trim() !== "";
+        if (!text && !element.matches(controls)) continue;
+        const box = element.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0 || getComputedStyle(element).visibility === "hidden") continue;
+        const overlaps =
+          box.left < lights.x + lights.width &&
+          lights.x < box.right &&
+          box.top < lights.y + lights.height &&
+          lights.y < box.bottom;
+        if (overlaps)
+          hits.push(`${element.tagName.toLowerCase()} "${(element.textContent ?? element.ariaLabel ?? "").trim()}"`);
+      }
+      return hits;
+    },
+    { lights: TRAFFIC_LIGHTS, controls: TITLEBAR_CONTROLS },
+  );
 }
 
 const insetVariable = (page: Page): Promise<string> =>
