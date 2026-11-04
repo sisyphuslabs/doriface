@@ -31,7 +31,7 @@ export function Panes({ connection, terminals, open, active, split, onFocus, onE
             hidden={!shown}
             className={
               address === split
-                ? "motion-arrive order-last flex min-w-0 flex-1 [--arrive-from:translateX(0.5rem)]"
+                ? "motion-arrive order-last flex min-w-0 flex-1 origin-right [--arrive-from:scale(0.98)]"
                 : "flex min-w-0 flex-1"
             }
           >
