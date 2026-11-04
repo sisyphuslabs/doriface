@@ -2,6 +2,7 @@ import { _electron as electron, expect, test, type ElectronApplication } from "@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
+import { MAC_TITLEBAR_CSS } from "../src/config/window.ts";
 import { scratchHcSession } from "./hc-session.ts";
 import { launchOptions } from "./launch.ts";
 
@@ -111,4 +112,25 @@ test("wide cells and styled runs keep their columns under the app's CSP", async 
     );
   });
   expect(columns).toEqual({ ab: 0, "\u{AC00}": 2, cd: 4, "\u{65E5}": 6, ef: 8, gh: 10 });
+});
+
+test("under the macOS titlebar rules a whole tab takes the press, so it drags the tab and not the window", async () => {
+  if (launched === undefined) throw new Error("the app did not launch");
+  const page = await launched.firstWindow();
+  // Only macOS adds the sheet on its own; adding it here reads the same rules on every platform.
+  await launched.evaluate(
+    ({ BrowserWindow }, css) => BrowserWindow.getAllWindows()[0]?.webContents.insertCSS(css),
+    MAC_TITLEBAR_CSS,
+  );
+  const regions = await page
+    .locator("[data-tab-id]")
+    .first()
+    .evaluate((pill) => {
+      const strip = pill.closest("[data-titlebar]");
+      return {
+        strip: strip === null ? "" : getComputedStyle(strip).getPropertyValue("-webkit-app-region"),
+        pill: getComputedStyle(pill).getPropertyValue("-webkit-app-region"),
+      };
+    });
+  expect(regions).toEqual({ strip: "drag", pill: "no-drag" });
 });
