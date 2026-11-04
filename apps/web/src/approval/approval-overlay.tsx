@@ -16,7 +16,7 @@ export function ApprovalOverlay({ connection, terminal }: { connection: HcConnec
   useEffect(() => setAnnounced(said), [said]);
   return (
     <>
-      <p data-approval-live={terminal.address} role="status" aria-live="polite" className="sr-only">
+      <p data-approval-live={terminal.address} aria-live="polite" aria-atomic="true" className="sr-only">
         {announced}
       </p>
       {approval === undefined ? null : (
