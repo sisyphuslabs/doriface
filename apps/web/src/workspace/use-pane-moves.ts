@@ -20,8 +20,11 @@ export interface PaneMoves {
    */
   readonly go: (direction: Direction) => boolean;
   readonly bumped: Bump | null;
-  /** Moves the line between children `index` and `index + 1` of a row or column of the tab in view by `delta`. */
-  readonly resize: (container: string, index: number, delta: number) => void;
+  /**
+   * Moves the line between children `index` and `index + 1` of a row or column of the tab in view by `delta`; true once
+   * the write landed, false when nothing was written.
+   */
+  readonly resize: (container: string, index: number, delta: number) => Promise<boolean>;
   /** Moves the focused pane's nearest edge that way by one step, as Ghostty's `resize_split`. */
   readonly resizeFocused: (direction: Direction) => boolean;
   readonly equalize: () => boolean;
@@ -59,22 +62,21 @@ export function usePaneMoves({ active, focused, layoutOf, show, setView, history
 
   // Pane sizes are shared in the herdr-app document, as herdr-app keeps them; this is the one place that writes them,
   // so keeping them per device instead would change only this function.
+  // The write, or null when the tab in view takes no size edits.
   const editSizes = useCallback(
-    (change: (root: Node) => Node | null): boolean => {
-      if (active === null || active.transient) return false;
+    (change: (root: Node) => Node | null): Promise<boolean> | null => {
+      if (active === null || active.transient) return null;
       const layout = layoutOf(active.machine);
-      if (layout === undefined || layout.readOnly !== null) return false;
+      if (layout === undefined || layout.readOnly !== null) return null;
       const id = active.id;
-      void layout.edit((doc) => (doc === null ? null : editTab(doc, id, change)));
-      return true;
+      return layout.edit((doc) => (doc === null ? null : editTab(doc, id, change)));
     },
     [active, layoutOf],
   );
 
   const resize = useCallback(
-    (container: string, index: number, delta: number): void => {
-      editSizes((root) => resizeAt(root, container, index, delta));
-    },
+    (container: string, index: number, delta: number): Promise<boolean> =>
+      editSizes((root) => resizeAt(root, container, index, delta)) ?? Promise.resolve(false),
     [editSizes],
   );
 
@@ -82,12 +84,12 @@ export function usePaneMoves({ active, focused, layoutOf, show, setView, history
     (direction: Direction): boolean => {
       if (active === null || focused === null) return false;
       const edge = nearestEdge(active.root, focused.id, direction);
-      return edge === null ? false : editSizes((root) => resizeAt(root, edge.container, edge.index, edge.delta));
+      return edge !== null && editSizes((root) => resizeAt(root, edge.container, edge.index, edge.delta)) !== null;
     },
     [active, editSizes, focused],
   );
 
-  const equalizeTab = useCallback((): boolean => (active === null ? false : editSizes(equalize)), [active, editSizes]);
+  const equalizeTab = useCallback((): boolean => editSizes(equalize) !== null, [editSizes]);
 
   const toggleZoom = useCallback((): boolean => {
     if (active === null || focused === null || active.panes.length < 2) return false;

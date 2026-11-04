@@ -1,16 +1,20 @@
 import { cn } from "@doriface/ui";
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { Divider, Rect } from "../layout/rects.ts";
+import type { LinePosition } from "./line-position.ts";
 import { RESIZE_STEP } from "./use-pane-moves.ts";
 
 export interface PaneDividerProps {
   readonly divider: Divider;
   /** The row or column the line splits, whose length a drag is measured against. */
   readonly container: Rect;
-  /** The share of the container before the line, 0 to 100, for assistive tech. */
-  readonly before: number;
+  /** Where the line sits and how far a resize can move it, in percent of the container, for assistive tech. */
+  readonly position: LinePosition;
   /** Shows a drag as it happens; null ends the preview. */
   readonly onPreview: (delta: number | null) => void;
+  /** A drag let go of: the preview stays on screen until the write replaces it. */
+  readonly onDrop: (delta: number) => void;
+  /** One arrow key step, or Home and End. */
   readonly onResize: (delta: number) => void;
 }
 
@@ -21,7 +25,7 @@ const REACH = 4;
  * The line between two panes, a WAI-ARIA window splitter: drag it, or focus it and press the arrow keys along its
  * axis (one step each, Home and End for the ends), as Ghostty's resize keys move it from inside a pane.
  */
-export function PaneDivider({ divider, container, before, onPreview, onResize }: PaneDividerProps) {
+export function PaneDivider({ divider, container, position, onPreview, onDrop, onResize }: PaneDividerProps) {
   const row = divider.axis === "row";
   const length = row ? container.width : container.height;
   const start = useRef<number | null>(null);
@@ -43,8 +47,8 @@ export function PaneDivider({ divider, container, before, onPreview, onResize }:
     const moved = delta(event);
     start.current = null;
     setDragging(false);
-    onPreview(null);
-    if (commit && moved !== 0) onResize(moved);
+    if (commit && moved !== 0) onDrop(moved);
+    else onPreview(null);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const keys: Readonly<Record<string, number>> = row
@@ -62,14 +66,15 @@ export function PaneDivider({ divider, container, before, onPreview, onResize }:
       tabIndex={0}
       aria-orientation={row ? "vertical" : "horizontal"}
       aria-label={row ? "Resize the panes left and right" : "Resize the panes above and below"}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={Math.round(before)}
+      aria-valuemin={Math.round(position.min)}
+      aria-valuemax={Math.round(position.max)}
+      aria-valuenow={Math.round(position.now)}
       data-container={divider.container}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(event) => finish(event, true)}
       onPointerCancel={(event) => finish(event, false)}
+      onLostPointerCapture={(event) => finish(event, false)}
       onKeyDown={onKeyDown}
       style={
         row

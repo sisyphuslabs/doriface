@@ -43,7 +43,7 @@ const layout: Layout = {
   go: () => false,
   bumped: null,
   fresh: null,
-  resize: noop,
+  resize: () => Promise.resolve(true),
   resizeFocused: () => false,
   equalize: () => true,
   toggleZoom: () => true,

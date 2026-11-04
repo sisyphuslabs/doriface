@@ -1,12 +1,13 @@
 import type { HcConnection } from "@doriface/client";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { type Axis, childrenOf, type Node, nodeAt, pathTo, resizeAt, weightOf } from "@doriface/protocol/layout";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { type Axis, type Node, nodeAt, pathTo, resizeAt } from "@doriface/protocol/layout";
 import { arrange, type Rect } from "../layout/rects.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { LayoutPane, LayoutTab } from "./layout-model.ts";
 import type { Session } from "./model.ts";
 import { Pane } from "./pane.tsx";
 import { PaneDivider } from "./pane-divider.tsx";
+import { linePosition } from "./line-position.ts";
 import { usePaneMotion, type PaneMotion } from "./pane-motion.ts";
 import type { Layout, PaneTarget } from "./use-layout.ts";
 
@@ -79,15 +80,29 @@ interface Preview {
   readonly container: string;
   readonly index: number;
   readonly delta: number;
+  /** Set once let go: the tab's tree as it was, so the drag stays on screen until the write replaces that tree. */
+  readonly over?: string;
+}
+
+/** The drag to show: a dropped one only until the tab's tree is no longer the one it was dropped on. */
+function shownPreview(preview: Preview | null, tabs: readonly LayoutTab[]): Preview | null {
+  if (preview?.over === undefined) return preview;
+  const root = tabs.find((tab) => tab.key === preview.tab)?.root;
+  return root !== undefined && JSON.stringify(root) === preview.over ? preview : null;
 }
 
 const HIDDEN: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
 export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSplit, onClose }: SplitPanesProps) {
   const [ref, box] = useBoxSize();
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [held, setPreview] = useState<Preview | null>(null);
+  const preview = shownPreview(held, layout.tabs);
+  useEffect(() => {
+    if (held !== null && preview === null) setPreview(null);
+  }, [held, preview]);
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
-  // A divider drag lays panes out on every move; like a window resize it plays no motion, its release included.
+  // A divider drag lays panes out on every move; like a window resize it plays no motion, its release included: the
+  // dropped drag stays on screen until its write lands, and that render changes the frame, so it moves no pane either.
   const frame = `${box.width}x${box.height}${preview === null ? "" : `:${preview.delta}`}`;
   return (
     <div className="min-h-0 flex-1 p-2">
@@ -144,7 +159,7 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSpl
                       key={`${divider.container}:${divider.index}`}
                       divider={divider}
                       container={containers.get(divider.container) ?? box}
-                      before={shareBefore(root, divider.container, divider.index)}
+                      position={linePosition(root, divider.container, divider.index)}
                       onPreview={(delta) =>
                         setPreview(
                           delta === null
@@ -152,7 +167,15 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSpl
                             : { tab: tab.key, container: divider.container, index: divider.index, delta },
                         )
                       }
-                      onResize={(delta) => layout.resize(divider.container, divider.index, delta)}
+                      onDrop={(delta) => {
+                        const { container, index } = divider;
+                        setPreview({ tab: tab.key, container, index, delta, over: JSON.stringify(tab.root) });
+                        void layout.resize(container, index, delta).then((written) => {
+                          if (!written) setPreview(null);
+                          return written;
+                        });
+                      }}
+                      onResize={(delta) => void layout.resize(divider.container, divider.index, delta)}
                     />
                   ))
                 : null}
@@ -162,16 +185,6 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSpl
       </div>
     </div>
   );
-}
-
-/** The share of a row or column that lies before line `index`, in percent. */
-function shareBefore(root: Node, container: string, index: number): number {
-  const path = pathTo(root, container);
-  const node = path === null ? null : nodeAt(root, path);
-  const weights = (node === null ? [] : childrenOf(node)).map((child) => weightOf(child) ?? 0);
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  const before = weights.slice(0, index + 1).reduce((sum, weight) => sum + weight, 0);
-  return total === 0 ? 0 : (100 * before) / total;
 }
 
 interface PaneSlotProps {
