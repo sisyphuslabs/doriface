@@ -13,7 +13,12 @@ export interface CoreFeed {
 }
 
 /** The push service's own line to this host's core: its events feed the notices, its calls answer prompts. */
-export function startCoreFeed(target: HcTarget, service: PushService, log: (line: string) => void): CoreFeed {
+export function startCoreFeed(
+  target: HcTarget,
+  service: PushService,
+  log: (line: string) => void,
+  openLink: (core: HcTarget) => ByteLink = spawnHcLink,
+): CoreFeed {
   const first = Promise.withResolvers<void>();
   let stopped = false;
   let current: HcConnection | undefined;
@@ -27,7 +32,7 @@ export function startCoreFeed(target: HcTarget, service: PushService, log: (line
     if (!stopped) timer = setTimeout(() => void open(), RETRY_MS);
   };
   const open = async (): Promise<void> => {
-    const child = spawnHcLink(target);
+    const child = openLink(target);
     const gone = Promise.withResolvers<void>();
     child.onClose(() => gone.resolve());
     link = child;

@@ -146,6 +146,46 @@ async function failedStart(prepare: (stateDir: string) => { readonly lan?: { hos
   }
 }
 
+describe("a host whose push feed started", () => {
+  test("stop settles once the feed's hc connect child has exited", async () => {
+    const session = createHcSession("dh-stop");
+    const stateDir = mkdtempSync(join(tmpdir(), "dh-stop-"));
+    try {
+      new SubscriptionStore(stateDir).put(
+        LOOPBACK_OWNER,
+        { endpoint: "https://fcm.googleapis.com/fcm/send/stop", p256dh: "B".repeat(87), auth: "C".repeat(22) },
+        DEFAULT_PUSH_PREFS,
+      );
+      const host = await startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        token: generateToken(),
+        hc: session.hc,
+        session: session.name,
+        env: session.env,
+        stateDir,
+        log: () => {},
+      });
+      // The feed spawns its child while the host starts; read its pid before stopping, since an exited pid is not listed.
+      const pids = hcConnectPids(session.name);
+      expect(pids).toHaveLength(1);
+      await host.stop();
+      const alive = pids.filter((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      expect(alive).toEqual([]);
+    } finally {
+      for (const pid of hcConnectPids(session.name)) process.kill(pid, "SIGTERM");
+      await session.dispose();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("a startup that fails after the push feed started", () => {
   test("a control socket that cannot bind exits non-zero and leaves no hc connect child", async () => {
     const run = await failedStart((stateDir) => {

@@ -9,6 +9,7 @@ import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { listenError, StartupError } from "./startup-error.ts";
+import { type StartedPart, stopStarted } from "./stop-started.ts";
 import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
 import { type PairingSlotRegistrar, PairingSlots } from "./pairing-slots.ts";
 import { HostUplink } from "./relay/host-uplink.ts";
@@ -88,25 +89,21 @@ export async function startHost(options: HostOptions): Promise<Host> {
   }
   const hcVersion = await readHcVersion(options.hc);
   // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
-  const started: (() => unknown)[] = [];
+  const parts: StartedPart[] = [];
   try {
-    return await serve(options, hcVersion, (undo) => started.push(undo));
+    return await serve(options, hcVersion, (name, stop) => parts.push({ name, stop }));
   } catch (error) {
-    await started
-      .toReversed()
-      .reduce<Promise<unknown>>(
-        (previous, undo) =>
-          previous
-            .then(undo)
-            .catch((cause: unknown) => options.log(`startup: stopping a part it had started failed: ${String(cause)}`)),
-        Promise.resolve(),
-      );
+    await stopStarted(parts, options.log);
     throw error;
   }
 }
 
 /** Starts every part of the host; `started` records how to stop each one once it runs. */
-async function serve(options: HostOptions, hcVersion: string, started: (undo: () => unknown) => void): Promise<Host> {
+async function serve(
+  options: HostOptions,
+  hcVersion: string,
+  started: (name: string, stop: () => unknown) => void,
+): Promise<Host> {
   const { hostname, port } = options.listen;
   const stateDir = options.stateDir;
   if (options.relay !== undefined && stateDir === undefined) throw new Error("the relay uplink needs a state dir");
@@ -129,7 +126,7 @@ async function serve(options: HostOptions, hcVersion: string, started: (undo: ()
     stateDir === undefined || identity === undefined
       ? undefined
       : e2eeDeps(stateDir, identity, options.pairingSlots ?? uplink, options, proofs);
-  if (e2ee !== undefined) started(() => e2ee.sync.stop());
+  if (e2ee !== undefined) started("mesh sync", () => e2ee.sync.stop());
   const push =
     stateDir === undefined || e2ee === undefined
       ? undefined
@@ -141,9 +138,9 @@ async function serve(options: HostOptions, hcVersion: string, started: (undo: ()
           extraOrigins: options.pushTestOrigins,
           log: options.log,
         });
-  if (push !== undefined) started(() => push.stop());
+  if (push !== undefined) started("push feed", () => push.stop());
   const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
-  started(() => ends.stop());
+  started("end sweeper", () => ends.stop());
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -157,8 +154,8 @@ async function serve(options: HostOptions, hcVersion: string, started: (undo: ()
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
-  started(() => gateway.closeAll());
-  if (uplink !== undefined) started(() => uplink.stop());
+  started("gateway", () => gateway.closeAll());
+  if (uplink !== undefined) started("relay uplink", () => uplink.stop());
   await uplink?.start({
     onSession: (session) => {
       gateway
@@ -181,7 +178,7 @@ async function serve(options: HostOptions, hcVersion: string, started: (undo: ()
   } catch (error) {
     throw listenError(error, `${formatHost(hostname)}:${port}`);
   }
-  started(() => server.stop(true));
+  started("main listener", () => server.stop(true));
   const lan = options.lanListen;
   let lanServer: ReturnType<typeof Bun.serve> | undefined;
   try {
@@ -197,7 +194,7 @@ async function serve(options: HostOptions, hcVersion: string, started: (undo: ()
   } catch (error) {
     throw lan === undefined ? error : listenError(error, `${formatHost(lan.hostname)}:${lan.port}`);
   }
-  if (lanServer !== undefined) started(() => lanServer.stop(true));
+  if (lanServer !== undefined) started("LAN listener", () => lanServer.stop(true));
   if (lan !== undefined && lanServer !== undefined) {
     e2ee?.lanUrls.push(...lanUrlsFor(lan.hostname, lanServer.port ?? lan.port));
   }
