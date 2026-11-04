@@ -14,12 +14,31 @@ const closeSelected = (page: Page) =>
     .locator("xpath=..")
     .getByRole("button", { name: /^Close / });
 
+/** The session actions sit in the tab strip beside Split and act on the focused terminal. */
 async function sessionMenu(page: Page, item: string): Promise<void> {
-  await pane(page).getByRole("button", { name: "Session actions" }).click();
+  await page.getByRole("button", { name: "Session actions" }).click();
   await page.getByRole("menuitem", { name: item }).click();
 }
 
-test("renaming a session from its pane updates the tab and the pane title", async ({ page }) => {
+test("a pane has no title bar: the tab names the terminal and the status bar names its space", async ({ page }) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await expect(pane(page).getByRole("heading")).toHaveCount(0);
+  await expect(pane(page).getByRole("button", { name: "Session actions" })).toHaveCount(0);
+  // A new shell's title moves from its argv (/bin/sh) to the program's name (sh): read the pane and the button together.
+  const sessionActions = page.getByRole("button", { name: /^Session actions for / });
+  await expect
+    .poll(async () => {
+      const title = (await pane(page).getAttribute("aria-label"))?.replace(/ terminal$/, "");
+      return (await sessionActions.getAttribute("aria-label")) === `Session actions for ${title}`;
+    })
+    .toBe(true);
+  // Which chord: tab-shortcuts.e2e.ts presses each tab's and checks it selects that tab.
+  await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", /\((⌘|Ctrl\+)\d\)$/);
+  await expect(page.getByRole("contentinfo").locator("[data-status-space]")).not.toBeEmpty();
+});
+
+test("renaming a session from the tab strip updates the tab", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
   await sessionMenu(page, "Rename…");
@@ -28,10 +47,10 @@ test("renaming a session from its pane updates the tab and the pane title", asyn
   await page.keyboard.press("Enter");
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("tab", { name: "deploy-check" })).toBeVisible();
-  await expect(pane(page).getByRole("heading", { name: "deploy-check" })).toBeVisible();
+  await expect(pane(page)).toHaveAttribute("aria-label", "deploy-check terminal");
 });
 
-test("ending a session from its pane stops the program", async ({ page }) => {
+test("ending a session from the tab strip stops the program", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
   const before = await liveCount(page);
