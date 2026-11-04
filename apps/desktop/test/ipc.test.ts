@@ -14,6 +14,7 @@ const foreign: readonly IpcSender[] = [
 const setup = () => {
   const opened: string[] = [];
   const painted: string[] = [];
+  const zooms: string[] = [];
   let starts = 0;
   let closes = 0;
   const handlers = ipcHandlers({
@@ -32,15 +33,18 @@ const setup = () => {
     closeWindow: () => {
       closes += 1;
     },
+    zoomWindow: (step) => {
+      zooms.push(step);
+    },
   });
-  return { handlers, opened, painted, starts: () => starts, closes: () => closes };
+  return { handlers, opened, painted, zooms, starts: () => starts, closes: () => closes };
 };
 
 afterEach(() => void takePairingLink());
 
 describe("IPC sender gate", () => {
   test("refuses foreign and detached frames before touching the shell or the host", async () => {
-    const { handlers, opened, starts } = setup();
+    const { handlers, opened, zooms, starts } = setup();
     openPairingLink("#p=waiting");
     await Promise.all(
       foreign.flatMap((event) => [
@@ -48,10 +52,12 @@ describe("IPC sender gate", () => {
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.zoomWindow(event, "out")).rejects.toThrow("refused IPC"),
       ]),
     );
     for (const event of foreign) expect(() => handlers.takePairingLink(event)).toThrow("refused IPC");
     expect(opened).toEqual([]);
+    expect(zooms).toEqual([]);
     expect(starts()).toBe(0);
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
   });
@@ -91,6 +97,15 @@ describe("IPC sender gate", () => {
     );
     expect(refused).toEqual([false, false, false, false, false, false]);
     expect(painted).toEqual(["#131518"]);
+  });
+
+  test("the app origin can zoom its window one step in, out or back, and nothing else", async () => {
+    const { handlers, zooms } = setup();
+    const taken = await Promise.all(["in", "out", "reset"].map((step) => handlers.zoomWindow(app, step)));
+    const refused = await Promise.all(["0.5", 0.5, "IN", undefined].map((step) => handlers.zoomWindow(app, step)));
+    expect(taken).toEqual([true, true, true]);
+    expect(refused).toEqual([false, false, false, false]);
+    expect(zooms).toEqual(["in", "out", "reset"]);
   });
 
   test("the app origin can ask its window to close", async () => {
