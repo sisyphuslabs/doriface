@@ -28,6 +28,8 @@ async function secondDevice(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
+/** The tab bar's own Split right: split panes carry one each in their header too. */
+const splitRight = (page: Page) => page.locator("[data-titlebar]").getByRole("button", { name: "Split right" });
 const tabs = (page: Page) => page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
 const panesIn = (page: Page, tab: string) =>
   page.locator(
@@ -72,17 +74,14 @@ test("a split on one device shows on another without a reload, and edits of two 
   await Promise.all([expect(tabs(page)).toHaveCount(2, { timeout: 20_000 }), expect(tabs(other)).toHaveCount(2)]);
 
   await tabs(page).filter({ hasText: "one" }).click();
-  await page.getByRole("button", { name: "Split right" }).click();
+  await splitRight(page).click();
   await expect(panesIn(page, "one")).toHaveCount(2, { timeout: 15_000 });
   await expect(panesIn(other, "one")).toHaveCount(2, { timeout: 15_000 });
   // The other device keeps its own selected tab and focus: the split did not move it.
   await expect(tabs(other).first()).toHaveAttribute("aria-selected", "true");
 
   await tabs(other).filter({ hasText: "two" }).click();
-  await Promise.all([
-    page.getByRole("button", { name: "Split right" }).click(),
-    other.getByRole("button", { name: "Split right" }).click(),
-  ]);
+  await Promise.all([splitRight(page).click(), splitRight(other).click()]);
   await Promise.all(
     [page, other].flatMap((device) => [
       expect(panesIn(device, "one")).toHaveCount(3, { timeout: 20_000 }),
