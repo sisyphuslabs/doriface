@@ -73,9 +73,9 @@ test("Use this computer attaches a live terminal that echoes", async () => {
   await page.keyboard.type("echo doriface-ok");
   await page.keyboard.press("Enter");
   await expect(terminal).toContainText(/doriface-ok[\s\S]*doriface-ok/, { timeout: 15_000 });
-  // The pane title comes from the running program's argv (clean-shell, then bash once it execs);
+  // The tab title comes from the running program's argv (clean-shell, then bash once it execs);
   // wait until it is set and names no path before reading what the window shows.
-  await expect(page.getByRole("heading", { level: 2 }).first()).toHaveText(/^[^/]+$/, { timeout: 10_000 });
+  await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", /^[^/]+$/, { timeout: 10_000 });
   // The whole window, so the status bar's machine name counts as well as the prompt.
   const shown = (await page.locator("body").textContent()) ?? "";
   const host = hostname().split(".")[0] ?? "";

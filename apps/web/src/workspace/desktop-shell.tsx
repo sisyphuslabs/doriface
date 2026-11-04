@@ -1,12 +1,14 @@
 import type { HcConnection } from "@doriface/client";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
-import { Columns2, Monitor, PanelLeft } from "lucide-react";
+import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
+import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
-import { agentStatus, machineOf, type Session, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
@@ -32,6 +34,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
+  const tabKeys = useTabSelectKeys();
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   useAppActions({
     terminals,
@@ -42,14 +45,24 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     onSession,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
-  const tabList: WorkspaceTab[] = tabs.open.flatMap((address) => {
+  const tabList: WorkspaceTab[] = tabs.open.flatMap((address, position) => {
     const terminal = byAddress.get(address);
     if (terminal === undefined) return [];
-    const tab: WorkspaceTab = { id: address, title: terminalTitle(terminal), status: agentStatus(terminal) };
+    // tab.select:N opens tabs.open[N - 1], so the hint is read by the same position.
+    const shortcut = tabKeys[position];
     const machine = machineOf(address);
-    return [machine === undefined ? tab : { ...tab, machine }];
+    return [
+      {
+        id: address,
+        title: terminalTitle(terminal),
+        status: agentStatus(terminal),
+        ...(machine === undefined ? {} : { machine }),
+        ...(shortcut === undefined ? {} : { shortcut }),
+      },
+    ];
   });
   const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
+  const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   const toggle = (
@@ -98,7 +111,14 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
               />
             )
           }
-          trailing={toggle}
+          trailing={
+            <>
+              {focusedTerminal === undefined ? null : (
+                <SessionMenu address={focusedTerminal.address} title={terminalTitle(focusedTerminal)} />
+              )}
+              {toggle}
+            </>
+          }
         />
         {tabs.open.length === 0 ? <NoTerminal onNew={onNew} /> : null}
         <Panes
@@ -113,12 +133,27 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
         <StatusBar
           start={
             <>
-              <StatusBarItem icon={<Monitor aria-hidden />}>{focusedMachine}</StatusBarItem>
-              {loaded ? (
-                <StatusBarItem>
-                  {live.length} {live.length === 1 ? "terminal" : "terminals"}
-                  {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
+              {/* A terminal on another machine shows its full hc address (build-box/t3): what hc commands take. */}
+              <span data-status-machine className="flex min-w-0">
+                <span className="sr-only">Machine: </span>
+                <StatusBarItem icon={<Monitor aria-hidden />}>
+                  {tabs.active !== null && machineOf(tabs.active) !== undefined ? tabs.active : focusedMachine}
                 </StatusBarItem>
+              </span>
+              {focusedTerminal === undefined ? null : (
+                // The space gives way first, so a long name never pushes the terminal count out of the bar.
+                <span data-status-space className="flex max-w-48 min-w-0">
+                  <span className="sr-only">Space: </span>
+                  <StatusBarItem icon={<Folder aria-hidden />}>{spaceName(focusedTerminal)}</StatusBarItem>
+                </span>
+              )}
+              {loaded ? (
+                <span className="flex shrink-0">
+                  <StatusBarItem>
+                    {live.length} {live.length === 1 ? "terminal" : "terminals"}
+                    {blocked > 0 ? <span className="text-status-blocked-text"> · {blocked} needs you</span> : null}
+                  </StatusBarItem>
+                </span>
               ) : null}
               <ReconnectStatus />
             </>

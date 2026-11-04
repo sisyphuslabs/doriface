@@ -1,5 +1,5 @@
 import { base64urlEncode } from "@doriface/crypto";
-import { parseRecord, type Signed } from "@doriface/mesh";
+import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
 import { type Clock, type Random, uniform } from "./clock.ts";
 import { type DialPolicy, type DialPurpose, type DueReason } from "./dial-policy.ts";
 import { missingSince } from "./anti-entropy.ts";
@@ -56,6 +56,8 @@ export class Gossip implements SyncHost {
   readonly #lastSync = new Map<string, number>();
   readonly #known = new MemberBook();
   readonly #revokedLast: RevokedLast;
+  /** Revoked members whose released revoke push did not get through yet: retried as a revoke push when they are due. */
+  readonly #revokeOwed = new Set<string>();
   #view: MeshView;
   #stopNet: () => void = () => undefined;
 
@@ -77,7 +79,9 @@ export class Gossip implements SyncHost {
       waitMs: this.#timings.revokedLastMs,
       release: (key) => {
         const member = this.#known.get(key);
-        if (member !== undefined) void this.sync(member, "push");
+        if (member === undefined || !this.owed().includes(member)) return;
+        this.#revokeOwed.add(key);
+        void this.sync(member, "revoke-push");
       },
     });
     this.#view = this.#stored.view();
@@ -140,6 +144,7 @@ export class Gossip implements SyncHost {
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult {
     this.#claims.delete(session.peer);
     const result = mergeBatch(this.#options, batch);
+    this.#heldBy(session.peer, batch);
     for (const refusal of result.refused) {
       this.#options.log(
         `mesh: refused record ${refusal.hash} from ${this.#known.nameOf(session.peer)}: ${refusal.reason}`,
@@ -178,8 +183,24 @@ export class Gossip implements SyncHost {
    */
   heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void {
     this.#confirmed.set(peer, heads);
+    if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self];
     if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
+  }
+
+  /**
+   * A stored record a peer sent, and its past, is one it holds (section 5.3: owed is what it is not known to hold).
+   * Only stored hashes are kept, as the session's own set does: refused ones would grow it without bound.
+   */
+  #heldBy(peer: string, batch: readonly Signed[]): void {
+    const stored = new Set(this.records().map(hashOf));
+    const held = batch.map(hashOf).filter((hash) => stored.has(hash));
+    this.#confirmed.set(peer, [...new Set([...(this.#confirmed.get(peer) ?? []), ...held])]);
+  }
+
+  /** The heads and records `peer` is known to hold: its last `hello`, and the stored records it sent since. */
+  held(peer: string): readonly string[] {
+    return this.#confirmed.get(peer) ?? [];
   }
 
   ended(session: SyncSession): void {
@@ -203,8 +224,10 @@ export class Gossip implements SyncHost {
   due(signPub: string, reason: DueReason): void {
     const member = this.#known.get(signPub);
     if (member === undefined || this.#revokedLast.holds(signPub)) return;
-    if (reason === "probe" || this.owed().includes(member))
-      void this.sync(member, reason === "probe" ? "probe" : "push");
+    const owed = this.owed().includes(member);
+    if (!owed) this.#revokeOwed.delete(signPub);
+    if (owed && this.#revokeOwed.has(signPub)) void this.sync(member, "revoke-push");
+    else if (reason === "probe" || owed) void this.sync(member, reason === "probe" ? "probe" : "push");
   }
 
   /** This host's uplink answered again; after a drop of more than 2 minutes it sweeps with one member. */
