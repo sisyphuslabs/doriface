@@ -47,15 +47,27 @@ export class MemberDialer {
       policy.release();
       return true;
     }
+    let link: LineLink;
     try {
-      const link = await this.#options.dial(member);
-      policy.report(member.signPub, "connected");
-      this.#options.attach(member, link, purpose === "sweep" || purpose === "probe");
-      return true;
+      link = await this.#options.dial(member);
     } catch (error) {
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
       policy.report(member.signPub, code === 4429 ? 4429 : 4404);
       this.#options.log(`mesh: sync with ${member.name} failed: ${String(error)}`);
+      return false;
+    }
+    policy.report(member.signPub, "connected");
+    return this.#attach(member, link, purpose === "sweep" || purpose === "probe");
+  }
+
+  /** The member answered: a session this host fails to set up says nothing about the member, so it gates nothing. */
+  #attach(member: MemberEntry, link: LineLink, sweeping: boolean): boolean {
+    try {
+      this.#options.attach(member, link, sweeping);
+      return true;
+    } catch (error) {
+      link.close(1011, "sync failed to start");
+      this.#options.log(`mesh: sync with ${member.name} failed to start here: ${String(error)}`);
       return false;
     }
   }
