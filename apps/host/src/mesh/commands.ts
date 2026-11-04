@@ -122,9 +122,13 @@ export class MeshCommands {
     const confirmed = record === undefined || others.length === 0 ? [] : await this.#pushLeave(record);
     withStateLock(this.deps.stateDir, () => rmSync(join(this.deps.stateDir, MESH_FILE), { force: true }));
     this.deps.closeRevoked();
-    await this.deps.hooks.left().catch((error: unknown) => {
-      this.deps.log(`mesh: removing this host's mesh machines after leaving failed: ${String(error)}`);
-    });
+    const machinesKept = await this.deps.hooks.left().then(
+      () => null,
+      (error: unknown) => {
+        this.deps.log(`mesh: removing this host's mesh machines after leaving failed: ${String(error)}`);
+        return String(error);
+      },
+    );
     const name = view.name.get(this.#self) ?? this.deps.identity.hostId;
     return {
       signed: record !== undefined,
@@ -134,6 +138,7 @@ export class MeshCommands {
         others.length > 0 && confirmed.length === 0
           ? (meshRevokeCommand(name) ?? `doriface-host mesh revoke ${this.deps.identity.hostId}`)
           : null,
+      machinesKept,
     };
   }
 

@@ -91,14 +91,33 @@ describe("doriface-host mesh rename", () => {
 
 describe("doriface-host mesh leave", () => {
   test("sends mesh-leave and exits 0 once it left", async () => {
-    const reply = { signed: true, members: [f, d], confirmed: [f], revokeCommand: null };
+    const reply = { signed: true, members: [f, d], confirmed: [f], revokeCommand: null, machinesKept: null };
     const out = await run(["leave"], [reply]);
     expect(out.asked).toEqual([{ op: "mesh-leave" }]);
     expect(out.code).toBe(0);
   });
 
   test("reaching nobody, it prints the revoke to run on another member", async () => {
-    const reply = { signed: true, members: [f], confirmed: [], revokeCommand: "doriface-host mesh revoke a" };
+    const reply = {
+      signed: true,
+      members: [f],
+      confirmed: [],
+      revokeCommand: "doriface-host mesh revoke a",
+      machinesKept: null,
+    };
     expect((await run(["leave"], [reply])).text).toContain("doriface-host mesh revoke a");
+  });
+
+  test("a mesh machine it could not remove exits 1, after leaving", async () => {
+    const reply = {
+      signed: true,
+      members: [f],
+      confirmed: [f],
+      revokeCommand: null,
+      machinesKept: 'Error: "b" is still in herdr',
+    };
+    const out = await run(["leave"], [reply]);
+    expect(out.code).toBe(1);
+    expect(out.text).toContain('"b"');
   });
 });
