@@ -210,6 +210,11 @@ describe("parseMeshStatus", () => {
     },
   );
 
+  test("refuses a status without a self line that still lists self on another line, even with a reason (L28)", () => {
+    const listed = { ...status, sync: "stuck" as const, stuck: [{ kind: "possibly_revoked" as const }] };
+    expect(parseMeshStatus({ ...listed, members: [{ ...self, line: "connected" }, member] })).toBeUndefined();
+  });
+
   test.each(["name", "localName", "fingerprint"])("refuses a member within the cap without its %s", (key) => {
     expect(parseMeshStatus(memberAt(1, { [key]: null }))).toBeUndefined();
   });
