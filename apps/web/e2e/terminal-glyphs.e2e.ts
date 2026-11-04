@@ -28,6 +28,23 @@ async function expectCentred(page: Page, terminal: Locator): Promise<void> {
   expect(Math.abs(margins.left - margins.right)).toBeLessThan(1);
 }
 
+async function openTerminalSettings(page: Page): Promise<void> {
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page
+    .getByRole("tab", { name: "Terminal" })
+    .or(page.getByRole("button", { name: "Terminal" }))
+    .first()
+    .click();
+}
+
+/** Closes Settings and returns the focused terminal once its prompt is back. */
+async function closeSettings(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Close settings" }).first().click();
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  await expect(focused).toContainText("$", { timeout: 20_000 });
+  return focused;
+}
+
 test("a wide glyph is centred in its two cells", async ({ page }) => {
   await page.goto("/");
   await expectCentred(page, await openNewTerminal(page));
@@ -36,17 +53,10 @@ test("a wide glyph is centred in its two cells", async ({ page }) => {
 test("adjust-cell-width widens the cells, not the wide glyph inside them: it stays centred", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
-  await page.getByRole("link", { name: "Settings" }).first().click();
-  await page
-    .getByRole("tab", { name: "Terminal" })
-    .or(page.getByRole("button", { name: "Terminal" }))
-    .first()
-    .click();
+  await openTerminalSettings(page);
   await page.getByRole("textbox", { name: "adjust-cell-width" }).fill("4");
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Close settings" }).first().click();
-  const focused = page.locator('[data-focused="true"] [data-terminal]');
-  await expect(focused).toContainText("$", { timeout: 20_000 });
+  const focused = await closeSettings(page);
   await expect
     .poll(() =>
       focused
@@ -56,6 +66,50 @@ test("adjust-cell-width widens the cells, not the wide glyph inside them: it sta
     )
     .toBe("4px");
   await expectCentred(page, focused);
+});
+
+// CJK fonts with their own Hangul, one for each place the suite runs: the Linux build hosts carry Noto Sans Mono CJK,
+// and CI's Playwright dependencies carry WenQuanYi Zen Hei. Whichever is installed is the user's chosen font.
+const CJK_FONTS = ["Noto Sans Mono CJK KR", "WenQuanYi Zen Hei Mono"] as const;
+
+async function addFontFamily(page: Page, name: string): Promise<void> {
+  await page.getByRole("button", { name: "Add font-family", exact: true }).click();
+  await page.keyboard.type(name);
+  await page.keyboard.press("Enter");
+}
+
+test("a user-chosen font that has Hangul draws it at its own size: only a fallback face is resized", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await openTerminalSettings(page);
+  await addFontFamily(page, CJK_FONTS[0]);
+  await addFontFamily(page, CJK_FONTS[1]);
+  const terminal = await closeSettings(page);
+  await expect.poll(() => terminal.evaluate((element) => getComputedStyle(element).fontFamily)).toContain(CJK_FONTS[0]);
+  await print(page, terminal, "\u{D55C}\u{AE00}");
+  const syllables = liveWide(terminal).filter({ hasText: /^[\u{AC00}-\u{D7A3}]$/u });
+  await expect(syllables).toHaveCount(2, { timeout: 15_000 });
+  const sizes = await terminal.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const context = document.createElement("canvas").getContext("2d");
+    if (context === null) throw new Error("no canvas");
+    const ink = (family: string) => {
+      context.font = `${style.fontSize} ${family}`;
+      const glyph = context.measureText("\u{D55C}");
+      return [glyph.width, glyph.actualBoundingBoxLeft, glyph.actualBoundingBoxRight, glyph.actualBoundingBoxAscent];
+    };
+    const spans = [...element.querySelectorAll(".term-row:not(.term-scrollback-row) .term-wide")];
+    return {
+      terminal: style.fontSize,
+      spans: spans.map((span) => getComputedStyle(span).fontSize),
+      // The user's font drew the syllable when it differs from what the default stack falls back to.
+      ownFont: ink(style.fontFamily).join() !== ink(style.getPropertyValue("--font-term")).join(),
+    };
+  });
+  expect(sizes.ownFont).toBe(true);
+  for (const size of sizes.spans) expect(size).toBe(sizes.terminal);
 });
 
 test("Hangul fills its two cells as Ghostty sizes a fallback font, leaving no wider gap than the ASCII baseline sets", async ({
