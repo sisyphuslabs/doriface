@@ -1,5 +1,5 @@
 import { HcConnection } from "@doriface/client";
-import { screenText } from "@doriface/protocol";
+import { HcRpcError } from "@doriface/protocol";
 import { type HcTarget, spawnHcLink } from "../mesh/hc-machines.ts";
 import type { PushCore, PushService } from "./push-service.ts";
 
@@ -57,10 +57,23 @@ export function startCoreFeed(target: HcTarget, service: PushService, log: (line
   };
 }
 
+const where = (on: string | undefined) => (on === undefined ? {} : { on });
+
+/** The approval calls over the host's own line, as #192's banner makes them over a client's: a doc conflict is an answer. */
 const coreOf = (connection: HcConnection): PushCore => ({
   terminal: (terminal) => connection.call("terminal.get", { terminal }),
-  screen: async (terminal) => screenText(await connection.call("terminal.read", { terminal, lines: 0 })),
+  screen: async (terminal) => (await connection.call("terminal.read", { terminal, lines: 0 })).text,
   keys: async (terminal, keys) => {
     await connection.call("terminal.keys", { terminal, keys });
+  },
+  doc: (name, on) => connection.call("doc.get", { name, ...where(on) }),
+  setDoc: async (name, on, value, version) => {
+    try {
+      await connection.call("doc.set", { name, value, version, ...where(on) });
+      return "ok";
+    } catch (error) {
+      if (error instanceof HcRpcError && error.kind === "conflict") return "conflict";
+      throw error;
+    }
   },
 });

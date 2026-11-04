@@ -6,7 +6,6 @@ export * from "./lines.ts";
 export * from "./events.ts";
 export * from "./mesh-status.ts";
 export * from "./push.ts";
-export * from "./permission-prompt.ts";
 export { isMeshName, meshRevokeCommand } from "./mesh-name.ts";
 export { parseMeshStatus } from "./mesh-status-parse.ts";
 export { isTerminal } from "./event-guards.ts";

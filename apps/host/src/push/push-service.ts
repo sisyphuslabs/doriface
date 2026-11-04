@@ -1,17 +1,17 @@
 import {
-  answerKeys,
-  checkPrompt,
+  answerApproval,
+  type ApprovalCore,
+  type ApprovalMark,
   type HcEvent,
   type HeldSubscription,
-  markPrompt,
   noticeMachineId,
   type NoticeKind,
   type PromptAnswer,
-  type PromptMark,
   type PushHostLine,
   type PushNotice,
   type PushPrefs,
   type PushSubscriptionKeys,
+  readApproval,
   type Terminal,
 } from "@doriface/protocol";
 import { deliverPush, type PushFetch, pushEndpointAllowed } from "./deliver.ts";
@@ -20,13 +20,8 @@ import { LOOPBACK_OWNER, type StoredSubscription, type SubscriptionStore } from 
 import { NoticeTrigger, type Trigger } from "./trigger.ts";
 import type { VapidKey } from "./web-push.ts";
 
-/** The host's own hc line, as the push service reads and answers terminals through it. */
-export interface PushCore {
-  terminal(address: string): Promise<Terminal>;
-  /** The visible screen as {@link screenText} gives it. */
-  screen(address: string): Promise<string>;
-  keys(address: string, keys: readonly string[]): Promise<void>;
-}
+/** The host's own hc line, as the push service reads and answers terminals through it (the calls #192's banner uses). */
+export type PushCore = ApprovalCore;
 
 export interface PushServiceOptions {
   readonly hostId: string;
@@ -34,6 +29,8 @@ export interface PushServiceOptions {
   readonly subscriptions: SubscriptionStore;
   /** The paired devices' keys, read when a notice goes out, so a device revoked by another process gets none. */
   readonly paired: () => ReadonlySet<string>;
+  /** A name people recognise for a device key, recorded with the answer it sent ("answered on ..."). */
+  readonly deviceName?: ((owner: string) => string) | undefined;
   readonly post?: PushFetch | undefined;
   /** For tests: origins of a private push service the host may also post to. */
   readonly extraOrigins?: readonly string[] | undefined;
@@ -47,11 +44,6 @@ export interface PushServiceOptions {
 export interface Presence {
   focus(terminal: string | null): void;
   leave(): void;
-}
-
-async function screenHash(screen: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(screen));
-  return Buffer.from(digest).toString("base64url");
 }
 
 /**
@@ -135,27 +127,24 @@ export class PushService {
   }
 
   /**
-   * Answers a permission notice with the agent's own keys, once, and only while the prompt it was made for is still the
-   * one on the live screen (the shared rule in `checkPrompt`). Anything else is `stale` and sends nothing.
+   * Answers a permission notice with the agent's own key through the rule #192's banner uses (`answerApproval`): one
+   * claim per prompt across every client, then the live screen re-read, and the key only if the marked prompt is
+   * still up. Anything else is `stale` and sends nothing.
    */
-  async answer(id: string, answer: PromptAnswer): Promise<PushHostLine> {
+  async answer(id: string, answer: PromptAnswer, owner: string): Promise<PushHostLine> {
     const entry = this.resolve(id);
     const stale: PushHostLine = { t: "stale", terminal: entry?.terminal ?? null };
     const { terminal, mark } = entry ?? {};
     const core = this.#core;
     if (entry?.kind !== "permission" || terminal == null || mark === undefined || core === undefined) return stale;
-    if (!this.#notices.claimAnswer(id)) return stale;
-    const keys = answerKeys(mark.app, answer);
-    if (keys === undefined) return stale;
+    const who = { by: this.#options.deviceName?.(owner) ?? "a notification", client: `push:${owner}` };
     try {
-      const [now, screen] = await Promise.all([core.terminal(terminal), core.screen(terminal)]);
-      if (checkPrompt(mark, now, await screenHash(screen)) !== "pending") return stale;
-      await core.keys(terminal, keys);
+      const result = await answerApproval(core, mark, answer, who, this.#now());
+      return result.kind === "sent" ? { t: "answered", terminal } : stale;
     } catch (error) {
       this.#options.log(`push: could not answer a permission notice: ${String(error)}`);
       return stale;
     }
-    return { t: "answered", terminal };
   }
 
   async #notify(hit: Trigger): Promise<void> {
@@ -177,12 +166,11 @@ export class PushService {
     await Promise.all(recipients.map((entry) => this.#send(entry, this.#notice(id, hit.kind))));
   }
 
-  async #mark(terminal: string): Promise<PromptMark | undefined> {
+  async #mark(terminal: string): Promise<ApprovalMark | undefined> {
     const core = this.#core;
     if (core === undefined) return undefined;
     try {
-      const [now, screen] = await Promise.all([core.terminal(terminal), core.screen(terminal)]);
-      return markPrompt(now, await screenHash(screen));
+      return await readApproval(core, terminal);
     } catch (error) {
       this.#options.log(`push: could not read the prompt of ${terminal}: ${String(error)}`);
       return undefined;

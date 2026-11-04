@@ -1,5 +1,9 @@
 import { DEFAULT_PUSH_PREFS } from "@doriface/protocol";
 import { afterEach, describe, expect, test } from "bun:test";
+import {
+  CLAUDE_AFTER_SCREEN,
+  CLAUDE_PROMPT_SCREEN,
+} from "../../../../packages/protocol/src/testing/approval-screens.ts";
 import { verifyVapid } from "../testing/push-receiver.ts";
 import { ENDPOINT, HOST_ID, type Rig, rig, statusEvent, terminal } from "../testing/push-rig.ts";
 
@@ -118,13 +122,14 @@ describe("who gets a notice", () => {
 });
 
 describe("answering a permission notice", () => {
-  const SCREEN = "Allow Bash(rm -rf build)?\n> 1. Yes\n  2. No";
+  // Claude Code's own dialog (captured from a real session in #192): Allow is its key "1", Deny is Esc.
+  const ASKING = { state: "blocked", kind: "permission", app: "claude-code" };
 
   async function noticed(): Promise<{ r: Rig; id: string }> {
     const r = await subscribed();
-    r.core.terminals.set("t3", terminal("t3", SECRET));
-    r.core.screens.set("t3", SCREEN);
-    await r.service.event(statusEvent("t3", SECRET));
+    r.core.terminals.set("t3", terminal("t3", ASKING));
+    r.core.screens.set("t3", CLAUDE_PROMPT_SCREEN);
+    await r.service.event(statusEvent("t3", ASKING));
     const [notice] = await r.notices();
     const id = typeof notice === "object" && notice !== null ? String(Reflect.get(notice, "n")) : "";
     return { r, id };
@@ -135,45 +140,55 @@ describe("answering a permission notice", () => {
     expect(r.service.resolve(id)).toMatchObject({ terminal: "t3", kind: "permission" });
   });
 
-  test("Allow sends the agent's own key while the prompt is still on the live screen", async () => {
-    const { r, id } = await noticed();
-    expect(await r.service.answer(id, "allow")).toEqual({ t: "answered", terminal: "t3" });
-    expect(r.core.sent).toEqual([{ terminal: "t3", keys: ["enter"] }]);
+  test("Allow sends Claude Code's own key 1 while the prompt is still on the live screen; Deny sends Esc", async () => {
+    const allowed = await noticed();
+    expect(await allowed.r.service.answer(allowed.id, "allow", "device-a")).toEqual({ t: "answered", terminal: "t3" });
+    expect(allowed.r.core.sent).toEqual([{ terminal: "t3", keys: ["1"] }]);
+    const denied = await noticed();
+    expect(await denied.r.service.answer(denied.id, "deny", "device-a")).toEqual({ t: "answered", terminal: "t3" });
+    expect(denied.r.core.sent).toEqual([{ terminal: "t3", keys: ["esc"] }]);
   });
 
   test.each([
     [
       "answered in the terminal first",
-      (r: Rig) => r.core.terminals.set("t3", terminal("t3", { state: "working", app: "claude" })),
+      (r: Rig) => r.core.terminals.set("t3", terminal("t3", { state: "working", app: "claude-code" })),
     ],
     [
       "a new prompt took its place",
-      (r: Rig) => r.core.terminals.set("t3", terminal("t3", SECRET, { status_ms: 9_999 })),
+      (r: Rig) => r.core.terminals.set("t3", terminal("t3", ASKING, { status_ms: 9_999, turn: 3 })),
     ],
-    ["the screen changed", (r: Rig) => r.core.screens.set("t3", "Allow Bash(git push)?\n> 1. Yes")],
+    ["the dialog left the screen", (r: Rig) => r.core.screens.set("t3", CLAUDE_AFTER_SCREEN)],
   ])("stale when %s: nothing is sent", async (_, change) => {
     const { r, id } = await noticed();
     change(r);
-    expect(await r.service.answer(id, "allow")).toEqual({ t: "stale", terminal: "t3" });
+    expect(await r.service.answer(id, "allow", "device-a")).toEqual({ t: "stale", terminal: "t3" });
     expect(r.core.sent).toEqual([]);
   });
 
   test("two racing answers send exactly one", async () => {
     const { r, id } = await noticed();
-    const replies = await Promise.all([r.service.answer(id, "allow"), r.service.answer(id, "deny")]);
+    const replies = await Promise.all([
+      r.service.answer(id, "allow", "device-a"),
+      r.service.answer(id, "deny", "device-b"),
+    ]);
     expect(replies.map((reply) => reply.t).toSorted()).toEqual(["answered", "stale"]);
     expect(r.core.sent).toHaveLength(1);
   });
 
-  test("an agent with no key mapping, or an unknown id, is stale", async () => {
+  test("an agent this host cannot read, or an unknown id, is stale", async () => {
     const r = await subscribed();
-    const other = { ...SECRET, app: "my-agent" };
+    const other = { ...ASKING, app: "my-agent" };
     r.core.terminals.set("t5", terminal("t5", other));
+    r.core.screens.set("t5", CLAUDE_PROMPT_SCREEN);
     await r.service.event(statusEvent("t5", other));
     const [notice] = await r.notices();
     const id = typeof notice === "object" && notice !== null ? String(Reflect.get(notice, "n")) : "";
-    expect(await r.service.answer(id, "allow")).toEqual({ t: "stale", terminal: "t5" });
-    expect(await r.service.answer("AAAAAAAAAAAAAAAAAAAAAA", "allow")).toEqual({ t: "stale", terminal: null });
+    expect(await r.service.answer(id, "allow", "device-a")).toEqual({ t: "stale", terminal: "t5" });
+    expect(await r.service.answer("AAAAAAAAAAAAAAAAAAAAAA", "allow", "device-a")).toEqual({
+      t: "stale",
+      terminal: null,
+    });
     expect(r.core.sent).toEqual([]);
   });
 });

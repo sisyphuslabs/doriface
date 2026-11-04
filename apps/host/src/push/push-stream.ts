@@ -47,7 +47,7 @@ async function reply(
       return { t: "notice", terminal: entry?.terminal ?? null, kind: entry?.kind ?? null };
     }
     case "answer":
-      return service.answer(line.id, line.answer);
+      return service.answer(line.id, line.answer, owner);
     case "unknown":
       return error("unknown line");
   }

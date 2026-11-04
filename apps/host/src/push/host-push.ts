@@ -3,7 +3,7 @@ import type { DeviceStore } from "../state/devices.ts";
 import { type CoreFeed, startCoreFeed } from "./core-feed.ts";
 import { PushService } from "./push-service.ts";
 import { type PushLink, servePushStream } from "./push-stream.ts";
-import { SubscriptionStore } from "./subscriptions.ts";
+import { LOOPBACK_OWNER, SubscriptionStore } from "./subscriptions.ts";
 import { loadVapidKey } from "./vapid-key.ts";
 
 export interface HostPush {
@@ -36,6 +36,10 @@ export async function startHostPush(options: HostPushOptions): Promise<HostPush>
     vapid: await loadVapidKey(stateDir),
     subscriptions,
     paired,
+    deviceName: (owner) =>
+      owner === LOOPBACK_OWNER
+        ? "this computer"
+        : (devices.list().find((device) => device.clientStaticPub === owner)?.name ?? "a paired device"),
     extraOrigins: options.extraOrigins,
     onSubscribe: () => follow(),
     log,

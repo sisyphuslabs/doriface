@@ -1,4 +1,4 @@
-import type { HcEvent, Status, Terminal } from "@doriface/protocol";
+import type { HcEvent, JsonValue, Status, Terminal } from "@doriface/protocol";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,7 +53,25 @@ export class FakeCore implements PushCore {
   }
 
   async keys(address: string, keys: readonly string[]): Promise<void> {
+    await Promise.resolve();
     this.sent.push({ terminal: address, keys });
+  }
+
+  readonly #docs = new Map<string, { value: JsonValue; version: number }>();
+
+  /** As hc 0.1.17's documents: `doc.set` is a compare-and-set on the version read; every call yields first. */
+  async doc(name: string, on: string | undefined): Promise<{ readonly value: JsonValue; readonly version: number }> {
+    await Promise.resolve();
+    return this.#docs.get(`${on ?? ""}:${name}`) ?? { value: null, version: 0 };
+  }
+
+  async setDoc(name: string, on: string | undefined, value: JsonValue, version: number): Promise<"ok" | "conflict"> {
+    await Promise.resolve();
+    const key = `${on ?? ""}:${name}`;
+    const current = this.#docs.get(key)?.version ?? 0;
+    if (current !== version) return "conflict";
+    this.#docs.set(key, { value, version: current + 1 });
+    return "ok";
   }
 }
 

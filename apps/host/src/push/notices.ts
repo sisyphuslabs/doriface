@@ -1,5 +1,5 @@
 import { base64urlEncode } from "@doriface/crypto";
-import type { NoticeKind, PromptMark } from "@doriface/protocol";
+import type { ApprovalMark, NoticeKind } from "@doriface/protocol";
 
 export interface NoticeEntry {
   /** Null for a test notice. */
@@ -7,7 +7,7 @@ export interface NoticeEntry {
   readonly kind: NoticeKind;
   readonly at: number;
   /** A permission notice's prompt as it stood when the notice was made; an answer is checked against it. */
-  readonly mark: PromptMark | undefined;
+  readonly mark: ApprovalMark | undefined;
 }
 
 export const NOTICE_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -19,7 +19,6 @@ const MAX_NOTICES = 200;
  */
 export class NoticeBook {
   readonly #entries = new Map<string, NoticeEntry>();
-  readonly #answered = new Set<string>();
 
   add(entry: NoticeEntry): string {
     const id = base64urlEncode(crypto.getRandomValues(new Uint8Array(16)));
@@ -27,7 +26,6 @@ export class NoticeBook {
     for (const old of this.#entries.keys()) {
       if (this.#entries.size <= MAX_NOTICES) break;
       this.#entries.delete(old);
-      this.#answered.delete(old);
     }
     return id;
   }
@@ -35,12 +33,5 @@ export class NoticeBook {
   get(id: string, now: number): NoticeEntry | undefined {
     const entry = this.#entries.get(id);
     return entry === undefined || now - entry.at > NOTICE_LIFETIME_MS ? undefined : entry;
-  }
-
-  /** Claims the one answer a notice takes; false when it was claimed before. */
-  claimAnswer(id: string): boolean {
-    if (this.#answered.has(id)) return false;
-    this.#answered.add(id);
-    return true;
   }
 }
