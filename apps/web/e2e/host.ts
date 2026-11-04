@@ -53,8 +53,10 @@ const host = Bun.spawn(
     "--token",
     E2E_TOKEN,
     "--no-relay",
-    // The notifications specs run their own push service here; nothing listens on it otherwise.
-    ...(layout ? [] : ["--push-test-origin", `http://127.0.0.1:${E2E_PUSH_PORT}`]),
+    // The notifications specs run their own push service here (the layout host too: a connection moves there); nothing
+    // listens on it otherwise.
+    "--push-test-origin",
+    `http://127.0.0.1:${E2E_PUSH_PORT}`,
   ],
   { env, stdout: "inherit", stderr: "inherit" },
 );

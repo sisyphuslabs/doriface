@@ -1,7 +1,7 @@
 // Web push for the e2e specs: a loopback push service the host posts to, a browser whose PushManager subscribes
 // to it, and the worker's push and notification-click events driven as the browser would drive them.
 import { decryptPushBody, type ReceiverKeys, receiverKeys, verifyVapid } from "@doriface/host/testing/push-receiver";
-import type { BrowserContext, Page, Worker } from "@playwright/test";
+import { type BrowserContext, expect, type Page, type Worker } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { E2E_HOST_PORT, E2E_PUSH_PORT, E2E_TOKEN, E2E_WEB_PORT } from "./config.ts";
 
@@ -163,6 +163,8 @@ export const shownNotifications = (worker: Worker): Promise<Shown[]> =>
  * event may not extend its lifetime, and the returned promise settles when the handler's work does.
  */
 export async function tapNotification(worker: Worker, tag: string, action: string): Promise<void> {
+  // DevTools' deliverPushMessage returns before the worker's showNotification settles: tap only once it is shown.
+  await expect.poll(async () => (await shownNotifications(worker)).some((shown) => shown.tag === tag)).toBe(true);
   await worker.evaluate(`(async () => {
     const [notification] = await self.registration.getNotifications({ tag: ${JSON.stringify(tag)} });
     if (notification === undefined) throw new Error("no notification to tap");
@@ -175,11 +177,8 @@ export async function tapNotification(worker: Worker, tag: string, action: strin
 }
 
 /** One line to the e2e host's push stream as the loopback client; resolves with its reply. */
-export async function askHost(line: object): Promise<Readonly<Record<string, unknown>>> {
-  const socket = new WebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/push`, [
-    "doriface.v1",
-    `doriface.token.${E2E_TOKEN}`,
-  ]);
+export async function askHost(line: object, port = E2E_HOST_PORT): Promise<Readonly<Record<string, unknown>>> {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}/v1/push`, ["doriface.v1", `doriface.token.${E2E_TOKEN}`]);
   socket.binaryType = "arraybuffer";
   const reply = new Promise<string>((resolve, reject) => {
     socket.addEventListener("message", (event) => resolve(new TextDecoder().decode(new Uint8Array(event.data))));
@@ -193,9 +192,9 @@ export async function askHost(line: object): Promise<Readonly<Record<string, unk
   return Object.fromEntries(Object.entries(answer));
 }
 
-/** The subscriptions the e2e host holds for the loopback client. */
-export async function heldSubscriptions(): Promise<readonly unknown[]> {
-  const held = (await askHost({ t: "hello" }))["subscriptions"];
+/** The subscriptions an e2e host (the main one by default) holds for the loopback client. */
+export async function heldSubscriptions(port = E2E_HOST_PORT): Promise<readonly unknown[]> {
+  const held = (await askHost({ t: "hello" }, port))["subscriptions"];
   if (!Array.isArray(held)) throw new Error("the host answered no subscriptions");
   return held;
 }
