@@ -12,7 +12,9 @@ test.use({ ...phone, serviceWorkers: "block" });
 
 const mic = (page: Page) => page.getByRole("button", { name: /^Dictate into/ });
 const strip = (page: Page) => page.locator("[data-voice-strip]");
-const keyBar = (page: Page) => page.getByRole("toolbar", { name: "Terminal keys" });
+// The keys bar in either shape (#195): the toolbar with the soft keyboard up, the round button with it down.
+const keyBar = (page: Page) =>
+  page.getByRole("toolbar", { name: "Terminal keys" }).or(page.getByRole("button", { name: "Show keyboard" }));
 
 /** Opens a shell on the added machine from the phone list, once the machine reads connected. */
 async function openOnMachine(page: Page, name: string, address: string) {
@@ -38,7 +40,7 @@ test("a dictation under way ends when its machine drops: the recognizer is abort
 
     switchTo("drop");
     await expect(terminal).toHaveCount(0, { timeout: STATE_BOUND_MS });
-    await expect(keyBar(page)).toBeVisible();
+    await expect(page.getByText(`${MACHINE_NAME} is offline`)).toBeVisible();
     await expect(strip(page)).toHaveCount(0);
     await expect(mic(page)).toHaveCount(0);
     await expect.poll(() => speech.aborts()).toBe(1);
@@ -62,6 +64,10 @@ test("the ended view offers no dictation: no mic, no strip, no keys bar, and a b
     await expect(
       page.locator('[id="keybinding-voice.dictate"]').locator("xpath=../..").getByText("Changed"),
     ).toBeVisible();
+    // The speech service, so the bound key would start a real dictation if the ended view still took one.
+    await page.getByRole("tab", { name: "Voice input" }).click();
+    await page.getByRole("button", { name: "Service", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Service", exact: true })).toHaveAttribute("aria-pressed", "true");
 
     const terminal = await openOnMachine(page, "voice-ended", address);
     switchTo("drop");
