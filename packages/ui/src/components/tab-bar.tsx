@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
 import { ContextMenu, MenuItem, skipMenuHandler } from "./menu.tsx";
@@ -41,7 +41,7 @@ export interface TabBarProps {
   readonly newTabKeys?: readonly string[];
   /** The Move tab left and right shortcuts as key chips, shown in each tab's menu. */
   readonly moveKeys?: { readonly left?: readonly string[]; readonly right?: readonly string[] };
-  /** The last move, which the strip announces to screen readers; a tab that had focus keeps it. */
+  /** The last move, which the strip announces to screen readers once, as it stood when the tab moved. */
   readonly moved?: TabMoved | null;
   /** Before the tabs, e.g. the button that brings a hidden sidebar back where the sidebar was. */
   readonly leading?: ReactNode;
@@ -66,7 +66,6 @@ export function TabBar({
 }: TabBarProps) {
   const list = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
-  const focused = useRef<string | null>(null);
   // The strip owns a touch's long press: held and moved it drags the tab, held and let go it opens the tab's menu.
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const { drag, settle, lifted, touching, onPointerDown, onClickCapture } = useTabDrag(
@@ -82,21 +81,19 @@ export function TabBar({
     },
   );
 
-  // Reordering moves the focused button in the DOM, which drops its focus; it goes straight back.
-  const last = moved ?? null;
-  useLayoutEffect(() => {
-    if (last === null || focused.current !== last.id) return;
-    const button = buttons.current.get(last.id);
-    if (button !== undefined && document.activeElement !== button) button.focus();
-  }, [last]);
-
-  const movedAt = last === null ? -1 : tabs.findIndex((tab) => tab.id === last.id);
-  const movedTab = tabs[movedAt];
+  // Said once per move, as the strip stood then: a later title change or a tab opening or closing does not say it again.
   // The count's parity changes the text each time, so a second move to the same place is still read out.
-  const announcement =
-    last === null || movedTab === undefined
-      ? ""
-      : `Moved ${movedTab.title} to position ${movedAt + 1} of ${tabs.length}${last.count % 2 === 0 ? "" : "\u00a0"}`;
+  const [said, setSaid] = useState({ count: 0, text: "" });
+  const last = moved ?? null;
+  if (last !== null && last.count !== said.count) {
+    const at = tabs.findIndex((tab) => tab.id === last.id);
+    const tab = tabs[at];
+    const text =
+      tab === undefined
+        ? ""
+        : `Moved ${tab.title} to position ${at + 1} of ${tabs.length}${last.count % 2 === 0 ? "" : "\u00a0"}`;
+    setSaid({ count: last.count, text });
+  }
 
   return (
     <div
@@ -152,12 +149,6 @@ export function TabBar({
                 aria-selected={active}
                 title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
-                onFocus={() => {
-                  focused.current = tab.id;
-                }}
-                onBlur={(event) => {
-                  if (event.relatedTarget !== null) focused.current = null;
-                }}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
@@ -200,10 +191,7 @@ export function TabBar({
                 icon={<ArrowLeft />}
                 disabled={index === 0}
                 {...(moveKeys?.left === undefined ? {} : { keys: moveKeys.left })}
-                onClick={() => {
-                  focused.current = tab.id;
-                  onMove(tab.id, index - 1);
-                }}
+                onClick={() => onMove(tab.id, index - 1)}
               >
                 Move tab left
               </MenuItem>
@@ -211,10 +199,7 @@ export function TabBar({
                 icon={<ArrowRight />}
                 disabled={index === tabs.length - 1}
                 {...(moveKeys?.right === undefined ? {} : { keys: moveKeys.right })}
-                onClick={() => {
-                  focused.current = tab.id;
-                  onMove(tab.id, index + 1);
-                }}
+                onClick={() => onMove(tab.id, index + 1)}
               >
                 Move tab right
               </MenuItem>
@@ -229,7 +214,7 @@ export function TabBar({
         />
       </div>
       <span role="status" aria-live="polite" className="sr-only">
-        {announcement}
+        {said.text}
       </span>
       {trailing}
     </div>
