@@ -60,6 +60,7 @@ export class SyncSession {
   #saidHello = false;
   #idle: () => void = () => undefined;
   #answerDue: (() => void) | undefined;
+  #retiring: (() => void) | undefined;
   #closed = false;
 
   constructor(
@@ -95,6 +96,15 @@ export class SyncSession {
     if (this.#closed) return;
     const missing = this.#unsent();
     if (missing.length > 0) this.#sendRecords(missing);
+  }
+
+  /**
+   * This host dialed the session and its peer is no longer a member: it ends within the linger whatever the peer still
+   * sends (section 6.2). Until then the revoked host can still learn its revoke and the acks after it (section 6.4).
+   */
+  retire(reason: string): void {
+    if (this.#closed || this.#retiring !== undefined) return;
+    this.#retiring = this.#clock.after(this.#lingerMs, () => this.close(CloseCode.UnknownDevice, reason));
   }
 
   close(code = 1000, reason = "sync done"): void {
@@ -248,6 +258,7 @@ export class SyncSession {
     this.#closed = true;
     this.#idle();
     this.#answerDue?.();
+    this.#retiring?.();
     this.#host.ended(this);
   }
 }

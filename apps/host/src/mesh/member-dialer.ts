@@ -20,6 +20,7 @@ export interface MemberDialerOptions {
  * for a token is used instead, giving the token back.
  */
 export class MemberDialer {
+  readonly #refusedAsRevoked = new Set<string>();
   readonly #options: MemberDialerOptions;
   readonly #dialing = new Map<string, Promise<boolean>>();
 
@@ -28,12 +29,28 @@ export class MemberDialer {
   }
 
   sync(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
-    if (this.#options.flushOpen(member.signPub)) return Promise.resolve(true);
+    if (this.#options.flushOpen(member.signPub)) {
+      this.accepted(member.signPub);
+      return Promise.resolve(true);
+    }
     const pending = this.#dialing.get(member.signPub);
     if (pending !== undefined) return pending;
     const dial = this.#dial(member, purpose).finally(() => this.#dialing.delete(member.signPub));
     this.#dialing.set(member.signPub, dial);
     return dial;
+  }
+
+  /** Members whose last answer to this host's sync dial was 4401: they may have merged a revoke of this host. */
+  get refusedAsRevoked(): number {
+    return this.#refusedAsRevoked.size;
+  }
+
+  /**
+   * `member` holds a session with this host, so it accepts this host: an earlier 4401 from it was the join race (it had
+   * not merged this host's admission yet, section 5.4), not a revoke.
+   */
+  accepted(member: string): void {
+    this.#refusedAsRevoked.delete(member);
   }
 
   async #dial(member: MemberEntry, purpose: DialPurpose): Promise<boolean> {
@@ -46,6 +63,7 @@ export class MemberDialer {
     }
     if (this.#options.flushOpen(member.signPub)) {
       policy.release(grant.chargedAt);
+      this.accepted(member.signPub);
       return true;
     }
     let link: LineLink;
@@ -58,10 +76,12 @@ export class MemberDialer {
       }
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
       policy.report(member.signPub, code === 4429 ? 4429 : 4404);
+      if (code === 4401) this.#refusedAsRevoked.add(member.signPub);
       this.#options.log(`mesh: sync with ${member.name} failed: ${String(error)}`);
       return false;
     }
     policy.report(member.signPub, "connected");
+    this.accepted(member.signPub);
     return this.#attach(member, link, purpose === "sweep" || purpose === "probe");
   }
 

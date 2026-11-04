@@ -62,6 +62,8 @@ export class Gossip implements SyncHost {
   /** Revoked members whose released revoke push did not get through yet: retried as a revoke push when they are due. */
   readonly #revokeOwed = new Set<string>();
   #view: MeshView;
+  #peerCounter = 0;
+  #stopNet: () => void = () => undefined;
 
   constructor(options: GossipOptions) {
     this.#options = options;
@@ -129,6 +131,26 @@ export class Gossip implements SyncHost {
     return this.#stored.records();
   }
 
+  /** When this host last had a sync session with `peer`, on this host's clock. */
+  lastSync(peer: string): number | undefined {
+    return this.#lastSync.get(peer);
+  }
+
+  /** The highest counter of this host's key any peer's `hello` showed (section 10.1). */
+  get peerCounter(): number {
+    return this.#peerCounter;
+  }
+
+  /** A member refused this host's sync dial with 4401: this host may be revoked (section 8.6). */
+  get possiblyRevoked(): boolean {
+    return this.#dialer.refusedAsRevoked > 0;
+  }
+
+  /** How many stored records `peer` is not known to hold. */
+  owedCount(peer: string): number {
+    return missingSince(this.records(), this.#confirmed.get(peer) ?? []).length;
+  }
+
   /** The open sync session with `peer`, if one is up. */
   session(peer: string): SyncSession | undefined {
     const open = this.#sessions.get(peer);
@@ -150,9 +172,11 @@ export class Gossip implements SyncHost {
       existing.close(1000, "replaced");
     }
     this.#sessions.set(peer, session);
+    this.#dialer.accepted(peer);
     this.#lastSync.set(peer, this.#options.clock.now());
     if (dialer === peer) this.#options.policy.presence(peer);
     session.start(waitForHello);
+    this.#retireIfGone(session);
     return session;
   }
 
@@ -200,6 +224,7 @@ export class Gossip implements SyncHost {
     this.#confirmed.set(peer, heads);
     if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self] ?? 0;
+    this.#peerCounter = Math.max(this.#peerCounter, claim);
     const owner = this.#sessions.get(peer);
     return owner !== undefined && claim > ownN(this.records(), this.self) && this.#claims.claim(peer, claim, owner);
   }
@@ -283,6 +308,17 @@ export class Gossip implements SyncHost {
     this.#options.onView?.(result.view, result);
     for (const session of this.#sessions.values()) session.flush();
     if (owedOnwards) this.#push(result);
+    for (const session of this.#sessions.values()) this.#retireIfGone(session);
+  }
+
+  /**
+   * Section 6.2: a revoked member's inbound sessions close at once through LiveSessions; one this host dialed, at the
+   * view change or later (section 5.3's last push to it), retires within the linger.
+   */
+  #retireIfGone(session: SyncSession): void {
+    if (session.dialer !== this.self || this.#view.members.some((member) => member.signPub === session.peer)) return;
+    const capped = this.#view.overCap.some((member) => member.signPub === session.peer);
+    session.retire(capped ? "past the mesh's 12-member cap" : "revoked from the mesh");
   }
 
   /** Section 5.3: a revoke first; the revoked member last, after one ack came back or 10 s. */

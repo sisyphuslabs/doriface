@@ -17,6 +17,7 @@ import type { HcTarget } from "./hc-machines.ts";
 import { type HostRuntime, startHostRuntime } from "./host-runtime.ts";
 import { NoUplinkError } from "./no-uplink.ts";
 import type { MeshRuntime } from "./runtime.ts";
+import { liveFactsOf, NOT_RUNNING, type SyncFacts } from "./live-facts.ts";
 
 /** The relay must open a member dial's socket within 10 s, as the Noise handshake after it must finish (L-E1). */
 export const CONNECT_MS = 10_000;
@@ -35,6 +36,8 @@ export interface HostSyncOptions {
    * steps 2 to 4 of section 6.2 run on every member that merges a revoke (section 6.3), not only on the revoker.
    */
   readonly closeRevoked: () => void;
+  /** Whether an authenticated session from this Noise key is open on this host (`LiveSessions.has`): presence. */
+  readonly openFrom: (noisePub: string) => boolean;
   readonly log: (line: string) => void;
   readonly clock?: Clock;
   readonly random?: Random;
@@ -58,6 +61,14 @@ export class HostSync {
 
   get gossip(): Gossip | undefined {
     return this.#running?.runtime.gossip;
+  }
+
+  /** The running mesh's live facts for `mesh status` (none before sync runs). */
+  live(): SyncFacts {
+    const runtime = this.#running?.runtime;
+    return runtime === undefined
+      ? NOT_RUNNING
+      : liveFactsOf({ ...runtime, openFrom: this.#options.openFrom }, this.#clock());
   }
 
   /** The running mesh (sync, reconciler, lines) once this host has a mesh.json. */

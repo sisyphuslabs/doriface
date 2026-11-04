@@ -4,6 +4,7 @@ import { type PendingJoin, PendingJoins } from "./pending-joins.ts";
 const join = (nonce: string): PendingJoin => ({
   nonce,
   name: "beta",
+  noisePub: "noise-beta",
   hostId: "host",
   fingerprint: "3FA9",
   expiresAt: Date.now() + 60_000,

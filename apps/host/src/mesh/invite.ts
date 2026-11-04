@@ -154,7 +154,14 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
     }
     if ((index?.memberCount ?? 0) >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
     const fingerprint = fingerprintOf(base64urlDecode(card.noisePub));
-    const join = { nonce: offer.nonce, name: card.name, hostId: card.hostId, fingerprint, expiresAt: deps.expiresAt };
+    const join = {
+      nonce: offer.nonce,
+      name: card.name,
+      hostId: card.hostId,
+      fingerprint,
+      noisePub: card.noisePub,
+      expiresAt: deps.expiresAt,
+    };
     await decision(lines, deps, join);
     sendWelcome(lines, admit(deps, meshId, offer.inviter, card, { body: reply.body, sig: reply.sig }), meshId);
     lines.detach();
