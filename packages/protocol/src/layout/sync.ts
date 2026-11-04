@@ -34,6 +34,8 @@ export class LayoutDoc {
   #reads = 0;
   #queue: Promise<unknown> = Promise.resolve();
   #writing = 0;
+  /** The newest version a doc event named while our writes were in flight: read once they are done. */
+  #missed = -1;
 
   constructor(calls: DocCalls, on: string | null, changed: (state: DocState) => void) {
     this.#calls = calls;
@@ -67,10 +69,19 @@ export class LayoutDoc {
     else this.#publish({ phase: "ready", doc: read.kind === "ok" ? read.doc : null, version });
   }
 
-  /** A `doc` event: another client wrote the document, so read it unless this one wrote that version. */
+  /**
+   * A `doc` event: another client wrote the document, so read it unless this one wrote that version. While a write is
+   * in flight the event can name a version past ours before our reply arrives; it is kept and read once writing ends.
+   */
   heard(version: number): Promise<void> {
-    const known = this.#state.phase === "ready" ? this.#state.version : -1;
-    return version !== known && this.#writing === 0 ? this.refresh() : Promise.resolve();
+    if (version === this.#known()) return Promise.resolve();
+    if (this.#writing === 0) return this.refresh();
+    this.#missed = Math.max(this.#missed, version);
+    return Promise.resolve();
+  }
+
+  #known(): number {
+    return this.#state.phase === "ready" ? this.#state.version : -1;
   }
 
   /** Applies an edit and writes it; resolves false when it was dropped or the document cannot take writes. */
@@ -86,6 +97,11 @@ export class LayoutDoc {
       return await this.#attempt(change, CONFLICT_RETRIES);
     } finally {
       this.#writing -= 1;
+      const missed = this.#missed;
+      if (this.#writing === 0 && missed !== -1) {
+        this.#missed = -1;
+        if (missed > this.#known()) await this.refresh();
+      }
     }
   }
 
