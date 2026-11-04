@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { rows } from "./sidebar-measure.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -20,7 +21,7 @@ test("each sidebar list is one Tab stop and the arrow keys move within it", asyn
   await openNewTerminal(page);
   const sidebar = page.getByRole("complementary", { name: "Workspace" });
   const idle = sidebar.getByRole("region", { name: "Idle" });
-  await expect(idle.getByRole("button").nth(1)).toBeVisible({ timeout: 15_000 });
+  await expect(rows(idle).nth(1)).toBeVisible({ timeout: 15_000 });
   const stops = await sidebar.evaluate((aside) =>
     [...aside.querySelectorAll("section")].map(
       (section) =>
@@ -32,17 +33,17 @@ test("each sidebar list is one Tab stop and the arrow keys move within it", asyn
   expect(stops.length).toBeGreaterThanOrEqual(3);
   expect(stops.every((count) => count <= 1)).toBe(true);
 
-  await idle.getByRole("button").first().focus();
+  await rows(idle).first().focus();
   await page.keyboard.press("ArrowDown");
-  await expect(idle.getByRole("button").nth(1)).toBeFocused();
+  await expect(rows(idle).nth(1)).toBeFocused();
   await page.keyboard.press("ArrowUp");
-  await expect(idle.getByRole("button").first()).toBeFocused();
+  await expect(rows(idle).first()).toBeFocused();
   await page.keyboard.press("End");
-  await expect(idle.getByRole("button").last()).toBeFocused();
+  await expect(rows(idle).last()).toBeFocused();
   await page.keyboard.press("Tab");
   expect(await idle.evaluate((region) => region.contains(document.activeElement))).toBe(false);
   await page.keyboard.press("Shift+Tab");
-  await expect(idle.getByRole("button").last()).toBeFocused();
+  await expect(rows(idle).last()).toBeFocused();
 });
 
 test("the skip links are the first Tab stops, and Skip to terminal puts focus in the terminal", async ({ page }) => {

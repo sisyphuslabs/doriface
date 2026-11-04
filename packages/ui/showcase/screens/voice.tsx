@@ -1,12 +1,16 @@
 import { Mic } from "lucide-react";
 import { IconButton, TabBar, VoiceStrip, type VoiceState } from "../../src/index.ts";
-import { CLAUDE_LINES, TABS, VOICE_LEVELS, VOICE_TRANSCRIPT } from "../data.ts";
+import { CLAUDE_LINES, TABS, VOICE_HEARD, VOICE_TRANSCRIPT } from "../data.ts";
 import { BoardFrame, StateSection, TerminalCrop } from "./frames.tsx";
 import { MobileTerminal } from "./mobile.tsx";
 import { Sidebar, WorkspaceBody } from "./shell.tsx";
 
-const LISTENING: VoiceState = { kind: "listening", seconds: 7, levels: VOICE_LEVELS };
+const LISTENING: VoiceState = { kind: "listening", seconds: 7, heard: true, text: VOICE_HEARD };
 const STATES: readonly { readonly label: string; readonly state: VoiceState }[] = [
+  {
+    label: "First use: the browser's speech service hears nothing until Allow",
+    state: { kind: "consent", device: true },
+  },
   { label: "Listening", state: LISTENING },
   { label: "Transcribing", state: { kind: "transcribing", seconds: 7 } },
   {
@@ -15,13 +19,17 @@ const STATES: readonly { readonly label: string; readonly state: VoiceState }[] 
   },
   { label: "Error: microphone permission denied", state: { kind: "error", reason: "permission" } },
   { label: "Error: no speech heard", state: { kind: "error", reason: "no-speech" } },
+  {
+    label: "Unavailable: no speech recognition in this browser",
+    state: { kind: "unavailable", why: "This browser has no speech recognition, so dictation is off here." },
+  },
 ];
 
 const strip = (state: VoiceState, className?: string) => (
   <VoiceStrip
     state={state}
     target="Claude Code"
-    language="Korean"
+    language="Korean (South Korea)"
     {...(className === undefined ? {} : { className })}
   />
 );
@@ -51,7 +59,7 @@ export function VoiceScreen() {
         <BoardFrame label="Idle: Dictate in the tab bar acts on the focused pane">
           <TerminalCrop lines={CLAUDE_LINES} header={<TabBar tabs={TABS} activeId="t1" trailing={mic(false)} />} />
         </BoardFrame>
-        {STATES.slice(1).map((entry) => (
+        {STATES.map((entry) => (
           <BoardFrame key={entry.label} label={entry.label}>
             <TerminalCrop lines={CLAUDE_LINES} dock={strip(entry.state, "pb-2")} />
           </BoardFrame>
