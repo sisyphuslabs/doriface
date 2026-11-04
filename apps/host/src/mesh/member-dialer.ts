@@ -2,6 +2,7 @@ import { closeCodeOf } from "@doriface/crypto";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { DialPolicy, DialPurpose } from "./dial-policy.ts";
 import type { LineLink } from "./lines.ts";
+import { NoUplinkError } from "./no-uplink.ts";
 
 export interface MemberDialerOptions {
   readonly policy: DialPolicy;
@@ -51,6 +52,10 @@ export class MemberDialer {
     try {
       link = await this.#options.dial(member);
     } catch (error) {
+      if (error instanceof NoUplinkError) {
+        policy.release(grant.chargedAt);
+        return false;
+      }
       const code = error instanceof Error ? closeCodeOf(error) : undefined;
       policy.report(member.signPub, code === 4429 ? 4429 : 4404);
       this.#options.log(`mesh: sync with ${member.name} failed: ${String(error)}`);
