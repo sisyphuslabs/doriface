@@ -6,6 +6,7 @@ import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { machineRow, newOn, STATE_BOUND_MS, switchOn, switchTo } from "./machine-switch.ts";
 import { expect, test } from "./fixtures.ts";
+import { clearLayouts } from "./layout-doc.ts";
 
 const OUT = join(import.meta.dirname, "../../../docs/design/app");
 const SHOTS = [
@@ -22,6 +23,7 @@ test.use({ page: async ({ page }, use) => use(page) });
 async function openPage(browser: Browser, { width, theme }: Shot): Promise<{ page: Page; close: () => Promise<void> }> {
   const size = width === "1440" ? { viewport: { width: 1440, height: 900 } } : devices["iPhone 14"];
   const { defaultBrowserType: _browser, ...use } = { defaultBrowserType: "chromium", ...size };
+  clearLayouts();
   const context = await browser.newContext({ ...use, colorScheme: theme === "day" ? "light" : "dark" });
   const connection = {
     mode: "loopback",

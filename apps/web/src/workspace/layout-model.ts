@@ -20,11 +20,13 @@ export interface LayoutTab {
   readonly root: Node;
   readonly panes: readonly LayoutPane[];
   readonly readOnly: string | null;
-  /** Shown while no tab exists anywhere, the way the first live terminal opened before; written once it is edited. */
+  /** Not in any document (the first live terminal shown alone, or a loose tab); written once it is split. */
   readonly transient: boolean;
 }
 
 export const TRANSIENT = "transient";
+const LOOSE = "loose:";
+export const looseKey = (address: string): string => `${LOOSE}${address}`;
 
 export const qualify = (local: string, machine: string | null): string =>
   machine === null ? local : `${machine}/${local}`;
@@ -53,28 +55,40 @@ function docTabs(layout: MachineLayout): LayoutTab[] {
   }));
 }
 
-/** Every tab of every machine's document, this core's first; or the first live terminal alone while there is none. */
-export function buildTabs(layouts: readonly MachineLayout[], terminals: readonly Terminal[]): LayoutTab[] {
-  const tabs = layouts.flatMap(docTabs);
-  const local = layouts.find((layout) => layout.machine === null);
-  if (tabs.length > 0 || local === undefined || !local.loaded) return tabs;
-  const first = terminals.find((terminal) => terminal.state === "live");
-  if (first === undefined) return tabs;
-  const machine = machineOf(first.address) ?? null;
+function looseTab(address: string, layouts: readonly MachineLayout[]): LayoutTab {
+  const machine = machineOf(address) ?? null;
   const owner = layouts.find((layout) => layout.machine === machine);
-  return [
-    {
-      key: TRANSIENT,
-      id: TRANSIENT,
-      space: "",
-      machine,
-      name: "",
-      root: { children: [terminalBlock(TRANSIENT, localOf(first.address))], id: "", type: "row" },
-      panes: [{ id: TRANSIENT, address: first.address, mod: null }],
-      readOnly: owner?.readOnly ?? "the machine is not connected",
-      transient: true,
-    },
-  ];
+  return {
+    key: looseKey(address),
+    id: looseKey(address),
+    space: "",
+    machine,
+    name: "",
+    root: { children: [terminalBlock(TRANSIENT, localOf(address))], id: "", type: "row" },
+    panes: [{ id: TRANSIENT, address, mod: null }],
+    readOnly: owner?.readOnly ?? "the machine is not connected",
+    transient: true,
+  };
+}
+
+/**
+ * Every tab of every machine's document, this core's first, then the terminals opened on this screen while their
+ * machine's layout could not take a tab (`loose`: offline, loading). With no tab at all, the first live terminal is
+ * shown alone, as it opened before the layout lived in the core.
+ */
+export function buildTabs(
+  layouts: readonly MachineLayout[],
+  terminals: readonly Terminal[],
+  loose: readonly string[] = [],
+): LayoutTab[] {
+  const tabs = layouts.flatMap(docTabs);
+  const shown = new Set(tabs.flatMap((tab) => tab.panes.map((pane) => pane.address)));
+  const extra = loose.filter((address) => !shown.has(address)).map((address) => looseTab(address, layouts));
+  if (tabs.length + extra.length > 0) return [...tabs, ...extra];
+  const local = layouts.find((layout) => layout.machine === null);
+  const first = terminals.find((terminal) => terminal.state === "live");
+  if (local === undefined || !local.loaded || first === undefined) return [];
+  return [{ ...looseTab(first.address, layouts), key: TRANSIENT, id: TRANSIENT }];
 }
 
 export interface Picked {

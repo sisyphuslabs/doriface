@@ -15,7 +15,16 @@ import {
   terminalBlock,
 } from "@doriface/protocol/layout";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
-import { buildTabs, findTerminal, localOf, pick, type LayoutPane, type LayoutTab } from "./layout-model.ts";
+import {
+  buildTabs,
+  findTerminal,
+  localOf,
+  looseKey,
+  pick,
+  TRANSIENT,
+  type LayoutPane,
+  type LayoutTab,
+} from "./layout-model.ts";
 import { machineOf } from "./model.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
@@ -53,7 +62,9 @@ export function useLayout(
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
   useEffect(() => saveView(core, view), [core, view]);
-  const tabs = useMemo(() => buildTabs(layouts, terminals), [layouts, terminals]);
+  // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
+  const [loose, setLoose] = useState<readonly string[]>([]);
+  const tabs = useMemo(() => buildTabs(layouts, terminals, loose), [layouts, terminals, loose]);
   const { active, focused, zoomed } = pick(tabs, view);
   const layoutOf = useCallback(
     (machine: string | null) => {
@@ -81,7 +92,10 @@ export function useLayout(
     (address: string): void => {
       const machine = machineOf(address) ?? null;
       const layout = layoutOf(machine);
-      if (layout === undefined || layout.readOnly !== null) return;
+      if (layout === undefined || layout.readOnly !== null) {
+        setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
+        return show(looseKey(address), TRANSIENT);
+      }
       const id = freshId("tb");
       const pane = freshId("p");
       const tab: JsonObject = { id, name: "", root: rootOf(id, [terminalBlock(pane, localOf(address))]) };
@@ -135,7 +149,8 @@ export function useLayout(
   const dropPane = useCallback(
     (address: string): void => {
       const found = findTerminal(tabs, address);
-      if (found === null || found.tab.transient) return;
+      if (found === null) return;
+      if (found.tab.transient) return setLoose((prev) => prev.filter((each) => each !== address));
       const layout = layoutOf(found.tab.machine);
       void layout?.edit((doc) => {
         if (doc === null) return null;
@@ -151,7 +166,8 @@ export function useLayout(
   const closeTab = useCallback(
     (key: string): void => {
       const tab = tabs.find((each) => each.key === key);
-      if (tab === undefined || tab.transient) return;
+      if (tab === undefined) return;
+      if (tab.transient) return setLoose((prev) => prev.filter((address) => address !== tab.panes[0]?.address));
       void layoutOf(tab.machine)?.edit((doc) => (doc === null ? null : removeTab(doc, tab.id)));
     },
     [layoutOf, tabs],

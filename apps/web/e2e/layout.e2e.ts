@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { SCREENS, STARTS } from "./layout-screens.ts";
 import { findOverflows } from "./overflow.ts";
 import { expect, test } from "./fixtures.ts";
+import { clearLayouts } from "./layout-doc.ts";
 
 const VIEWPORTS = [
   { name: "1470x956@2", viewport: { width: 1470, height: 956 }, deviceScaleFactor: 2, narrow: false, inset: false },
@@ -43,6 +44,8 @@ for (const { name: size, narrow, inset, ...use } of VIEWPORTS) {
     const screens = SCREENS.filter((screen) => screen.only === undefined || (screen.only === "narrow") === narrow);
     for (const screen of screens) {
       test(`${screen.name} at ${size} in ${theme} overflows nowhere`, async ({ browser }) => {
+        // Each screen opens on what it sets up itself, not on the tabs and splits an earlier screen saved in the core.
+        clearLayouts();
         const context = await browser.newContext({
           ...use,
           isMobile: narrow,

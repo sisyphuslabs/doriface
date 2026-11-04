@@ -15,6 +15,8 @@ export const E2E_HOST_ENV = join(tmpdir(), `doriface-web-e2e-${E2E_HOST_PORT}-ho
 export const E2E_WEB_PORT = port("E2E_WEB_PORT", 4173);
 /** A second e2e host whose names, titles and paths are long, Korean or unbroken, for the layout spec. */
 export const E2E_LAYOUT_PORT = port("E2E_LAYOUT_PORT", 7798);
+/** The layout spec's core environment, so each spec starts with no tabs saved there either. */
+export const E2E_LAYOUT_ENV = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-host.json`);
 export const E2E_LAYOUT_MACHINE_DIR = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-machine`);
 /** A throwaway token for a loopback-only test host. */
 export const E2E_TOKEN = "doriface-e2e-loopback-token-0000";

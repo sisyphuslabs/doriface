@@ -53,11 +53,12 @@ export function clearLayout(): void {
 }
 
 /**
- * Every spec starts with no tabs saved, on this core and on the added machine, as each started before the layout lived
+ * Every spec starts with no tabs saved, on both e2e cores and on the added machine, as each started before the layout lived
  * in the core. A machine that is not connected shows a fresh page no layout, so there is nothing to clear on it.
  */
 export function clearLayouts(): void {
   clearLayout();
+  setCoreDoc(LAYOUT_DOC, null, undefined, "layout");
   try {
     setCoreDoc(LAYOUT_DOC, null, MACHINE_NAME);
   } catch (error) {

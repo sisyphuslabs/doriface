@@ -3,7 +3,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
+import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_ENV, E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
@@ -38,8 +38,9 @@ writeFileSync(
   JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: layout ? LAYOUT_CORE : "studio" }),
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
-// Only the main host owns it: the layout host runs beside it and must not overwrite or delete it.
-if (!layout) writeFileSync(E2E_HOST_ENV, JSON.stringify({ hc, env: own }));
+// Each host owns its own file: the layout host runs beside the main one and must not overwrite or delete its file.
+const savedEnv = layout ? E2E_LAYOUT_ENV : E2E_HOST_ENV;
+writeFileSync(savedEnv, JSON.stringify({ hc, env: own }));
 const host = Bun.spawn(
   [
     "bun",
@@ -74,7 +75,7 @@ async function shutdown(): Promise<void> {
   await host.exited;
   await stopCore();
   await stopMachine?.();
-  if (!layout) rmSync(E2E_HOST_ENV, { force: true });
+  rmSync(savedEnv, { force: true });
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);
 }

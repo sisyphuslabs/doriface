@@ -1,17 +1,21 @@
 // A spec's write to a herdr document on the e2e host's own core, the way another client would make it: read the
 // version, then a compare-and-set at it, with the core environment the e2e host saved (E2E_HOST_ENV).
 import { execFileSync } from "node:child_process";
-import { E2E_HOST_ENV } from "./config.ts";
+import { E2E_HOST_ENV, E2E_LAYOUT_ENV } from "./config.ts";
 import { readSavedEnv, type SavedEnv } from "./saved-env.ts";
 
 interface CoreEnv extends SavedEnv {
   readonly session: string;
 }
 
-function coreEnv(): CoreEnv {
-  const saved = readSavedEnv(E2E_HOST_ENV);
+/** Which e2e core: the main host's, or the layout spec's (E2E_LAYOUT_ENV). */
+export type Core = "host" | "layout";
+
+function coreEnv(core: Core = "host"): CoreEnv {
+  const file = core === "host" ? E2E_HOST_ENV : E2E_LAYOUT_ENV;
+  const saved = readSavedEnv(file);
   const session = saved.env["HC_SESSION"];
-  if (session === undefined) throw new Error(`${E2E_HOST_ENV} names no HC_SESSION`);
+  if (session === undefined) throw new Error(`${file} names no HC_SESSION`);
   return { ...saved, session };
 }
 
@@ -31,8 +35,8 @@ function call(core: CoreEnv, method: string, params: unknown): unknown {
   throw new Error(`${method}: no reply`);
 }
 
-export function setCoreDoc(name: string, value: unknown, on?: string): void {
-  const core = coreEnv();
+export function setCoreDoc(name: string, value: unknown, on?: string, which: Core = "host"): void {
+  const core = coreEnv(which);
   const where = on === undefined ? { name } : { name, on };
   const current = call(core, "doc.get", where);
   const version = typeof current === "object" && current !== null && "version" in current ? current.version : 0;
