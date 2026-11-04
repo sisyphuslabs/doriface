@@ -2,7 +2,7 @@ import type { Clock } from "./clock.ts";
 import type { Gossip } from "./gossip.ts";
 import type { MeshView } from "./mesh-view.ts";
 import type { Reconciler } from "./reconciler.ts";
-import { IDLE_MESH_HOOKS, type MeshHooks } from "./host-hooks.ts";
+import { IDLE_MESH_HOOKS, type MeshHooks, type MeshLiveFacts } from "./host-hooks.ts";
 
 /** The part of `HostSync` the mesh commands drive: its gossip and runtime once sync runs, starting it, stopping it. */
 export interface SyncHandle {
@@ -12,6 +12,8 @@ export interface SyncHandle {
     | undefined;
   changed(): void;
   stop(): void | Promise<void>;
+  /** The running mesh's live facts, once sync runs. */
+  live?(): MeshLiveFacts | undefined;
 }
 
 /** The view with no member: a reconcile against it removes every mesh machine from this host's core. */
@@ -62,6 +64,6 @@ export function syncHooks(sync: SyncHandle, clock: Clock): MeshHooks {
         await sync.stop();
       }
     },
-    live: IDLE_MESH_HOOKS.live,
+    live: () => sync.live?.() ?? IDLE_MESH_HOOKS.live(),
   };
 }

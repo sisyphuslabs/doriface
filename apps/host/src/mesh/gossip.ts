@@ -109,6 +109,16 @@ export class Gossip implements SyncHost {
     return this.#stored.records();
   }
 
+  /** When this host last had a sync session with `peer`, on this host's clock. */
+  lastSync(peer: string): number | undefined {
+    return this.#lastSync.get(peer);
+  }
+
+  /** How many stored records `peer` is not known to hold. */
+  owedCount(peer: string): number {
+    return missingSince(this.records(), this.#confirmed.get(peer) ?? []).length;
+  }
+
   /** The open sync session with `peer`, if one is up. */
   session(peer: string): SyncSession | undefined {
     const open = this.#sessions.get(peer);
