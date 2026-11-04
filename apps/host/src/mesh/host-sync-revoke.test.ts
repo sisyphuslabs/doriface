@@ -48,6 +48,7 @@ describe("a member that merges a revoke through sync (section 6.3)", () => {
       hc: { hc: "hc-not-installed" },
       stateDir,
       program: "/opt/doriface-host",
+      openFrom: () => false,
       closeRevoked: () => sessions.closeRevoked(),
       log: () => undefined,
       clock,
