@@ -59,10 +59,11 @@ export function ConnectionLine() {
   return (
     <p
       role="status"
-      className="flex shrink-0 items-center gap-2 border-b border-border bg-chrome px-4 py-2 text-sm text-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
+      className="flex shrink-0 items-start gap-2 border-b border-border bg-chrome px-4 py-2 text-sm text-foreground [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
     >
       {glyph(notice)}
-      <span className="min-w-0 truncate" title={notice.detail}>
+      {/* The sentence is required content (DESIGN.md 5 (e)): it wraps at narrow widths rather than losing its end. */}
+      <span className="min-w-0 text-pretty break-words" title={notice.detail}>
         {notice.offline ? notice.detail : notice.label}
       </span>
     </p>
