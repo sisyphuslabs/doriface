@@ -71,6 +71,24 @@ test("the first screen does not animate in: nothing arrives on load, and a later
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
+test("coming back from Settings is not an arrival: the workspace returns without animating", async ({ page }) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  await recordArrivals(page);
+  await page.reload();
+  await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Connection", level: 2 })).toBeVisible();
+  await page.goBack();
+  await expect(page.locator(SIDEBAR)).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
+  );
+  expect(await arrivals(page)).toEqual([]);
+});
+
 test("showing the sidebar fades it in without moving it", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
