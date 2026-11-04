@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import type { ByteLink } from "@doriface/crypto";
+import { RelayCloseError } from "@doriface/relay-client";
 import { DialPolicy } from "./dial-policy.ts";
 import { LineGrants } from "./line-grants.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
 import { hostIdFor } from "./testing/hc-mesh.ts";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshView } from "./mesh-view.ts";
+import { NoUplinkError } from "./no-uplink.ts";
 
 const member = (name: string): MemberEntry => ({
   signPub: `sign-${name}`,
@@ -62,6 +64,17 @@ describe("line grants (section 7.2)", () => {
     });
   });
 
+  test("a line dial refused for its pass (4412) gates nothing, unlike an offline member (4404)", async () => {
+    const refusedFor = (code: number) =>
+      lines({ members: [a, b], overCap: [], revoked: [] }, () => Promise.reject(new RelayCloseError(code, "closed")));
+    const pass = refusedFor(4412);
+    expect(await pass.lines.grant(b.hostId)).toMatchObject({ ok: false, code: 4412 });
+    expect(pass.policy.gate(b.signPub)).toBeUndefined();
+    const offline = refusedFor(4404);
+    await offline.lines.grant(b.hostId);
+    expect(offline.policy.gate(b.signPub)?.misses).toBe(1);
+  });
+
   test("a line dial that fails without a close code gates the member", async () => {
     const { policy, lines: grants } = lines({ members: [a, b], overCap: [], revoked: [] }, () =>
       Promise.reject(new Error("the dial timed out")),
@@ -84,5 +97,17 @@ describe("line grants (section 7.2)", () => {
     grants.closeRevoked({ members: [a], overCap: [m], revoked: [b.signPub] });
     expect(toB.closes).toEqual([{ code: 4401, reason: "revoked from the mesh" }]);
     expect(toM.closes).toEqual([{ code: 4401, reason: "past the mesh's 12-member cap" }]);
+  });
+});
+
+describe("a host that keeps no relay uplink (L-E5)", () => {
+  test("refuses the line 4404 without gating the member or keeping the token", async () => {
+    const { policy, lines: grants } = lines({ members: [a, b], overCap: [], revoked: [] }, () =>
+      Promise.reject(new NoUplinkError()),
+    );
+    expect(await grants.grant(b.hostId)).toEqual({ ok: false, code: 4404, reason: new NoUplinkError().message });
+    expect(policy.gate(b.signPub)).toBeUndefined();
+    const all = await Promise.all(Array.from({ length: 12 }, (_, i) => policy.acquire(`m${i}`, "push", { waitMs: 0 })));
+    expect(all.every((grant) => grant.ok)).toBe(true);
   });
 });

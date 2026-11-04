@@ -45,3 +45,22 @@ export function countersOf(records: readonly Signed[]): Record<string, number> {
   }
   return n;
 }
+
+/**
+ * `missing` split into the records `signer` signed, with their past, and the rest, each in their order (section 10.1):
+ * an answer sends a hello's sender its own records first, so a claim it made on them is met by the first lines.
+ */
+export function signerFirst(missing: readonly Signed[], signer: string): readonly [Signed[], Signed[]] {
+  const { prevOf, hashes } = indexOf(missing);
+  const first = new Set<string>();
+  const stack = missing.flatMap((record, i) => (parseRecord(record)?.by === signer ? [hashes[i] ?? ""] : []));
+  for (let hash = stack.pop(); hash !== undefined; hash = stack.pop()) {
+    if (first.has(hash)) continue;
+    first.add(hash);
+    stack.push(...(prevOf.get(hash) ?? []).filter((prev) => prevOf.has(prev)));
+  }
+  const own: Signed[] = [];
+  const rest: Signed[] = [];
+  missing.forEach((record, i) => (first.has(hashes[i] ?? "") ? own : rest).push(record));
+  return [own, rest];
+}

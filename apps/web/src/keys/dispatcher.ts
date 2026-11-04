@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { actionFor, type Scope } from "./actions.ts";
 import { resolveKeymap } from "./keymap.ts";
 import { useOverrides } from "./keymap-store.ts";
+import { TEXT_FIELD_KEEPS } from "./text-field-keys.ts";
 import { currentPlatform, triggerFromEvent } from "./trigger.ts";
 
 /** Returns true when the action ran; false lets the key reach the page. */
@@ -43,6 +44,25 @@ function inTerminal(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest(".wterm") !== null;
 }
 
+const NOT_TEXT = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
+function inTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement) || inTerminal(target)) return false;
+  if (target.isContentEditable || target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLInputElement && !NOT_TEXT.has(target.type);
+}
+
 export function useKeymapDispatcher(): void {
   const overrides = useOverrides();
   const keymap = useMemo(() => resolveKeymap(currentPlatform(), overrides), [overrides]);
@@ -56,6 +76,7 @@ export function useKeymapDispatcher(): void {
       const action = actionFor(id);
       if (action === null) return;
       if (action.scope === "terminal" && !inTerminal(event.target)) return;
+      if (TEXT_FIELD_KEEPS.has(id) && inTextField(event.target)) return;
       if (dispatch(action.scope, id)) {
         event.preventDefault();
         event.stopPropagation();

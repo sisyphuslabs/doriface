@@ -18,6 +18,10 @@ import type { Tabs } from "./use-tabs.ts";
 
 const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
 
+/** The tab whose button has keyboard focus, which Move tab left/right moves instead of the active one. */
+const focusedTab = (): string | null =>
+  document.activeElement?.closest("[data-tab-id]")?.getAttribute("data-tab-id") ?? null;
+
 export interface DesktopShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Session[];
@@ -35,6 +39,8 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
   const tabKeys = useTabSelectKeys();
+  const moveLeftKeys = useActionKeys("tab.move:left");
+  const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   useAppActions({
     terminals,
@@ -43,6 +49,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     onToggleSidebar: () => setSidebar((shown) => !shown),
     onFocusSidebar: focusSidebar,
     onSession,
+    focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
   const tabList: WorkspaceTab[] = tabs.open.flatMap((address, position) => {
@@ -100,6 +107,16 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           onSelect={tabs.select}
           onClose={tabs.close}
           onNew={onNew}
+          // The strip counts the tabs it shows; `tabs.move` counts every open tab, so it is told which tab to pass.
+          onMove={(id, to) => {
+            const target = tabList[to]?.id;
+            if (target !== undefined) tabs.move(id, tabs.open.indexOf(target));
+          }}
+          moveKeys={{
+            ...(moveLeftKeys === undefined ? {} : { left: moveLeftKeys }),
+            ...(moveRightKeys === undefined ? {} : { right: moveRightKeys }),
+          }}
+          moved={tabs.lastMove === null ? null : { id: tabs.lastMove.address, count: tabs.lastMove.count }}
           {...(sidebar ? {} : { className: "pl-[var(--titlebar-inset-start,0.625rem)]" })}
           leading={
             sidebar ? null : (

@@ -15,6 +15,7 @@ import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "
 import { ConnectionLine, ReconnectStatus } from "./reconnect-status.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { RovingLists } from "./roving-lists.tsx";
+import { SessionMenu } from "./session-menu.tsx";
 import { usePhoneActions, type SessionVerb } from "./use-app-actions.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -123,6 +124,7 @@ function PhoneTerminal(props: {
             {where}
           </p>
         </div>
+        <SessionMenu address={terminal.address} title={title} placement="header" />
       </header>
       <ConnectionLine />
       {terminal.offline === true && machine !== undefined ? (

@@ -20,10 +20,10 @@ export type DialLimits = { readonly [K in keyof typeof DIAL_LIMITS]: number };
 export type DialPurpose = "revoke-push" | "push" | "sweep" | "line" | "probe";
 const PRIORITY: Readonly<Record<DialPurpose, number>> = { "revoke-push": 0, push: 1, sweep: 1, line: 2, probe: 3 };
 
-export type DueReason = "presence" | "probe" | "added" | "settle" | "budget";
+export type DueReason = "presence" | "probe" | "added" | "settle" | "budget" | "pass";
 
 export type Grant =
-  | { readonly ok: true }
+  | { readonly ok: true; readonly chargedAt: number | undefined }
   | { readonly ok: false; readonly reason: "offline"; readonly misses: number; readonly nextInMs: number }
   | { readonly ok: false; readonly reason: "rate-limited"; readonly nextInMs: number }
   | { readonly ok: false; readonly reason: "settling"; readonly nextInMs: number }
@@ -69,6 +69,11 @@ export class DialPolicy {
   readonly #firstMiss = new Map<string, number>();
   readonly #present = new Set<string>();
   readonly #budgetRefused = new Set<string>();
+  /**
+   * Members whose dial met a refused relay pass (4412): due again when a new pass arrives, never gated. Each one's
+   * fallback makes it due anyway after the first probe wait, in case no new pass ever comes.
+   */
+  readonly #passRefused = new Map<string, () => void>();
   #budgetWake: (() => void) | undefined;
   #halvedUntil = Number.NEGATIVE_INFINITY;
   #settleUntil = Number.NEGATIVE_INFINITY;
@@ -123,7 +128,7 @@ export class DialPolicy {
     if (purpose === "line" && !this.#present.has(member) && now < this.#settleUntil) {
       return Promise.resolve({ ok: false, reason: "settling", nextInMs: this.#settleUntil - now });
     }
-    if (options.direct === true) return Promise.resolve({ ok: true });
+    if (options.direct === true) return Promise.resolve({ ok: true, chargedAt: undefined });
     const taken = this.#take(PRIORITY[purpose], options.waitMs);
     if (purpose !== "line") return taken;
     return taken.then((grant) => {
@@ -132,34 +137,59 @@ export class DialPolicy {
     });
   }
 
-  /** A line refused for the budget is due again once the window frees (herdr cannot wait past its own deadline). */
+  /**
+   * A line refused for the budget (herdr cannot wait past its own deadline) is due again the moment a token is free
+   * for it: the window slid or a dial gave its token back, and no dial of higher priority waits. While the window
+   * stays full, nothing is due, so herdr is not asked to add a line that would only be refused again.
+   */
   #lineRefused(member: string): void {
     this.#budgetRefused.add(member);
-    if (this.#budgetWake !== undefined) return;
-    const oldest = this.#charged[0] ?? this.#clock.now();
-    const at = Math.max(0, oldest + this.#limits.windowMs - this.#clock.now());
-    this.#budgetWake = this.#clock.after(at, () => {
+    this.#armBudgetWake();
+  }
+
+  #armBudgetWake(): void {
+    if (this.#budgetWake !== undefined || this.#budgetRefused.size === 0) return;
+    const now = this.#clock.now();
+    const free = this.#waiters.length === 0 && this.#used() < this.budget;
+    const at = free ? now : (this.#charged[0] ?? now) + this.#limits.windowMs;
+    this.#budgetWake = this.#clock.after(Math.max(0, at - now), () => {
       this.#budgetWake = undefined;
+      if (this.#waiters.length > 0 || this.#used() >= this.budget) return this.#armBudgetWake();
       const members = [...this.#budgetRefused];
       this.#budgetRefused.clear();
       for (const refused of members) this.#onDue(refused, "budget");
     });
   }
 
-  /** A granted dial that was not needed after all (a session came up while it waited) gives its token back. */
-  release(): void {
-    this.#charged.pop();
+  /**
+   * A granted dial that was not needed after all (a session came up while it waited) gives its own token back: the
+   * charge made when it was granted, so the window's expiry stays exact.
+   */
+  release(chargedAt: number | undefined): void {
+    const index = chargedAt === undefined ? -1 : this.#charged.indexOf(chargedAt);
+    if (index === -1) return;
+    this.#charged.splice(index, 1);
     this.#serve();
   }
 
   /**
-   * What a dial ended with: connected, the relay rate limited it (4429), or it failed (4404, or any error without a
-   * close code: a timeout or a dropped connection), which gates the member until presence or its probe.
+   * What a dial ended with: connected, the relay rate limited it (4429), it failed (4404, or any error without a
+   * close code: a timeout or a dropped connection), which gates the member until presence or its probe, or the relay
+   * refused this host's pass (4412, contract v1.6), which says nothing about the member: no gate, no halving, and the
+   * member is due again once a new pass arrives, or after the first probe wait (30 s) if none does.
    */
-  report(member: string, outcome: "connected" | 4404 | 4429): void {
+  report(member: string, outcome: "connected" | 4404 | 4412 | 4429): void {
     const now = this.#clock.now();
     if (outcome === "connected") {
       this.#reached(member);
+      return;
+    }
+    if (outcome === 4412) {
+      if (this.#passRefused.has(member)) return;
+      const fallback = this.#clock.after(this.#limits.probeFirstMs, () => {
+        if (this.#passRefused.delete(member)) this.#onDue(member, "pass");
+      });
+      this.#passRefused.set(member, fallback);
       return;
     }
     const misses = this.#gates.get(member)?.misses ?? 0;
@@ -176,6 +206,16 @@ export class DialPolicy {
     if (!this.#firstMiss.has(member)) this.#firstMiss.set(member, now);
     const wait = Math.min(this.#limits.probeFirstMs * 2 ** misses, this.#limits.probeMaxMs);
     this.#setGate(member, { cause: "offline", misses: misses + 1, nextAt: now + wait, lastMissAt: now });
+  }
+
+  /** This host has a new relay pass: members whose dials met a refused pass are due now. */
+  passRenewed(): void {
+    const members = [...this.#passRefused];
+    this.#passRefused.clear();
+    for (const [member, cancel] of members) {
+      cancel();
+      this.#onDue(member, "pass");
+    }
   }
 
   /** Any authenticated session from `member` proves it is online: ungate it and dial after 0-2 s. */
@@ -228,7 +268,7 @@ export class DialPolicy {
   #take(priority: number, waitMs: number | undefined): Promise<Grant> {
     if (this.#waiters.length === 0 && this.#used() < this.budget) {
       this.#charged.push(this.#clock.now());
-      return Promise.resolve({ ok: true });
+      return Promise.resolve({ ok: true, chargedAt: this.#clock.now() });
     }
     const { promise, resolve } = Promise.withResolvers<Grant>();
     const waiter: Waiter = { priority, seq: this.#seq++, resolve, cancel: () => undefined };
@@ -256,9 +296,12 @@ export class DialPolicy {
       if (waiter === undefined) break;
       waiter.cancel();
       this.#charged.push(this.#clock.now());
-      waiter.resolve({ ok: true });
+      waiter.resolve({ ok: true, chargedAt: this.#clock.now() });
     }
     this.#schedule();
+    this.#budgetWake?.();
+    this.#budgetWake = undefined;
+    this.#armBudgetWake();
   }
 
   #schedule(): void {
