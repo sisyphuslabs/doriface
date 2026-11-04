@@ -79,7 +79,7 @@ export class Gossip implements SyncHost {
       waitMs: this.#timings.revokedLastMs,
       release: (key) => {
         const member = this.#known.get(key);
-        if (member === undefined) return;
+        if (member === undefined || !this.owed().includes(member)) return;
         this.#revokeOwed.add(key);
         void this.sync(member, "revoke-push");
       },
@@ -182,6 +182,7 @@ export class Gossip implements SyncHost {
    */
   heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void {
     this.#confirmed.set(peer, heads);
+    if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self];
     if (claim !== undefined && claim > 0) this.#claims.set(peer, claim);
   }
