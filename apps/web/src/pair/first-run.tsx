@@ -46,12 +46,20 @@ function LocalFirstRun({ bridge }: { readonly bridge: DesktopBridge }) {
   );
 }
 
-/** No host yet: in the desktop app, start one here; elsewhere, the command that starts pairing. */
-export function FirstRun() {
+/**
+ * No host yet: in the desktop app, start one here (this computer needs no network, so being offline changes nothing);
+ * elsewhere, the command that starts pairing, which does need a network, so an offline device says so above it.
+ */
+export function FirstRun({ offline = false }: { readonly offline?: boolean }) {
   const bridge = desktopBridge();
   if (bridge !== null) return <LocalFirstRun bridge={bridge} />;
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10">
+      {offline ? (
+        <Notice tone="warning" title="You are offline" className="w-full max-w-md">
+          Pairing a host needs a network. The steps below work once it is back.
+        </Notice>
+      ) : null}
       <Steps current={0} />
       <EmptyState
         icon={<Server />}
