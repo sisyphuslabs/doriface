@@ -15,12 +15,14 @@ export function revokedBy(records: readonly Signed[]): ReadonlySet<string> {
 
 /**
  * Section 6.2: a revoked member's inbound sessions close at once through LiveSessions; one this host dialed, at the
- * view change or later (section 5.3's last push to it), retires within the linger.
+ * view change or later (section 5.3's last push to it), retires within the linger; back in the view (under the cap
+ * again), it stays.
  */
 export function retireIfGone(session: SyncSession, view: MeshView, self: string): void {
   if (session.dialer !== self) return;
   const reason = retireReason(view, session.peer);
-  if (reason !== undefined) session.retire(reason);
+  if (reason === undefined) session.keep();
+  else session.retire(reason);
 }
 
 /** Why a sync session this host dialed to `peer` retires; undefined while `peer` is a member. */

@@ -109,6 +109,12 @@ export class SyncSession {
     this.#retiring = this.#clock.after(this.#lingerMs, () => this.close(CloseCode.UnknownDevice, reason));
   }
 
+  /** Back in the view (under the cap again): the retirement is called off. */
+  keep(): void {
+    this.#retiring?.();
+    this.#retiring = undefined;
+  }
+
   close(code = 1000, reason = "sync done"): void {
     if (this.#closed) return;
     this.#lines.close(code, reason);
