@@ -173,6 +173,9 @@ export function TerminalView(props: TerminalViewProps) {
 
   const attach = (ready: WTerm): void => {
     setWt(ready);
+    // wterm focuses every terminal as it starts (@wterm/dom 0.5.8 wterm.js:410); only the focused pane's keeps it.
+    const active = document.activeElement;
+    if (!isFocused.current && active instanceof HTMLElement && ready.element.contains(active)) active.blur();
     attachedTo.current = connection;
     // wterm starts every grid at 80x24 and fits it later; the pty starts at the size the view renders.
     ready.fit();
@@ -252,6 +255,7 @@ export function TerminalView(props: TerminalViewProps) {
         aria-label={label}
         data-slot="terminal-viewport"
         data-terminal={address}
+        data-ready={wt !== null}
         className={cn("min-h-0 flex-1 bg-term-bg", options.hollowCursor && "cursor-hollow", className)}
         onReady={attach}
         onData={(data) => send(transformInput === undefined ? data : transformInput(data))}

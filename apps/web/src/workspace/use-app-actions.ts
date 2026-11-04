@@ -142,6 +142,8 @@ export function desktopActions(
         return focused === null ? false : (onSplit(), true);
       case "pane.close":
         return focused === null ? false : (onClosePane(focused), true);
+      case "pane.go":
+        return (argument === "left" || argument === "right") && layout.go(argument);
       case "agent.next":
         return openAgent(layout, neighbour(live, focused, 1));
       case "agent.prev":

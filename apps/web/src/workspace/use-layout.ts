@@ -14,6 +14,8 @@ import {
   tabsOf,
   terminalBlock,
 } from "@doriface/protocol/layout";
+import { nearest, type Direction } from "../layout/neighbor.ts";
+import { arrange } from "../layout/rects.ts";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import {
   buildTabs,
@@ -42,7 +44,12 @@ export interface Layout {
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
   readonly dropPane: (address: string) => void;
   readonly closeTab: (key: string) => void;
+  /** Focuses the nearest pane that way in the tab in view; false when none lies that way, so the key stays the program's. */
+  readonly go: (direction: Direction) => boolean;
 }
+
+/** Proportions are all moving focus needs, so it measures the tree in a fixed box. */
+const MEASURE = { x: 0, y: 0, width: 1600, height: 1000 } as const;
 
 const rootOf = (id: string, children: readonly Node[]): Node => ({ children: [...children], id, type: "row" });
 
@@ -175,7 +182,18 @@ export function useLayout(
 
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
-  return { tabs, active, focused, zoomed, selectTab, focusPane, openTerminal, split, dropPane, closeTab };
+  const go = useCallback(
+    (direction: Direction): boolean => {
+      if (active === null || focused === null || active.panes.length < 2) return false;
+      const to = nearest(focused.id, direction, arrange(active.root, MEASURE, 8, null).panes);
+      if (to === null) return false;
+      show(active.key, to);
+      return true;
+    },
+    [active, focused, show],
+  );
+
+  return { tabs, active, focused, zoomed, selectTab, focusPane, openTerminal, split, dropPane, closeTab, go };
 }
 
 function spaceOf(doc: JsonObject | null): string | null {

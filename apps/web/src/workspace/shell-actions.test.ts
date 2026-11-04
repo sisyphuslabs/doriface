@@ -27,6 +27,7 @@ const layout: Layout = {
   split: noop,
   dropPane: noop,
   closeTab: noop,
+  go: () => true,
 };
 const handlers = {
   desktop: desktopActions(

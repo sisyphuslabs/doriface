@@ -26,7 +26,11 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd }: P
   return (
     <section
       aria-label={`${title} terminal`}
-      onFocusCapture={onFocus}
+      onFocusCapture={(event) => {
+        // wterm takes focus as it starts; that is not the person picking this pane (see TerminalView's attach).
+        if (event.target instanceof Element && event.target.closest('[data-ready="false"]') !== null) return;
+        onFocus();
+      }}
       data-split={split}
       data-focused={focused}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
