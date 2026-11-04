@@ -170,8 +170,13 @@ export function useTabDrag(
       const onUp = (up: PointerEvent): void => {
         if (up.pointerId !== current.pointerId) return;
         if (!current.touch || !current.armed || current.dragging !== null) return finish(true);
-        // A lifted tab let go where it was: its menu opens instead of a tap selecting it.
+        // A lifted tab let go where it was: its menu opens instead of a tap selecting it. Cancelling the touchend that
+        // follows keeps the browser from sending the tap's mouse events, whose mousedown would close the menu at once.
         swallowClick.current = true;
+        const noTap = (touchEnd: TouchEvent): void => {
+          if (touchEnd.cancelable) touchEnd.preventDefault();
+        };
+        window.addEventListener("touchend", noTap, { once: true, passive: false, capture: true });
         end();
         latestHoldRelease.current?.(current.id, up.clientX, up.clientY);
       };
