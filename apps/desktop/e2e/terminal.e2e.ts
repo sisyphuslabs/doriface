@@ -126,9 +126,11 @@ test("under the macOS titlebar rules a whole tab takes the press, so it drags th
     .locator("[data-tab-id]")
     .first()
     .evaluate((pill) => {
-      const region = (element: Element | null): string =>
-        element === null ? "" : getComputedStyle(element).getPropertyValue("-webkit-app-region");
-      return { strip: region(pill.closest("[data-titlebar]")), pill: region(pill) };
+      const strip = pill.closest("[data-titlebar]");
+      return {
+        strip: strip === null ? "" : getComputedStyle(strip).getPropertyValue("-webkit-app-region"),
+        pill: getComputedStyle(pill).getPropertyValue("-webkit-app-region"),
+      };
     });
   expect(regions).toEqual({ strip: "drag", pill: "no-drag" });
 });

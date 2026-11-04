@@ -35,6 +35,6 @@ describe("app chords that edit text", () => {
   );
 
   test("on a Mac the tab moves sit on ⌘⇧←/→, which select to the line's start or end", () => {
-    expect(appActionsOnTextChords("mac").sort()).toEqual(["tab.move:left", "tab.move:right"]);
+    expect(appActionsOnTextChords("mac").toSorted()).toEqual(["tab.move:left", "tab.move:right"]);
   });
 });
