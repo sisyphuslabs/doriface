@@ -7,7 +7,7 @@ import { deliver, type Judgement, untilJudged } from "./support/mesh/inject.ts";
 import { isolate } from "./support/mesh/isolate.ts";
 import { type Mesh, startMesh } from "./support/mesh/mesh.ts";
 import { needLib, scenario } from "./support/mesh/present.ts";
-import { actorOf, cardIn, cardOf, foundRecord, lastOwn, signAdmit } from "./support/mesh/records.ts";
+import { actorOf, cardIn, cardOf, foundRecord, lastOwn, signAck, signAdmit } from "./support/mesh/records.ts";
 import { machineIds, meshIdOf, type SignedRecord, storedRecords, viewOf } from "./support/mesh/status.ts";
 
 const NAMES = ["a", "b", "c", "d"] as const;
@@ -89,9 +89,15 @@ scenario(
     }, 120_000);
 
     test("a record whose body changed after it was signed is refused at the door (3.3, rule 1)", async () => {
-      const admit = storedRecords(running().host("a")).find((record) => record.body.includes('"type":"admit"'));
-      if (admit === undefined) throw new Error("a stores no admit");
-      const tampered = { ...admit, body: admit.body.replace('"type":"admit"', '"type": "admit"') };
+      // A fresh ack of a's own, which every other rule would store: no card (so no nonce), its counter next, its prev
+      // a's head. Only the signature over the changed body can refuse it.
+      const lib = needLib();
+      const a = running().host("a");
+      const signer = actorOf(identityOf(a), "a", "");
+      const head = lastOwn(lib, storedRecords(a), signer.signPub);
+      const ack = signAck({ lib, mesh: meshIdOf(a), by: signer, n: head.n + 1, prev: [head.hash] });
+      const tampered = { ...ack, body: ack.body.replace('"type":"ack"', '"type": "ack"') };
+      expect(tampered.body).not.toBe(ack.body);
       expect(await injected("b", "c", [tampered])).toEqual(["refused"]);
     }, 120_000);
 
