@@ -30,6 +30,7 @@ const layout: Layout = {
   closeTab: noop,
   go: () => true,
   moveTab: noop,
+  restored: true,
   lastMove: null,
 };
 const handlers = {

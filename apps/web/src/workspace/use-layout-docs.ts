@@ -25,6 +25,16 @@ const docCalls = (connection: HcConnection): DocCalls => ({
     ),
 });
 
+/** Why a machine's layout takes no edits while it is still being read. */
+export const LAYOUT_LOADING = "the layout is loading";
+
+/** A machine's edits: through its live document, or refused with why when it has none (not connected). */
+export function docEdit(live: Pick<LayoutDoc, "edit"> | undefined): (change: DocEdit) => Promise<boolean> {
+  if (live === undefined)
+    return () => Promise.reject(new Error("The layout cannot take changes now: the machine is not connected"));
+  return (change) => live.edit(change);
+}
+
 /** The last document read per core and machine id, so a machine that drops keeps its tabs on screen (read-only). */
 const lastRead = new Map<string, JsonObject | null>();
 
@@ -76,7 +86,7 @@ export function useLayoutDocs(
           : state.phase === "unreadable"
             ? `this layout has ${state.reason}, which this version of doriface cannot edit`
             : state.phase === "loading"
-              ? "the layout is loading"
+              ? LAYOUT_LOADING
               : state.reason;
     return {
       machine,
@@ -84,10 +94,7 @@ export function useLayoutDocs(
       doc: state?.phase === "ready" ? state.doc : (kept ?? null),
       loaded: state?.phase === "ready" || kept !== undefined,
       readOnly,
-      edit:
-        live === undefined
-          ? () => Promise.reject(new Error("The layout cannot take changes now: the machine is not connected"))
-          : (change) => live.edit(change),
+      edit: docEdit(live),
     };
   });
   return { layouts, heard };

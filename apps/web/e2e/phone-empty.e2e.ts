@@ -1,36 +1,29 @@
-import { devices, type Page } from "@playwright/test";
+import { devices } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
+import { hcOn } from "./machine-switch.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 test.use({ ...phone, serviceWorkers: "block" });
 
-/** Opens the first row of the phone list and exits its shell; false when the list has no row left. */
-async function exitFirst(page: Page): Promise<boolean> {
-  const rows = page.locator("section > button");
-  if ((await rows.count()) === 0) return false;
-  await rows.first().click();
-  const back = page.getByRole("button", { name: "Back to agents" });
-  await expect(back).toBeVisible();
-  const terminal = page.locator("[data-terminal]");
-  await expect(terminal).toContainText("$", { timeout: 15_000 });
-  await terminal.click();
-  // The echo's computed output proves keys reach the shell before exit is typed; a first key can land before that.
-  await expect(async () => {
-    await page.keyboard.type("echo ready-$((40 + 2))\r");
-    await expect(terminal).toContainText("ready-42", { timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
-  await page.keyboard.type("exit\r");
-  await expect(back).toBeHidden({ timeout: 15_000 });
-  return true;
+/** The live terminals the e2e core lists, this machine's and the added machine's. */
+function liveAddresses(): string[] {
+  const listed: unknown = JSON.parse(hcOn("host", ["ls", "--json"]));
+  const terminals = typeof listed === "object" && listed !== null ? Reflect.get(listed, "terminals") : undefined;
+  if (!Array.isArray(terminals)) throw new Error("hc ls printed no terminal list");
+  return terminals.map((terminal: unknown) =>
+    typeof terminal === "object" && terminal !== null ? String(Reflect.get(terminal, "address")) : "",
+  );
 }
 
 test("with no terminals the phone says so and offers a new terminal and adding a machine", async ({ page }) => {
+  // Earlier specs share this core and may leave shells running. One pass ends each one it lists, so the cleanup takes
+  // the same time however many there are, and the core must then list none.
+  const left = liveAddresses();
+  for (const address of left) hcOn("host", ["kill", address]);
+  await expect.poll(liveAddresses, { timeout: 15_000, message: `${left.length} ended` }).toEqual([]);
+
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
-  for (let left = 40; left > 0; left -= 1) {
-    // oxlint-disable-next-line no-await-in-loop -- each shell has to exit before the next row is read
-    if (!(await exitFirst(page))) break;
-  }
   const empty = page.getByRole("status").filter({ hasText: "No terminals yet" });
   await expect(empty).toBeVisible({ timeout: 15_000 });
   await expect(empty.getByRole("button", { name: "Add a machine" })).toBeVisible();

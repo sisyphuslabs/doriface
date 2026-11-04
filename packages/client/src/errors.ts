@@ -21,3 +21,14 @@ export class HcTimeoutError extends Error {
     this.timeoutMs = timeoutMs;
   }
 }
+
+/** The core's heartbeats stopped arriving on an open link: no frame came for `silentMs`, so the link is treated as gone. */
+export class HcLinkSilentError extends Error {
+  override readonly name = "HcLinkSilentError";
+  readonly silentMs: number;
+
+  constructor(silentMs: number) {
+    super(`no heartbeat from the core for ${Math.round(silentMs / 1000)} s`);
+    this.silentMs = silentMs;
+  }
+}

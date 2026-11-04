@@ -133,7 +133,12 @@ export const SHOTS: readonly Shot[] = [
       await page.getByRole("button", { name: "Split right" }).click();
       // Hidden tabs stay mounted, so only the two shown panes count.
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
-      await expect(page.locator("[data-terminal]:visible").filter({ hasText: "$" })).toBeVisible();
+      const shown = page.locator("section[data-split='true']:visible");
+      await expect(shown.and(page.getByLabel("deploy terminal"))).toHaveCount(1);
+      await expect(shown.and(page.getByLabel("shell terminal"))).toHaveCount(1);
+      await expect(
+        page.locator("[data-terminal]:visible").filter({ has: page.locator(".term-row", { hasText: /\S/ }) }),
+      ).toHaveCount(2);
     },
   },
   {
