@@ -84,6 +84,14 @@ describe("a host that cannot start", () => {
     }
   });
 
+  test("a non-loopback --listen without --unsafe-listen is a refused command line: exit 2 with the usage", async () => {
+    const exit = await serve(["--listen", "0.0.0.0:7766", "--hc", join(scratch(), "no-such-hc")]);
+    expect(exit.code).toBe(2);
+    expect(exit.stderr).toContain("--unsafe-listen");
+    expect(exit.stderr).toContain("usage: doriface-host");
+    expect(exit.reports).toEqual([]);
+  });
+
   test("a command line it does not accept still exits 2 with the usage", async () => {
     const exit = await serve(["--no-such-flag"]);
     expect(exit.code).toBe(2);

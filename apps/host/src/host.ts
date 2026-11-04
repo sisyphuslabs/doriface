@@ -8,7 +8,7 @@ import { LiveSessions } from "./e2ee/sessions.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { listenError, StartupError } from "./startup-error.ts";
-import { formatHost, isLoopbackHost, type ListenAddress } from "./listen.ts";
+import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
 import { type PairingSlotRegistrar, PairingSlots } from "./pairing-slots.ts";
 import { HostUplink } from "./relay/host-uplink.ts";
 import { openRelayPasses } from "./relay/relay-passes.ts";
@@ -75,11 +75,7 @@ export interface Host {
 
 export async function startHost(options: HostOptions): Promise<Host> {
   const { hostname, port } = options.listen;
-  if (!isLoopbackHost(hostname) && options.unsafeListen !== true) {
-    throw new Error(
-      `refusing to listen on ${hostname}: the endpoint is plaintext; bind loopback or pass --unsafe-listen`,
-    );
-  }
+  assertListenAllowed(options.listen, options.unsafeListen === true);
   if (options.lanListen !== undefined && options.stateDir === undefined) {
     throw new Error("a LAN listener serves only /v1/e2ee, which needs a state dir");
   }

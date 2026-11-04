@@ -9,7 +9,7 @@ import { MESH_JOIN_USAGE, meshJoinCommand } from "./commands/mesh-join.ts";
 import { MESH_USAGE, meshCommand } from "./commands/mesh.ts";
 import { PAIR_USAGE, pairCommand } from "./commands/pair.ts";
 import { HOST_VERSION, startHost } from "./host.ts";
-import { parseListen } from "./listen.ts";
+import { assertListenAllowed, parseListen } from "./listen.ts";
 import { asStartupError, STARTUP_EXIT_CODES, StartupError, startupErrorLine } from "./startup-error.ts";
 import { defaultStateDir } from "./state/files.ts";
 
@@ -101,9 +101,11 @@ async function serve(args: readonly string[]): Promise<void> {
   if (!URL.canParse(values.relay)) throw new Error(`--relay wants a URL, got ${JSON.stringify(values.relay)}`);
   const given = values.token ?? process.env["DORIFACE_HOST_TOKEN"] ?? "";
   const token = given === "" ? generateToken() : assertValidToken(given);
+  const listen = parseListen(values.listen);
+  assertListenAllowed(listen, values["unsafe-listen"]);
   // Past this point the command line was accepted: a failure is the host's, never a reason to print the usage.
   const host = await startHost({
-    listen: parseListen(values.listen),
+    listen,
     token,
     hc: values.hc,
     session: values.session,
