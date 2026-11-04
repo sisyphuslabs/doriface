@@ -5,19 +5,26 @@ test.use({ serviceWorkers: "block" });
 
 const SIDEBAR = 'aside[aria-label="Workspace"]';
 
-/** Transitions running on arrival regions now: each element's selector role and the properties it animates. */
+/** Records, from the page's very first script, every transition an arrival region starts: "tag:property". */
+const recordArrivals = (page: Page) =>
+  page.addInitScript(() => {
+    const seen: string[] = [];
+    Object.defineProperty(window, "__arrivals", { value: seen });
+    document.addEventListener(
+      "transitionstart",
+      (event) => {
+        if (event.target instanceof Element && event.target.classList.contains("motion-arrive")) {
+          seen.push(`${event.target.tagName.toLowerCase()}:${event.propertyName}`);
+        }
+      },
+      true,
+    );
+  });
 const arrivals = (page: Page) =>
-  page.evaluate(() =>
-    document
-      .getAnimations()
-      .flatMap((animation) => {
-        const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
-        if (!(target instanceof Element) || !target.classList.contains("motion-arrive")) return [];
-        if (!(animation instanceof CSSTransition)) return [];
-        return [`${target.tagName.toLowerCase()}:${animation.transitionProperty}`];
-      })
-      .sort(),
-  );
+  page.evaluate(() => {
+    const seen: unknown = Reflect.get(window, "__arrivals");
+    return Array.isArray(seen) ? seen.filter((entry): entry is string => typeof entry === "string").toSorted() : [];
+  });
 
 /** Watches an element's opacity and transform from now on, every frame, for the given time. */
 const sample = (page: Page, selector: string, ms: number) =>
@@ -40,14 +47,21 @@ const sample = (page: Page, selector: string, ms: number) =>
     [selector, ms] as const,
   );
 
-test("the first screen does not animate in: nothing arrives on load", async ({ page }) => {
+test("the first screen does not animate in: nothing arrives on load, and a later new tab does", async ({ page }) => {
   await page.goto("/");
   await openNewTerminal(page);
+  await recordArrivals(page);
   await page.reload();
   await expect(page.locator(SIDEBAR)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("tab").first()).toBeVisible();
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  // A load-time arrival starts when its region mounts, before it is visible; two frames let transitionstart dispatch.
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))),
+  );
   expect(await arrivals(page)).toEqual([]);
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
 test("showing the sidebar fades it in without moving it", async ({ page }) => {
