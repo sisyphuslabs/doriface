@@ -25,8 +25,8 @@ function onCore(address: string): boolean {
 const agentsList = (page: Page) => page.locator("h1", { hasText: /^Agents$/ });
 const screenTitle = (page: Page) => page.locator("header h1");
 
-/** On the phone page: opens `name`, asks End, and has its terminal.rm leave the page but not reach the core yet. */
-async function endWithRemovalHeld(phone: Page, link: HcSocket, name: string): Promise<() => void> {
+/** On the phone page: opens `name`, asks End, and has these calls of it leave the page but not reach the core yet. */
+async function endHolding(phone: Page, link: HcSocket, name: string, ...methods: string[]): Promise<() => void> {
   await phone.getByText(name).first().click();
   await expect(screenTitle(phone)).toHaveText(name);
   await phone
@@ -34,12 +34,13 @@ async function endWithRemovalHeld(phone: Page, link: HcSocket, name: string): Pr
     .getByRole("button", { name: /^Session actions for / })
     .click();
   await phone.getByRole("menuitem", { name: "End session…" }).click();
-  const deliver = link.hold("terminal.rm");
+  const deliver = link.hold(...methods);
   await phone
     .getByRole("dialog", { name: `End ${name}?` })
     .getByRole("button", { name: "End session" })
     .click();
-  await expect.poll(() => link.sent().some((frame) => frame.includes('"method":"terminal.rm"'))).toBe(true);
+  const out = (method: string): boolean => link.sent().some((frame) => frame.includes(`"method":"${method}"`));
+  await expect.poll(() => methods.every(out)).toBe(true);
   return deliver;
 }
 
@@ -76,15 +77,8 @@ test("a session ended on a phone is removed even when the page closes as soon as
   const link = await routeHcSocket(phone);
   await phone.goto("/");
   await expect(agentsList(phone)).toBeVisible({ timeout: 20_000 });
-  const deliver = await endWithRemovalHeld(phone, link, name);
-  // The program has exited, but the removal is unanswered: End is still working and the phone keeps the session's
-  // screen, so there is no list (and no moment to close the page) yet.
-  const ask = phone.getByRole("dialog", { name: `End ${name}?` });
-  await expect(ask.getByRole("button", { name: "End session" })).toHaveAttribute("aria-busy", "true");
-  await expect(screenTitle(phone)).toHaveText(name);
-  await expect(agentsList(phone)).toHaveCount(0);
-  deliver();
-  await expect(ask).toHaveCount(0, { timeout: 15_000 });
+  await endHolding(phone, link, name);
+  await expect(phone.getByRole("dialog", { name: `End ${name}?` })).toHaveCount(0, { timeout: 15_000 });
   await expect(agentsList(phone)).toBeVisible({ timeout: 15_000 });
   await phone.close();
 
@@ -131,40 +125,38 @@ test("a session renamed and ended on a phone is removed even when the page close
   await expect.poll(() => onCore(address), { timeout: 10_000, message: `${address} still on the core` }).toBe(false);
 });
 
-test("an End whose removal fails says so, lets the phone leave, and a second End finishes it", async ({ page }) => {
+test("an End that never reaches the core says so, and a second End finishes it", async ({ page }) => {
   const { link, name, address } = await phoneWithTerminal(page, "end-fails");
-  const deliver = await endWithRemovalHeld(page, link, name);
-  // The link drops with terminal.rm unanswered: the removal fails, and the program has already exited.
+  const deliver = await endHolding(page, link, name, "terminal.label", "terminal.kill");
+  // The link drops before End's mark and kill reach the core: End fails, and the program still runs.
   const sockets = link.opened();
   await link.drop(false);
   const ask = page.getByRole("dialog", { name: `End ${name}?` });
   await expect(ask.getByRole("alert")).toContainText("The session did not end", { timeout: 15_000 });
   await expect(ask.getByRole("button", { name: "End session" })).not.toHaveAttribute("aria-busy", "true");
-  await expect(agentsList(page)).toBeVisible({ timeout: 15_000 });
-  expect(onCore(address)).toBe(true);
+  expect(hc("ls", "--json")).toContain(`"${address}"`);
   // Once the link is back (a new socket, and no connection notice: a tag query, as the dialog hides the page from roles),
-  // try again; its own terminal.rm is held until it is out, so its success is what removes the terminal.
+  // try again; its own mark and kill are held until they are out, so its success is what removes the terminal.
   await expect.poll(link.opened, { timeout: 15_000 }).toBeGreaterThan(sockets);
   await expect(page.locator('[role="status"]', { hasText: /Reconnecting|Offline/ })).toHaveCount(0, {
     timeout: 15_000,
   });
-  const removals = () => link.sent().filter((frame) => frame.includes('"method":"terminal.rm"')).length;
-  const before = removals();
+  const kills = () => link.sent().filter((frame) => frame.includes('"method":"terminal.kill"')).length;
+  const before = kills();
   await ask.getByRole("button", { name: "End session" }).click();
-  await expect.poll(removals).toBeGreaterThan(before);
+  await expect.poll(kills).toBeGreaterThan(before);
   deliver();
   await expect(ask).toHaveCount(0, { timeout: 15_000 });
   await expect.poll(() => onCore(address), { timeout: 10_000, message: `${address} still on the core` }).toBe(false);
 });
 
-test("a session another client removes while End's removal is held closes the question without an error", async ({
+test("a session the host removes while End's own removal is held closes the question without an error", async ({
   page,
 }) => {
   const { link, name, address } = await phoneWithTerminal(page, "end-elsewhere");
-  const deliver = await endWithRemovalHeld(page, link, name);
-  await expect.poll(() => onCore(address) && hc("ls", "--all", "--json").includes('"finished"')).toBe(true);
-  hc("rm", address);
-  await expect.poll(() => onCore(address)).toBe(false);
+  const deliver = await endHolding(page, link, name, "terminal.rm");
+  // The host removes the marked terminal once it has finished; End's own terminal.rm then finds it gone.
+  await expect.poll(() => onCore(address), { timeout: 10_000 }).toBe(false);
   deliver();
   const ask = page.getByRole("dialog", { name: `End ${name}?` });
   await expect(ask).toHaveCount(0, { timeout: 15_000 });

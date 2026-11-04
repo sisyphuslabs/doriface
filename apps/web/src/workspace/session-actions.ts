@@ -1,5 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import {
+  END_LABEL,
   HcRpcError,
   type Terminal,
   type TerminalKillParams,
@@ -41,13 +42,21 @@ export async function renameSession(calls: SessionCalls, address: string, name: 
 const ending = new Map<string, Promise<void>>();
 
 async function killAndRemove(calls: SessionCalls, address: string): Promise<void> {
-  try {
+  // The mark leaves with the kill, so a page closed before terminal.rm goes out still has the host remove it (END_LABEL).
+  const marked = calls.label({ terminal: address, labels: { [END_LABEL]: "1" } });
+  const removed = (async () => {
     const ended = await calls.kill({ terminal: address });
     if (ended.state === "finished") await calls.rm({ terminal: address });
-  } catch (cause) {
-    // Removed meanwhile (another client, or an earlier attempt's removal arriving late): the terminal is gone, which is
-    // what End is for.
-    if (!(cause instanceof HcRpcError && cause.kind === "not_found")) throw cause;
+  })();
+  for (const outcome of await Promise.allSettled([marked, removed])) {
+    // Removed meanwhile (another client, the host, or an earlier attempt's removal arriving late): the terminal is gone,
+    // which is what End is for.
+    if (
+      outcome.status === "rejected" &&
+      !(outcome.reason instanceof HcRpcError && outcome.reason.kind === "not_found")
+    ) {
+      throw outcome.reason;
+    }
   }
 }
 

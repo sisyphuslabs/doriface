@@ -43,10 +43,14 @@ describe("session actions", () => {
     ]);
   });
 
-  test("ending kills the program, then removes the finished terminal", async () => {
+  test("ending marks the terminal for removal with the kill, then removes the finished terminal", async () => {
     const { calls, connection } = recorder();
     await endSession(connection, "box/t2");
-    expect(calls.map((call) => call.method)).toEqual(["terminal.kill", "terminal.rm"]);
+    expect(calls).toEqual([
+      { method: "terminal.label", params: { terminal: "box/t2", labels: { "herdr.end": "1" } } },
+      { method: "terminal.kill", params: { terminal: "box/t2" } },
+      { method: "terminal.rm", params: { terminal: "box/t2" } },
+    ]);
   });
 
   test("a screen that leaves when the program exits waits for End's terminal.rm", async () => {
