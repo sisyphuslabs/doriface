@@ -37,6 +37,8 @@ function spawnConnect(bin: string) {
       XDG_STATE_HOME: join(scratch, "state"),
       XDG_RUNTIME_DIR: join(scratch, "run"),
       XDG_CONFIG_HOME: join(scratch, "config"),
+      // The test run's mark (apps/host/src/testing/run-cores.ts), so `bun run test` stops this core if a failure leaves it.
+      DORIFACE_TEST_RUN: process.env["DORIFACE_TEST_RUN"],
     },
   });
 }

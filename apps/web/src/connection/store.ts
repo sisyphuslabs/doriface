@@ -30,9 +30,13 @@ export class ConnectionStore {
   #abort: AbortController | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #stale: HcConnection | null = null;
+  /** The attempt the pending retry timer will make, so `retryNow` can make it at once. */
+  #pending: number | null = null;
+  readonly #connect: typeof connect;
 
-  constructor(settings: ConnectionSettings) {
+  constructor(settings: ConnectionSettings, open: typeof connect = connect) {
     this.#settings = settings;
+    this.#connect = open;
   }
 
   get settings(): ConnectionSettings {
@@ -71,6 +75,7 @@ export class ConnectionStore {
 
   stop(): void {
     clearTimeout(this.#timer);
+    this.#pending = null;
     this.#abort?.abort();
     this.#abort = null;
     this.#stale = null;
@@ -82,7 +87,7 @@ export class ConnectionStore {
     this.#abort = abort;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const connection = await connect(this.#settings, abort.signal);
+      const connection = await this.#connect(this.#settings, abort.signal);
       if (abort.signal.aborted) return connection.close();
       connection.onClose((error) => {
         if (this.#abort !== abort) return;
@@ -105,7 +110,20 @@ export class ConnectionStore {
     }
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
     this.#set({ phase: "failed", error, retryInMs: delay, retryAt: Date.now() + delay, stale: this.#stale });
-    this.#timer = setTimeout(() => void this.#attempt(attempt), delay);
+    this.#pending = attempt;
+    this.#timer = setTimeout(() => {
+      this.#pending = null;
+      void this.#attempt(attempt);
+    }, delay);
+  }
+
+  /** Makes a waiting retry now instead of at the end of its back-off (the network is back); the workspace stays. */
+  retryNow(): void {
+    const attempt = this.#pending;
+    if (attempt === null || this.#state.phase !== "failed") return;
+    clearTimeout(this.#timer);
+    this.#pending = null;
+    void this.#attempt(attempt);
   }
 
   #set(state: ConnectionState): void {
@@ -115,6 +133,9 @@ export class ConnectionStore {
 }
 
 export const connectionStore = new ConnectionStore(loadSettings());
+
+// The network is back: a reconnect waiting out its back-off starts at once.
+if (typeof addEventListener === "function") addEventListener("online", () => connectionStore.retryNow());
 
 export function useConnection(store: ConnectionStore = connectionStore): ConnectionState {
   return useSyncExternalStore(store.subscribe, () => store.state);

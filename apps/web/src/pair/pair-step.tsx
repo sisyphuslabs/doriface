@@ -1,4 +1,4 @@
-import { Button, Field, Input } from "@doriface/ui";
+import { Button, Field, Input, Notice } from "@doriface/ui";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { formatCode, normalizeCode } from "./code.ts";
@@ -8,7 +8,13 @@ import { lookupCode } from "./lookup.ts";
 import { Steps } from "./steps.tsx";
 
 /** Takes the 8-character code doriface-host pair shows (or its link) and moves to Verify. */
-export function PairStep({ onOffer }: { readonly onOffer: (offer: PairingOffer) => void }) {
+export function PairStep({
+  onOffer,
+  offline = false,
+}: {
+  readonly onOffer: (offer: PairingOffer) => void;
+  readonly offline?: boolean;
+}) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,6 +33,11 @@ export function PairStep({ onOffer }: { readonly onOffer: (offer: PairingOffer) 
   };
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-5 px-6 py-10">
+      {offline ? (
+        <Notice tone="warning" title="You are offline">
+          Pairing needs a network: the code is looked up through the relay. Try again once it is back.
+        </Notice>
+      ) : null}
       <Steps current={1} />
       <div className="text-center">
         <h1 className="text-2xl font-semibold text-balance text-foreground">Pair this device</h1>
