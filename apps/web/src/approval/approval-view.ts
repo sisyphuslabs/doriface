@@ -21,6 +21,8 @@ export function stateAfterAnswer(result: AnswerResult, answer: ApprovalAnswer, s
       return { kind: "stale" };
     case "failed":
       return { kind: "failed", answer };
+    case "unknown":
+      return { kind: "unknown" };
     case "lost":
       return stateAfterLoss(result.record, self);
   }
@@ -32,7 +34,15 @@ function stateAfterLoss(record: ApprovalRecord, self: Answerer): ApprovalBannerS
     case "sent":
       return { kind: "answered", answer: record.answer, where: answeredWhere(record, self) };
     case "claimed":
-      return { kind: "elsewhere", where: `Being answered on another device (${record.by})` };
+      return {
+        kind: "elsewhere",
+        where:
+          record.client === self.client
+            ? "An earlier answer from this device is not confirmed yet"
+            : `Being answered on another device (${record.by})`,
+      };
+    case "unknown":
+      return { kind: "unknown" };
     case "stale":
     case "failed":
       return { kind: "stale" };

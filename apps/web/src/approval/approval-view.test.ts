@@ -35,6 +35,21 @@ describe("the banner after an answer", () => {
     });
   });
 
+  test("a key press that may have landed is shown as unconfirmed, never as answered and never offered again", () => {
+    expect(stateAfterAnswer({ kind: "unknown", reason: "keys: closed" }, "allow", self)).toEqual({ kind: "unknown" });
+    expect(stateAfterAnswer({ kind: "lost", record: { ...phone, outcome: "unknown" } }, "allow", self)).toEqual({
+      kind: "unknown",
+    });
+  });
+
+  test("this device's own unconfirmed claim is not shown as another device's", () => {
+    const own = { ...phone, client: self.client, by: self.by, outcome: "claimed" as const };
+    expect(stateAfterAnswer({ kind: "lost", record: own }, "allow", self)).toEqual({
+      kind: "elsewhere",
+      where: "An earlier answer from this device is not confirmed yet",
+    });
+  });
+
   test("a prompt that went away before the key was pressed is stale", () => {
     expect(stateAfterAnswer({ kind: "stale" }, "allow", self)).toEqual({ kind: "stale" });
   });
@@ -42,10 +57,12 @@ describe("the banner after an answer", () => {
 
 describe("the banner never says Allowed without a delivered key", () => {
   test("a failure after the claim shows the failure, with the answer to try again", () => {
-    expect(stateAfterAnswer({ kind: "failed", reason: "terminal.read: closed" }, "allow", self)).toEqual({
-      kind: "failed",
-      answer: "allow",
-    });
+    expect(stateAfterAnswer({ kind: "failed", reason: "terminal.read: closed", attempt: "a1" }, "allow", self)).toEqual(
+      {
+        kind: "failed",
+        answer: "allow",
+      },
+    );
   });
 
   test("losing to a claim still in flight says where it is being answered, not that it was", () => {
@@ -55,7 +72,7 @@ describe("the banner never says Allowed without a delivered key", () => {
     });
   });
 
-  test.each(["claimed", "failed", "stale"] as const)(
+  test.each(["claimed", "failed", "stale", "unknown"] as const)(
     "a %s record is not shown as answered once the agent moves on",
     (outcome) => {
       expect(stateAfterPrompt({ ...phone, outcome }, self)).toBeUndefined();
@@ -65,8 +82,9 @@ describe("the banner never says Allowed without a delivered key", () => {
   const results: readonly (readonly [string, AnswerResult])[] = [
     ["sent", { kind: "sent" }],
     ["stale", { kind: "stale" }],
-    ["failed", { kind: "failed", reason: "x" }],
-    ...(["claimed", "sent", "stale", "failed"] as const).map(
+    ["failed", { kind: "failed", reason: "x", attempt: "a1" }],
+    ["unknown", { kind: "unknown", reason: "x" }],
+    ...(["claimed", "sent", "stale", "failed", "unknown"] as const).map(
       (outcome) => [`lost to ${outcome}`, { kind: "lost", record: { ...phone, outcome } }] as const,
     ),
   ];

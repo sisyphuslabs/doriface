@@ -12,8 +12,13 @@ const SHOWN: Readonly<Record<AnswerPhase, { tone: "info" | "warning" | "error"; 
   },
   failed: {
     tone: "error",
-    title: "Nothing was sent",
-    body: "Your host could not be reached. Answer it in the terminal.",
+    title: "Did not go through",
+    body: "Nothing was sent. Answer it in the terminal.",
+  },
+  unknown: {
+    tone: "warning",
+    title: "Not confirmed",
+    body: "The answer may have reached the agent. Check the terminal before answering again.",
   },
 };
 

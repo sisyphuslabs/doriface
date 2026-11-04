@@ -20,8 +20,9 @@ export interface ApprovalPrompt {
 /**
  * waiting: answerable. sending: the host is checking the prompt is still on the live screen, then pressing the key.
  * stale: the prompt went away before the key was pressed, so nothing was sent. answered: a key was delivered, here or
- * elsewhere. failed: the answer broke off (a dropped connection) and no key is known to have been pressed. elsewhere:
- * another device holds the prompt and is answering it now.
+ * elsewhere. failed: the answer broke off (a dropped connection) and no key was pressed. elsewhere: another answer
+ * holds the prompt now. unknown: the key press failed after it was sent, so it may have reached the agent; nothing more
+ * is offered, since a second press could answer a later prompt.
  */
 export type ApprovalBannerState =
   | { readonly kind: "waiting" }
@@ -29,7 +30,8 @@ export type ApprovalBannerState =
   | { readonly kind: "stale" }
   | { readonly kind: "answered"; readonly answer: ApprovalAnswer; readonly where: string }
   | { readonly kind: "failed"; readonly answer: ApprovalAnswer }
-  | { readonly kind: "elsewhere"; readonly where: string };
+  | { readonly kind: "elsewhere"; readonly where: string }
+  | { readonly kind: "unknown" };
 
 export interface ApprovalBannerProps {
   readonly prompt: ApprovalPrompt;
@@ -61,6 +63,8 @@ export function approvalAnnouncement(prompt: ApprovalPrompt, state: ApprovalBann
       return "The answer did not go through. Nothing was confirmed sent.";
     case "elsewhere":
       return `${state.where}.`;
+    case "unknown":
+      return `The answer may have reached ${prompt.agent}. Check the terminal before answering again.`;
   }
 }
 
@@ -90,6 +94,23 @@ export function ApprovalBanner({ prompt, state, onAnswer, onDismiss, className }
           <span className="font-semibold text-foreground">{state.where}</span>
           <span className="ml-2 font-mono text-xs">{prompt.command}</span>
         </p>
+      </section>
+    );
+  }
+
+  if (state.kind === "unknown") {
+    return (
+      <section aria-label={`${prompt.agent} prompt`} className={cn(frame, className)}>
+        <div className="flex items-start gap-2.5">
+          <CircleSlash aria-hidden className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            <span className="font-semibold text-foreground">Not confirmed.</span> The answer may have reached{" "}
+            {prompt.agent}; check the terminal before answering again.
+          </p>
+          <Button variant="ghost" size="sm" onClick={onDismiss} className="-my-1 shrink-0">
+            Dismiss
+          </Button>
+        </div>
       </section>
     );
   }

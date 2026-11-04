@@ -19,8 +19,10 @@ import { thisAnswerer } from "./answerer.ts";
 export interface ApprovalView {
   readonly mark: ApprovalMark;
   readonly state: ApprovalBannerState;
-  /** While another device holds the prompt: when its claim expires and this one may answer. */
+  /** While another answer holds the prompt: when its claim lapses on this client's clock and this one may answer. */
   readonly retryAtMs?: number;
+  /** After this client's own answer failed: its claim's attempt id, so Try again may take over exactly that claim. */
+  readonly retake?: string;
 }
 
 export interface Approval extends ApprovalView {
@@ -81,7 +83,7 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
 
   useEffect(() => {
     const shown = current.current;
-    const open = shown !== undefined && ["waiting", "failed", "elsewhere"].includes(shown.state.kind);
+    const open = shown !== undefined && ["waiting", "failed", "elsewhere", "unknown"].includes(shown.state.kind);
     if (shown === undefined || !open || showsPrompt(shown.mark, terminal)) return;
     let live = true;
     const resolve = async () => {
@@ -118,15 +120,25 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
     ...view,
     answer: (answer) => {
       if (view.state.kind !== "waiting" && view.state.kind !== "failed") return;
-      const { mark } = view;
+      const { mark, retake } = view;
       setView({ mark, state: { kind: "sending", answer } });
       const self = thisAnswerer();
       const send = async () => {
         try {
-          const result = await answerApproval(core, mark, answer, self, Date.now());
+          const result = await answerApproval(
+            core,
+            mark,
+            answer,
+            self,
+            Date.now(),
+            retake === undefined ? {} : { retake },
+          );
           const state = stateAfterAnswer(result, answer, self);
-          const retryAtMs = result.kind === "lost" ? result.record.atMs + CLAIM_TTL_MS : undefined;
-          setView(retryAtMs === undefined ? { mark, state } : { mark, state, retryAtMs });
+          // Another answer's claim lapses after CLAIM_TTL_MS of this client's own watch, which starts now; the claimer's
+          // own clock (its `atMs`) is never compared with this one.
+          const retryAtMs = state.kind === "elsewhere" ? Date.now() + CLAIM_TTL_MS : undefined;
+          if (result.kind === "failed") setView({ mark, state, retake: result.attempt });
+          else setView(retryAtMs === undefined ? { mark, state } : { mark, state, retryAtMs });
         } catch {
           // The claim itself did not get through (a dropped connection): nothing was sent; offer it again.
           setView({ mark, state: { kind: "failed", answer } });
