@@ -4,6 +4,7 @@ import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn } from "./machine-switch.ts";
+import { domOrder, dragPast, openFour, tabs } from "./tab-strip.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -162,6 +163,35 @@ test("coming back from Settings is not an arrival: the workspace returns without
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await expect.poll(() => arrivals(page)).toContain("div:opacity");
+});
+
+test("moving a tab is not an arrival: a drag, a keyboard move and a menu move start no arrival on any tab", async ({
+  page,
+}) => {
+  await openFour(page);
+  await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
+  await watchArrivals(page);
+  // Each move has to change the strip's DOM order: that DOM move is what could restart a tab's arrival.
+  const moved = async (move: () => Promise<void>) => {
+    const before = await domOrder(page);
+    await move();
+    await expect.poll(() => domOrder(page)).not.toEqual(before);
+  };
+  await moved(() => dragPast(page, tabs(page).nth(0), tabs(page).nth(2)));
+  await moved(async () => {
+    const mac = await page.evaluate(() => navigator.platform.startsWith("Mac"));
+    await tabs(page).nth(0).focus();
+    await page.keyboard.press(mac ? "Meta+Shift+ArrowRight" : "Control+Shift+PageDown");
+  });
+  await moved(async () => {
+    await tabs(page).nth(3).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Move tab left" }).click();
+  });
+  await twoFrames(page);
+  // A drag slides the neighbours (`translate`); an arrival is the opacity and transform from @starting-style.
+  expect((await arrivals(page)).filter((entry) => !entry.endsWith(":translate"))).toEqual([]);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
