@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type ConnectionSettings } from "../connection/setting
 import {
   closeDesktopWindow,
   desktopBridge,
+  HostStartError,
   onDesktopNavigate,
   setDesktopBackground,
   zoomDesktopWindow,
@@ -80,6 +81,17 @@ describe("desktop local host", () => {
     expect(desktopBridge({ doriface: { version: "1" } })).toBeNull();
     const bad = desktopBridge({ doriface: { startLocalHost: async () => ({ url: 1 }) } });
     await expect(bad?.startLocalHost() ?? Promise.resolve()).rejects.toThrow("no local host address");
+  });
+
+  test("a start the shell reports as failed rejects with that failure, typed", async () => {
+    const failure = { code: "hc-binary-missing", message: "not found", path: "hc", details: "raw output" };
+    const failed = desktopBridge({ doriface: { startLocalHost: async () => ({ failure }) } });
+    const error: unknown = await failed?.startLocalHost().then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    expect(error).toBeInstanceOf(HostStartError);
+    expect(error instanceof HostStartError ? error.failure : undefined).toEqual(failure);
   });
 
   test("the shell's navigations reach the app only as app paths, and only through a bridge that offers them", () => {

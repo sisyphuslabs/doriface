@@ -1,16 +1,30 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
-import type { LocalHostEndpoint } from "../shared/bridge.ts";
+import type { LocalHostEndpoint, LocalHostFailure } from "../shared/bridge.ts";
 import type { HostCommand } from "./host-command.ts";
+import { StderrTail } from "./host-failure.ts";
 
 export interface LocalHostOptions {
   readonly command: HostCommand;
-  /** The herdr-core binary; undefined leaves doriface-host on its own default (`hc` on PATH). */
-  readonly hc: string | undefined;
+  /**
+   * Finds the herdr-core binary at each start, so a Retry after installing it finds it; undefined leaves doriface-host
+   * on its own default (`hc` on PATH).
+   */
+  readonly hc: () => string | undefined;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly log: (line: string) => void;
   readonly readyTimeoutMs?: number | undefined;
+}
+
+export class LocalHostStartError extends Error {
+  override readonly name = "LocalHostStartError";
+  readonly failure: LocalHostFailure;
+
+  constructor(failure: LocalHostFailure) {
+    super(failure.details);
+    this.failure = failure;
+  }
 }
 
 /** doriface-host logs this line once its loopback listener is up. */
@@ -52,31 +66,43 @@ export class LocalHost {
   #spawn(): Promise<LocalHostEndpoint> {
     const { command, hc, env, log } = this.#options;
     const token = randomBytes(32).toString("base64url");
-    const args = [...command.args, "--listen", "127.0.0.1:0", "--no-relay", ...(hc === undefined ? [] : ["--hc", hc])];
+    const binary = hc();
+    const args = [
+      ...command.args,
+      "--listen",
+      "127.0.0.1:0",
+      "--no-relay",
+      ...(binary === undefined ? [] : ["--hc", binary]),
+    ];
     const child = spawn(command.file, args, {
       env: { ...env, DORIFACE_HOST_TOKEN: token },
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,
     });
     this.#child = child;
-    const tail: string[] = [];
+    const tail = new StderrTail(STDERR_TAIL);
     return new Promise<LocalHostEndpoint>((resolve, reject) => {
       let ready = false;
       let exit: string | undefined;
       let stderrEnded = false;
       // The exit event can come before the last stderr lines are read; the reason is final once both have happened.
       const failOnExit = (): void => {
-        if (exit !== undefined && stderrEnded) fail(`exited before listening (${exit})`);
+        if (exit !== undefined && stderrEnded) fail("host-exited", `exited before listening (${exit})`);
       };
-      const fail = (reason: string): void => {
+      const fail = (code: string, reason: string): void => {
         if (ready) return;
         ready = true;
         clearTimeout(timer);
         child.kill("SIGTERM");
-        reject(new Error(`doriface-host ${reason}${tail.length === 0 ? "" : `:\n${tail.join("\n")}`}`));
+        const output = tail.text();
+        const details = `doriface-host ${reason}${output === "" ? "" : `:\n${output}`}`;
+        reject(new LocalHostStartError({ code, message: `doriface-host ${reason}`, ...tail.report, details }));
       };
       const timer = setTimeout(
-        () => fail(exit === undefined ? "did not start in time" : `exited before listening (${exit})`),
+        () =>
+          exit === undefined
+            ? fail("host-timeout", "did not start in time")
+            : fail("host-exited", `exited before listening (${exit})`),
         this.#options.readyTimeoutMs ?? 15_000,
       );
       const stderr = createInterface({ input: child.stderr });
@@ -87,14 +113,13 @@ export class LocalHost {
       stderr.on("line", (line) => {
         log(`doriface-host: ${line}`);
         tail.push(line);
-        if (tail.length > STDERR_TAIL) tail.shift();
         const url = READY_LINE.exec(line)?.[1];
         if (url === undefined || ready) return;
         ready = true;
         clearTimeout(timer);
         resolve({ url, token });
       });
-      child.once("error", (error) => fail(`could not start (${error.message})`));
+      child.once("error", (error) => fail("host-spawn-failed", `could not start (${error.message})`));
       child.once("exit", (code, signal) => {
         exit = signal ?? `code ${String(code)}`;
         failOnExit();
