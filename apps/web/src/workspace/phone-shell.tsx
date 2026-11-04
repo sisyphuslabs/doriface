@@ -102,6 +102,10 @@ function PhoneTerminal(props: {
   const voice = useDictation();
   const mic = useRef<HTMLButtonElement>(null);
   const [latched, setLatched] = useState<ReadonlySet<string>>(new Set());
+  // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
+  const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
+  // The view that showed its program had already ended; the keys bar has nothing to send to under it.
+  const [endedView, setEndedView] = useState<string | null>(null);
   const onSend = useCallback((next: ((data: TerminalInput) => void) | null) => {
     send.current = next;
   }, []);
@@ -126,12 +130,18 @@ function PhoneTerminal(props: {
   const machine = machineOf(terminal.address);
   const offline = terminal.offline === true && machine !== undefined;
   const { toggle } = voice;
+  // An ended view or an offline machine has nothing to type into: no mic, no dictation from the palette, and one under
+  // way ends.
+  const ended = endedView === viewKey;
   useEffect(() => {
-    dictate.current = offline ? null : toggle;
+    dictate.current = offline || ended ? null : toggle;
     return () => {
       dictate.current = null;
     };
-  }, [dictate, offline, toggle]);
+  }, [dictate, offline, ended, toggle]);
+  useEffect(() => {
+    if (ended || offline) voice.dictation.close();
+  }, [ended, offline, voice.dictation]);
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">
@@ -140,15 +150,14 @@ function PhoneTerminal(props: {
         terminals={terminals}
         onBack={onBack}
         onOpen={onOpen}
-        action={offline ? null : <DictateButton voice={voice} target={title} ref={mic} />}
+        action={offline || ended ? null : <DictateButton voice={voice} target={title} ref={mic} />}
       />
       <ConnectionLine />
       {offline ? (
         <MachineOffline machine={machine} />
       ) : (
         <TerminalView
-          // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
-          key={`${terminal.address}#${terminal.pid ?? ""}`}
+          key={viewKey}
           connection={connection}
           address={terminal.address}
           pid={terminal.pid ?? null}
@@ -159,9 +168,12 @@ function PhoneTerminal(props: {
           onSend={onSend}
           // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
+          // The header already has Back to agents; this one closes the ended session.
+          closeLabel="Close"
+          onEnded={() => setEndedView(viewKey)}
         />
       )}
-      {voice.state.kind === "idle" || offline ? (
+      {ended ? null : voice.state.kind === "idle" || offline ? (
         <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
       ) : (
         // Dictation takes the key bar's place; the transcript is typed past the latched modifiers, as written.
