@@ -12,9 +12,15 @@ function joined(left: Uint8Array, right: Uint8Array): Uint8Array {
 /**
  * Reads the close codes the relay sends on one plain `ws://` connection, from the raw server-to-host bytes a tap
  * forwards: the HTTP head first, then unmasked WebSocket frames. Payloads of other frames are skipped, not buffered.
+ * Each code is appended to `codes` as it arrives, so readers that share one list keep arrival order across connections.
  */
 export class CloseFrameReader {
-  readonly codes: number[] = [];
+  readonly codes: number[];
+
+  constructor(codes: number[] = []) {
+    this.codes = codes;
+  }
+
   #head = "";
   #inFrames = false;
   #pending: Uint8Array = new Uint8Array(0);

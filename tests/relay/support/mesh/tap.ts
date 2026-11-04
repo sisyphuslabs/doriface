@@ -20,7 +20,7 @@ export interface Tap {
   openTo(hostId: string): number;
   /** Every host this host dialed through the tap (sync sessions and hc lines alike), refused dials included. */
   dials(): readonly string[];
-  /** Every WebSocket close code the relay sent this host, on its uplink and its dials alike. */
+  /** Every WebSocket close code the relay sent this host, on its uplink and its dials alike, in arrival order. */
   closeCodes(): readonly number[];
   /** Calls `wake` whenever a connection opens or closes, until the returned function is called. */
   onChange(wake: () => void): () => void;
@@ -49,7 +49,8 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
     for (const wake of wakes) wake();
   };
   const dialed: string[] = [];
-  const readers: CloseFrameReader[] = [];
+  /** One list for every connection, so a phase can mark it by length and read only what arrived later. */
+  const closeCodes: number[] = [];
   let forwarded = 0;
   let cut = false;
   let blocked = new Set<string>();
@@ -71,9 +72,8 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
           headDone: false,
           target: undefined,
           queue: [],
-          closes: new CloseFrameReader(),
+          closes: new CloseFrameReader(closeCodes),
         };
-        readers.push(conn.closes);
         socket.data = conn;
         conns.add(socket);
         changed();
@@ -133,7 +133,7 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
     open: () => conns.size,
     openTo: (hostId) => [...conns].filter((socket) => socket.data.target === hostId).length,
     dials: () => dialed,
-    closeCodes: () => readers.flatMap((reader) => reader.codes),
+    closeCodes: () => closeCodes,
     onChange(wake) {
       wakes.add(wake);
       return () => wakes.delete(wake);
