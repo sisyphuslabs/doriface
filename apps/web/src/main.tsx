@@ -18,6 +18,7 @@ import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
 import { captureNotice, listenForNotices } from "./push/notice-open.ts";
+import { followConnection } from "./push/push-settings.ts";
 import { setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { router } from "./router.tsx";
 
@@ -29,6 +30,7 @@ if (location.protocol === "https:" || location.protocol === "http:") {
   // A tapped notification opens the app at /?notice=<id>, or reaches an open window as a message.
   captureNotice();
   listenForNotices(() => void router.navigate({ to: "/" }));
+  followConnection();
 } else void removeServiceWorkers();
 void bootConnection(desktopBridge(), connectionStore);
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */

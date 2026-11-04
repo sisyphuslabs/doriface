@@ -1,10 +1,21 @@
-import { base64urlDecode, bytesEqual } from "@doriface/crypto";
-import { DEFAULT_PUSH_PREFS, type PushHostLine, type PushPrefs, type PushSubscriptionKeys } from "@doriface/protocol";
+import { base64urlDecode } from "@doriface/crypto";
+import { DEFAULT_PUSH_PREFS, type PushHostLine, type PushPrefs } from "@doriface/protocol";
 import { useSyncExternalStore } from "react";
+import { type ConnectionSettings, isConfigured } from "../connection/settings.ts";
 import { connectionStore } from "../connection/store.ts";
 import { pushChannel } from "./push-channel.ts";
-import { loadPushRoute, routeOf, savePushRoute } from "./push-route.ts";
+import {
+  loadPushPrefs,
+  loadPushRoute,
+  type PushRoute,
+  routeOf,
+  sameRoute,
+  savePushPrefs,
+  savePushRoute,
+} from "./push-route.ts";
 import { browserScope, type PushSupport, pushSupport } from "./push-support.ts";
+import { reconcile } from "./reconcile.ts";
+import { keysOf, sameKey } from "./subscription-keys.ts";
 
 export interface PushView {
   readonly support: PushSupport;
@@ -28,25 +39,11 @@ const INITIAL: PushView = {
   tested: false,
 };
 
-/** base64url without padding, as the host's parser takes it, from whatever padding the browser used. */
-const unpadded = (value: string): string => value.replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-
-function keysOf(subscription: PushSubscription): PushSubscriptionKeys {
-  const json = subscription.toJSON();
-  const p256dh = json.keys?.["p256dh"];
-  const auth = json.keys?.["auth"];
-  if (p256dh === undefined || auth === undefined) throw new Error("the browser's subscription has no keys");
-  return { endpoint: subscription.endpoint, p256dh: unpadded(p256dh), auth: unpadded(auth) };
-}
-
 function expect(reply: PushHostLine, what: string): void {
   if (reply.t === "error") throw new Error(`The host refused to ${what}: ${reply.reason}`);
 }
 
-const sameKey = (subscription: PushSubscription, vapidKey: string): boolean => {
-  const key = subscription.options.applicationServerKey;
-  return key !== null && bytesEqual(new Uint8Array(key), base64urlDecode(vapidKey));
-};
+const manager = async (): Promise<PushManager> => (await navigator.serviceWorker.ready).pushManager;
 
 /** Settings > Notifications: this device's permission, its subscription on the host, and what it asks to hear. */
 class PushSettings {
@@ -62,24 +59,36 @@ class PushSettings {
     return this.#view;
   }
 
-  /** Reads the state; never asks for permission. A subscription the host lost is handed to it again. */
+  /**
+   * Reads the state; never asks for permission. Notifications that were turned on here stay on: a subscription the
+   * browser dropped is made again, and one the host lost is handed to it again (`reconcile`).
+   */
   async load(): Promise<void> {
     const support = pushSupport(browserScope());
     const permission = support === "supported" ? Notification.permission : null;
     this.#set({ support, permission });
     if (support !== "supported") return this.#set({ busy: false });
     await this.#run("read the notification settings", async () => {
-      const subscription = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
       const route = await loadPushRoute();
-      if (subscription === null || route === undefined || permission !== "granted") {
+      const granted = permission === "granted";
+      if (!granted || route === undefined) {
         if (route !== undefined) await savePushRoute(null);
         return this.#set({ on: false });
       }
+      const subscription = await (await manager()).getSubscription();
       const ready = await pushChannel.request({ t: "hello" }, route);
       if (ready.t !== "ready") throw new Error("the host did not answer");
-      const held = ready.subscriptions.find((entry) => entry.endpoint === subscription.endpoint);
-      if (held === undefined || !sameKey(subscription, ready.vapidKey)) return this.#set({ on: false });
-      this.#set({ on: true, prefs: held.prefs });
+      const held = ready.subscriptions.find((entry) => entry.endpoint === subscription?.endpoint);
+      const action = reconcile({
+        granted,
+        routeSaved: true,
+        browser: subscription === null ? null : { keyMatches: sameKey(subscription, ready.vapidKey) },
+        held: held !== undefined,
+      });
+      const prefs = held?.prefs ?? (await loadPushPrefs()) ?? DEFAULT_PUSH_PREFS;
+      if (action !== "on") await this.#register(route, prefs, ready.vapidKey);
+      else await savePushPrefs(prefs);
+      this.#set({ on: true, prefs });
     });
   }
 
@@ -89,25 +98,7 @@ class PushSettings {
     this.#set({ permission });
     if (permission !== "granted") return;
     await this.#run("turn notifications on", async () => {
-      const route = routeOf(connectionStore.settings);
-      const ready = await pushChannel.request({ t: "hello" }, route);
-      if (ready.t !== "ready") throw new Error("the host did not answer");
-      const manager = (await navigator.serviceWorker.ready).pushManager;
-      let subscription = await manager.getSubscription();
-      if (subscription !== null && !sameKey(subscription, ready.vapidKey)) {
-        await subscription.unsubscribe();
-        subscription = null;
-      }
-      subscription ??= await manager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: new Uint8Array(base64urlDecode(ready.vapidKey)),
-      });
-      const prefs = this.#view.prefs;
-      expect(
-        await pushChannel.request({ t: "subscribe", subscription: keysOf(subscription), prefs }, route),
-        "subscribe",
-      );
-      await savePushRoute(route);
+      await this.#register(routeOf(connectionStore.settings), this.#view.prefs);
       this.#set({ on: true });
     });
   }
@@ -115,7 +106,7 @@ class PushSettings {
   /** Removes the subscription from the host and the browser; the permission itself stays the browser's. */
   async turnOff(): Promise<void> {
     await this.#run("turn notifications off", async () => {
-      const subscription = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+      const subscription = await (await manager()).getSubscription();
       if (subscription !== null) {
         await pushChannel.request({ t: "unsubscribe", endpoint: subscription.endpoint }).catch(() => undefined);
         await subscription.unsubscribe();
@@ -125,25 +116,77 @@ class PushSettings {
     });
   }
 
+  /**
+   * The connection moved to another host or token: the old host stops notifying this browser, the saved route (and the
+   * loopback token in it) is dropped, and notifications that were on are registered with the new host.
+   */
+  async retarget(next: ConnectionSettings): Promise<void> {
+    const route = await loadPushRoute().catch(() => undefined);
+    if (route === undefined) return;
+    const target = isConfigured(next) ? routeOf(next) : undefined;
+    if (target !== undefined && sameRoute(route, target)) return;
+    await this.#run("move notifications to the new host", async () => {
+      const subscription = await (await manager()).getSubscription();
+      if (subscription !== null) {
+        await pushChannel.request({ t: "unsubscribe", endpoint: subscription.endpoint }, route).catch(() => undefined);
+      }
+      await savePushRoute(null);
+      pushChannel.reset();
+      if (target === undefined || Notification.permission !== "granted") return this.#set({ on: false });
+      await this.#register(target, (await loadPushPrefs()) ?? this.#view.prefs);
+      this.#set({ on: true });
+    });
+  }
+
   async setPrefs(prefs: PushPrefs): Promise<void> {
     const before = this.#view.prefs;
     this.#set({ prefs });
     await this.#run("save the notification settings", async () => {
-      const subscription = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+      const subscription = await (await manager()).getSubscription();
       if (subscription === null) return;
       const reply = await pushChannel.request({ t: "prefs", endpoint: subscription.endpoint, prefs });
       if (reply.t === "error") this.#set({ prefs: before });
       expect(reply, "save the settings");
+      await savePushPrefs(prefs);
     });
   }
 
   async test(): Promise<void> {
     await this.#run("send a test notification", async () => {
-      const subscription = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+      const subscription = await (await manager()).getSubscription();
       if (subscription === null) throw new Error("this device has no subscription");
       expect(await pushChannel.request({ t: "test", endpoint: subscription.endpoint }), "send a test notification");
       this.#set({ tested: true });
     });
+  }
+
+  /**
+   * Subscribes the browser with the host's VAPID key (again, when it holds none or one for another key), hands the
+   * subscription to the host, and saves the route and preferences the service worker needs.
+   */
+  async #register(route: PushRoute, prefs: PushPrefs, knownKey?: string): Promise<void> {
+    let vapidKey = knownKey;
+    if (vapidKey === undefined) {
+      const ready = await pushChannel.request({ t: "hello" }, route);
+      if (ready.t !== "ready") throw new Error("the host did not answer");
+      vapidKey = ready.vapidKey;
+    }
+    const pushManager = await manager();
+    let subscription = await pushManager.getSubscription();
+    if (subscription !== null && !sameKey(subscription, vapidKey)) {
+      await subscription.unsubscribe();
+      subscription = null;
+    }
+    subscription ??= await pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: new Uint8Array(base64urlDecode(vapidKey)),
+    });
+    expect(
+      await pushChannel.request({ t: "subscribe", subscription: keysOf(subscription), prefs }, route),
+      "subscribe",
+    );
+    await savePushRoute(route);
+    await savePushPrefs(prefs);
   }
 
   async #run(what: string, step: () => Promise<void>): Promise<void> {
@@ -165,3 +208,13 @@ class PushSettings {
 export const pushSettings = new PushSettings();
 
 export const usePushSettings = (): PushView => useSyncExternalStore(pushSettings.subscribe, () => pushSettings.view);
+
+/** Keeps the saved push route with the connection: a change of host or token re-registers notifications there. */
+export function followConnection(): void {
+  let settings = connectionStore.settings;
+  connectionStore.subscribe(() => {
+    if (connectionStore.settings === settings) return;
+    settings = connectionStore.settings;
+    void pushSettings.retarget(settings);
+  });
+}

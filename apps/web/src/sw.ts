@@ -1,11 +1,14 @@
 /// <reference lib="webworker" />
-import { parsePushNotice, type PromptAnswer, type PushHostLine } from "@doriface/protocol";
+import { base64urlDecode } from "@doriface/crypto";
+import { DEFAULT_PUSH_PREFS, parsePushNotice, type PromptAnswer, type PushHostLine } from "@doriface/protocol";
 import { clientsClaim } from "workbox-core";
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from "workbox-precaching";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { planClick } from "./push/notice-click.ts";
 import { noticeDisplay } from "./push/notice-display.ts";
-import { loadPushRoute, openPushLink } from "./push/push-route.ts";
+import { loadPushPrefs, loadPushRoute, openPushLink } from "./push/push-route.ts";
+import { carryOver } from "./push/reconcile.ts";
+import { asSubscription } from "./push/subscription-keys.ts";
 import { PushStreamClient } from "./push/push-stream-client.ts";
 
 declare const self: ServiceWorkerGlobalScope & {
@@ -58,6 +61,38 @@ async function answerOverPush(id: string, answer: PromptAnswer): Promise<PushHos
     client.close();
   }
 }
+
+/**
+ * The browser replaced or dropped this device's subscription (expiry, rotation): the host drops the old endpoint and
+ * takes the new one with the same preferences, so notices keep coming without opening Settings.
+ */
+async function carryOverHere(old: unknown, fresh: unknown): Promise<void> {
+  const route = await loadPushRoute();
+  if (route === undefined) return;
+  const client = new PushStreamClient(await openPushLink(route));
+  try {
+    const ready = await client.request({ t: "hello" });
+    if (ready.t !== "ready") return;
+    const next =
+      asSubscription(fresh) ??
+      asSubscription(
+        await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: new Uint8Array(base64urlDecode(ready.vapidKey)),
+        }),
+      );
+    if (next === null) return;
+    const prefs = (await loadPushPrefs()) ?? DEFAULT_PUSH_PREFS;
+    await carryOver(asSubscription(old), next, prefs, (line) => client.request(line));
+  } finally {
+    client.close();
+  }
+}
+
+self.addEventListener("pushsubscriptionchange", (event: Event) => {
+  if (!(event instanceof ExtendableEvent)) return;
+  event.waitUntil(carryOverHere(Reflect.get(event, "oldSubscription"), Reflect.get(event, "newSubscription")));
+});
 
 /** Focuses an open window and hands it the notice, or opens one at the notice's address. */
 async function openApp(url: string): Promise<void> {

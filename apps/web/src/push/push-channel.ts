@@ -11,6 +11,8 @@ const REOPEN_MS = 5_000;
 export class PushChannel {
   readonly #open: (route: PushRoute) => Promise<PushStreamClient>;
   #client: PushStreamClient | undefined;
+  /** The route `#client` was opened on: a request for another host never reuses it. */
+  #clientRoute = "";
   #opening: Promise<PushStreamClient> | undefined;
   #focus: string | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
@@ -55,12 +57,21 @@ export class PushChannel {
     }
   }
 
-  #connect(route: PushRoute): Promise<PushStreamClient> {
+  /** Closes the stream, e.g. when the connection moved to another host; the next request opens a fresh one. */
+  reset(): void {
     const client = this.#client;
-    if (client !== undefined && !client.closed) return Promise.resolve(client);
+    if (client !== undefined) this.#drop(client);
+  }
+
+  #connect(route: PushRoute): Promise<PushStreamClient> {
+    const key = JSON.stringify(route);
+    const client = this.#client;
+    if (client !== undefined && !client.closed && this.#clientRoute === key) return Promise.resolve(client);
+    if (client !== undefined) this.#drop(client);
     this.#opening ??= this.#open(route)
       .then((opened) => {
         this.#client = opened;
+        this.#clientRoute = key;
         return opened;
       })
       .finally(() => {

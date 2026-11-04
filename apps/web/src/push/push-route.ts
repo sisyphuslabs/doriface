@@ -5,6 +5,7 @@ import { loadDeviceKey } from "../connection/device-key.ts";
 import type { ConnectionSettings } from "../connection/settings.ts";
 import { openWebSocketLink } from "../connection/ws-link.ts";
 import { deviceStore, type KeyValueStore } from "../storage/idb.ts";
+import { parsePushClientLine, type PushPrefs } from "@doriface/protocol";
 
 /**
  * How to reach the host's push stream. The service worker cannot read localStorage, where the connection settings
@@ -45,6 +46,25 @@ export async function loadPushRoute(store: KeyValueStore = deviceStore): Promise
 
 export const savePushRoute = (route: PushRoute | null, store: KeyValueStore = deviceStore): Promise<void> =>
   store.put(KEY, route);
+
+const PREFS_KEY = "push-prefs";
+
+/** The preferences last sent to the host, so the worker can carry them to a replaced subscription. */
+export async function loadPushPrefs(store: KeyValueStore = deviceStore): Promise<PushPrefs | undefined> {
+  const value = await store.get(PREFS_KEY);
+  if (value === undefined || value === null) return undefined;
+  try {
+    const line = parsePushClientLine(JSON.stringify({ t: "prefs", endpoint: "https://prefs.invalid/", prefs: value }));
+    return line.t === "prefs" ? line.prefs : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export const savePushPrefs = (prefs: PushPrefs, store: KeyValueStore = deviceStore): Promise<void> =>
+  store.put(PREFS_KEY, prefs);
+
+export const sameRoute = (a: PushRoute, b: PushRoute): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 const SUBPROTOCOL = "doriface.v1";
 const TOKEN_PREFIX = "doriface.token.";
