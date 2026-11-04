@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { relayDir } from "../../private-relay.ts";
 import { testIp } from "../probe.ts";
 import { within } from "../watch.ts";
-import { processTable, signalAll, treeOf } from "./processes.ts";
+import { adoptProcessGroup, stopProcessGroup } from "../process-group.ts";
 import { makeTap, type Tap } from "./tap.ts";
 
 export type { Tap } from "./tap.ts";
@@ -74,6 +74,8 @@ export async function startMeshRelay(): Promise<MeshRelay> {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
+      // A group of its own, adopted: an interrupt of the test runner ends wrangler and every workerd it started.
+      detached: true,
       env: {
         ...process.env,
         WRANGLER_SEND_METRICS: "false",
@@ -82,6 +84,7 @@ export async function startMeshRelay(): Promise<MeshRelay> {
       },
     },
   );
+  adoptProcessGroup(proc, scratch);
   let output = "";
   const ready = Promise.withResolvers<string>();
   const drain = async (stream: ReadableStream<Uint8Array>): Promise<void> => {
@@ -100,13 +103,8 @@ export async function startMeshRelay(): Promise<MeshRelay> {
   const ip = testIp();
   const stop = async (): Promise<void> => {
     for (const tap of taps) tap.stop();
-    const tree = treeOf(await processTable(), proc.pid);
-    signalAll(tree.toReversed(), "SIGTERM");
-    await proc.exited;
-    await within(drained, "the relay's processes exiting", STOP_MS).catch((error: unknown) => {
-      signalAll(tree, "SIGKILL");
-      throw error;
-    });
+    await stopProcessGroup(proc);
+    await within(drained, "the relay's processes exiting", STOP_MS);
     rmSync(scratch, { recursive: true, force: true });
   };
   try {

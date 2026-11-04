@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { lookupPairSlot, PairLookupError } from "@doriface/relay-client";
+import { join } from "node:path";
 import { HOST_NAMES, type Mesh, type Receipt, startMesh } from "./support/mesh/mesh.ts";
+import { isAlive } from "./support/mesh/processes.ts";
 import { testIp } from "./support/probe.ts";
 import { inOrder } from "./support/sequential.ts";
 
@@ -96,4 +98,33 @@ describe("the four-host relay harness, before any mesh command exists", () => {
     expect(receipt.alive).toEqual([]);
     expect(receipt.listening).toEqual([]);
   }, 60_000);
+});
+
+/** The first line `stream` yields. */
+async function firstLine(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = "";
+  for await (const chunk of stream) {
+    text += decoder.decode(chunk, { stream: true });
+    if (text.includes("\n")) return text;
+  }
+  throw new Error(`the mesh process ended before it started: ${text}`);
+}
+
+describe("the harness ended by a signal", () => {
+  test("SIGTERM to a process running a mesh leaves none of its hosts, hc cores or relay processes alive", async () => {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, "support/mesh/interrupted-mesh.ts")], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "inherit",
+    });
+    const text = await firstLine(child.stdout);
+    const owned: unknown = JSON.parse(text.slice(0, text.indexOf("\n")));
+    if (!Array.isArray(owned)) throw new Error(`not a pid list: ${text}`);
+    const pids = owned.filter((pid): pid is number => typeof pid === "number");
+    expect(pids.length).toBeGreaterThan(3);
+    child.kill("SIGTERM");
+    await child.exited;
+    expect(pids.filter(isAlive)).toEqual([]);
+  }, 180_000);
 });

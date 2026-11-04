@@ -1,5 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { within } from "../watch.ts";
+import { onInterrupt } from "../process-group.ts";
 import { type MeshHost, startMeshHost } from "./mesh-host.ts";
 import { isAlive, type Owned, processTable, treeOf } from "./processes.ts";
 import { type MeshRelay, startMeshRelay } from "./relay-front.ts";
@@ -35,6 +36,8 @@ export interface Mesh {
   until(what: string, check: () => Promise<boolean> | boolean, ms?: number): Promise<void>;
   /** `mesh pair --auto` on `inviter`, then `mesh join` on `joiner`: the only operator steps a join takes. */
   join(inviter: string, joiner: string): Promise<void>;
+  /** Every process this mesh owns now: the relay tree, the hosts and their children, and each host's hc core. */
+  owned(): Promise<readonly Owned[]>;
   dispose(): Promise<Receipt>;
 }
 
@@ -116,12 +119,12 @@ export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
   const wakeAll = (): void => {
     for (const wake of wakes) wake();
   };
-  const dispose = async (): Promise<Receipt> => {
+  const owned = async (): Promise<readonly Owned[]> => {
     const coreStatuses = await Promise.all(
       hosts.map(async (each) => (await core(each.name)).call("server.status").catch(() => undefined)),
     );
     const rows = await processTable();
-    const owned: Owned[] = [
+    return [
       ...(relay === undefined ? [] : treeOf(rows, relay.pid).map((pid): Owned => ({ kind: "relay", pid }))),
       ...hosts.flatMap((host) =>
         host.owned().flatMap((own) => treeOf(rows, own.pid).map((pid): Owned => ({ kind: own.kind, pid }))),
@@ -130,13 +133,19 @@ export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
         status === undefined ? [] : treeOf(rows, status.pid).map((pid): Owned => ({ kind: "hc-core", pid })),
       ),
     ];
+  };
+  const dispose = async (): Promise<Receipt> => {
+    unhook();
+    const owns = await owned();
     for (const close of closers.splice(0)) close();
     await Promise.all(hosts.map((host) => host.dispose()));
     await relay?.stop();
     const ports = hosts.flatMap((host) => (host.tap === undefined ? [] : [host.tap.port]));
     const listening = (await Promise.all(ports.map(async (port) => ((await portListens(port)) ? [port] : [])))).flat();
-    return { owned, alive: owned.filter((own) => isAlive(own.pid)), listening };
+    return { owned: owns, alive: owns.filter((own) => isAlive(own.pid)), listening };
   };
+  // An interrupt of the runner (SIGTERM, SIGINT) tears the mesh down first: the hc cores are daemons in no group.
+  const unhook = onInterrupt(async () => void (await dispose()));
   const starts = await Promise.allSettled(
     names.map(async (name) => {
       const tap = relay?.tapFor();
@@ -150,6 +159,7 @@ export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
   );
   const failed = starts.find((start) => start.status === "rejected");
   if (failed !== undefined) {
+    unhook();
     await Promise.all(hosts.map((each) => each.dispose()));
     await relay?.stop();
     throw failed.reason;
@@ -207,5 +217,5 @@ export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
     const joined = await host(joiner).cli("mesh", "join", link, "--yes", "--name", joiner, ...via);
     if (joined.exit !== 0) throw new Error(`mesh join on ${joiner} failed: ${joined.stderr}${joined.stdout}`);
   };
-  return { relay, hosts, host, core, onWake, until, join, dispose };
+  return { relay, hosts, host, core, onWake, until, join, owned, dispose };
 }
