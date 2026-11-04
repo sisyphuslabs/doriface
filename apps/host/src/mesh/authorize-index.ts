@@ -115,6 +115,8 @@ export class AuthorizeIndex {
   readonly #hcIds = new Set<string>();
   readonly #hostIds = new Set<string>();
   readonly #signPubs = new Set<string>();
+  /** The signing keys whose cards name each key; "" stands for a current member's superseded key (owner not kept). */
+  readonly #namedBy = new Map<string, Set<string>>();
 
   constructor(data: IndexData) {
     this.generation = data.generation;
@@ -136,11 +138,32 @@ export class AuthorizeIndex {
       for (const key of entry.keys) this.#revoked.add(key);
       this.#hostIds.add(entry.hostId);
     }
+    const name = (key: string | undefined, signPub: string): void => {
+      if (key === undefined) return;
+      const by = this.#namedBy.get(key) ?? new Set<string>();
+      by.add(signPub);
+      this.#namedBy.set(key, by);
+    };
+    for (const entry of [...data.members, ...data.overCap]) {
+      name(entry.noisePub, entry.signPub);
+      name(entry.devicePub, entry.signPub);
+    }
+    for (const entry of data.revoked) for (const key of entry.keys) name(key, entry.signPub);
+    for (const key of data.superseded) name(key, "");
   }
 
-  /** The current, not over-cap member whose Noise key this is. */
+  /**
+   * The current, not over-cap member whose Noise key this is, when no other signing key names it (#90): a key that two
+   * members hold, that a revoked member's card named, or that is another member's superseded key authorizes nobody.
+   */
   member(key: string): MemberEntry | undefined {
-    return this.#byNoise.get(key);
+    const entry = this.#byNoise.get(key);
+    return entry === undefined || this.namedByAnother(key, entry.signPub) ? undefined : entry;
+  }
+
+  /** Whether a card of a signing key other than `signPub` names `key` (a member's, revoked or superseded key). */
+  namedByAnother(key: string, signPub: string): boolean {
+    return [...(this.#namedBy.get(key) ?? [])].some((by) => by !== signPub);
   }
 
   /** Why a key that is not a current member's Noise key may not be a device, if it may not (section 9.2 step 2). */
@@ -149,6 +172,8 @@ export class AuthorizeIndex {
     if (this.#overCap.has(key)) return "over-cap mesh member";
     if (this.#memberDevices.has(key)) return "this key belongs to a mesh member: use the mesh line";
     if (this.#superseded.has(key)) return "a superseded key of a mesh member";
+    if (this.#byNoise.has(key) && this.member(key) === undefined)
+      return "a Noise key that more than one mesh key names";
     return undefined;
   }
 

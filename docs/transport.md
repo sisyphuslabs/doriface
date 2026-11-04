@@ -238,9 +238,10 @@ own_chain(x)    = every record of x.by in past(x) has a counter < x.n, and x.n -
 saw(p, a, b)    = ∃ w ∈ S, w.by == p, a ∈ past(w), b ∉ past(w), testifies(w)       # saw0: with testifies0
 support(a, b)   = |{ p ∈ pool : saw(p, a, b) and not saw(p, b, a) }|
                   # pool = voters1(v, x) of the conflict at level 1, voters(v, x) at level 0 (same pool both ways)
-type_ok(x, V)   = admit:  subject ∉ V.members, or the card's noisePub == V.noise[subject]
+type_ok(x, V)   = admit:  (subject ∉ V.members, or the card's noisePub == V.noise[subject])
+                          and the card's noisePub ≠ V.noise[k] for every k ∈ V.members, k ≠ subject
                   name:   subject ∈ V.members
-                  rekey:  by == subject
+                  rekey:  by == subject, and the card's noisePub ≠ V.noise[k] for every k ∈ V.members, k ≠ subject
                   revoke: every subject is the subject of some found/admit in past(x)
                   ack:    true
 
@@ -260,7 +261,7 @@ membership(S, eff):
 
 - Both directions of one conflict use the same pool, the voters of (accuser v, accused x): `voters` at level 0 and `voters1` at level 1. The revoke lineage walk in `status` is taken hop by hop: it starts at the governing admission of the revoke's signer in `view(past(x))`, and each later hop looks up the governing admission of the previous admission's signer in the view of that admission's own past (`view(past(g))`, the view it was written under), not in one fixed view. A key with no governing admission on the way voids the revoke, and the walk goes all the way to the founding record.
 - A conflict that no independent member present at the revoked key's last own record can decide is resolved fail-closed: the revoked key's admits and other non-revokes fall, and its revokes stand.
-- A member's Noise key comes from its admission's card or a later `rekey` it signed; an admit never changes a current member's key. A member's governing admission is the first effective one, in canonical order, that follows every effective revoke of it. Its admitter is that admission's signer (the lineage). At most 12 members: members past the twelfth in canonical order are over-cap, are not dialed and cannot sign.
+- A member's Noise key comes from its admission's card or a later `rekey` it signed; an admit never changes a current member's key, and no admit or rekey takes another current member's key (a twin). Twins written in concurrent branches both pass `type_ok`; a host resolves them when it authorizes: a Noise key that the cards of more than one signing key name (two members, a revoked member's card, or another member's superseded key) authorizes nobody, and an inviter refuses a new signing key that presents such a key. A member's governing admission is the first effective one, in canonical order, that follows every effective revoke of it. Its admitter is that admission's signer (the lineage). At most 12 members: members past the twelfth in canonical order are over-cap, are not dialed and cannot sign.
 
 ### Joining, sync and connectivity
 
