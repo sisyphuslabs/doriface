@@ -40,14 +40,14 @@ async function openPage(browser: Browser, { width, theme }: Shot): Promise<{ pag
   );
   const page = await context.newPage();
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Machines" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: "Spaces" })).toBeVisible({ timeout: 20_000 });
   return { page, close: () => context.close() };
 }
 
 async function shoot(page: Page, shot: Shot, name: string): Promise<void> {
   if (shot.width === "390") {
     await page
-      .getByRole("heading", { name: "Machines" })
+      .getByRole("heading", { name: "Spaces" })
       .evaluate((heading) => heading.scrollIntoView({ block: "center" }));
   }
   await page.evaluate(() => document.fonts.ready);

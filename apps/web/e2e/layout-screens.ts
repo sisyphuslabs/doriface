@@ -144,11 +144,13 @@ export const SCREENS: readonly Screen[] = [
       await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
     },
   },
-  ...(["Connections", "Appearance", "Device", "Terminal", "Keybindings"] as const).map((label): Screen => ({
-    name: `settings-${label.toLowerCase()}`,
-    start: "layout",
-    open: (page, narrow) => section(page, narrow, label),
-  })),
+  ...(["Connections", "Appearance", "Device", "Terminal", "Keybindings", "Voice input"] as const).map(
+    (label): Screen => ({
+      name: `settings-${label.toLowerCase()}`,
+      start: "layout",
+      open: (page, narrow) => section(page, narrow, label),
+    }),
+  ),
   {
     name: "settings-storage-error",
     start: "layout",
