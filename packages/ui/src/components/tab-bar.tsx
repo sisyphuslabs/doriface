@@ -1,10 +1,11 @@
 import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
-import { type ReactNode, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
 import { ContextMenu, MenuItem } from "./menu.tsx";
 import { StatusIndicator, type AgentStatus } from "./status.tsx";
-import { caretLeft, type DragState, landingLeft, type Settle, shiftOf, useTabDrag } from "./tab-drag.ts";
+import { useTabDrag } from "./tab-drag.ts";
+import { DropCaret, DropIndicator, placement } from "./tab-drop.tsx";
 
 export interface WorkspaceTab {
   readonly id: string;
@@ -48,44 +49,6 @@ export interface TabBarProps {
   readonly className?: string;
 }
 
-const MOTION = "transition-[translate,opacity] duration-(--duration-micro) ease-out";
-
-/** Where a tab is drawn while a drag or its settle is under way, and how it gets there. */
-function placement(id: string, index: number, drag: DragState | null, settle: Settle | null) {
-  if (settle?.id === id) {
-    return settle.running
-      ? { offset: 0, className: cn(MOTION, "motion-reduce:translate-none!") }
-      : { offset: settle.offset, className: "motion-reduce:translate-none! motion-reduce:opacity-0" };
-  }
-  if (drag === null) return { offset: 0, className: "" };
-  if (drag.id === id) return { offset: drag.offset, className: "z-10 cursor-grabbing bg-raised shadow-overlay" };
-  return { offset: shiftOf(drag, index), className: cn(MOTION, "motion-reduce:translate-none!") };
-}
-
-/** The landing place: the gap neighbours open, or a caret where they stay put under reduced motion. */
-function DropIndicator({ drag }: { readonly drag: DragState }) {
-  const width = drag.slots[drag.from]?.width ?? 0;
-  return (
-    <span
-      aria-hidden
-      data-tab-drop-indicator
-      className="pointer-events-none absolute top-1/2 h-7 -translate-y-1/2 rounded-md bg-hover motion-reduce:hidden"
-      style={{ left: landingLeft(drag), width }}
-    />
-  );
-}
-
-function DropCaret({ drag }: { readonly drag: DragState }) {
-  return (
-    <span
-      aria-hidden
-      data-tab-drop-caret
-      className="pointer-events-none absolute top-1/2 hidden h-5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ring motion-reduce:block"
-      style={{ left: caretLeft(drag) }}
-    />
-  );
-}
-
 /** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars; tabs reorder by drag. */
 export function TabBar({
   tabs,
@@ -104,10 +67,13 @@ export function TabBar({
   const list = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const focused = useRef<string | null>(null);
-  const { drag, settle, lifted, onPointerDown, onClickCapture, cancel } = useTabDrag(
+  // A held touch opens the tab's menu, and moving on from there drags the tab: the menu closes as the drag starts.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const { drag, settle, lifted, onPointerDown, onClickCapture } = useTabDrag(
     list,
     tabs.map((tab) => tab.id),
     onMove,
+    () => setMenuFor(null),
   );
 
   // Reordering moves the focused button in the DOM, which drops its focus; it goes straight back.
@@ -215,9 +181,8 @@ export function TabBar({
                   return buttons.current.get(tab.id) ?? null;
                 },
               }}
-              onOpenChange={(open) => {
-                if (open) cancel();
-              }}
+              open={menuFor === tab.id}
+              onOpenChange={(open) => setMenuFor(open ? tab.id : null)}
             >
               <MenuItem
                 icon={<ArrowLeft />}

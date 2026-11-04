@@ -36,14 +36,19 @@ export interface ContextMenuProps {
   /** The element whose right-click, Menu key or touch long-press opens the menu at the pointer. */
   readonly trigger: ReactElement;
   readonly children: ReactNode;
+  /** Controls the menu; uncontrolled when left out. */
+  readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
   /** Where focus goes when the menu closes; Base UI's default otherwise. */
   readonly finalFocus?: RefObject<HTMLElement | null>;
 }
 
-export function ContextMenu({ trigger, children, onOpenChange, finalFocus }: ContextMenuProps) {
+export function ContextMenu({ trigger, children, open, onOpenChange, finalFocus }: ContextMenuProps) {
   return (
-    <BaseContextMenu.Root {...(onOpenChange === undefined ? {} : { onOpenChange: (open) => onOpenChange(open) })}>
+    <BaseContextMenu.Root
+      {...(open === undefined ? {} : { open })}
+      {...(onOpenChange === undefined ? {} : { onOpenChange: (next) => onOpenChange(next) })}
+    >
       <BaseContextMenu.Trigger render={trigger} />
       <BaseContextMenu.Portal>
         <BaseContextMenu.Positioner>
