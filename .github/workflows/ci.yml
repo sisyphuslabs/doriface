@@ -18,8 +18,49 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      # tsc and the web build run under Node; the same Node 24 as the relay job.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: Install herdr-core
+        env:
+          HC_URL: https://releases.herdr.dev/core/0.1.17/herdr-core-linux-x86_64.tar.gz
+          HC_SHA256: 82ec44043f6894bfdb716b979b87cda43fd7fa46b0104e7b7bd93e64d1a9b877
+        run: |
+          mkdir -p "$RUNNER_TEMP/hc"
+          curl -fsSL "$HC_URL" -o "$RUNNER_TEMP/hc.tar.gz"
+          echo "$HC_SHA256  $RUNNER_TEMP/hc.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/hc.tar.gz" -C "$RUNNER_TEMP/hc" herdr-core
+          ln -s herdr-core "$RUNNER_TEMP/hc/hc"
+          echo "$RUNNER_TEMP/hc" >> "$GITHUB_PATH"
+          echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/hc/hc" --version
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run fmt:check
+      - run: bun run test
+      - name: Build apps/web
+        run: bun run --cwd apps/web build
+
+  relay-e2e:
+    name: Relay e2e
+    runs-on: ubuntu-latest
+    # The relay and mesh suites (tests/relay): real hosts, hc cores and the private relay under wrangler dev, in
+    # parallel with Check so neither waits on the other.
+    timeout-minutes: 25
     env:
-      # Pull requests from forks get no secrets; only they may skip the relay suites (see the last steps).
+      # Pull requests from forks get no secrets; only they may skip the relay suites (see the last step).
       RELAY_TOKEN_SET: ${{ secrets.DORIFACE_RELAY_READ_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v5
@@ -49,10 +90,6 @@ jobs:
           echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/hc/hc" --version
       - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun run lint
-      - run: bun run fmt:check
-      - run: bun run test
       # The relay server is deployed separately, from its own private repository, named by the RELAY_REPO secret so
       # that Actions masks it in the log. tests/relay runs this repository's host and client against it at the commit
       # relay-pin.json names, cloned over HTTPS with a fine-grained token that can only read that repository. git asks a
@@ -84,8 +121,6 @@ jobs:
             echo "::error::DORIFACE_RELAY_READ_TOKEN is not set, so the relay suites in tests/relay cannot run."
             exit 1
           fi
-      - name: Build apps/web
-        run: bun run --cwd apps/web build
 
   web-e2e:
     name: Web e2e
