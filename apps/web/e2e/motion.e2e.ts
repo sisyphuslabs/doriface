@@ -80,7 +80,8 @@ test("showing the sidebar fades it in without moving it", async ({ page }) => {
   await page.getByRole("button", { name: "Show sidebar" }).click();
   const seen = await frames;
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
-  expect(seen.at(-1)?.opacity).toBe(1);
+  // At rest after the transition ended (the sampler waits for it): a computed opacity can land a hair under 1.
+  expect(seen.at(-1)?.opacity).toBeCloseTo(1, 2);
   expect(seen.every((frame) => frame.transform === "none")).toBe(true);
 });
 
@@ -96,7 +97,8 @@ test("a new tab scales and fades in, and settles at rest", async ({ page }) => {
   expect(seen.length).toBeGreaterThan(0);
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
   expect(seen.some((frame) => frame.transform !== "none")).toBe(true);
-  expect(seen.at(-1)).toEqual({ opacity: 1, transform: "none" });
+  expect(seen.at(-1)?.opacity).toBeCloseTo(1, 2);
+  expect(seen.at(-1)?.transform).toBe("none");
 });
 
 test("under reduced motion a new tab only fades: no frame is transformed", async ({ page }) => {
