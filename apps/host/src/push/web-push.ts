@@ -31,6 +31,11 @@ export async function ephemeralSenderKey(): Promise<SenderKey> {
 export interface EncryptOptions {
   readonly sender?: SenderKey;
   readonly salt?: Uint8Array;
+  /**
+   * The record's plaintext size, padding included (RFC 8188 section 2: zero octets after the 0x02 delimiter), so
+   * every body of one sender has one length and its size says nothing about what it carries.
+   */
+  readonly padTo?: number;
 }
 
 /**
@@ -58,11 +63,10 @@ export async function encryptPushPayload(
   const cek = (await hmac(prk, utf8("Content-Encoding: aes128gcm\0\x01"))).subarray(0, 16);
   const nonce = (await hmac(prk, utf8("Content-Encoding: nonce\0\x01"))).subarray(0, 12);
   const aes = await crypto.subtle.importKey("raw", own(cek), "AES-GCM", false, ["encrypt"]);
-  const sealed = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: own(nonce) },
-    aes,
-    own(concatBytes(plaintext, Uint8Array.of(2))),
-  );
+  const record = new Uint8Array(Math.max(plaintext.byteLength + 1, options.padTo ?? 0));
+  record.set(plaintext);
+  record[plaintext.byteLength] = 2;
+  const sealed = await crypto.subtle.encrypt({ name: "AES-GCM", iv: own(nonce) }, aes, own(record));
   const header = new Uint8Array(21);
   header.set(salt);
   new DataView(header.buffer).setUint32(16, RECORD_SIZE);

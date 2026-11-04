@@ -19,6 +19,8 @@ export function pushEndpointAllowed(endpoint: string, extraOrigins: readonly str
 export type Delivery = "sent" | "gone" | "failed";
 
 const TTL_SECONDS = 24 * 60 * 60;
+/** Every notice's record, padded: the longest notice is under 100 bytes, so no kind can be told by its length. */
+export const NOTICE_RECORD_BYTES = 128;
 const TIMEOUT_MS = 10_000;
 
 export type PushFetch = (url: string, init: RequestInit) => Promise<Response>;
@@ -30,7 +32,9 @@ export async function deliverPush(
   vapid: VapidKey,
   post: PushFetch = fetch,
 ): Promise<Delivery> {
-  const body = await encryptPushPayload(new TextEncoder().encode(JSON.stringify(notice)), subscription);
+  const plaintext = new TextEncoder().encode(JSON.stringify(notice));
+  if (plaintext.byteLength >= NOTICE_RECORD_BYTES) throw new Error("a notice longer than its padded record");
+  const body = await encryptPushPayload(plaintext, subscription, { padTo: NOTICE_RECORD_BYTES });
   const response = await post(subscription.endpoint, {
     method: "POST",
     headers: {

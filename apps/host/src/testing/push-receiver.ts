@@ -65,8 +65,10 @@ export async function decryptPushBody(body: Uint8Array, keys: ReceiverKeys): Pro
   const nonce = (await hmac(prk, text("Content-Encoding: nonce\0\x01"))).subarray(0, 12);
   const aes = await crypto.subtle.importKey("raw", own(cek), "AES-GCM", false, ["decrypt"]);
   const padded = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: own(nonce) }, aes, own(sealed)));
-  const end = padded.lastIndexOf(2);
-  if (end === -1) throw new Error("no last-record delimiter");
+  // RFC 8188 section 2: the delimiter is the last non-zero octet; zero padding may follow it.
+  let end = padded.byteLength - 1;
+  while (end >= 0 && padded[end] === 0) end -= 1;
+  if (padded[end] !== 2) throw new Error("no last-record delimiter");
   return padded.subarray(0, end);
 }
 
