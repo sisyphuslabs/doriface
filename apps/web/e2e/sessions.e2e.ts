@@ -39,8 +39,9 @@ test("a pane has no title bar: the tab names the terminal and the status bar nam
   const currentSpace = page
     .getByRole("region", { name: "Spaces" })
     .locator('[aria-current="true"] [data-floor="name"]');
+  await expect(currentSpace).toHaveText(/\S/);
   await expect(page.getByRole("contentinfo").locator("[data-status-space] [title]")).toHaveText(
-    (await currentSpace.textContent()) ?? "missing",
+    await currentSpace.innerText(),
   );
 });
 

@@ -133,9 +133,9 @@ export const SHOTS: readonly Shot[] = [
       await page.getByRole("button", { name: "Split" }).click();
       // Hidden tabs stay mounted, so only the two shown panes count.
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
-      // Split shows the active tab beside the next one, which depends on the seeded tab order, not on the shell:
-      // wait for the blocked deploy agent the shot exists to show.
-      await expect(page.locator("[data-terminal]:visible").filter({ hasText: "Waiting for approval" })).toBeVisible();
+      // Both shown panes must have drawn something before the shot; which tab is the split partner depends on the
+      // seeded tab order, so wait for content in each rather than for a particular prompt.
+      await expect(page.locator("[data-terminal]:visible").filter({ hasText: /\S/ })).toHaveCount(2);
     },
   },
   {
