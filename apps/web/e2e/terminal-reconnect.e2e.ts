@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { FrameDecoder, FrameKind } from "@doriface/protocol";
-import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { expect, laidOutBox, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -24,12 +24,12 @@ test("a connection blip keeps the terminal on screen and runs what was typed mea
   await page.keyboard.type("seq 1 200; echo before-$((5+5))");
   await page.keyboard.press("Enter");
   await expect(terminal).toContainText("before-10", { timeout: 15_000 });
-  // Rows are virtualized, so the buffer's length is read from the scroll height.
-  const lines = () =>
-    terminal.evaluate((el) => {
-      const row = el.querySelector(".term-row:not(.term-scrollback-row)");
-      return Math.round(el.scrollHeight / (row?.getBoundingClientRect().height ?? Number.NaN));
-    });
+  // Rows are virtualized, so the buffer's length is read from the scroll height over a laid-out row's height: a row
+  // read before its layout is 0 high, and the quotient would be Infinity.
+  const lines = async () => {
+    const row = await laidOutBox(terminal.locator(".term-row:not(.term-scrollback-row)").first());
+    return Math.round((await terminal.evaluate((el) => el.scrollHeight)) / row.height);
+  };
   const linesBefore = await lines();
   expect(linesBefore).toBeGreaterThan(200);
   const opened = socket.opened();
