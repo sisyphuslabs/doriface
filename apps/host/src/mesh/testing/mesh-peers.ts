@@ -50,7 +50,10 @@ export function meshOf(members: readonly Peer[]): { readonly records: readonly S
   const [founder, ...rest] = members;
   if (founder === undefined) throw new Error("a mesh needs a founder");
   const fixture = new MeshFixture(scratch(), founder.machine);
-  for (const joiner of rest) fixture.admit(founder.machine, joiner.machine);
+  fixture.admitAll(
+    founder.machine,
+    rest.map((joiner) => joiner.machine),
+  );
   const records = fixture.store.read()?.records ?? [];
   return { records, meshId: fixture.meshId };
 }
