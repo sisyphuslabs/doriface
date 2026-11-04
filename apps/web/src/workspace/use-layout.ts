@@ -146,13 +146,20 @@ export function useLayout(
         return show(tabKey(layout.machineId, tab.id), pane);
       }
       const container = freshId("s");
+      // Whether the edit last found the pane gone; a write that failed instead was already reported by `edit`.
+      let gone = false;
       void layout
-        .edit((doc) =>
-          doc === null ? null : editTab(doc, active.id, (root) => splitPane(root, focused.id, axis, block, container)),
-        )
+        .edit((doc) => {
+          const next =
+            doc === null
+              ? null
+              : editTab(doc, active.id, (root) => splitPane(root, focused.id, axis, block, container));
+          gone = next === null;
+          return next;
+        })
         .then((placed) => {
           // The pane it split closed on another device first: the new terminal still opens, in a tab of its own.
-          if (!placed) {
+          if (!placed && gone) {
             addTab(address);
             told("The pane you split had closed, so the new terminal opened in a new tab.");
           }
