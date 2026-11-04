@@ -1,7 +1,6 @@
 // The E-BACKDATE shapes (design section 3.6 and the PR 9 row of section 11), record for record and edge for edge as
 // the design's model states them: the same ids, signers, subjects and `prev` links, cross-signer links included.
-// Pure data, imported by the e2e (which writes the honest part with real commands and signs the attack) and by the
-// design-model replay (which checks these exact graphs against the model and its mutations).
+// Pure data, imported by the e2e, which writes the honest part with real commands and signs the attack.
 
 export type StepType = "found" | "admit" | "revoke" | "name" | "ack";
 
