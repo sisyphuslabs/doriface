@@ -32,9 +32,11 @@ export class ConnectionStore {
   #stale: HcConnection | null = null;
   /** The attempt the pending retry timer will make, so `retryNow` can make it at once. */
   #pending: number | null = null;
+  readonly #connect: typeof connect;
 
-  constructor(settings: ConnectionSettings) {
+  constructor(settings: ConnectionSettings, open: typeof connect = connect) {
     this.#settings = settings;
+    this.#connect = open;
   }
 
   get settings(): ConnectionSettings {
@@ -85,7 +87,7 @@ export class ConnectionStore {
     this.#abort = abort;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const connection = await connect(this.#settings, abort.signal);
+      const connection = await this.#connect(this.#settings, abort.signal);
       if (abort.signal.aborted) return connection.close();
       connection.onClose((error) => {
         if (this.#abort !== abort) return;
