@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Mesh } from "./mesh.ts";
-import type { MeshHost } from "./mesh-host.ts";
+import type { CliResult, MeshHost } from "./mesh-host.ts";
 
 export interface SignedRecord {
   readonly body: string;
@@ -27,6 +27,8 @@ export interface Status {
   readonly revoked: readonly string[];
   /** `stuck[].kind`, e.g. `removed_undecidable` (section 3.7). */
   readonly stuck: readonly string[];
+  /** `budget.halvedUntil`: null while the host's dial budget is whole (section 8.2), else the ISO time halving ends. */
+  readonly halvedUntil: string | null | undefined;
 }
 
 const memberOf = (value: unknown): readonly Member[] => {
@@ -41,19 +43,26 @@ const hostIdsOf = (value: unknown): readonly string[] =>
 
 /** This host's `mesh status --json`, read as printed: `members` is the view, and `revoked` is kept apart from it. */
 export async function statusOf(host: MeshHost): Promise<Status> {
-  const run = await host.cli("mesh", "status", "--json");
+  return statusFrom(host.name, await host.cli("mesh", "status", "--json"));
+}
+
+/** `mesh status --json` as one host printed it (`name` only names it in the error). */
+export function statusFrom(name: string, run: CliResult): Status {
   const parsed: unknown = run.exit === 0 ? JSON.parse(run.stdout) : undefined;
   if (!isRecord(parsed) || !Array.isArray(parsed["members"])) {
-    throw new Error(`mesh status --json on ${host.name} failed: ${run.stderr}${run.stdout}`);
+    throw new Error(`mesh status --json on ${name} failed: ${run.stderr}${run.stdout}`);
   }
   const stuck = listOf(parsed["stuck"]).flatMap((entry) =>
     isRecord(entry) && typeof entry["kind"] === "string" ? [entry["kind"]] : [],
   );
+  const budget = parsed["budget"];
+  const halved = isRecord(budget) ? budget["halvedUntil"] : undefined;
   return {
     sync: String(parsed["sync"]),
     members: parsed["members"].flatMap(memberOf).toSorted((x, y) => x.hostId.localeCompare(y.hostId)),
     revoked: hostIdsOf(parsed["revoked"]).toSorted(),
     stuck,
+    halvedUntil: halved === null || typeof halved === "string" ? halved : undefined,
   };
 }
 
