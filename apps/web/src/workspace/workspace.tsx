@@ -30,6 +30,7 @@ import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
+import { useTypeAhead } from "./use-type-ahead.ts";
 
 export interface WorkspaceProps {
   readonly connection: HcConnection;
@@ -78,7 +79,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     [openInLayout, showOnPhone],
   );
   const [closingTab, setClosingTab] = useState<string | null>(null);
-  const runs = useMachineRuns(connection, opened, refresh);
+  const typeAhead = useTypeAhead();
+  const runs = useMachineRuns(connection, opened, refresh, typeAhead);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   const inViewTerminal = terminals.find((terminal) => terminal.address === inView);
   const newTerminal = (): void => runs.start(runParamsFor(inViewTerminal));
@@ -156,6 +158,16 @@ export function Workspace({ connection }: WorkspaceProps) {
         </SessionContext>
       </PinContext>
       <PromptAnswerBanner />
+      <textarea
+        ref={typeAhead.catcher}
+        aria-label="New terminal starting: what you type goes to it"
+        tabIndex={-1}
+        className="sr-only"
+        autoCapitalize="off"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+      />
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
       <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={layout.dropPane} />
       {closing === undefined ? null : (
