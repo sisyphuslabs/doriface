@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { answerApproval, CLAIM_TTL_MS, readApprovalRecord } from "./approval-answer.ts";
+import { answerApproval, approvalClock, CLAIM_TTL_MS, readApprovalRecord } from "./approval-answer.ts";
 import { markApproval } from "./approval-prompt.ts";
 import { MemoryApprovalCore } from "./testing/approval-core.ts";
 import {
@@ -112,22 +112,40 @@ describe("a claim is only as true as what happened after it", () => {
     expect(atPress).not.toContain('"outcome":"sent"');
   });
 
-  test("a key press that fails is never recorded as sent", async () => {
+  test("a key press that fails is recorded unknown, never sent, and holds the prompt for every answer", async () => {
     const { core, mark } = claudeAt("t3");
     core.failNext("keys");
-    expect(await answerApproval(core, mark, "allow", phone, 1)).toMatchObject({ kind: "failed" });
-    expect((await readApprovalRecord(core, mark))?.outcome).toBe("failed");
+    expect(await answerApproval(core, mark, "allow", phone, 1)).toMatchObject({ kind: "unknown" });
+    expect((await readApprovalRecord(core, mark))?.outcome).toBe("unknown");
+    expect(await answerApproval(core, mark, "allow", laptop, 2)).toMatchObject({ kind: "lost" });
   });
 
-  test("when even the failure cannot be recorded, the same client can answer again", async () => {
+  test("when even the failure cannot be recorded, the same client's next answer waits CLAIM_TTL_MS on its own clock", async () => {
     const { core, mark } = claudeAt("t3");
+    let now = 0;
+    const clock = approvalClock(() => now);
     core.failNext("screen");
     core.failNext("doc", 1, 1);
     // The claim lands (its doc.get passes); the re-read throws; recording `failed` cannot read the document.
-    const first = answerApproval(core, mark, "allow", phone, 1);
-    expect(await first).toMatchObject({ kind: "failed" });
+    expect(await answerApproval(core, mark, "allow", phone, 1, { clock })).toMatchObject({ kind: "failed" });
     expect((await readApprovalRecord(core, mark))?.outcome).toBe("claimed");
-    expect(await answerApproval(core, mark, "allow", phone, 2)).toEqual({ kind: "sent" });
+    expect(await answerApproval(core, mark, "allow", phone, 2, { clock })).toMatchObject({ kind: "lost" });
+    now = CLAIM_TTL_MS;
+    expect(await answerApproval(core, mark, "allow", phone, 3, { clock })).toEqual({ kind: "sent" });
+    expect(core.pressed).toHaveLength(1);
+  });
+
+  test("a client that saw its own answer fail takes over exactly that claim at once, and nothing else does", async () => {
+    const { core, mark } = claudeAt("t3");
+    core.failNext("screen");
+    core.failNext("doc", 1, 1);
+    const failed = await answerApproval(core, mark, "allow", phone, 1);
+    if (failed.kind !== "failed") throw new Error(`expected failed, got ${failed.kind}`);
+    expect(await answerApproval(core, mark, "allow", phone, 2, { retake: "not-that-attempt" })).toMatchObject({
+      kind: "lost",
+    });
+    expect(await answerApproval(core, mark, "allow", laptop, 2)).toMatchObject({ kind: "lost" });
+    expect(await answerApproval(core, mark, "allow", phone, 3, { retake: failed.attempt })).toEqual({ kind: "sent" });
     expect(core.pressed).toHaveLength(1);
   });
 
@@ -141,12 +159,20 @@ describe("a claim is only as true as what happened after it", () => {
     expect(core.pressed).toEqual([]);
   });
 
-  test("a claim whose owner went away expires after CLAIM_TTL_MS, and the prompt can be answered", async () => {
+  test("a claim whose owner went away expires after CLAIM_TTL_MS of the observer's own watch", async () => {
     const { core, mark } = claudeAt("t3");
+    let now = 0;
+    const clock = approvalClock(() => now);
     core.failNext("screen");
     core.failNext("doc", 1, 1);
     await answerApproval(core, mark, "allow", phone, 1_000);
-    expect(await answerApproval(core, mark, "deny", laptop, 1_000 + CLAIM_TTL_MS)).toEqual({ kind: "sent" });
+    expect(await answerApproval(core, mark, "deny", laptop, 1_000 + CLAIM_TTL_MS, { clock })).toMatchObject({
+      kind: "lost",
+    });
+    now = CLAIM_TTL_MS - 1;
+    expect(await answerApproval(core, mark, "deny", laptop, 0, { clock })).toMatchObject({ kind: "lost" });
+    now = CLAIM_TTL_MS;
+    expect(await answerApproval(core, mark, "deny", laptop, 0, { clock })).toEqual({ kind: "sent" });
     expect(core.pressed).toEqual([{ address: "t3", keys: ["esc"] }]);
     expect(await readApprovalRecord(core, mark)).toMatchObject({ by: laptop.by, answer: "deny", outcome: "sent" });
   });
