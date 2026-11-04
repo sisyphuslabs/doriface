@@ -1,4 +1,4 @@
-import { devices, type Page } from "@playwright/test";
+import { devices, type Locator, type Page } from "@playwright/test";
 import { agentRow, endAgent } from "./agents.ts";
 import { expect, laidOutBox, test } from "./fixtures.ts";
 import { hcOn } from "./machine-switch.ts";
@@ -34,6 +34,18 @@ function startShellIn(space: string, name: string): string {
   const started: unknown = JSON.parse(out);
   if (typeof started !== "object" || started === null || !("address" in started)) throw new Error(out);
   return String(started.address);
+}
+
+/**
+ * Resolves once the sheet has finished opening: Base UI drops `data-starting-style` as the slide-in starts, and every
+ * animation on the panel has then ended, so a measure inside it reads the panel at rest, not mid-slide.
+ */
+async function opened(sheet: Locator): Promise<void> {
+  await expect(sheet).toBeVisible();
+  await expect(sheet).not.toHaveAttribute("data-starting-style");
+  await sheet.evaluate(async (el) => {
+    await Promise.all(el.getAnimations({ subtree: true }).map((animation) => animation.finished));
+  });
 }
 
 /** Types into the shell a command that reports `state` over OSC 7501, as an agent does when its turn changes. */
@@ -80,7 +92,7 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     expect(box.height).toBeGreaterThanOrEqual(44);
     await switcher.click();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
-    await expect(sheet).toBeVisible();
+    await opened(sheet);
     // A visible Done closes the sheet and hands focus back to the switch.
     // Exact: an agent row's name also carries its state, "Done" among them.
     const done = sheet.getByRole("button", { name: "Done", exact: true });
