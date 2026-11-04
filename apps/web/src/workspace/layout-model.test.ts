@@ -1,6 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { expect, test } from "bun:test";
-import { buildTabs, keepTransient, looseKey, type LayoutTab } from "./layout-model.ts";
+import { afterClosing, buildTabs, keepTransient, looseKey, type LayoutTab } from "./layout-model.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
 const here: MachineLayout = {
@@ -35,4 +35,17 @@ test("the first live terminal shown alone is kept when a new tab opens, on this 
   expect(keepTransient(tab, "t1", true)).toBeNull();
   const loose: LayoutTab | null = tab === null ? null : { ...tab, key: looseKey("t1") };
   expect(keepTransient(loose, "build-box/t1", true)).toBeNull();
+});
+
+test("closing the tab in view shows the last of the others, so the keyboard lands in a terminal that is left", () => {
+  const [alone] = buildTabs([here], [live]);
+  if (alone === undefined) throw new Error("no tab for the live terminal");
+  const tabs = [
+    { ...alone, key: "inherited" },
+    { ...alone, key: "remaining" },
+    { ...alone, key: "closed" },
+  ];
+  expect(afterClosing(tabs, "closed")).toBe("remaining");
+  expect(afterClosing(tabs, "remaining")).toBe("closed");
+  expect(afterClosing([alone], alone.key)).toBeNull();
 });

@@ -4,7 +4,7 @@ import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } 
 import { findTerminal, type LayoutTab } from "./layout-model.ts";
 
 /** One machine's layout as a drop needs it: whether it takes edits now, and the edit. */
-interface DropTarget {
+export interface DropTarget {
   readonly readOnly: string | null;
   readonly edit: (change: (doc: JsonObject | null) => JsonObject | null) => Promise<boolean>;
 }
