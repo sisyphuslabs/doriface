@@ -1,5 +1,11 @@
 import type { HcConnection } from "@doriface/client";
-import type { Terminal, TerminalKillParams, TerminalLabelParams, TerminalRmParams } from "@doriface/protocol";
+import {
+  HcRpcError,
+  type Terminal,
+  type TerminalKillParams,
+  type TerminalLabelParams,
+  type TerminalRmParams,
+} from "@doriface/protocol";
 
 /**
  * The label a renamed session carries; terminalTitle reads it before hc's name and the program's title. herdr-app's
@@ -35,8 +41,14 @@ export async function renameSession(calls: SessionCalls, address: string, name: 
 const ending = new Map<string, Promise<void>>();
 
 async function killAndRemove(calls: SessionCalls, address: string): Promise<void> {
-  const ended = await calls.kill({ terminal: address });
-  if (ended.state === "finished") await calls.rm({ terminal: address });
+  try {
+    const ended = await calls.kill({ terminal: address });
+    if (ended.state === "finished") await calls.rm({ terminal: address });
+  } catch (cause) {
+    // Removed meanwhile (another client, or an earlier attempt's removal arriving late): the terminal is gone, which is
+    // what End is for.
+    if (!(cause instanceof HcRpcError && cause.kind === "not_found")) throw cause;
+  }
 }
 
 /** Ends the program (hangup, then terminate, then kill) and removes the finished terminal from hc. */
