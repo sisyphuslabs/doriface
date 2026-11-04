@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { startShell } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
-import { fractionOf, paneOf, seedLayout, type Fraction, type SeedTab } from "./layout-doc.ts";
+import { fractionOf, paneOf, renameTab, savedTab, seedLayout, type Fraction, type SeedTab } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 
 test.use({ serviceWorkers: "block" });
@@ -9,15 +9,43 @@ test.use({ serviceWorkers: "block" });
 type Platform = "mac" | "other";
 
 /** Ghostty's resize and equalize keys (⌘⌃ on macOS; Ctrl+Alt+Shift off it, since Super is the OS's), zoom as both. */
-const KEYS: Readonly<Record<Platform, Readonly<Record<"grow" | "equalize" | "zoom" | "close", string>>>> = {
-  mac: { grow: "Meta+Control+ArrowDown", equalize: "Meta+Control+Equal", zoom: "Meta+Shift+Enter", close: "Meta+w" },
+type Key = "grow" | "equalize" | "zoom" | "close" | "up" | "splitDown";
+const KEYS: Readonly<Record<Platform, Readonly<Record<Key, string>>>> = {
+  mac: {
+    grow: "Meta+Control+ArrowDown",
+    equalize: "Meta+Control+Equal",
+    zoom: "Meta+Shift+Enter",
+    close: "Meta+w",
+    up: "Meta+Alt+ArrowUp",
+    splitDown: "Meta+Shift+d",
+  },
   other: {
     grow: "Control+Alt+Shift+ArrowDown",
     equalize: "Control+Alt+Equal",
     zoom: "Control+Shift+Enter",
     close: "Control+Shift+X",
+    up: "Control+Alt+ArrowUp",
+    splitDown: "Control+Shift+E",
   },
 };
+
+/** Counts the Web Animations a pane frame (a tab panel's own child) plays, in the root element's data-pane-motion. */
+const COUNT_PANE_MOTION = `{
+  const animate = Element.prototype.animate;
+  Element.prototype.animate = function (...args) {
+    if (this.parentElement?.getAttribute("role") === "tabpanel") {
+      const root = document.documentElement;
+      root.dataset.paneMotion = String(Number(root.dataset.paneMotion ?? "0") + 1);
+    }
+    return animate.apply(this, args);
+  };
+}`;
+
+const paneMotion = (page: Page): Promise<number> =>
+  page.evaluate(() => Number(document.documentElement.dataset["paneMotion"] ?? "0"));
+
+const keyboardAddress = (page: Page): Promise<string | null> =>
+  page.evaluate(() => document.activeElement?.closest("[data-terminal]")?.getAttribute("data-terminal") ?? null);
 
 const shells: string[] = [];
 test.afterEach(() => {
@@ -43,10 +71,11 @@ function deepTab(t: readonly string[]): SeedTab {
         axis: "column",
         weight: 0.5,
         children: [
-          { pane: "p2", terminal: t2 },
+          { pane: "p2", terminal: t2, weight: 0.5 },
           {
             id: "s-row",
             axis: "row",
+            weight: 0.5,
             children: [
               { pane: "p3", terminal: t3 },
               {
@@ -80,6 +109,20 @@ async function expectAt(page: Page, address: string, want: Partial<Fraction>): P
     .toBe("ok");
 }
 
+/** Waits for one resize step of a pane in s-deep: its height moved that way by about a step of the column. */
+async function expectStep(page: Page, address: string, from: number, sign: 1 | -1): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const moved = sign * ((await fractionOf(page, address)).h - from);
+        // A step is a twentieth of s-deep, half the panel: 0.025 of it, less the gap.
+        return moved >= 0.015 && moved <= 0.04 ? "ok" : `moved ${moved.toFixed(3)}`;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe("ok");
+}
+
 async function setPlatform(page: Page, platform: Platform): Promise<void> {
   if (platform === "mac") {
     await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" }));
@@ -94,30 +137,58 @@ for (const platform of ["mac", "other"] as const) {
     const [, , , four = "", five = ""] = t;
     seedLayout([deepTab(t)]);
     await setPlatform(page, platform);
+    await page.addInitScript(COUNT_PANE_MOTION);
     await page.goto("/");
     await expectAt(page, four, { y: 0.5, h: 0.25 });
 
     const divider = page.locator('[role="separator"][data-container="s-deep"]');
     await expect(divider).toHaveAttribute("aria-orientation", "horizontal");
+    // The line reaches as far as a resize goes, each side keeping MIN_SHARE of the column: 5 to 95.
+    await expect(divider).toHaveAttribute("aria-valuemin", "5");
+    await expect(divider).toHaveAttribute("aria-valuemax", "95");
+    await expect(divider).toHaveAttribute("aria-valuenow", "50");
     const [line, panel] = [await divider.boundingBox(), await page.locator('[role="tabpanel"]:visible').boundingBox()];
     if (line === null || panel === null) throw new Error("no divider or panel box");
-    await page.mouse.move(line.x + line.width / 2, line.y + line.height / 2);
+    const [x, y] = [line.x + line.width / 2, line.y + line.height / 2];
+
+    // The line losing the pointer mid-drag (it unmounted, or the OS took the pointer) ends the drag where it began.
+    await page.mouse.move(x, y);
     await page.mouse.down();
-    await page.mouse.move(line.x + line.width / 2, line.y + line.height / 2 + panel.height * 0.1, { steps: 8 });
+    await page.mouse.move(x, y + panel.height * 0.1, { steps: 4 });
+    await expectAt(page, four, { h: 0.35 });
+    await divider.dispatchEvent("lostpointercapture");
+    await expectAt(page, four, { h: 0.25 });
+    await page.mouse.up();
+
+    const saved = savedTab("tb-deep");
+    await page.evaluate(() => {
+      document.documentElement.dataset["paneMotion"] = "0";
+    });
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + panel.height * 0.1, { steps: 8 });
     await page.mouse.up();
     await expectAt(page, four, { h: 0.35 });
     await expectAt(page, five, { y: 0.85, h: 0.15 });
+    // Once the page shows a later write it has drawn the drag's own: no pane moved with motion, during or after it.
+    await expect.poll(() => savedTab("tb-deep"), { timeout: 15_000 }).not.toBe(saved);
+    renameTab("tb-deep", "deep resized");
+    await expect(page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: /deep resized/ })).toBeVisible();
+    await expectAt(page, four, { h: 0.35 });
+    expect(await paneMotion(page)).toBe(0);
 
     await page.reload();
     await expectAt(page, four, { h: 0.35 });
 
     await divider.focus();
+    const dragged = (await fractionOf(page, four)).h;
     await page.keyboard.press("ArrowUp");
-    await expectAt(page, four, { h: 0.3 });
+    await expectStep(page, four, dragged, -1);
 
     await paneOf(page, four).getByRole("textbox").focus();
+    const stepped = (await fractionOf(page, four)).h;
     await page.keyboard.press(KEYS[platform].grow);
-    await expectAt(page, four, { h: 0.35 });
+    await expectStep(page, four, stepped, 1);
 
     await page.keyboard.press(KEYS[platform].equalize);
     await expectAt(page, four, { y: 0.5, h: 0.25 });
@@ -152,6 +223,10 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
   await expectAt(page, four, { x: 0.5, y: 0.5, w: 0.5, h: 0.25 });
   await expectAt(page, five, { x: 0.5, y: 0.75, w: 0.5, h: 0.25 });
   await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", two);
+  // Saved, three's row is gone: the column of four and five takes its place and the size it had.
+  await expect
+    .poll(() => savedTab("tb-deep"), { timeout: 15_000 })
+    .toBe("tb-deep(p1@0.5,s-col@0.5(p2@0.5,s-deep@0.5(p4,p5)))");
 
   await [two, four, five, one].reduce<Promise<void>>(async (previous, address) => {
     await previous;
@@ -162,4 +237,38 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
   }, Promise.resolve());
   await expect(tabs).toHaveCount(1);
   await expect(tabs.first()).toHaveText(/other/);
+});
+
+test("zoomed, moving focus or splitting shows every pane again, so a close acts on a pane in view", async ({
+  page,
+}) => {
+  const t = ["1", "2", "3", "4", "5"].map(shell);
+  const [, two = "", , four = "", five = ""] = t;
+  seedLayout([deepTab(t)]);
+  await page.goto("/");
+  await expectAt(page, four, { y: 0.5, h: 0.25 });
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+
+  await paneOf(page, four).getByRole("textbox").focus();
+  await page.keyboard.press(KEYS.other.zoom);
+  await expect(paneOf(page, five)).toBeHidden();
+  await page.keyboard.press(KEYS.other.up);
+  await expect(focused).toHaveAttribute("data-terminal", two);
+  await expect(paneOf(page, two)).toBeVisible();
+  await expect(paneOf(page, five)).toBeVisible();
+  await expect.poll(() => keyboardAddress(page), { timeout: 5_000 }).toBe(two);
+  await page.keyboard.press(KEYS.other.close);
+  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
+  await expect(paneOf(page, two)).toHaveCount(0);
+  await expect(paneOf(page, four)).toBeVisible();
+
+  await paneOf(page, four).getByRole("textbox").focus();
+  await page.keyboard.press(KEYS.other.zoom);
+  await expect(paneOf(page, five)).toBeHidden();
+  await page.keyboard.press(KEYS.other.splitDown);
+  await expect(focused).not.toHaveAttribute("data-terminal", four, { timeout: 15_000 });
+  const made = (await focused.getAttribute("data-terminal")) ?? "";
+  if (made !== "") shells.push(made);
+  await expect(paneOf(page, made)).toBeVisible();
+  await expect(paneOf(page, five)).toBeVisible();
 });
