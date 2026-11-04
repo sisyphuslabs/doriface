@@ -85,6 +85,11 @@ export class Reconciler {
     return this.#running;
   }
 
+  /** The names of this host's mesh machines still in its core; rejects when herdr does not answer. */
+  async remaining(): Promise<readonly string[]> {
+    return (await this.#entries()).map((entry) => entry.machine.name);
+  }
+
   /** The host is stopping: no retry fires after this. */
   stop(): void {
     this.#cancelRetry();

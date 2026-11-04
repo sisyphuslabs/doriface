@@ -76,6 +76,7 @@ describe("mesh-leave (design 6.5)", () => {
       signed: true,
       confirmed: [],
       revokeCommand: "doriface-host mesh revoke a",
+      machinesKept: "Error: no core",
     });
     expect(existsSync(join(it.dir, "mesh.json"))).toBe(false);
     expect(logs.filter((line) => line.startsWith("mesh:"))).toHaveLength(2);
@@ -103,6 +104,7 @@ describe("mesh-leave (design 6.5)", () => {
       members: [f, b].map((m) => ({ hostId: m.identity.hostId, name: m.name })),
       confirmed: [{ hostId: f.identity.hostId, name: "f" }],
       revokeCommand: null,
+      machinesKept: null,
     });
     expect(it.closes.count).toBe(1);
   });

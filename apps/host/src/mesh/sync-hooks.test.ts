@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { viewOf } from "@doriface/mesh";
 import { MeshCommands } from "./commands.ts";
+import type { MemberEntry } from "./authorize-index.ts";
+import { Reconciler } from "./reconciler.ts";
 import { syncHooks } from "./sync-hooks.ts";
+import { FakeMachines, hcError } from "./testing/fake-machines.ts";
+import { hostIdFor } from "./testing/hc-mesh.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
 import { MeshNet } from "./testing/mesh-net.ts";
 import { meshOf, peer } from "./testing/mesh-peers.ts";
@@ -93,28 +97,68 @@ describe("mesh revoke, rename and leave reach the other members through sync (de
   });
 });
 
+const coreMember = (name: string): MemberEntry => ({
+  signPub: `sign-${name}`,
+  hostId: hostIdFor(name),
+  noisePub: `noise-${name}`,
+  devicePub: undefined,
+  name,
+  hcId: `core-${name}`,
+});
+
+/** This host's core holding the mesh machines of b and c, put there by a real reconciler, and `left()` over it. */
+async function coreWithMachines(machines: FakeMachines) {
+  const clock = new FakeClock();
+  const self = coreMember("self");
+  const reconciler = new Reconciler({
+    machines,
+    program: "/opt/doriface-host",
+    stateDir: "/state",
+    selfHostId: self.hostId,
+    clock,
+    log: () => undefined,
+  });
+  await reconciler.reconcile({ members: [self, coreMember("b"), coreMember("c")], overCap: [], revoked: [] });
+  const runtime = { gossip: { stop: () => void machines.calls.push("gossip stopped") }, reconciler };
+  const stopped: string[] = [];
+  const sync = {
+    gossip: undefined,
+    runtime,
+    changed: () => undefined,
+    stop: () => {
+      stopped.push("sync");
+      return Promise.resolve();
+    },
+  };
+  return { left: () => syncHooks(sync, clock).left(), stopped };
+}
+
+/** A core whose `machine.rm` of b fails, as an unreachable or restarting herdr would. */
+class StuckMachines extends FakeMachines {
+  override rm(name: string): Promise<void> {
+    return name === "b" ? Promise.reject(hcError("unreachable")) : super.rm(name);
+  }
+}
+
 describe("mesh leave removes this host's mesh machines (design 6.5)", () => {
-  test("sync stops gossiping first, then the reconciler removes every mesh machine, then sync stops", async () => {
-    const calls: string[] = [];
-    const runtime = {
-      gossip: { stop: () => void calls.push("gossip stopped") },
-      reconciler: {
-        reconcile: (view: { readonly members: readonly unknown[]; readonly overCap: readonly unknown[] }) => {
-          calls.push(`reconciled to ${view.members.length + view.overCap.length} members`);
-          return Promise.resolve();
-        },
-      },
-    };
-    const sync = {
-      gossip: undefined,
-      runtime,
-      changed: () => undefined,
-      stop: () => {
-        calls.push("sync stopped");
-        return Promise.resolve();
-      },
-    };
-    await syncHooks(sync, new FakeClock()).left();
-    expect(calls).toEqual(["gossip stopped", "reconciled to 0 members", "sync stopped"]);
+  test("gossip stops first, then every mesh machine leaves the core, then sync stops", async () => {
+    const machines = new FakeMachines(new FakeClock());
+    const { left, stopped } = await coreWithMachines(machines);
+    await left();
+    expect(await machines.list()).toEqual([]);
+    expect(machines.calls.slice(machines.calls.indexOf("gossip stopped"))).toEqual([
+      "gossip stopped",
+      "0 rm b",
+      "0 rm c",
+    ]);
+    expect(stopped).toEqual(["sync"]);
+  });
+
+  test("a mesh machine the core would not remove makes left() fail naming it, and sync still stops (M9)", async () => {
+    const machines = new StuckMachines(new FakeClock());
+    const { left, stopped } = await coreWithMachines(machines);
+    await expect(left()).rejects.toThrow('"b"');
+    expect((await machines.list()).map((machine) => machine.name)).toEqual(["b"]);
+    expect(stopped).toEqual(["sync"]);
   });
 });

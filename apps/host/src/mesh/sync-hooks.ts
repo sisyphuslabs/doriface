@@ -8,7 +8,7 @@ import { IDLE_MESH_HOOKS, type MeshHooks } from "./host-hooks.ts";
 export interface SyncHandle {
   readonly gossip: Gossip | undefined;
   readonly runtime:
-    | { readonly gossip: Pick<Gossip, "stop">; readonly reconciler: Pick<Reconciler, "reconcile"> }
+    | { readonly gossip: Pick<Gossip, "stop">; readonly reconciler: Pick<Reconciler, "reconcile" | "remaining"> }
     | undefined;
   changed(): void;
   stop(): void | Promise<void>;
@@ -51,11 +51,16 @@ export function syncHooks(sync: SyncHandle, clock: Clock): MeshHooks {
     },
     async left() {
       const runtime = sync.runtime;
-      if (runtime !== undefined) {
+      try {
+        if (runtime === undefined) return;
         runtime.gossip.stop();
+        // The reconciler logs a failed run and resolves, so what is still in the core is read back.
         await runtime.reconciler.reconcile(NO_MEMBERS);
+        const kept = await runtime.reconciler.remaining();
+        if (kept.length > 0) throw new Error(`${kept.map((name) => JSON.stringify(name)).join(", ")} still in herdr`);
+      } finally {
+        await sync.stop();
       }
-      await sync.stop();
     },
     live: IDLE_MESH_HOOKS.live,
   };
