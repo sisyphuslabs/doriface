@@ -88,13 +88,21 @@ export function clearLayout(): void {
 }
 
 /**
- * Every spec starts with no tabs saved, on both e2e cores and on the added machine, as each started before the layout lived
- * in the core. A machine that is not connected shows a fresh page no layout, so there is nothing to clear on it.
+ * Every spec starts with no tabs saved on its worker's e2e core and on that core's added machine, as each started before
+ * the layout lived in the core. A machine that is not connected shows a fresh page no layout, so there is nothing to
+ * clear on it.
  */
 export function clearLayouts(): void {
   clearLayout();
-  setCoreDoc(LAYOUT_DOC, null, undefined, "layout");
   clearOn(MACHINE_NAME, "host");
+}
+
+/**
+ * The same on the layout host and its added machine. The workers share that host, so only the spec that reads it clears
+ * it: cleared from every spec, the workers' writes race on its documents' versions and wipe the layout spec's tabs.
+ */
+export function clearLayoutHost(): void {
+  setCoreDoc(LAYOUT_DOC, null, undefined, "layout");
   clearOn(LAYOUT_MACHINE_SPEC.name, "layout");
 }
 
