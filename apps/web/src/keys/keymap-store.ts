@@ -48,7 +48,10 @@ function migrate(layout: Stored): Read {
     const action = saved === null ? null : (RENAMED[saved] ?? saved);
     const checked = checkBinding(trigger, action);
     if (checked.ok) overrides.set(checked.trigger, action);
-    else if (action !== null && checkBinding(trigger, null).ok) foreign.set(trigger, action);
+    else if (action !== null) {
+      const key = checkBinding(trigger, null);
+      if (key.ok) foreign.set(key.trigger, action);
+    }
   }
   return { overrides, foreign };
 }
