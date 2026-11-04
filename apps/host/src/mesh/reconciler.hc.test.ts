@@ -11,10 +11,14 @@ import { meshHostOf, meshVia } from "./via.ts";
 
 const LONG = 60_000;
 const started: Core[] = [];
+/** Each mesh's own core, whose machines dial the other cores. */
+const dialers = new Set<Core>();
 const locals: ReturnType<typeof localHost>[] = [];
 afterAll(async () => {
   for (const local of locals) local.dispose();
-  await Promise.all(started.map((core) => core.dispose()));
+  // A dialer reconnects a machine whose core stopped, and its `hc connect` starts that core again: dialers stop first.
+  await Promise.all([...dialers].map((core) => core.dispose()));
+  await Promise.all(started.filter((core) => !dialers.has(core)).map((core) => core.dispose()));
 });
 
 const viewOf = (...members: readonly MemberEntry[]): MeshView => ({ members, overCap: [], revoked: [] });
@@ -36,6 +40,7 @@ async function cores(...names: readonly string[]): Promise<readonly Core[]> {
 async function mesh(names: readonly string[]) {
   const [self, ...members] = await cores("self", ...names);
   if (self === undefined) throw new Error("no core");
+  dialers.add(self);
   const local = localHost();
   locals.push(local);
   const clock = new FakeClock();
