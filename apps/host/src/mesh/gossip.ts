@@ -93,10 +93,12 @@ export class Gossip implements SyncHost {
       lastSync: (signPub) => this.#lastSync.get(signPub),
       sync: (member, purpose) => this.sync(member, purpose),
     });
-    this.#claims = new Claims(options.clock, (peer, n) =>
-      options.log(
-        `mesh: ${this.#known.nameOf(peer)} claimed counter ${n} of this host's key and sent no done within 30 s: its claims are ignored for 10 minutes`,
-      ),
+    this.#claims = new Claims(
+      () => options.clock.now(),
+      (peer, n) =>
+        options.log(
+          `mesh: ${this.#known.nameOf(peer)} claimed counter ${n} of this host's key and ended its session without done: its claims are ignored for 10 minutes`,
+        ),
     );
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
@@ -194,25 +196,24 @@ export class Gossip implements SyncHost {
    * own, it signs no own record below that counter (section 10.1) until the peer's next `done`, which carries every
    * record of this host's the peer holds, for at most 30 s (see Claims).
    */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void {
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean {
     this.#confirmed.set(peer, heads);
     if (missingSince(this.records(), heads).length === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self] ?? 0;
-    if (claim > ownN(this.records(), this.self)) this.#claims.claim(peer, claim);
+    const owner = this.#sessions.get(peer);
+    return owner !== undefined && claim > ownN(this.records(), this.self) && this.#claims.claim(peer, claim, owner);
   }
 
-  /** The peer owed a `done` for 30 s without a line of progress: its session closes 4400 and its claim is unanswered. */
+  /** The peer owed a `done` for 30 s without a line of progress: its session closes 4400 (and ends its claim). */
   overdue(session: SyncSession): void {
     if (this.#sessions.get(session.peer) !== session) return;
     this.#options.log(
       `mesh: closing the sync session with ${this.#known.nameOf(session.peer)}: no done within 30 s (4400)`,
     );
-    this.#claims.unanswered(session.peer);
   }
 
   answered(session: SyncSession): void {
-    if (this.#sessions.get(session.peer) !== session) return;
-    this.#claims.drop(session.peer);
+    if (this.#sessions.get(session.peer) === session) this.#claims.answered(session.peer);
   }
 
   /**
@@ -231,9 +232,8 @@ export class Gossip implements SyncHost {
   }
 
   ended(session: SyncSession): void {
-    if (this.#sessions.get(session.peer) !== session) return;
-    this.#sessions.delete(session.peer);
-    this.#claims.drop(session.peer);
+    this.#claims.ended(session.peer, session);
+    if (this.#sessions.get(session.peer) === session) this.#sessions.delete(session.peer);
   }
 
   /** Members that are owed records: their confirmed heads do not cover this host's set. */

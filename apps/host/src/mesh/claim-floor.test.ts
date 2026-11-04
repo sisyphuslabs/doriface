@@ -11,7 +11,7 @@ import { MeshNet } from "./testing/mesh-net.ts";
 const [a, b] = [peer("a"), peer("b")];
 const rename = { type: "name", signPub: b.signPub, name: "b" } as const;
 const KEEP_ALIVE_MS = 10_000;
-/** docs/transport.md: a claim holds own records for at most 30 s; an unanswered one is ignored for 10 minutes. */
+/** docs/transport.md: a claimer owes a done, and 30 s without progress closes its session; then 10 minutes ignored. */
 const CLAIM_MS = 30_000;
 const COOLDOWN_MS = 600_000;
 const CLAIM = { [b.signPub]: Number.MAX_SAFE_INTEGER };
@@ -80,19 +80,20 @@ describe("a peer's hello.n claim on this host's counter (section 10.1, M-E1)", (
     expect(s.signs()).toBe(true);
   });
 
-  test("an unanswered claim releases the floor at 30 s, and the claimer's claims are then ignored for 10 minutes", async () => {
+  test("a claim made after answering this host's hello makes the claimer owe a done: none in 30 s closes 4400, and its claims are then ignored for 10 minutes", async () => {
     const s = meshAtB(53);
     const session = s.connect();
     session.done();
     session.hello(CLAIM);
     await s.clock.advance(CLAIM_MS - 1);
     expect(s.signs()).not.toBe(true);
-    await s.clock.advance(1);
-    expect(s.signs()).toBe(true);
-    session.hello(CLAIM);
-    await s.clock.advance(1);
-    expect(s.signs()).toBe(true);
     expect(session.ours.closeCode).toBeUndefined();
+    await s.clock.advance(1);
+    expect(session.ours.closeCode).toBe(CloseCode.CryptoFailure);
+    expect(s.signs()).toBe(true);
+    s.connect().hello(CLAIM);
+    await s.clock.advance(1);
+    expect(s.signs()).toBe(true);
     await s.clock.advance(COOLDOWN_MS);
     s.connect().hello(CLAIM);
     await s.clock.advance(1);

@@ -24,8 +24,11 @@ export interface SyncHost {
   readonly meshId: string;
   records(): readonly Signed[];
   merge(session: SyncSession, batch: readonly Signed[]): MergeResult;
-  /** The peer said which heads it holds, and the highest `n` it holds of each signer (its `hello`). */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): void;
+  /**
+   * The peer said which heads it holds, and the highest `n` it holds of each signer (its `hello`). True when that
+   * claims a counter of this host's key the host now waits on: the peer then owes a `done` like an answer.
+   */
+  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean;
   /** The peer's `done`: what it held for this host has arrived, so a claim its hello made is resolved. */
   answered(session: SyncSession): void;
   /** The peer owed a `done` past ANSWER_MS with no line of progress; the session closes 4400 right after. */
@@ -153,7 +156,8 @@ export class SyncSession {
           return this.close(CloseCode.CryptoFailure, `more than ${MAX_RECORDS} records before done`);
         }
         this.#incoming.push(...line.records);
-        return this.#progress();
+        if (line.records.length > 0) this.#progress();
+        return;
       case "want":
         return this.#answerWant(line.hashes);
       case "done":
@@ -183,7 +187,7 @@ export class SyncSession {
       return this.close(CloseCode.CryptoFailure, `a peer claimed more than ${MAX_RECORDS} heads`);
     }
     for (const head of heads) this.#peerHeads.add(head);
-    this.#host.heard(this.peer, heads, n);
+    if (this.#host.heard(this.peer, heads, n)) this.#owesAnswer();
     if (!this.#saidHello) this.#hello();
     this.#sendRecords(this.#unsent());
   }

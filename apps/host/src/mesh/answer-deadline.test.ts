@@ -73,7 +73,7 @@ function lateSession() {
     merge: () => {
       throw new Error("no records come in this test");
     },
-    heard: () => undefined,
+    heard: () => false,
     answered: () => undefined,
     overdue: (session) => void overdue.push(session.peer),
     ended: () => undefined,
