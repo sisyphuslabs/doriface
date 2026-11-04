@@ -51,7 +51,10 @@ export interface Layout {
   readonly moveTab: (key: string, to: number) => void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
   readonly lastMove: TabMove | null;
-  /** Every machine's layout has been read, or cannot be: the tabs on screen are all the documents hold. */
+  /**
+   * machine.list has answered and every machine's layout has been read, or cannot be: the tabs on screen are all the
+   * documents hold, so a tab showing up now is an arrival, not the restored screen.
+   */
   readonly restored: boolean;
 }
 
@@ -74,6 +77,8 @@ export function useLayout(
   terminals: readonly Terminal[],
   failed: (message: string) => void,
   told: (message: string) => void,
+  /** machine.list has answered since the workspace mounted, so every added machine's layout is known. */
+  machinesListed = true,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
   useEffect(() => saveView(core, view), [core, view]);
@@ -236,7 +241,7 @@ export function useLayout(
     go,
     moveTab,
     lastMove,
-    restored: layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
+    restored: machinesListed && layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
   };
 }
 
