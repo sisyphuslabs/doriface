@@ -23,12 +23,13 @@ const SEEDS: readonly { readonly name: string; readonly space: string; readonly 
   { name: "tests", space: "website", argv: agent("done", "All 128 tests passed", ["128 pass", "0 fail"]) },
 ];
 
+/** One at a time, in SEEDS order, so every core lists the same first terminal and the captures do not change. */
 export async function seed(hc: string, env: Record<string, string | undefined>, root: string): Promise<void> {
-  const runs = SEEDS.map(async ({ name, space, argv }) => {
+  for (const { name, space, argv } of SEEDS) {
     const cwd = join(root, space);
     mkdirSync(cwd, { recursive: true });
     const run = Bun.spawn([hc, "run", "--bg", "--name", name, "--", ...argv], { env, cwd, stdout: "ignore" });
+    // oxlint-disable-next-line no-await-in-loop -- sequential on purpose: the start order is the terminal order
     if ((await run.exited) !== 0) throw new Error(`hc run ${name} failed`);
-  });
-  await Promise.all(runs);
+  }
 }
