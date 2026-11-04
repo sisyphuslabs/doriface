@@ -1,5 +1,5 @@
 import { devices, type Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, liveOnCore, test } from "./fixtures.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 test.use({ ...phone, serviceWorkers: "block" });
@@ -27,7 +27,8 @@ async function exitFirst(page: Page): Promise<boolean> {
 test("with no terminals the phone says so and offers a new terminal and adding a machine", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
-  for (let left = 40; left > 0; left -= 1) {
+  // Each pass ends one terminal, so the core's live count bounds the loop however many earlier specs left behind.
+  for (let ended = 0, live = liveOnCore(); ended < live; ended += 1) {
     // oxlint-disable-next-line no-await-in-loop -- each shell has to exit before the next row is read
     if (!(await exitFirst(page))) break;
   }
