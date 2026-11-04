@@ -1,6 +1,14 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { expect, test } from "bun:test";
-import { followTerminals, type KeyedTabs, moveTab, NO_TABS, selectTab, selectTerminal } from "./tab-follow.ts";
+import {
+  followTerminals,
+  type KeyedTabs,
+  moveTab,
+  moveTabTo,
+  NO_TABS,
+  selectTab,
+  selectTerminal,
+} from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 
 const terminal = (address: string): Terminal => ({
@@ -104,4 +112,20 @@ test("moving a tab changes only the order, and an index past either end changes 
   ] as const) {
     expect(moveTab(three, key, to)).toBe(three);
   }
+});
+
+test("a move that changes nothing is not said: machine.list names a machine whose tab is still kept by name", () => {
+  // The frame before followTerminals re-keys the tab: the strip lists it by address, the move looks it up by id.
+  const named = machineIds([machine("rohan")]);
+  const prev: KeyedTabs = { ...NO_TABS, open: ["name:rohan/t7", "local:t1"], active: "local:t1" };
+  expect(prev.open.map((key) => tabAddress(key, named))).toEqual(["rohan/t7", "t1"]);
+  const stale = moveTabTo(prev, null, "rohan/t7", 1, named);
+  expect(stale.tabs).toBe(prev);
+  expect(stale.said).toBeNull();
+
+  const rekeyed: KeyedTabs = { ...prev, open: [tabKey("rohan/t7", named), "local:t1"] };
+  expect(moveTabTo(rekeyed, null, "rohan/t7", 1, named)).toEqual({
+    tabs: { ...rekeyed, open: ["local:t1", tabKey("rohan/t7", named)] },
+    said: { address: "rohan/t7", count: 1 },
+  });
 });

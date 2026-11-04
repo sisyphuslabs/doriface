@@ -13,6 +13,31 @@ export interface KeyedTabs {
 
 export const NO_TABS: KeyedTabs = { open: [], active: null, split: null, missing: new Map(), pending: null };
 
+/** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
+export interface TabMove {
+  readonly address: string;
+  readonly count: number;
+}
+
+/**
+ * Moves the tab at `address` to slot `to` of the tabs whose machine is listed (a tab whose machine is not listed yet
+ * holds its place without one), and the move to say. A move that changes nothing keeps `said` as it was, so nothing is
+ * announced: for one frame while machine.list names a machine whose tab is still kept by name (`name:`), until
+ * followTerminals re-keys it, the lookup by id misses.
+ */
+export function moveTabTo(
+  prev: KeyedTabs,
+  said: TabMove | null,
+  address: string,
+  to: number,
+  ids: MachineIds,
+): { readonly tabs: KeyedTabs; readonly said: TabMove | null } {
+  const target = prev.open.filter((key) => tabAddress(key, ids) !== undefined)[to];
+  const tabs = target === undefined ? prev : moveTab(prev, tabKey(address, ids), prev.open.indexOf(target));
+  if (tabs === prev) return { tabs, said };
+  return { tabs, said: { address, count: (said?.count ?? 0) + 1 } };
+}
+
 const sameList = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((entry, index) => entry === b[index]);
 

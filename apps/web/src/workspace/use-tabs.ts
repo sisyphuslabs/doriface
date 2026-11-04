@@ -1,7 +1,9 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { followTerminals, type KeyedTabs, moveTab, selectTerminal } from "./tab-follow.ts";
+import { followTerminals, type KeyedTabs, moveTabTo, selectTerminal, type TabMove } from "./tab-follow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
+
+export type { TabMove } from "./tab-follow.ts";
 import { loadTabs, saveTabs } from "./tab-store.ts";
 
 export interface TabsState {
@@ -24,11 +26,6 @@ export interface Tabs extends TabsState {
   move(address: string, to: number): void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
   readonly lastMove: TabMove | null;
-}
-
-export interface TabMove {
-  readonly address: string;
-  readonly count: number;
 }
 
 /**
@@ -113,15 +110,9 @@ export function useTabs(
   latest.current = state;
   const move = useCallback(
     (address: string, to: number) => {
-      // `to` counts the tabs `open` lists; a tab whose machine is not listed yet holds its place without one.
-      const moved = (prev: KeyedTabs): KeyedTabs => {
-        const target = prev.open.filter((key) => tabAddress(key, ids) !== undefined)[to];
-        return target === undefined ? prev : moveTab(prev, tabKey(address, ids), prev.open.indexOf(target));
-      };
-      // Only a move that changes the order is announced.
-      if (moved(latest.current) === latest.current) return;
-      setState(moved);
-      setLastMove((prev) => ({ address, count: (prev?.count ?? 0) + 1 }));
+      // Only a move that changes the order is announced: `moveTabTo` hands back the same `said` for one that does not.
+      setLastMove((said) => moveTabTo(latest.current, said, address, to, ids).said);
+      setState((prev) => moveTabTo(prev, null, address, to, ids).tabs);
     },
     [ids],
   );
