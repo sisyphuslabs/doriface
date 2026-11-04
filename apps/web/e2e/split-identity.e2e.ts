@@ -31,7 +31,9 @@ test("with no pane title bar, a split marks the focused pane's edge and the othe
   await expect.poll(() => edgeOf(other)).toBe(await colourOf(page, "--border"));
 
   const otherName = (await other.getAttribute("aria-label"))?.replace(/ terminal$/, "") ?? "";
-  const otherTab = page.getByRole("tab", { name: otherName, exact: false }).and(page.locator("[data-shown=true]"));
-  await expect(otherTab).toHaveCount(1);
+  const shownPill = page.locator("[role=tablist] [data-shown=true]");
+  await expect(shownPill).toHaveCount(1);
+  const otherTab = shownPill.getByRole("tab");
+  await expect(otherTab).toHaveAttribute("title", new RegExp(`^${otherName}\\b`));
   await expect(otherTab).toHaveAttribute("aria-selected", "false");
 });
