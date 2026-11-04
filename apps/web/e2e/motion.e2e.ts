@@ -2,6 +2,8 @@ import type { Page } from "@playwright/test";
 import { agentRow, endAgent, startShell } from "./agents.ts";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
+import { MACHINE_NAME } from "./machine.ts";
+import { hcOn } from "./machine-switch.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -25,6 +27,24 @@ const listen = () => {
 const recordArrivals = (page: Page) => page.addInitScript(listen);
 /** Records arrivals from now on in the current document, which in-app navigation keeps. */
 const watchArrivals = (page: Page) => page.evaluate(listen);
+/** Every terminal address the e2e core lists: this machine's (`t3`) and the added machine's (`build-box/t2`). */
+const listedOnCore = (): string[] => {
+  const listed: unknown = JSON.parse(hcOn("host", ["ls", "--json"]));
+  const terminals = typeof listed === "object" && listed !== null ? Reflect.get(listed, "terminals") : undefined;
+  if (!Array.isArray(terminals)) throw new Error("hc ls printed no terminal list");
+  return terminals.map((terminal: unknown) =>
+    String(typeof terminal === "object" && terminal !== null ? Reflect.get(terminal, "address") : ""),
+  );
+};
+/** Ends every terminal started since `before` on the core that runs it, so no later spec counts it (one worker). */
+const endStartedSince = (before: ReadonlySet<string>) => {
+  const remote = `${MACHINE_NAME}/`;
+  for (const address of listedOnCore()) {
+    if (before.has(address)) continue;
+    if (address.startsWith(remote)) endAgent("machine", address.slice(remote.length));
+    else endAgent("host", address);
+  }
+};
 /** An arrival starts when its region mounts, before it is visible; two frames let transitionstart dispatch. */
 const twoFrames = (page: Page) =>
   page.evaluate(
@@ -90,7 +110,8 @@ test("the first screen does not animate in: nothing arrives on load, and a later
 test("a kept tab on an added machine does not arrive late on the way back from Settings while machine.list is slow", async ({
   page,
 }) => {
-  const remote = startShell("machine", "faraway");
+  const before = new Set(listedOnCore());
+  startShell("machine", "faraway");
   try {
     const socket = await routeHcSocket(page);
     await page.goto("/");
@@ -114,10 +135,18 @@ test("a kept tab on an added machine does not arrive late on the way back from S
     await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
     await twoFrames(page);
     expect(await arrivals(page)).toEqual([]);
+    // New tab opens on the focused pane's machine: focus a local tab, so the control opens nothing on the added machine.
+    await page
+      .getByRole("tablist", { name: "Tabs" })
+      .getByRole("tab")
+      .filter({ hasNotText: "faraway" })
+      .first()
+      .click();
+    await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", /^[^/]+$/);
     await page.getByRole("button", { name: "New tab", exact: true }).click();
     await expect.poll(() => arrivals(page)).toContain("div:opacity");
   } finally {
-    endAgent("machine", remote);
+    endStartedSince(before);
   }
 });
 
