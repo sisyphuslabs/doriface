@@ -46,19 +46,19 @@ function dials(...outcomes: (number | "ok")[]): { dial: () => Promise<string>; c
 describe("a dial refused for its pass (contract v1.6, 3.6)", () => {
   test("a 4412 on a dial that carried no proof is an ordinary failure: no redial, nothing marked", async () => {
     const { proofs } = fakeProofs();
-    proofs.refused("wss://relay.example");
+    proofs.refused("wss://relay.example", "");
     const once = dials(4412, "ok");
     const error = await withPassRetry(once.dial, proofs, RELAY, 1).catch((caught: unknown) => caught);
     expect(error instanceof RelayCloseError ? error.code : error).toBe(4412);
     expect(once.count()).toBe(1);
   });
 
-  test("marks the pass refused and redials once as soon as the new pass arrives", async () => {
+  test("leaves marking the pass to the dial, and redials once as soon as the new pass arrives", async () => {
     const { proofs, renew, subscribed } = fakeProofs();
     const { dial, count } = dials(4412, "ok");
     const result = withPassRetry(dial, proofs, RELAY, 60_000);
     await subscribed;
-    expect(proofs.presents("wss://relay.example")).toBe(false);
+    expect(proofs.presents("wss://relay.example")).toBe(true);
     renew();
     expect(await result).toBe("link 2");
     expect(count()).toBe(2);

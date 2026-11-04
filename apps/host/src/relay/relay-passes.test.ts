@@ -16,8 +16,10 @@ function stateDir(): string {
   return dir;
 }
 
-function farPass(): Uint8Array<ArrayBuffer> {
+/** A pass for `signPub`'s host (its first 16 hash bytes at offset 10), valid for 30 days. */
+async function farPass(signPub: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const pass = new Uint8Array(58);
+  pass.set(new Uint8Array(await crypto.subtle.digest("SHA-256", signPub)).subarray(0, 16), 10);
   const view = new DataView(pass.buffer);
   view.setUint8(0, 1);
   view.setUint8(1, 1);
@@ -31,11 +33,14 @@ describe("relay-passes.json (contract v1.6)", () => {
   test("a no-host mesh join presents a proof from the file, and a refusal never writes the file", async () => {
     const dir = stateDir();
     const origin = "wss://relay.example";
-    relayPassFile(dir).save(new Map([[origin, { pass: farPass(), offsetMs: 0, receivedAt: Date.now() }]]));
+    const identity = generateHostIdentity();
+    const pass = await farPass(identity.sign.publicKey);
+    relayPassFile(dir).save(new Map([[origin, { pass, offsetMs: 0, receivedAt: Date.now() }]]));
     const before = readFileSync(join(dir, RELAY_PASSES_FILE), "utf8");
-    const book = await openReadOnlyRelayPasses(dir, generateHostIdentity(), () => undefined);
-    expect(book.proof("client", "a".repeat(26), origin)).toBeDefined();
-    book.refused(origin);
+    const book = await openReadOnlyRelayPasses(dir, identity, () => undefined);
+    const proof = book.proof("client", "a".repeat(26), origin);
+    expect(proof).toBeDefined();
+    book.refused(origin, proof ?? "");
     expect(book.proof("client", "a".repeat(26), origin)).toBeUndefined();
     expect(readFileSync(join(dir, RELAY_PASSES_FILE), "utf8")).toBe(before);
   });

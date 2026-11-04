@@ -11,17 +11,19 @@ type Script = "serve-pass" | "no-pass" | "refuse-4412" | "limit-4429";
 interface Attempt {
   readonly url: URL;
   readonly frames: number[];
+  /** Resolves once the relay saw this attempt's socket close: every frame the host sent before it has arrived. */
+  readonly closed: PromiseWithResolvers<void>;
 }
 
 const attempts: Attempt[] = [];
 let script: Script[] = [];
-let issuedPass: Uint8Array = new Uint8Array(PASS_BYTES);
+let issuedPass: Uint8Array<ArrayBuffer> = new Uint8Array(PASS_BYTES);
 
 const relay = Bun.serve<{ readonly attempt: Attempt; readonly step: Script }>({
   hostname: "127.0.0.1",
   port: 0,
   fetch: (request, server) => {
-    const attempt = { url: new URL(request.url), frames: [] };
+    const attempt = { url: new URL(request.url), frames: [], closed: Promise.withResolvers<void>() };
     attempts.push(attempt);
     const step = script.shift() ?? "no-pass";
     return server.upgrade(request, { data: { attempt, step } }) ? undefined : new Response("upgrade", { status: 426 });
@@ -40,6 +42,7 @@ const relay = Bun.serve<{ readonly attempt: Attempt; readonly step: Script }>({
       }
       ws.data.attempt.frames.push(message[0] ?? -1);
     },
+    close: (ws) => ws.data.attempt.closed.resolve(),
   },
 });
 afterAll(() => relay.stop(true));
@@ -156,12 +159,20 @@ describe("the uplink and relay passes (contract v1.6)", () => {
     expect(wanted).toEqual([]);
   });
 
-  test("a host never sends a pass request on an uplink that got no PASS frame", async () => {
+  test("a host never sends a pass request on an uplink that got no PASS frame (an old relay)", async () => {
     const { book, secretKey } = await hostWithBook();
+    const origin = `ws://127.0.0.1:${relay.port}`;
+    book.received(origin, { relayNowMs: Date.now(), pass: issuedPass });
     script = ["no-pass"];
     await start(secretKey, book, 2);
-    book.refused(`ws://127.0.0.1:${relay.port}`);
+    const wanted: string[] = [];
+    book.onWant((wantedOrigin) => wanted.push(wantedOrigin));
+    book.refused(origin, book.proof("host", "a".repeat(26), origin) ?? "");
+    expect(wanted).toEqual([origin]);
+    // A request the uplink scheduled now would go out on the next timer turn; timers run in order, so after this one.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     uplink?.stop();
+    await attempts[0]?.closed.promise;
     expect(attempts[0]?.frames.filter((type) => type === MuxType.Pass)).toEqual([]);
   });
 });

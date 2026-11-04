@@ -24,7 +24,8 @@ export class UplinkPasses {
   #socket: WebSocket | undefined;
   #served = false;
   #deferred = false;
-  #proven = false;
+  /** The proof the current attempt carried, if any. */
+  #proof: string | undefined;
   #retry: ReturnType<typeof setTimeout> | undefined;
 
   constructor(proofs: RelayProofs, relayOrigin: string, hostId: string, random: () => number) {
@@ -42,7 +43,7 @@ export class UplinkPasses {
     const url = new URL(base);
     url.searchParams.set(...PASS_QUERY);
     const proof = this.#proofs.proof("host", this.#hostId, this.#relayOrigin);
-    this.#proven = proof !== undefined;
+    this.#proof = proof;
     if (proof !== undefined) url.searchParams.set(PROOF_QUERY, proof);
     return url.toString();
   }
@@ -56,7 +57,7 @@ export class UplinkPasses {
 
   /** The relay's challenge arrived: a proof on this attempt was accepted. */
   challenged(): void {
-    if (this.#proven) this.#proofs.accepted(this.#relayOrigin);
+    if (this.#proof !== undefined) this.#proofs.accepted(this.#relayOrigin);
   }
 
   /** A PASS frame's payload; false when it is malformed (the caller closes the uplink). */
@@ -82,11 +83,11 @@ export class UplinkPasses {
   /** The delay before reconnecting after `code`, or undefined to use the usual backoff. */
   reconnectDelay(code: number): number | undefined {
     // A 4412 on an attempt without a proof is no pass refusal (only a faulty stand-in sends one): the usual backoff.
-    if (code === CloseCode.PassRefused && this.#proven) {
-      this.#proofs.refused(this.#relayOrigin);
+    if (code === CloseCode.PassRefused && this.#proof !== undefined) {
+      this.#proofs.refused(this.#relayOrigin, this.#proof);
       return 0;
     }
-    if (code === CloseCode.RateLimited && !this.#proven) {
+    if (code === CloseCode.RateLimited && this.#proof === undefined) {
       return REGISTRATION_MIN_MS + Math.round(this.#random() * REGISTRATION_JITTER_MS);
     }
     return undefined;
@@ -106,7 +107,8 @@ export class UplinkPasses {
     clearTimeout(this.#retry);
     this.#retry = setTimeout(() => {
       const socket = this.#socket;
-      if (!this.#served || socket === undefined || !isOpen(socket)) return;
+      // Scheduled only once this attempt had a PASS frame: attempting() clears it whenever a new attempt starts.
+      if (socket === undefined || !isOpen(socket)) return;
       if (delayMs === 0 || this.#proofs.wantsPass(this.#relayOrigin)) socket.send(encodePassRequest());
       this.#schedule(this.#jittered());
     }, delayMs);

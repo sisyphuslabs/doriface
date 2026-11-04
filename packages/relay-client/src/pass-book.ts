@@ -1,7 +1,15 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Unsubscribe } from "./link.ts";
-import { toBase64Url } from "./wire/base64url.ts";
-import { encodeProof, passFields, type PassFrame, proofMessage, type ProofRole } from "./wire/pass.ts";
+import { fromBase64Url, toBase64Url } from "./wire/base64url.ts";
+import {
+  encodeProof,
+  PASS_BYTES,
+  passFields,
+  type PassFrame,
+  PROOF_BYTES,
+  proofMessage,
+  type ProofRole,
+} from "./wire/pass.ts";
 
 /** A pass as the host keeps it: the bytes, the relay's clock offset when it arrived, and when that was (local ms). */
 export interface StoredPass {
@@ -24,8 +32,8 @@ export interface RelayProofs {
   proof(role: ProofRole, target: string, relayOrigin: string): string | undefined;
   /** A PASS frame from this relay on the host's uplink. */
   received(relayOrigin: string, frame: PassFrame): void;
-  /** The relay refused a proof (4412). */
-  refused(relayOrigin: string): void;
+  /** The relay refused this proof (4412); a refusal of a pass the host no longer presents changes nothing. */
+  refused(relayOrigin: string, proof: string): void;
   /** The relay forwarded a proven upgrade (its challenge arrived). */
   accepted(relayOrigin: string): void;
   /** Whether the host should ask this relay for a pass now. */
@@ -57,6 +65,18 @@ export interface PassBookOptions {
 }
 
 /** A host's relay passes: validates what relays send, keeps the newest per relay, and builds proofs from them. */
+/** The pass a base64url proof carries (bytes 1..59), or undefined when the text is no proof. */
+function passOfProof(proof: string): Uint8Array | undefined {
+  const bytes = fromBase64Url(proof);
+  return bytes === undefined || bytes.byteLength !== PROOF_BYTES ? undefined : bytes.subarray(1, 1 + PASS_BYTES);
+}
+
+function samePass(held: Uint8Array, refused: Uint8Array | undefined): boolean {
+  return (
+    refused !== undefined && held.byteLength === refused.byteLength && held.every((byte, i) => byte === refused[i])
+  );
+}
+
 export class PassBook implements RelayProofs {
   readonly #secretKey: Uint8Array;
   readonly #signPub: Uint8Array;
@@ -77,7 +97,12 @@ export class PassBook implements RelayProofs {
     this.#store = options.store;
     this.#now = options.now ?? Date.now;
     this.#log = options.log ?? (() => undefined);
-    this.#entries = new Map([...options.store.load()].map(([origin, stored]) => [origin, { ...stored, usable: true }]));
+    // A stored pass that no longer parses (another version or kid layout) or names another host is dropped on load.
+    const loaded = [...options.store.load()].filter(([, stored]) => {
+      const fields = passFields(stored.pass);
+      return fields !== undefined && fields.hostIdHash.every((byte, index) => byte === hostIdHash[index]);
+    });
+    this.#entries = new Map(loaded.map(([origin, stored]) => [origin, { ...stored, usable: true }]));
   }
 
   static async create(options: PassBookOptions): Promise<PassBook> {
@@ -135,10 +160,11 @@ export class PassBook implements RelayProofs {
     for (const listener of this.#passListeners) listener(relayOrigin);
   }
 
-  refused(relayOrigin: string): void {
+  refused(relayOrigin: string, proof: string): void {
     const entry = this.#entries.get(relayOrigin);
-    // Several dials in flight on one dead pass are one refusal: only the first refusal of a usable pass counts.
-    if (entry === undefined || !entry.usable) return;
+    // Several dials in flight on one dead pass are one refusal: only the first refusal of the usable pass counts, and
+    // a late refusal of an older pass never touches the newer one.
+    if (entry === undefined || !entry.usable || !samePass(entry.pass, passOfProof(proof))) return;
     this.#entries.set(relayOrigin, { ...entry, usable: false });
     const refusals = (this.#refusals.get(relayOrigin) ?? 0) + 1;
     if (refusals >= PASS_LIMITS.refusalLimit) {

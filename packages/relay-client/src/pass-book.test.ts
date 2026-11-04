@@ -7,6 +7,11 @@ import { PASS_BYTES, proofMessage } from "./wire/pass.ts";
 
 const ORIGIN = "wss://relay.example";
 const DAY_S = 24 * 60 * 60;
+const TARGET = "a".repeat(26);
+
+const NONCE_AT = 1 + PASS_BYTES + 32 + 8;
+const nonceOf = (proof: string | undefined): string =>
+  (fromBase64Url(proof ?? "") ?? new Uint8Array()).subarray(NONCE_AT, NONCE_AT + 16).join();
 
 function memoryStore(initial: ReadonlyMap<string, StoredPass> = new Map()): PassStore & { saved: number } {
   let passes = initial;
@@ -102,61 +107,88 @@ describe("PassBook (contract v1.6)", () => {
     const { book, secretKey, logs } = await bookAt(now);
     const wanted: string[] = [];
     book.onWant((origin) => wanted.push(origin));
-    const fresh = async (): Promise<void> =>
+    const fresh = async (): Promise<string> => {
       book.received(ORIGIN, {
         relayNowMs: now.value,
         pass: await passFor(secretKey, now.value / 1000, now.value / 1000 + DAY_S),
       });
-    await fresh();
-    book.refused(ORIGIN);
-    expect(book.proof("client", "a".repeat(26), ORIGIN)).toBeUndefined();
+      return book.proof("client", TARGET, ORIGIN) ?? "";
+    };
+    book.refused(ORIGIN, await fresh());
+    expect(book.proof("client", TARGET, ORIGIN)).toBeUndefined();
     expect(wanted).toEqual([ORIGIN]);
+    book.refused(ORIGIN, await fresh());
+    book.refused(ORIGIN, await fresh());
     await fresh();
-    book.refused(ORIGIN);
-    await fresh();
-    book.refused(ORIGIN);
-    await fresh();
-    expect(book.proof("client", "a".repeat(26), ORIGIN)).toBeUndefined();
+    expect(book.proof("client", TARGET, ORIGIN)).toBeUndefined();
     expect(logs).toHaveLength(1);
     now.value += PASS_LIMITS.cooldownMs + 1;
-    expect(book.proof("client", "a".repeat(26), ORIGIN)).toBeDefined();
+    expect(book.proof("client", TARGET, ORIGIN)).toBeDefined();
   });
 
   test("several refusals of the same pass count once; only a refusal of a newer pass advances the count", async () => {
     const now = { value: 0 };
     const { book, secretKey, logs } = await bookAt(now);
-    const fresh = async (): Promise<void> =>
-      book.received(ORIGIN, { relayNowMs: 0, pass: await passFor(secretKey, 0, DAY_S) });
-    await fresh();
-    book.refused(ORIGIN);
-    book.refused(ORIGIN);
-    book.refused(ORIGIN);
-    await fresh();
-    book.refused(ORIGIN);
-    book.refused(ORIGIN);
-    await fresh();
+    const fresh = async (issuedAt: number): Promise<string> => {
+      book.received(ORIGIN, { relayNowMs: 0, pass: await passFor(secretKey, issuedAt, DAY_S) });
+      return book.proof("client", TARGET, ORIGIN) ?? "";
+    };
+    const first = await fresh(0);
+    book.refused(ORIGIN, first);
+    book.refused(ORIGIN, first);
+    book.refused(ORIGIN, first);
+    const second = await fresh(1);
+    book.refused(ORIGIN, second);
+    book.refused(ORIGIN, second);
+    const third = await fresh(2);
     expect(logs).toEqual([]);
-    expect(book.proof("client", "a".repeat(26), ORIGIN)).toBeDefined();
-    book.refused(ORIGIN);
+    expect(book.proof("client", TARGET, ORIGIN)).toBeDefined();
+    book.refused(ORIGIN, third);
     expect(logs).toHaveLength(1);
+  });
+
+  test("a late refusal of an older pass leaves the newer pass usable and the count unchanged", async () => {
+    const now = { value: 0 };
+    const { book, secretKey, logs } = await bookAt(now);
+    const wanted: string[] = [];
+    book.onWant((origin) => wanted.push(origin));
+    const fresh = async (issuedAt: number): Promise<string> => {
+      book.received(ORIGIN, { relayNowMs: 0, pass: await passFor(secretKey, issuedAt, DAY_S) });
+      return book.proof("client", TARGET, ORIGIN) ?? "";
+    };
+    const older = await fresh(0);
+    const newer = await fresh(1);
+    book.refused(ORIGIN, older);
+    expect(book.presents(ORIGIN)).toBe(true);
+    expect(wanted).toEqual([]);
+    book.refused(ORIGIN, newer);
+    book.refused(ORIGIN, await fresh(2));
+    expect(logs).toEqual([]);
+    expect(book.presents(ORIGIN)).toBe(false);
+  });
+
+  test("every proof carries a fresh nonce", async () => {
+    const { book, secretKey } = await bookAt({ value: 0 });
+    book.received(ORIGIN, { relayNowMs: 0, pass: await passFor(secretKey, 0, DAY_S) });
+    const nonces = new Set(Array.from({ length: 8 }, () => nonceOf(book.proof("client", TARGET, ORIGIN))));
+    expect(nonces.size).toBe(8);
   });
 
   test("an accepted proof resets the refusal count", async () => {
     const now = { value: 0 };
     const { book, secretKey, logs } = await bookAt(now);
-    const fresh = async (): Promise<void> =>
-      book.received(ORIGIN, { relayNowMs: 0, pass: await passFor(secretKey, 0, DAY_S) });
-    await fresh();
-    book.refused(ORIGIN);
-    await fresh();
+    const fresh = async (issuedAt: number): Promise<string> => {
+      book.received(ORIGIN, { relayNowMs: 0, pass: await passFor(secretKey, issuedAt, DAY_S) });
+      return book.proof("client", TARGET, ORIGIN) ?? "";
+    };
+    book.refused(ORIGIN, await fresh(0));
+    await fresh(1);
     book.accepted(ORIGIN);
-    await fresh();
-    book.refused(ORIGIN);
-    await fresh();
-    book.refused(ORIGIN);
-    await fresh();
+    book.refused(ORIGIN, await fresh(2));
+    book.refused(ORIGIN, await fresh(3));
+    await fresh(4);
     expect(logs).toEqual([]);
-    expect(book.proof("client", "a".repeat(26), ORIGIN)).toBeDefined();
+    expect(book.proof("client", TARGET, ORIGIN)).toBeDefined();
   });
 
   test("a stored pass survives a restart, and one older than a day is refreshed", async () => {

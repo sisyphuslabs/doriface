@@ -38,15 +38,40 @@ describe("relay URLs", () => {
 
 describe("relay passes on client sessions (contract v1.6)", () => {
   test("the session carries the proof, and a 4412 tells the passes which relay refused it", async () => {
-    const refused: string[] = [];
+    const refused: [string, string][] = [];
     const proofs = {
       proof: (role: string, target: string, origin: string) => `${role}.${target.slice(0, 4)}.${origin.length}`,
-      refused: (origin: string) => refused.push(origin),
+      refused: (origin: string, proof: string) => refused.push([origin, proof]),
     };
     await untilClosed(connectRelayClient({ relayUrl: `http://127.0.0.1:${refusing.port}`, hostId, proofs }));
     const origin = `ws://127.0.0.1:${refusing.port}`;
     expect(urls.at(-1)?.searchParams.get("proof")).toBe(`client.aaaa.${origin.length}`);
-    expect(refused).toEqual([origin]);
+    expect(refused).toEqual([[origin, `client.aaaa.${origin.length}`]]);
+  });
+
+  test("a session that fails before opening names no proof in its error, so no log can carry one", async () => {
+    const gone = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("gone") });
+    const relayUrl = `http://127.0.0.1:${gone.port}`;
+    await gone.stop(true);
+    const proofs = { proof: () => "SECRET-PROOF-TEXT", refused: () => undefined };
+    const error = await connectRelayClient({ relayUrl, hostId, proofs }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toContain("SECRET-PROOF-TEXT");
+    expect(String(error)).not.toContain("proof=");
+  });
+
+  test("only a 4412 is a refusal: a session closed for any other reason marks no pass", async () => {
+    const limiting = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, server) => (server.upgrade(request) ? undefined : new Response("upgrade", { status: 426 })),
+      websocket: { open: (ws) => ws.close(4429, "rate limited"), message: () => undefined },
+    });
+    const refused: string[] = [];
+    const proofs = { proof: () => "proof", refused: (origin: string) => void refused.push(origin) };
+    await untilClosed(connectRelayClient({ relayUrl: `http://127.0.0.1:${limiting.port}`, hostId, proofs }));
+    await limiting.stop(true);
+    expect(refused).toEqual([]);
   });
 
   test("without a pass the session dials as before, with no proof", async () => {

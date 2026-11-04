@@ -46,11 +46,13 @@ export async function connectRelayClient(options: ClientConnectOptions): Promise
   if (proof !== undefined) {
     link.onClose((error) => {
       if (error instanceof RelayCloseError && error.code === CloseCode.PassRefused)
-        options.proofs?.refused(relayOrigin);
+        options.proofs?.refused(relayOrigin, proof);
     });
   }
   return new Promise((resolve, reject) => {
     ws.addEventListener("open", () => resolve(link), { once: true });
-    link.onClose((error) => reject(error ?? new Error(`relay socket to ${url} closed before opening`)));
+    // The URL may carry a proof: errors (and so logs) name the path only.
+    const path = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}`);
+    link.onClose((error) => reject(error ?? new Error(`relay socket to ${path} closed before opening`)));
   });
 }
