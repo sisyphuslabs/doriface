@@ -133,8 +133,8 @@ test("Settings > Voice input picks the language and the speech service, and the 
   await page.getByRole("button", { name: /^Language/ }).click();
   await page.getByRole("menuitem", { name: "Korean (South Korea)" }).click();
   await expect(page.getByRole("button", { name: /^Language/ })).toContainText("Korean (South Korea)");
-  await page.getByRole("button", { name: "Speech service" }).click();
-  await expect(page.getByRole("button", { name: "Speech service" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Service", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Service", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await agentRow(page, NAME, false).click();

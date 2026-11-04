@@ -6,8 +6,8 @@ import { useVoiceSettings, voiceStore } from "../voice/voice-store.ts";
 
 const ENGINES = [
   { value: "ask", label: "Ask first" },
-  { value: "device", label: "On this device" },
-  { value: "service", label: "Speech service" },
+  { value: "device", label: "On device" },
+  { value: "service", label: "Service" },
 ] as const;
 
 const ENGINE_NOTE: Readonly<Record<Engine, string>> = {
@@ -41,7 +41,9 @@ export function VoiceSection() {
           // A long language name gives way inside the row instead of pushing the button past the screen's edge.
           className="max-w-full min-w-0 justify-between [&>span]:max-w-full [&>span]:min-w-0"
         >
-          <span className="truncate">{name(settings.language)}</span>
+          <span title={name(settings.language)} className="truncate">
+            {name(settings.language)}
+          </span>
           <ChevronDown aria-hidden />
         </Button>
       }
