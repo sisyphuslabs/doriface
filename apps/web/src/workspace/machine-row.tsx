@@ -97,6 +97,7 @@ export function MachineRow({ machine, selected, onOpen, onNewOn, reorder }: Mach
         type="button"
         aria-current={selected ? "true" : undefined}
         aria-disabled={machine.first === undefined || undefined}
+        data-reorder-keys={reorder === undefined ? undefined : ""}
         onClick={() => machine.first !== undefined && onOpen(machine.first)}
         onKeyDown={onKeyDown}
         onFocus={reorder?.onFocus}
