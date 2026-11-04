@@ -9,6 +9,8 @@ export interface Voice {
   readonly state: DictationState;
   /** Why the mic cannot listen in this browser at all, or null when it can. */
   readonly unavailable: Unavailable | null;
+  /** The mic, the palette row and a bound key: start a dictation, or end the one under way. */
+  readonly toggle: () => void;
 }
 
 /** One dictation for one surface (the phone terminal, the desktop's focused pane); it ends when the surface goes. */
@@ -25,5 +27,6 @@ export function useDictation(): Voice {
   });
   const state = useSyncExternalStore(voice.dictation.subscribe, () => voice.dictation.state);
   useEffect(() => () => voice.dictation.close(), [voice]);
-  return { ...voice, state };
+  const toggle = () => (voice.dictation.state.kind === "idle" ? void voice.dictation.start() : voice.dictation.close());
+  return { ...voice, state, toggle };
 }

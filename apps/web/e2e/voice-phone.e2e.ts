@@ -55,7 +55,7 @@ test("dictation asks first, listens, transcribes, and types the edited transcrip
   await expect(keyBar(page)).toHaveCount(0);
   await expect(mic(page)).toHaveAttribute("aria-pressed", "true");
   expect(await speech.started()).toEqual([
-    { lang: "en-US", continuous: true, interimResults: true, processLocally: false },
+    { lang: "en-US", continuous: false, interimResults: true, processLocally: false },
   ]);
   await speech.say(["echo voice", false]);
   await expect(page.getByText("echo voice", { exact: true })).toBeVisible();
@@ -157,4 +157,23 @@ test("the listening light pulses, and holds still under reduced motion", async (
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(await light.evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
   await page.getByRole("button", { name: "Cancel dictation" }).click();
+});
+
+test("listening ends when the recognizer ends the utterance, with no Done, and the transcript waits to be edited", async ({
+  page,
+}) => {
+  const speech = await stubSpeech(page);
+  await openShell(page);
+  await startListening(page);
+  await speech.say(["git status", false]);
+  await speech.speechEnd();
+  await expect(announced(page, "Transcribing")).toBeVisible();
+  expect(await speech.stops()).toBe(0);
+  await speech.say(["git status", true]);
+  await speech.end();
+  await expect(transcript(page)).toHaveValue("git status");
+  await expect(transcript(page)).toBeEditable();
+  expect(hcOn("host", ["read", address])).not.toContain("git status");
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(keyBar(page).first()).toBeVisible();
 });

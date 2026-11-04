@@ -15,7 +15,7 @@ export interface DictateButtonProps {
  * stays in place, crossed out and named as unavailable; pressing it says why.
  */
 export function DictateButton({ voice, target, size = "md", ref }: DictateButtonProps) {
-  const { dictation, state, unavailable } = voice;
+  const { state, unavailable, toggle } = voice;
   const open = state.kind !== "idle";
   return (
     <IconButton
@@ -26,7 +26,7 @@ export function DictateButton({ voice, target, size = "md", ref }: DictateButton
       size={size}
       pressed={open}
       {...(unavailable === null ? {} : { className: "text-muted-foreground/70" })}
-      onClick={() => (open ? dictation.close() : void dictation.start())}
+      onClick={toggle}
     />
   );
 }

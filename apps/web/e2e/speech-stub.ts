@@ -19,6 +19,8 @@ export interface SpeechStub {
   readonly fail: (code: string) => Promise<void>;
   /** The end of the session, which a browser fires after stop() once its last result is in. */
   readonly end: () => Promise<void>;
+  /** The recognizer's own end of speech: the utterance is over, its last words not yet delivered. */
+  readonly speechEnd: () => Promise<void>;
 }
 
 /** Call before page.goto: SpeechRecognition and webkitSpeechRecognition become the stub. No audio is captured. */
@@ -70,6 +72,7 @@ export async function stubSpeech(page: Page): Promise<SpeechStub> {
         fire("end");
       },
       end: () => fire("end"),
+      speechEnd: () => fire("speechend"),
     });
   });
   const calls = () =>
@@ -85,6 +88,7 @@ export async function stubSpeech(page: Page): Promise<SpeechStub> {
     say: (...segments) => page.evaluate((list) => Reflect.get(window, "__speech").say(list), segments),
     fail: (code) => page.evaluate((error) => Reflect.get(window, "__speech").fail(error), code),
     end: () => page.evaluate(() => Reflect.get(window, "__speech").end()),
+    speechEnd: () => page.evaluate(() => Reflect.get(window, "__speech").speechEnd()),
   };
 }
 

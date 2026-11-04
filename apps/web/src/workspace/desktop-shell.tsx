@@ -61,6 +61,13 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     onToggleSidebar: () => setSidebar((shown) => !shown),
     onFocusSidebar: focusSidebar,
     onSession,
+    // The session in view, as the tab bar's mic acts on it; none in view (or its machine offline) leaves the key alone.
+    onDictate: () => {
+      const target = terminals.find((terminal) => terminal.address === tabs.active);
+      if (target === undefined || target.offline === true) return false;
+      voice.toggle();
+      return true;
+    },
     focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));

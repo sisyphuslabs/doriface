@@ -11,7 +11,7 @@ import { VOICE_ERROR_COPY, type VoiceError } from "./voice-copy.ts";
 /**
  * unavailable: no recognizer here, with why. consent: before the browser's speech service hears anything (device:
  * on-device recognition is offered too). preparing: the on-device language pack installs. listening: recording, with
- * what has been heard so far. transcribing: Done pressed, the last words still owed. ready: the transcript, editable,
+ * what has been heard so far. transcribing: the speech ended or Done was pressed, the last words still owed. ready: the transcript, editable,
  * not yet typed. error: what went wrong and the next step.
  */
 export type VoiceState =

@@ -6,7 +6,7 @@ import type { Engine } from "./voice-settings.ts";
 /**
  * idle: the mic alone. unavailable: no recognizer here, and why. consent: before the browser's speech service hears
  * anything (device: on-device recognition can be installed instead). preparing: the on-device language pack installs.
- * listening, transcribing (Done pressed, last words owed), ready (the transcript to edit), error.
+ * listening, transcribing (the speech ended or Done was pressed; the last words are owed), ready (the transcript to edit), error.
  */
 export type DictationState =
   | { readonly kind: "idle" }
@@ -148,7 +148,8 @@ export class Dictation {
   #listen(Recognizer: RecognizerClass, local: boolean): void {
     const session = new Recognizer();
     session.lang = this.#options.language();
-    session.continuous = true;
+    // One utterance: the recognizer ends the session itself when the speech ends (#194 Q5), with no timer of our own.
+    session.continuous = false;
     session.interimResults = true;
     if (local) session.processLocally = true;
     let text = "";
@@ -156,6 +157,10 @@ export class Dictation {
     const current = () => this.#session === session;
     session.addEventListener("speechstart", () => {
       if (current() && this.#state.kind === "listening") this.#set({ ...this.#state, heard: true });
+    });
+    // The utterance is over: no more audio is taken, and the last words are still on their way.
+    session.addEventListener("speechend", () => {
+      if (current() && this.#state.kind === "listening") this.#set({ kind: "transcribing", since: this.#state.since });
     });
     session.addEventListener("result", (event) => {
       if (!current()) return;

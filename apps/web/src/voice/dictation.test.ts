@@ -17,7 +17,7 @@ test("the browser's speech service hears nothing until the user allows it, and t
   await dictation.allowService();
   expect(remembered).toEqual(["service"]);
   expect(state()).toEqual({ kind: "listening", since: 1_000, heard: false, text: "" });
-  expect(last()).toMatchObject({ lang: "ko-KR", continuous: true, interimResults: true, processLocally: false });
+  expect(last()).toMatchObject({ lang: "ko-KR", continuous: false, interimResults: true, processLocally: false });
   expect(last().started).toBe(true);
 });
 

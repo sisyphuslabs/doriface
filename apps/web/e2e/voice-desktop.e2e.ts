@@ -7,13 +7,17 @@ import { stubSpeech } from "./speech-stub.ts";
 test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 
 const NAME = "dictate-desk";
+const OTHER = "dictate-other";
 
 let address = "";
+let other = "";
 test.beforeEach(() => {
   address = startShell("host", NAME);
+  other = startShell("host", OTHER);
 });
 test.afterEach(() => {
   endAgent("host", address);
+  endAgent("host", other);
 });
 
 test("Dictate in the tab bar docks under the focused pane and types into it without Enter", async ({ page }) => {
@@ -38,4 +42,31 @@ test("Dictate in the tab bar docks under the focused pane and types into it with
   await expect(pane.locator(`[data-terminal="${address}"]`).getByRole("textbox")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect.poll(() => hcOn("host", ["read", address])).toContain("desk-42");
+});
+
+test("moving focus to another tab ends the dictation, so nothing heard for one pane is typed into another", async ({
+  page,
+}) => {
+  const speech = await stubSpeech(page);
+  await page.goto("/");
+  await agentRow(page, OTHER, false).click();
+  await expect(page.locator(`[data-terminal="${other}"]`)).toContainText("$", { timeout: 15_000 });
+  await agentRow(page, NAME, false).click();
+  await expect(page.locator(`[data-focused="true"] [data-terminal="${address}"]`)).toContainText("$", {
+    timeout: 15_000,
+  });
+
+  await page.getByRole("button", { name: `Dictate into ${NAME}` }).click();
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(page.locator("[data-voice-strip]")).toHaveAttribute("data-voice-strip", "listening");
+  await page.getByRole("tablist", { name: "Tabs" }).getByRole("tab").filter({ hasText: OTHER }).click();
+  await expect(page.locator(`[data-focused="true"] [data-terminal="${other}"]`)).toBeVisible();
+
+  await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+  expect(await speech.aborts()).toBe(1);
+  await speech.say(["echo stray", true]);
+  await speech.end();
+  await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+  expect(hcOn("host", ["read", other])).not.toContain("echo stray");
+  expect(hcOn("host", ["read", address])).not.toContain("echo stray");
 });

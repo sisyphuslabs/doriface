@@ -2,7 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import { ExtraKeysBar, IconButton, ScrollArea, StatusBar, StatusBarItem, StatusChip } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Monitor, Plus, Search, Settings } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { NEW_TAB } from "../keys/actions.ts";
 import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
@@ -37,7 +37,9 @@ export interface PhoneShellProps {
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
 export function PhoneShell(props: PhoneShellProps) {
   const { connection, terminals, open, onOpen, onBack, onNew, onPalette, onSession } = props;
-  usePhoneActions(onNew, onSession);
+  // The open terminal registers its dictation here, so the palette and a bound key reach it from this shell's handler.
+  const dictate = useRef<(() => void) | null>(null);
+  usePhoneActions(onNew, onSession, () => (dictate.current === null ? false : (dictate.current(), true)));
   const machines = useMachinesContext();
   const terminal = terminals.find((entry) => entry.address === open);
   const empty = !terminals.some((entry) => entry.state === "live");
@@ -75,15 +77,16 @@ export function PhoneShell(props: PhoneShellProps) {
       </div>
     );
   }
-  return <PhoneTerminal connection={connection} terminal={terminal} onBack={onBack} />;
+  return <PhoneTerminal connection={connection} terminal={terminal} onBack={onBack} dictate={dictate} />;
 }
 
 function PhoneTerminal(props: {
   readonly connection: HcConnection;
   readonly terminal: Session;
   readonly onBack: () => void;
+  readonly dictate: RefObject<(() => void) | null>;
 }) {
-  const { connection, terminal, onBack } = props;
+  const { connection, terminal, onBack, dictate } = props;
   const send = useRef<((data: TerminalInput) => void) | null>(null);
   const voice = useDictation();
   const mic = useRef<HTMLButtonElement>(null);
@@ -112,6 +115,13 @@ function PhoneTerminal(props: {
   const machine = machineOf(terminal.address);
   const where = machine === undefined ? spaceName(terminal) : `${machine} · ${spaceName(terminal)}`;
   const offline = terminal.offline === true && machine !== undefined;
+  const { toggle } = voice;
+  useEffect(() => {
+    dictate.current = offline ? null : toggle;
+    return () => {
+      dictate.current = null;
+    };
+  }, [dictate, offline, toggle]);
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">

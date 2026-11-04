@@ -90,3 +90,19 @@ test("a recognizer that refuses to start reads as the service being off", async 
   expect(made).toHaveLength(1);
   expect(state()).toEqual({ kind: "error", reason: "service" });
 });
+
+test("the recognizer's own end of speech ends listening, and the transcript still waits to be edited (#194 Q5)", async () => {
+  const { dictation, state, last } = rig({ engine: "service" });
+  await dictation.start();
+  expect(last().continuous).toBe(false);
+  last().emit("speechstart");
+  last().say(["git status", false]);
+  last().emit("speechend");
+  expect(state()).toEqual({ kind: "transcribing", since: 1_000 });
+  expect(last().stopped).toBe(false);
+  last().say(["git status", true]);
+  last().emit("end");
+  expect(state()).toEqual({ kind: "ready", transcript: "git status" });
+  dictation.edit("git status --short");
+  expect(dictation.take()).toBe("git status --short");
+});
