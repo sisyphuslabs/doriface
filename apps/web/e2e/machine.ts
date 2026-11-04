@@ -61,11 +61,11 @@ export async function runSeeds(
   seeds: readonly Seed[],
 ): Promise<void> {
   mkdirSync(cwd, { recursive: true });
-  const runs = seeds.map(async ({ args, argv }) => {
+  for (const { args, argv } of seeds) {
     const run = Bun.spawn([hc, "run", "--bg", ...args, "--", ...argv], { env, cwd, stdout: "ignore" });
+    // oxlint-disable-next-line no-await-in-loop -- sequential on purpose: the start order is the terminal order
     if ((await run.exited) !== 0) throw new Error(`hc run ${args.join(" ")} failed`);
-  });
-  await Promise.all(runs);
+  }
 }
 
 /** Starts the second core (with its demo terminals when `withSeeds`) and adds it; resolves with its stop. */
