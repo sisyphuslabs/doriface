@@ -184,6 +184,22 @@ test("View > Zoom Out, Zoom In and Actual Size drive the same window zoom as the
   await expect.poll(zoomFactor).toBe(0.9);
 });
 
+test("the zoom keys zoom the window on Settings, where no workspace handles them", async () => {
+  const page = await app().firstWindow();
+  await page.keyboard.press("ControlOrMeta+Comma");
+  await expect(page).toHaveURL(/\/settings$/);
+  expect(await zoomFactor()).toBe(0.9);
+  await page.keyboard.press("ControlOrMeta+Minus");
+  await expect.poll(zoomFactor).toBe(0.8);
+  await page.keyboard.press("ControlOrMeta+Equal");
+  await expect.poll(zoomFactor).toBe(0.9);
+  await page.keyboard.press("ControlOrMeta+0");
+  await expect.poll(zoomFactor).toBe(1);
+  // Leaves the window at 90%, which the next test reads back at launch.
+  await page.keyboard.press("ControlOrMeta+Minus");
+  await expect.poll(zoomFactor).toBe(0.9);
+});
+
 test("the window opens at the zoom it was left at", async () => {
   await app().close();
   launched = await launch();
