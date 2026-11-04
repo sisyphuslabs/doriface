@@ -144,6 +144,38 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
   });
 }
 
+/** A tab's place among the live tabs of its space, counted from 1 in feed order, as the space row counts them. */
+export interface TabPosition {
+  readonly index: number;
+  readonly count: number;
+}
+
+/** Where a terminal sits in its space; none for one that is finished or not in the feed. */
+export function tabPosition(terminals: readonly Terminal[], address: string): TabPosition | undefined {
+  const terminal = terminals.find((t) => t.address === address && t.state === "live");
+  if (terminal === undefined) return undefined;
+  const space = spaceId(terminal);
+  const tabs = terminals.filter((t) => t.state === "live" && spaceId(t) === space);
+  return { index: tabs.indexOf(terminal) + 1, count: tabs.length };
+}
+
+export interface AgentCounts {
+  readonly done: number;
+  readonly working: number;
+  readonly idle: number;
+}
+
+/** How many live agents are done, working and idle, as the agent sections count them; offline ones are unknown. */
+export function agentCounts(terminals: readonly Session[]): AgentCounts {
+  const counts = { done: 0, working: 0, idle: 0 };
+  for (const terminal of terminals) {
+    if (terminal.state !== "live") continue;
+    const status = agentStatus(terminal);
+    if (status === "done" || status === "working" || status === "idle") counts[status] += 1;
+  }
+  return counts;
+}
+
 /** The first live terminal of a space, to open when the space is picked. */
 export function firstInSpace(terminals: readonly Terminal[], id: string): string | undefined {
   return terminals.find((t) => t.state === "live" && spaceId(t) === id)?.address;
