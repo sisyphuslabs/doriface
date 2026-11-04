@@ -1,5 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
+import type { HostStartFailure } from "../desktop/bridge.ts";
 import { connect, DeviceNotPairedError } from "./connect.ts";
 import { type ConnectionSettings, isConfigured, loadSettings, saveSettings } from "./settings.ts";
 
@@ -11,6 +12,8 @@ export type ConnectionState =
   | { readonly phase: "unconfigured" }
   | { readonly phase: "connecting"; readonly attempt: number; readonly stale: HcConnection | null }
   | { readonly phase: "open"; readonly connection: HcConnection }
+  /** This computer's host did not start: nothing is tried until a start succeeds. */
+  | { readonly phase: "host-failed"; readonly failure: HostStartFailure }
   | {
       readonly phase: "failed";
       readonly error: Error;
@@ -62,6 +65,12 @@ export class ConnectionStore {
   restoring(): void {
     this.stop();
     this.#set({ phase: "connecting", attempt: 0, stale: null });
+  }
+
+  /** The desktop app's local host did not start at boot: its cause is shown and the saved link is not tried. */
+  hostStartFailed(failure: HostStartFailure): void {
+    this.stop();
+    this.#set({ phase: "host-failed", failure });
   }
 
   start(): void {
