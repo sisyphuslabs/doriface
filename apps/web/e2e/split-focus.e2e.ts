@@ -80,7 +80,6 @@ function lies(box: Box, from: Box, side: Move): boolean {
 
 /** Presses a split key and returns the new pane once it holds the focus, the keys and the selected tab. */
 async function split(page: Page, platform: Platform, side: "right" | "down", from: string): Promise<string> {
-  const tabs = await page.getByRole("tablist", { name: "Tabs" }).getByRole("tab").count();
   await page.keyboard.press(KEYS[platform].split[side]);
   await expect.poll(() => focusedAddress(page), { timeout: 15_000 }).not.toBe(from);
   const created = await focusedAddress(page);
@@ -88,7 +87,8 @@ async function split(page: Page, platform: Platform, side: "right" | "down", fro
   await expect(paneOf(page, created)).toContainText("$", { timeout: 15_000 });
   await expect.poll(() => keyboardAddress(page), { timeout: 5_000 }).toBe(created);
   await expect.poll(() => selectedTabHolds(page, created), { timeout: 5_000 }).toBe(true);
-  await expect(page.getByRole("tablist", { name: "Tabs" }).getByRole("tab")).toHaveCount(tabs);
+  // The split stays in the tab in view: the selected tab holds the pane it came from too.
+  await expect.poll(() => selectedTabHolds(page, from), { timeout: 5_000 }).toBe(true);
   expect(lies(await boxOf(page, created), await boxOf(page, from), side)).toBe(true);
   return created;
 }

@@ -71,6 +71,7 @@ async function splitFrom(page: Page, side: "right" | "down", from: string): Prom
   const created = (await focusedAddress(page)) ?? "";
   await expect.poll(() => keyboardAddress(page), { timeout: 15_000 }).toBe(created);
   await expect.poll(() => selectedTabHolds(page, created), { timeout: 5_000 }).toBe(true);
+  await expect.poll(() => selectedTabHolds(page, from), { timeout: 5_000 }).toBe(true);
   const [box, before] = await Promise.all([boxOf(page, created), boxOf(page, from)]);
   if (side === "right") expect(box.x).toBeGreaterThanOrEqual(before.x + before.width - 1);
   else expect(box.y).toBeGreaterThanOrEqual(before.y + before.height - 1);
@@ -90,10 +91,7 @@ test("in the desktop app, split right and split down focus the new pane beside o
   await expect(first).toContainText("$", { timeout: 30_000 });
   const one = (await first.getAttribute("data-terminal")) ?? "";
   await first.getByRole("textbox").focus();
-  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-  const count = await tabs.count();
 
   const two = await splitFrom(page, "right", one);
   await splitFrom(page, "down", two);
-  await expect(tabs).toHaveCount(count);
 });
