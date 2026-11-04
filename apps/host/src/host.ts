@@ -91,7 +91,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
   // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
   const parts: StartedPart[] = [];
   try {
-    return await serve(options, hcVersion, (name, stop) => parts.push({ name, stop }));
+    return await serve(options, hcVersion, (name, stop, kill) =>
+      parts.push(kill === undefined ? { name, stop } : { name, stop, kill }),
+    );
   } catch (error) {
     await stopStarted(parts, options.log);
     throw error;
@@ -102,7 +104,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
 async function serve(
   options: HostOptions,
   hcVersion: string,
-  started: (name: string, stop: () => unknown) => void,
+  started: (name: string, stop: () => unknown, kill?: () => readonly string[]) => void,
 ): Promise<Host> {
   const { hostname, port } = options.listen;
   const stateDir = options.stateDir;
@@ -138,7 +140,13 @@ async function serve(
           extraOrigins: options.pushTestOrigins,
           log: options.log,
         });
-  if (push !== undefined) started("push feed", () => push.stop());
+  if (push !== undefined) {
+    started(
+      "push feed",
+      () => push.stop(),
+      () => push.kill().map((pid) => `hc connect pid ${pid}`),
+    );
+  }
   const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
   started("end sweeper", () => ends.stop());
   const gateway = createGateway({

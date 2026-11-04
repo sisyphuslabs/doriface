@@ -26,8 +26,14 @@ export function hcMachines(connection: HcConnection): HcMachines {
   };
 }
 
+/** A link to a child process, which can be ended by force when closing its stdin is not enough. */
+export interface ChildByteLink extends ByteLink {
+  readonly pid: number;
+  kill(signal: "SIGKILL"): void;
+}
+
 /** A `hc connect` child's stdio as the client's ByteLink. */
-class ChildLink implements ByteLink {
+class ChildLink implements ChildByteLink {
   readonly #child: Subprocess<"pipe", "pipe", "inherit">;
   readonly #data = new Set<(bytes: Uint8Array) => void>();
   readonly #close = new Set<(error: Error | undefined) => void>();
@@ -60,6 +66,14 @@ class ChildLink implements ByteLink {
     void this.#child.stdin.end();
   }
 
+  get pid(): number {
+    return this.#child.pid;
+  }
+
+  kill(signal: "SIGKILL"): void {
+    this.#child.kill(signal);
+  }
+
   async #pump(): Promise<void> {
     for await (const chunk of this.#child.stdout) for (const listener of this.#data) listener(chunk);
     this.#open = false;
@@ -82,7 +96,7 @@ export interface HcTarget {
 }
 
 /** `hc connect` to a core as a byte link. */
-export function spawnHcLink(target: HcTarget): ByteLink {
+export function spawnHcLink(target: HcTarget): ChildByteLink {
   const session = target.session === undefined ? [] : ["--session", target.session];
   const child = Bun.spawn([target.hc, "connect", ...session], {
     stdin: "pipe",
