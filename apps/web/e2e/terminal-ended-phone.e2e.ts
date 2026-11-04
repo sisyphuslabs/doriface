@@ -4,6 +4,7 @@ import { removeTerminal, stateOn } from "./ended-terminal.ts";
 import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
+import { fakeSoftKeyboard } from "./phone-key-bar.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -16,6 +17,8 @@ test("on a phone, a session that ended while its machine was offline shows as en
   const local = startShell("machine", "ended-phone");
   const go = test.info().outputPath("go");
   try {
+    // The keys bar shows on a touch phone only while the soft keyboard is up.
+    await fakeSoftKeyboard(page);
     await page.goto("/");
     await expect(machineRow(page)).toContainText("connected", { timeout: STATE_BOUND_MS });
     await agentRow(page, "ended-phone", true).click();
@@ -36,6 +39,7 @@ test("on a phone, a session that ended while its machine was offline shows as en
     // One way back (the header's), and the ended view's own action; no keys bar with no terminal to type into.
     await expect(page.getByRole("button", { name: "Back to agents" })).toHaveCount(1);
     await expect(keys).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Show keyboard" })).toHaveCount(0);
     await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 15_000 });
   } finally {
