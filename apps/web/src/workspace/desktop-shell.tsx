@@ -8,6 +8,7 @@ import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "
 import { NoTerminal } from "./no-terminal.tsx";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { afterEnd } from "./session-actions.ts";
 import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
@@ -145,7 +146,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           active={tabs.active}
           split={tabs.split}
           onFocus={tabs.focus}
-          onEnd={(address, end) => (closesTab(end) ? tabs.drop(address) : undefined)}
+          onEnd={(address, end) => (closesTab(end) ? afterEnd(address, () => tabs.drop(address)) : undefined)}
         />
         <StatusBar
           start={

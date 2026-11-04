@@ -28,8 +28,31 @@ export async function renameSession(calls: SessionCalls, address: string, name: 
   await calls.label({ terminal: address, labels: { [TITLE_LABEL]: name.trim() } });
 }
 
-/** Ends the program (hangup, then terminate, then kill) and removes the finished terminal from hc. */
-export async function endSession(calls: SessionCalls, address: string): Promise<void> {
+/**
+ * Ends in flight, by address. An End belongs to the session, not to the screen that asked for it: the program's exit
+ * closes that screen before End's terminal.rm goes out, and a page closed then would leave the terminal finished.
+ */
+const ending = new Map<string, Promise<void>>();
+
+async function killAndRemove(calls: SessionCalls, address: string): Promise<void> {
   const ended = await calls.kill({ terminal: address });
   if (ended.state === "finished") await calls.rm({ terminal: address });
+}
+
+/** Ends the program (hangup, then terminate, then kill) and removes the finished terminal from hc. */
+export function endSession(calls: SessionCalls, address: string): Promise<void> {
+  const run = killAndRemove(calls, address);
+  ending.set(address, run);
+  const settle = (): void => {
+    if (ending.get(address) === run) ending.delete(address);
+  };
+  run.then(settle, settle);
+  return run;
+}
+
+/** Runs `then` once no End of this session is in flight: at once, or when that End has removed the terminal or failed. */
+export function afterEnd(address: string, then: () => void): void {
+  const run = ending.get(address);
+  if (run === undefined) then();
+  else run.then(then, then);
 }
