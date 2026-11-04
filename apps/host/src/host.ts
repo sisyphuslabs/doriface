@@ -5,9 +5,11 @@ import type { CreateSocket, RelayProofs } from "@doriface/relay-client";
 import { controlIsLive, listenControl } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
 import { LiveSessions } from "./e2ee/sessions.ts";
+import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
-import { formatHost, isLoopbackHost, type ListenAddress } from "./listen.ts";
+import { listenError, StartupError } from "./startup-error.ts";
+import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
 import { type PairingSlotRegistrar, PairingSlots } from "./pairing-slots.ts";
 import { HostUplink } from "./relay/host-uplink.ts";
 import { openRelayPasses } from "./relay/relay-passes.ts";
@@ -77,16 +79,13 @@ export interface Host {
 
 export async function startHost(options: HostOptions): Promise<Host> {
   const { hostname, port } = options.listen;
-  if (!isLoopbackHost(hostname) && options.unsafeListen !== true) {
-    throw new Error(
-      `refusing to listen on ${hostname}: the endpoint is plaintext; bind loopback or pass --unsafe-listen`,
-    );
-  }
+  assertListenAllowed(options.listen, options.unsafeListen === true);
   if (options.lanListen !== undefined && options.stateDir === undefined) {
     throw new Error("a LAN listener serves only /v1/e2ee, which needs a state dir");
   }
   if (options.stateDir !== undefined && (await controlIsLive(options.stateDir))) {
-    throw new Error(`another doriface-host is already running on ${options.stateDir}`);
+    const message = `another doriface-host is already running on ${options.stateDir}`;
+    throw new StartupError("already-running", message, { path: options.stateDir });
   }
   const hcVersion = await readHcVersion(options.hc);
   const stateDir = options.stateDir;
@@ -121,6 +120,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
           extraOrigins: options.pushTestOrigins,
           log: options.log,
         });
+  const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -129,7 +129,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
     hcVersion,
     log: options.log,
     directIdleMs: options.directIdleMs,
-    openPipe: () => new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log }),
+    openPipe: () => {
+      void ends.ensure();
+      return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
+    },
   });
   await uplink?.start({
     onSession: (session) => {
@@ -153,7 +156,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
   } catch (error) {
     push?.stop();
     await uplink?.stop();
-    throw error;
+    throw listenError(error, `${formatHost(hostname)}:${port}`);
   }
   const lan = options.lanListen;
   let lanServer: ReturnType<typeof Bun.serve> | undefined;
@@ -170,7 +173,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
   } catch (error) {
     await uplink?.stop();
     await server.stop(true);
-    throw error;
+    throw lan === undefined ? error : listenError(error, `${formatHost(lan.hostname)}:${lan.port}`);
   }
   if (lan !== undefined && lanServer !== undefined) {
     e2ee?.lanUrls.push(...lanUrlsFor(lan.hostname, lanServer.port ?? lan.port));
@@ -210,6 +213,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
       stopping ??= Promise.resolve(e2ee?.sync.stop())
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
+        .then(() => ends.stop())
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => undefined);
       return stopping;

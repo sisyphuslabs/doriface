@@ -1,5 +1,5 @@
 import { devices, type Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, laidOutBox, test } from "./fixtures.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -27,9 +27,9 @@ async function sessionAction(page: Page, item: string): Promise<void> {
 test("on a phone the open terminal's header renames its session", async ({ page }) => {
   await openNewTerminal(page);
   // A touch target, not the desktop tab strip's 24 px glyph button.
-  const box = await sessionActions(page).boundingBox();
-  expect(box?.width).toBeGreaterThanOrEqual(44);
-  expect(box?.height).toBeGreaterThanOrEqual(44);
+  const box = await laidOutBox(sessionActions(page));
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
 
   await sessionAction(page, "Rename…");
   const dialog = page.getByRole("dialog", { name: /^Rename / });
