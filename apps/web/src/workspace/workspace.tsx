@@ -40,7 +40,15 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (name === ORDER_DOC && machine === null) heardOrder.current(version);
   }, []);
   const fed = useTerminals(connection, onDoc);
-  const { entries: listed, terminals, refresh, listError, views, retry } = useMachines(connection, fed.terminals);
+  const {
+    entries: listed,
+    terminals,
+    refresh,
+    listError,
+    views,
+    retry,
+    listed: machineReads,
+  } = useMachines(connection, fed.terminals);
   const { layouts, heard } = useLayoutDocs(connection, views);
   heardLayout.current = heard;
   const order = useMachineOrder(connection, listed);
@@ -64,7 +72,14 @@ export function Workspace({ connection }: WorkspaceProps) {
     [toasts],
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
-  const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed, told);
+  const layout = useLayout(
+    connection.hello.core.id,
+    layouts,
+    fed.loaded ? terminals : [],
+    failed,
+    told,
+    machineReads > 0,
+  );
   useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, layout.dropPane);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
