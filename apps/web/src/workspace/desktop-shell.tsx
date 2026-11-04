@@ -135,9 +135,14 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
             <>
               <StatusBarItem icon={<Monitor aria-hidden />}>{focusedMachine}</StatusBarItem>
               {focusedTerminal === undefined ? null : (
-                <StatusBarItem icon={<Folder aria-hidden />}>
-                  <span data-status-space>{spaceName(focusedTerminal)}</span>
-                </StatusBarItem>
+                // The space gives way first, so a long name never pushes the terminal count out of the bar.
+                <span className="flex max-w-48 min-w-0">
+                  <StatusBarItem icon={<Folder aria-hidden />}>
+                    <span data-status-space title={spaceName(focusedTerminal)}>
+                      {spaceName(focusedTerminal)}
+                    </span>
+                  </StatusBarItem>
+                </span>
               )}
               {loaded ? (
                 <StatusBarItem>

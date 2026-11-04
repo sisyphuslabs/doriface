@@ -22,8 +22,9 @@ test.describe("two terminals named alike on two machines", () => {
     await expect(tabs).toHaveCount(2, { timeout: 15_000 });
     const remote = tabs.filter({ hasText: MACHINE_NAME });
     await expect(remote).toHaveCount(1);
-    await expect(remote).toHaveAttribute("title", `review on ${MACHINE_NAME}`);
-    await expect(tabs.filter({ hasNotText: MACHINE_NAME })).toHaveAttribute("title", "review");
+    // The tooltip ends in the pane's shortcut while the tab is shown, e.g. "review on build-box (Ctrl+1)".
+    await expect(remote).toHaveAttribute("title", new RegExp(`^review on ${MACHINE_NAME}( \\(.+\\))?$`));
+    await expect(tabs.filter({ hasNotText: MACHINE_NAME })).toHaveAttribute("title", /^review( \(.+\))?$/);
 
     const status = page.getByRole("contentinfo");
     await expect(status).toContainText(MACHINE_NAME);

@@ -30,15 +30,16 @@ test("off macOS the status bar and sidebar show the palette shortcut as Ctrl Shi
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "P"]);
 });
 
-test("off macOS the tab bar and pane headers show Ctrl shortcuts", async ({ page }) => {
+test("off macOS the tab bar and the tab tooltip show Ctrl shortcuts", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" });
     Object.defineProperty(Navigator.prototype, "userAgent", { get: () => "Mozilla/5.0 (X11; Linux x86_64)" });
   });
   await page.goto("/");
   const terminal = await openNewTerminal(page);
-  await expect(page.locator('[data-focused="true"] header')).toContainText("Ctrl+1");
-  await expect(page.locator('[data-focused="true"] header')).not.toContainText("⌘");
+  const selected = page.getByRole("tab", { selected: true });
+  await expect(selected).toHaveAttribute("title", /\(Ctrl\+1\)$/);
+  await expect(selected).not.toHaveAttribute("title", /⌘/);
   await expect(terminal).toBeVisible();
   // CI intermittently showed no tooltip when re-hovering New tab right after openNewTerminal clicked
   // it; the cause is unknown (#43). A reload sidesteps it, and the terminal survives the reload.
