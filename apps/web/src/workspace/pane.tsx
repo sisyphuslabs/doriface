@@ -7,6 +7,7 @@ import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
+import { picksPane } from "./pane-focus.ts";
 
 export interface PaneProps {
   readonly connection: HcConnection;
@@ -65,11 +66,8 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onS
     <section
       aria-label={`${title} terminal`}
       onFocusCapture={(event) => {
-        // wterm takes focus as it starts; that is not the person picking this pane (see TerminalView's onFocus).
-        if (event.target instanceof Element && event.target.closest('[data-ready="false"]') !== null) return;
-        // Already the pane in focus: nothing to choose. It may only stand in for a pane still being written (a split's),
-        // and writing it would replace that choice.
-        if (!focused) onFocus();
+        const starting = event.target instanceof Element && event.target.closest('[data-ready="false"]') !== null;
+        if (picksPane(starting, focused)) onFocus();
       }}
       data-split={split}
       data-focused={focused}

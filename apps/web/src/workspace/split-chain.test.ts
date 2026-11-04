@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SplitChain } from "./split-chain.ts";
+import { chainedSplit, SplitChain } from "./split-chain.ts";
 
 const placed = (chain: SplitChain, tab: string, focused: string, source: string | null = null) => {
   const link = chain.next(tab, focused, source);
@@ -50,5 +50,34 @@ describe("splits pressed back to back", () => {
     const again = placed(chain, "other", "y");
     again.land();
     expect(await again.from).toBe("y");
+  });
+});
+
+describe("the workspace's split, through the chain", () => {
+  test("two keys back to back: the second terminal starting first still splits the pane the first one makes", async () => {
+    const chain = new SplitChain();
+    const starts: { place: (address: string) => void }[] = [];
+    const splits: [string, string, string][] = [];
+    const { promise: bothLanded, resolve } = Promise.withResolvers<void>();
+    const press = () =>
+      chainedSplit(
+        chain,
+        { tab: "tab", focused: "two", source: null },
+        (place) => starts.push({ place }),
+        (address, from, made) => {
+          splits.push([address, from, made]);
+          if (splits.length === 2) resolve();
+        },
+      );
+    press();
+    press();
+    starts[1]?.place("t-down");
+    starts[0]?.place("t-right");
+    await bothLanded;
+    const [first, second] = splits;
+    if (first === undefined || second === undefined) throw new Error("two splits were expected");
+    expect([first[0], first[1]]).toEqual(["t-right", "two"]);
+    expect([second[0], second[1]]).toEqual(["t-down", first[2]]);
+    expect(second[2]).not.toBe(first[2]);
   });
 });
