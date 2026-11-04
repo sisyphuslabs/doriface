@@ -15,6 +15,9 @@ interface Adopted {
 
 /** Groups started and not yet stopped, by pgid. A group of its own gets none of the signals that end this process. */
 const liveGroups = new Map<number, Adopted>();
+/** Async teardowns (a harness's own processes outside any group, such as daemons) to run first on an interrupt. */
+const cleanups = new Set<() => Promise<void>>();
+const CLEANUP_MS = 30_000;
 let interruptsHooked = false;
 
 function isErrno(error: unknown, code: string): boolean {
@@ -79,6 +82,8 @@ function hookInterrupts(): void {
   process.once("exit", () => removeDirs(killLiveGroups()));
   for (const signal of INTERRUPTS) {
     process.once(signal, async () => {
+      const deadline = new Promise<void>((resolve) => setTimeout(resolve, CLEANUP_MS));
+      await Promise.race([Promise.allSettled([...cleanups].map((cleanup) => cleanup())), deadline]);
       const groups = killLiveGroups();
       await Promise.all(groups.map(({ leader }) => goneWithin(leader.pid, KILL_GRACE_MS)));
       removeDirs(groups);
@@ -94,6 +99,16 @@ function hookInterrupts(): void {
 export function adoptProcessGroup(leader: Subprocess, dir: string): void {
   liveGroups.set(leader.pid, { leader, dir });
   hookInterrupts();
+}
+
+/**
+ * Runs `cleanup` (bounded) before the live groups are killed when this process ends on SIGINT, SIGTERM or SIGHUP;
+ * returns the function that unregisters it, once the owner tore down by itself.
+ */
+export function onInterrupt(cleanup: () => Promise<void>): () => void {
+  cleanups.add(cleanup);
+  hookInterrupts();
+  return () => void cleanups.delete(cleanup);
 }
 
 /** Stops every group still registered and removes its scratch: the end-of-run cleanup for relays a test left running. */
