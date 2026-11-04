@@ -68,5 +68,6 @@ export {
 export { ThemePicker, type ThemeOption, type ThemePickerProps } from "./components/theme-picker.tsx";
 export { ToastProvider, ToastViewport, useToastManager, type ToastViewportProps } from "./components/toast.tsx";
 export { Tooltip, TooltipProvider, type TooltipProps } from "./components/tooltip.tsx";
+export { type VoiceError } from "./components/voice-copy.ts";
 export { VoiceStrip, type VoiceState, type VoiceStripProps } from "./components/voice-strip.tsx";
 export * from "./theme/index.ts";

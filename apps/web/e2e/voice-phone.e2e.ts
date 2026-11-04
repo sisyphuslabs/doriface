@@ -61,7 +61,7 @@ test("dictation asks first, listens, transcribes, and types the edited transcrip
   await expect(page.getByText("echo voice", { exact: true })).toBeVisible();
 
   // Transcribing: Done stops the recognizer, which still owes its last words.
-  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(announced(page, "Transcribing")).toBeVisible();
   expect(await speech.stops()).toBe(1);
 
@@ -115,7 +115,7 @@ test("a take with no speech says nothing was typed, and Close brings the key bar
   const speech = await stubSpeech(page);
   await openShell(page);
   await startListening(page);
-  await page.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
   await speech.end();
   const notice = page.getByRole("status").filter({ hasText: "Didn't catch anything" });
   await expect(notice).toContainText("Nothing was typed");
@@ -133,7 +133,8 @@ test("Settings > Voice input picks the language and the speech service, and the 
   await page.getByRole("button", { name: /^Language/ }).click();
   await page.getByRole("menuitem", { name: "Korean (South Korea)" }).click();
   await expect(page.getByRole("button", { name: /^Language/ })).toContainText("Korean (South Korea)");
-  await page.getByRole("radio", { name: "Speech service" }).click();
+  await page.getByRole("button", { name: "Speech service" }).click();
+  await expect(page.getByRole("button", { name: "Speech service" })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await agentRow(page, NAME, false).click();

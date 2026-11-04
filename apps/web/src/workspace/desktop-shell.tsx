@@ -1,11 +1,16 @@
 import type { HcConnection } from "@doriface/client";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
+import { DictateButton } from "../voice/dictate-button.tsx";
+import { useDictation } from "../voice/use-dictation.ts";
+import { VoiceDock } from "../voice/voice-dock.tsx";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
+import { usePaneSends } from "./pane-sends.ts";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { afterEnd } from "./session-actions.ts";
@@ -43,6 +48,12 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const moveLeftKeys = useActionKeys("tab.move:left");
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
+  const voice = useDictation();
+  const sends = usePaneSends();
+  const mic = useRef<HTMLButtonElement>(null);
+  // A dictation belongs to the pane it started in: moving focus to another tab or pane ends it, typing nothing.
+  const { dictation } = voice;
+  useEffect(() => dictation.close(), [dictation, tabs.active]);
   useAppActions({
     terminals,
     tabs,
@@ -131,6 +142,9 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           }
           trailing={
             <>
+              {focusedTerminal === undefined || focusedTerminal.offline === true ? null : (
+                <DictateButton voice={voice} target={terminalTitle(focusedTerminal)} size="sm" ref={mic} />
+              )}
               {focusedTerminal === undefined ? null : (
                 <SessionMenu address={focusedTerminal.address} title={terminalTitle(focusedTerminal)} />
               )}
@@ -147,6 +161,21 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           split={tabs.split}
           onFocus={tabs.focus}
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, () => tabs.drop(address)) : undefined)}
+          sends={sends}
+          dock={
+            focusedTerminal === undefined ? null : (
+              <VoiceDock
+                voice={voice}
+                target={terminalTitle(focusedTerminal)}
+                onType={(text) => {
+                  sends.type(focusedTerminal.address, text);
+                  document.querySelector<HTMLElement>(FOCUSED_TERMINAL_INPUT)?.focus();
+                }}
+                onClose={() => mic.current?.focus()}
+                className="pb-2"
+              />
+            )
+          }
         />
         <StatusBar
           start={

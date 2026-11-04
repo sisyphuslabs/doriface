@@ -144,7 +144,7 @@ export const SCREENS: readonly Screen[] = [
       await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
     },
   },
-  ...(["Connections", "Appearance", "Terminal", "Keybindings"] as const).map((label): Screen => ({
+  ...(["Connections", "Appearance", "Terminal", "Keybindings", "Voice input"] as const).map((label): Screen => ({
     name: `settings-${label.toLowerCase()}`,
     start: "layout",
     open: (page, narrow) => section(page, narrow, label),

@@ -26,9 +26,9 @@ export async function stubSpeech(page: Page): Promise<SpeechStub> {
   await page.addInitScript(() => {
     const started: StartedSession[] = [];
     const calls = { started, stops: 0, aborts: 0 };
-    let current: EventTarget | null = null;
+    const sessions: EventTarget[] = [];
     const fire = (type: string, fields: Record<string, unknown> = {}): void => {
-      current?.dispatchEvent(Object.assign(new Event(type), fields));
+      sessions.at(-1)?.dispatchEvent(Object.assign(new Event(type), fields));
     };
     class StubRecognition extends EventTarget {
       lang = "";
@@ -38,7 +38,7 @@ export async function stubSpeech(page: Page): Promise<SpeechStub> {
       start(): void {
         const { lang, continuous, interimResults, processLocally } = this;
         calls.started.push({ lang, continuous, interimResults, processLocally });
-        current = this;
+        sessions.push(this);
         queueMicrotask(() => {
           fire("start");
           fire("audiostart");

@@ -1,5 +1,5 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
-import { ArrowLeft, Keyboard, Link2, Network, Palette, Server, SquareTerminal } from "lucide-react";
+import { ArrowLeft, Keyboard, Link2, Mic, Network, Palette, Server, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { currentPlatform, triggerKeys } from "../keys/trigger.ts";
 import { AppearanceSection } from "../settings/appearance-section.tsx";
@@ -10,6 +10,7 @@ import { MeshSection } from "../settings/mesh-section.tsx";
 import { MachinesSection } from "../settings/machines-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 import { useCloseSettings } from "../settings/use-close-settings.ts";
+import { VoiceSection } from "../settings/voice-section.tsx";
 
 const SECTIONS = [
   { id: "connections", label: "Connections", icon: <Link2 /> },
@@ -18,6 +19,7 @@ const SECTIONS = [
   { id: "appearance", label: "Appearance", icon: <Palette /> },
   { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
   { id: "keybindings", label: "Keybindings", icon: <Keyboard /> },
+  { id: "voice", label: "Voice input", icon: <Mic /> },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -111,9 +113,13 @@ export function SettingsRoute() {
             <Group title="Terminal">
               <TerminalSection />
             </Group>
-          ) : (
+          ) : section === "keybindings" ? (
             <Group title="Keybindings">
               <KeybindingsSection />
+            </Group>
+          ) : (
+            <Group title="Voice input">
+              <VoiceSection />
             </Group>
           )}
         </div>

@@ -8,7 +8,10 @@ test("stored voice settings: anything unreadable falls back to the browser's lan
     expect(parseVoiceSettings(raw)).toEqual(DEFAULT_VOICE);
   }
   expect(parseVoiceSettings('{"language":"ko-KR","engine":"device"}')).toEqual({ language: "ko-KR", engine: "device" });
-  expect(parseVoiceSettings('{"language":"ja-JP","engine":"service"}')).toEqual({ language: "ja-JP", engine: "service" });
+  expect(parseVoiceSettings('{"language":"ja-JP","engine":"service"}')).toEqual({
+    language: "ja-JP",
+    engine: "service",
+  });
 });
 
 test("the recognition language follows the browser until one is picked", () => {
@@ -24,12 +27,21 @@ test("a language reads as words, and an unknown tag as itself", () => {
   expect(languageName("not a tag")).toBe("not a tag");
 });
 
+const recognizerClass = () =>
+  class extends EventTarget {
+    lang = "";
+    continuous = false;
+    interimResults = false;
+    start = () => undefined;
+    stop = () => undefined;
+    abort = () => undefined;
+  };
 test("the recognizer is the standard one, else the prefixed one, and only on a secure page", () => {
-  class Standard extends EventTarget {}
-  class Prefixed extends EventTarget {}
-  expect(findRecognizer({ isSecureContext: true, SpeechRecognition: Standard, webkitSpeechRecognition: Prefixed })).toEqual(
-    { kind: "ok", recognizer: Standard },
-  );
+  const Standard = recognizerClass();
+  const Prefixed = recognizerClass();
+  expect(
+    findRecognizer({ isSecureContext: true, SpeechRecognition: Standard, webkitSpeechRecognition: Prefixed }),
+  ).toEqual({ kind: "ok", recognizer: Standard });
   expect(findRecognizer({ isSecureContext: true, webkitSpeechRecognition: Prefixed })).toEqual({
     kind: "ok",
     recognizer: Prefixed,

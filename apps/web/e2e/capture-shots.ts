@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
+import { VOICE_SHOTS } from "./capture-voice-shots.ts";
 import { machineRow, STATE_BOUND_MS } from "./machine-switch.ts";
 import { resetMeshDocs } from "./mesh-reset.ts";
 
@@ -216,4 +217,5 @@ export const SHOTS: readonly Shot[] = [
       await expect(page.getByRole("alert").first()).toBeVisible();
     },
   },
+  ...VOICE_SHOTS,
 ];

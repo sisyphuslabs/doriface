@@ -8,6 +8,9 @@ import { NEW_TAB } from "../keys/actions.ts";
 import { applyModifiers, keySequence, MODIFIERS } from "../terminal/keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import { type TerminalInput, TerminalView } from "../terminal/terminal-view.tsx";
+import { DictateButton } from "../voice/dictate-button.tsx";
+import { useDictation } from "../voice/use-dictation.ts";
+import { VoiceDock } from "../voice/voice-dock.tsx";
 import { AgentLists } from "./agent-lists.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { onlyThisMachine } from "./machines.ts";
@@ -82,6 +85,8 @@ function PhoneTerminal(props: {
 }) {
   const { connection, terminal, onBack } = props;
   const send = useRef<((data: TerminalInput) => void) | null>(null);
+  const voice = useDictation();
+  const mic = useRef<HTMLButtonElement>(null);
   const [latched, setLatched] = useState<ReadonlySet<string>>(new Set());
   const onSend = useCallback((next: ((data: TerminalInput) => void) | null) => {
     send.current = next;
@@ -106,6 +111,7 @@ function PhoneTerminal(props: {
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   const where = machine === undefined ? spaceName(terminal) : `${machine} · ${spaceName(terminal)}`;
+  const offline = terminal.offline === true && machine !== undefined;
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-card">
@@ -125,10 +131,11 @@ function PhoneTerminal(props: {
             {where}
           </p>
         </div>
+        {offline ? null : <DictateButton voice={voice} target={title} ref={mic} />}
         <SessionMenu address={terminal.address} title={title} placement="header" />
       </header>
       <ConnectionLine />
-      {terminal.offline === true && machine !== undefined ? (
+      {offline ? (
         <MachineOffline machine={machine} />
       ) : (
         <TerminalView
@@ -146,7 +153,21 @@ function PhoneTerminal(props: {
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
         />
       )}
-      <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
+      {voice.state.kind === "idle" || offline ? (
+        <ExtraKeysBar latched={[...latched]} onKey={press} className="pb-[max(0.25rem,env(safe-area-inset-bottom))]" />
+      ) : (
+        // Dictation takes the key bar's place; the transcript is typed past the latched modifiers, as written.
+        <VoiceDock
+          voice={voice}
+          target={title}
+          onType={(text) => {
+            send.current?.(text);
+            document.querySelector<HTMLElement>("[data-terminal] textarea")?.focus();
+          }}
+          onClose={() => mic.current?.focus()}
+          className="pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+        />
+      )}
     </div>
   );
 }
