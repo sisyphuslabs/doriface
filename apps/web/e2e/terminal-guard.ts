@@ -1,8 +1,8 @@
 // Every spec leaves the e2e core with the terminals it found there (#226). A test's terminals are the ones listed
-// after it that were not listed before it.
+// after it that were not listed before it; the guard ends those (and removes their finished entries), never another's.
 // A spec file's beforeAll terminals are the ones that appeared between the last test of the file before it (or a new
 // worker's start) and its own first test; its afterAll hooks end them. Whatever is still on the core once its owner is
-// done is a leak, failed by the worker that found it: a test's own leak fails that test, and a leak found between tests
+// done is a leak, which the guard ends too, failed by the worker that found it: a test's own leak fails that test, and a leak found between tests
 // (a late terminal, a beforeAll terminal its afterAll left) fails the worker as it ends, naming the spec either way.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -58,6 +58,20 @@ function list(): Listing {
   );
 }
 
+/** Ends each of `keys` that is live and removes it; returns the core afterwards and every refusal from hc. */
+function end(keys: readonly string[], now: Listing): { readonly now: Listing; readonly errors: string[] } {
+  const errors: string[] = [];
+  for (const terminal of keys.flatMap((key) => now.get(key) ?? [])) {
+    try {
+      if (terminal.live) hcOn("host", ["kill", terminal.address]);
+      hcOn("host", ["rm", terminal.address]);
+    } catch (error) {
+      errors.push(`${terminal.address}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
+    }
+  }
+  return { now: list(), errors };
+}
+
 /** Which worker slot and e2e host found a leak, for its message and the ledger. */
 export const WHERE = `worker ${E2E_SLOT}, e2e host :${E2E_HOST_PORT}`;
 /** Leaks this worker found between tests: it fails with them as it ends. */
@@ -78,12 +92,17 @@ interface Found {
   readonly leak: string | undefined;
 }
 
-/** Records `keys` still on the core as a leak of `owner`. */
+/** Records `keys` still on the core as a leak of `owner`, after ending them. */
 function leak(now: Listing, owner: string, spec: string, keys: readonly string[]): Found {
   const { live, finished } = left(now, keys);
   if (live.length + finished.length === 0) return { now, leak: undefined };
-  record({ kind: "leak", where: WHERE, owner, spec, live, finished, errors: [] });
-  return { now, leak: `${owner}: ${live.length} live [${live.join(" ")}], ${finished.length} finished [${finished.join(" ")}]` };
+  const { now: after, errors } = end(keys, now);
+  record({ kind: "leak", where: WHERE, owner, spec, live, finished, errors });
+  const refused = errors.length === 0 ? "" : `, could not end: ${errors.join("; ")}`;
+  return {
+    now: after,
+    leak: `${owner}: ${live.length} live [${live.join(" ")}], ${finished.length} finished [${finished.join(" ")}]${refused}`,
+  };
 }
 
 const fail = (leaks: readonly string[]): Error =>
@@ -145,11 +164,16 @@ export function beginTest(info: TestInfo): Listing {
   return now;
 }
 
-/** After a test, its pages closed: fails the test if it left terminals on the core. */
+/** After a test, its pages closed: ends the terminals it opened, and fails the test with any it could not end. */
 export function endTest(info: TestInfo, before: Listing): void {
   const [owner, spec] = [ownerOf(info), specOf(info)];
-  const now = list();
-  const own = leak(now, owner, spec, newIn(now, [...before.keys()]));
+  let now = list();
+  const opened = newIn(now, [...before.keys()]);
+  if (opened.length > 0) {
+    now = end(opened, now).now;
+    record({ kind: "ended", owner, spec, count: opened.length });
+  }
+  const own = leak(now, owner, spec, opened);
   const fileOwned = readState()?.fileOwned ?? [];
   writeState({ worker: info.workerIndex, spec, owner, listed: [...own.now.keys()], fileOwned });
   if (own.leak !== undefined) throw fail([own.leak]);

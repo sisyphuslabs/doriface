@@ -1,5 +1,4 @@
 import type { Page, Route } from "@playwright/test";
-import { endAgent } from "./agents.ts";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
@@ -8,18 +7,6 @@ test.use({ serviceWorkers: "block" });
 
 /** The default close-tab shortcut on this platform's keymap (Cmd+W on macOS, Ctrl+Shift+W elsewhere). */
 const CLOSE_TAB = process.platform === "darwin" ? "Meta+KeyW" : "Control+Shift+KeyW";
-
-// Every spec shares one core: what a test here opens, it ends, so later specs count from what they found.
-const opened: string[] = [];
-test.afterEach(() => {
-  for (const address of opened.splice(0)) endAgent("host", address);
-});
-
-async function openOwnTerminal(page: Page): Promise<string> {
-  const address = (await (await openNewTerminal(page)).getAttribute("data-terminal")) ?? "";
-  opened.push(address);
-  return address;
-}
 
 const focusInside = (page: Page, role: "dialog" | "menu", name?: RegExp) =>
   page.getByRole(role, name === undefined ? {} : { name }).evaluate((layer) => layer.contains(document.activeElement));
@@ -53,7 +40,7 @@ test("a terminal that becomes ready while Cmd+W's question is open leaves the qu
 }) => {
   const socket = await routeHcSocket(page);
   await page.goto("/");
-  await openOwnTerminal(page);
+  await openNewTerminal(page);
   // After a reload every view attaches again; held, the focused one stays connecting until release.
   const release = socket.hold("terminal.attach");
   await page.reload();
@@ -90,7 +77,7 @@ test("a terminal whose renderer starts while Cmd+W's question is open leaves the
   page,
 }) => {
   await page.goto("/");
-  await openOwnTerminal(page);
+  await openNewTerminal(page);
   const release = await reloadWithRenderersHeld(page);
 
   // Asked before any renderer started, so focus was on the page body when the question opened.
@@ -116,7 +103,7 @@ test("a terminal whose renderer starts while its session menu is open leaves the
   page,
 }) => {
   await page.goto("/");
-  await openOwnTerminal(page);
+  await openNewTerminal(page);
   const release = await reloadWithRenderersHeld(page);
 
   await page.getByRole("button", { name: /^Session actions for / }).click();
