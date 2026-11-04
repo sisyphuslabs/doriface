@@ -28,7 +28,7 @@ import { machineOf } from "./model.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
 import { orderTabs, type TabMove } from "./tab-order.ts";
-import { useDropPane } from "./use-drop-pane.ts";
+import { type Leaving, useDropPane } from "./use-drop-pane.ts";
 import { useTabMoves } from "./use-tab-moves.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
@@ -230,26 +230,30 @@ export function useLayout(
     [active, addTab, focused, keepHere, layoutOf, show, tabs, told],
   );
 
-  const dropFromDoc = useDropPane(tabs, layoutOf, setLoose);
-  const dropPane = useCallback(
-    (address: string): void => {
-      const found = findTerminal(tabs, address);
-      dropFromDoc(address);
-      if (found === null || found.tab.transient) return;
-      // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there.
-      const key = found.tab.key;
-      const gone = found.pane.id;
-      const left = (history.current.get(key) ?? []).filter((id) => id !== gone);
-      history.current.set(key, left);
-      const here = new Set(found.tab.panes.map((pane) => pane.id));
-      const before = left.findLast((id) => here.has(id));
+  // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there. A write
+  // that fails puts the pane back, and focus with it, unless it has moved on since.
+  const leave = useCallback((leaving: Leaving): (() => void) => {
+    const key = leaving.tab.key;
+    const gone = leaving.pane.id;
+    const had = history.current.get(key) ?? [];
+    const left = had.filter((id) => id !== gone);
+    history.current.set(key, left);
+    const here = new Set(leaving.tab.panes.map((pane) => pane.id));
+    const before = left.findLast((id) => here.has(id));
+    if (before !== undefined)
+      setView((prev) => (prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev));
+    return () => {
+      if (had.includes(gone)) {
+        const now = (history.current.get(key) ?? []).filter((id) => id !== gone);
+        history.current.set(key, [...now, gone].slice(-HISTORY));
+      }
       if (before !== undefined)
         setView((prev) =>
-          prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev,
+          prev.focused[key] === before ? { ...prev, focused: { ...prev.focused, [key]: gone } } : prev,
         );
-    },
-    [dropFromDoc, tabs],
-  );
+    };
+  }, []);
+  const dropPane = useDropPane(tabs, layoutOf, setLoose, leave);
 
   const closeTab = useCallback(
     (key: string): void => {

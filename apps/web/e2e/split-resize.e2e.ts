@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { startShell } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
+import { routeHcSocket } from "./hc-socket.ts";
 import { fractionOf, paneOf, renameTab, savedTab, seedLayout, type Fraction, type SeedTab } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 
@@ -237,6 +238,44 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
   }, Promise.resolve());
   await expect(tabs).toHaveCount(1);
   await expect(tabs.first()).toHaveText(/other/);
+});
+
+test("a pane whose program ends while its layout write is refused stays, says so, and keeps focus", async ({
+  page,
+}) => {
+  const [one = "", two = ""] = ["left", "right"].map(shell);
+  seedLayout([
+    {
+      id: "tb-pair",
+      name: "pair",
+      root: [
+        { pane: "p1", terminal: one, weight: 0.5 },
+        { pane: "p2", terminal: two, weight: 0.5 },
+      ],
+    },
+  ]);
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  // Focus goes through both panes, so `two` has `one` before it to hand focus back to (the first pane may hold focus
+  // from the load already, and focusing it again fires nothing).
+  await paneOf(page, two).getByRole("textbox").focus();
+  await paneOf(page, one).getByRole("textbox").focus();
+  await expect(focused).toHaveAttribute("data-terminal", one);
+  await paneOf(page, two).getByRole("textbox").focus();
+  await expect(focused).toHaveAttribute("data-terminal", two);
+  const saved = savedTab("tb-pair");
+
+  // A program that exits drops its pane with no question asked, so nothing but the drop moves focus.
+  socket.staleWrites(true);
+  await page.keyboard.type("exit\r");
+  await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  // The layout kept the pane, which now says its session ended; focus stays on it, not on the pane before it.
+  const kept = page.getByRole("region", { name: "resize-right terminal" });
+  await expect(kept.getByRole("heading", { name: "This session ended" })).toBeVisible();
+  await expect(kept).toHaveAttribute("data-focused", "true");
+  await expect(page.getByRole("region", { name: "resize-left terminal" })).toHaveAttribute("data-focused", "false");
+  expect(savedTab("tb-pair")).toBe(saved);
 });
 
 test("zoomed, moving focus or splitting shows every pane again, so a close acts on a pane in view", async ({

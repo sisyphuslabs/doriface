@@ -1,7 +1,7 @@
 import type { JsonObject } from "@doriface/protocol";
 import { editTab, panesOf, removePane, removeTab, tabsOf } from "@doriface/protocol/layout";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
-import { findTerminal, type LayoutTab } from "./layout-model.ts";
+import { findTerminal, type LayoutPane, type LayoutTab } from "./layout-model.ts";
 
 /** One machine's layout as a drop needs it: whether it takes edits now, and the edit. */
 interface DropTarget {
@@ -28,15 +28,25 @@ export function writableDrops(
   return { now, gone };
 }
 
+/** The pane a drop takes out, in the tab it was found in. */
+export interface Leaving {
+  readonly tab: LayoutTab;
+  readonly pane: LayoutPane;
+}
+
 /**
  * Takes the terminal's pane out of its tab, and the tab when it was the last pane. A machine whose layout takes no
  * edits yet (still loading after a reconnect, or not connected) gets the drop as soon as it does, so a program that
  * ended while the line was down still closes its pane once the page is back.
+ *
+ * `leave` runs as the edit goes out, when the document already shows the pane gone, and returns how to undo what it
+ * did: a write that fails puts the pane back, so the undo runs then, and the failure is reported by `edit`.
  */
 export function useDropPane(
   tabs: readonly LayoutTab[],
   layoutOf: (machine: string | null) => DropTarget | undefined,
   setLoose: Dispatch<SetStateAction<readonly string[]>>,
+  leave: (leaving: Leaving) => () => void,
 ): (address: string) => void {
   const [pending, setPending] = useState<readonly string[]>([]);
   const dropPane = useCallback(
@@ -48,15 +58,25 @@ export function useDropPane(
       if (layout === undefined || layout.readOnly !== null) {
         return setPending((prev) => (prev.includes(address) ? prev : [...prev, address]));
       }
-      void layout.edit((doc) => {
-        if (doc === null) return null;
-        const tab = tabsOf(doc).find((each) => each.id === found.tab.id);
-        const root = tab === undefined ? null : removePane(tab.root, found.pane.id);
-        if (root === null) return null;
-        return panesOf(root).length === 0 ? removeTab(doc, found.tab.id) : editTab(doc, found.tab.id, () => root);
-      });
+      // Whether the edit found the pane already out of the document: nothing is written, and it stays gone.
+      let gone = false;
+      const undo = leave(found);
+      void layout
+        .edit((doc) => {
+          const tab = doc === null ? undefined : tabsOf(doc).find((each) => each.id === found.tab.id);
+          const root = tab === undefined ? null : removePane(tab.root, found.pane.id);
+          if (doc === null || root === null) {
+            gone = true;
+            return null;
+          }
+          return panesOf(root).length === 0 ? removeTab(doc, found.tab.id) : editTab(doc, found.tab.id, () => root);
+        })
+        .then((written) => {
+          if (!written && !gone) undo();
+          return written;
+        });
     },
-    [layoutOf, setLoose, tabs],
+    [layoutOf, leave, setLoose, tabs],
   );
   useEffect(() => {
     if (pending.length === 0) return;
