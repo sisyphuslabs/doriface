@@ -64,6 +64,20 @@ describe("the dial budget (S-4)", () => {
     expect(due.filter((entry) => entry.member === "m").map((entry) => entry.reason)).toEqual(["pass"]);
   });
 
+  test("a member refused for its pass is due after 30 s when no new pass comes, and only once", async () => {
+    const { clock, dials, due } = policy();
+    dials.report("m", 4412);
+    dials.report("m", 4412);
+    await clock.advance(29_999);
+    expect(due.filter((entry) => entry.member === "m")).toEqual([]);
+    await clock.advance(1);
+    expect(due.filter((entry) => entry.member === "m").map((entry) => [entry.reason, entry.at])).toEqual([
+      ["pass", 30_000],
+    ]);
+    dials.passRenewed();
+    expect(due.filter((entry) => entry.member === "m")).toHaveLength(1);
+  });
+
   test("a direct (LAN) dial is never charged", async () => {
     const { dials } = policy();
     await fill(dials, 12);

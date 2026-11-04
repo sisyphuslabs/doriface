@@ -155,7 +155,7 @@ The suites in `tests/relay` check a relay against this section. They start it wi
 | `IDLE_TIMEOUT_MS`    | 90000   | a socket with no `ping` for this long is reaped (4408)   |
 | `AUTH_TIMEOUT_MS`    | 10000   | an uplink's time to answer its challenge (4403)          |
 
-Relay passes (v1.6) are optional for a stand-in: one that ignores `?pass=1` and `proof` is conformant, and hosts behave as against a v1.5 relay. The pass suites feature-detect: they dial `?pass=1` and, when no PASS frame comes before the PAIR_SLOT_ACK of a request sent right behind the answer, skip the pass tests and assert v1.5 behaviour. A stand-in that serves passes accepts these `--var` overrides, each clamped to its default as a maximum so it can only shorten:
+Relay passes (v1.6) are optional for a stand-in: one that ignores `?pass=1` and `proof` is conformant, and hosts behave as against a v1.5 relay. A conformance check can feature-detect them: dial `?pass=1`, answer, send a PAIR_SLOT right behind the answer, and when the PAIR_SLOT_ACK comes with no PASS frame before it, treat the relay as v1.5. A stand-in that serves passes accepts these `--var` overrides, each clamped to its default as a maximum so it can only shorten:
 
 | Variable                | Default | Meaning                                               |
 | ----------------------- | ------- | ----------------------------------------------------- |

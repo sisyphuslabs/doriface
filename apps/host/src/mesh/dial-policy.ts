@@ -70,7 +70,8 @@ export class DialPolicy {
   readonly #present = new Set<string>();
   readonly #budgetRefused = new Set<string>();
   /** Members whose dial met a refused relay pass (4412): due again when a new pass arrives, never gated. */
-  readonly #passRefused = new Set<string>();
+  /** Each one's fallback: due anyway after the first probe wait, in case no new pass ever comes. */
+  readonly #passRefused = new Map<string, () => void>();
   #budgetWake: (() => void) | undefined;
   #halvedUntil = Number.NEGATIVE_INFINITY;
   #settleUntil = Number.NEGATIVE_INFINITY;
@@ -148,7 +149,7 @@ export class DialPolicy {
    * What a dial ended with: connected, the relay rate limited it (4429), it failed (4404, or any error without a
    * close code: a timeout or a dropped connection), which gates the member until presence or its probe, or the relay
    * refused this host's pass (4412, contract v1.6), which says nothing about the member: no gate, no halving, and the
-   * member is due again once a new pass arrives.
+   * member is due again once a new pass arrives, or after the first probe wait (30 s) if none does.
    */
   report(member: string, outcome: "connected" | 4404 | 4412 | 4429): void {
     const now = this.#clock.now();
@@ -157,7 +158,11 @@ export class DialPolicy {
       return;
     }
     if (outcome === 4412) {
-      this.#passRefused.add(member);
+      if (this.#passRefused.has(member)) return;
+      const fallback = this.#clock.after(this.#limits.probeFirstMs, () => {
+        if (this.#passRefused.delete(member)) this.#onDue(member, "pass");
+      });
+      this.#passRefused.set(member, fallback);
       return;
     }
     const misses = this.#gates.get(member)?.misses ?? 0;
@@ -180,7 +185,10 @@ export class DialPolicy {
   passRenewed(): void {
     const members = [...this.#passRefused];
     this.#passRefused.clear();
-    for (const member of members) this.#onDue(member, "pass");
+    for (const [member, cancel] of members) {
+      cancel();
+      this.#onDue(member, "pass");
+    }
   }
 
   /** Any authenticated session from `member` proves it is online: ungate it and dial after 0-2 s. */
