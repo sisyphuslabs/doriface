@@ -171,13 +171,13 @@ Every interactive primitive: hover, pressed, focus-visible (2 px `--ring` outlin
 
 ## 6. Motion & Interaction
 
-| Type           | Duration                       | Easing                                      | Usage                                                            |
-| -------------- | ------------------------------ | ------------------------------------------- | ---------------------------------------------------------------- |
-| Micro          | 120 ms (`--duration-micro`)    | `--ease-out` cubic-bezier(0.23, 1, 0.32, 1) | press, hover, overlay scale-fade (0.97 -> 1)                     |
-| Standard       | 220 ms (`--duration-standard`) | `--ease-out`                                | sheet slide, backdrop fade                                       |
-| Status         | 900 ms per turn, linear        |                                             | working spinner (herdr-app)                                      |
+| Type           | Duration                       | Easing                                      | Usage                                                                             |
+| -------------- | ------------------------------ | ------------------------------------------- | --------------------------------------------------------------------------------- |
+| Micro          | 120 ms (`--duration-micro`)    | `--ease-out` cubic-bezier(0.23, 1, 0.32, 1) | press, hover, overlay scale-fade (0.97 -> 1)                                      |
+| Standard       | 220 ms (`--duration-standard`) | `--ease-out`                                | sheet slide, backdrop fade                                                        |
+| Status         | 900 ms per turn, linear        |                                             | working spinner (herdr-app)                                                       |
 | Arrival        | 220 ms (`--duration-standard`) | `--ease-out`                                | shown sidebar (from 0.98, left edge), split's second pane (from 0.98, right edge) |
-| Arrival, small | 120 ms (`--duration-micro`)    | `--ease-out`                                | a new tab (from 0.97 scale)                                      |
+| Arrival, small | 120 ms (`--duration-micro`)    | `--ease-out`                                | a new tab (from 0.97 scale)                                                       |
 
 - Arrival is the `.motion-arrive` utility (`base.css`): `@starting-style` opacity 0 plus `--arrive-from`, set per region. It runs only after the first painted frame (`:root[data-ready]`), so the first screen never fades in, a region only ever scales up to its own box from the edge it is anchored to (never a translate that crosses the shell's clipping edge), and a CSS transition retargets mid-flight, so toggling the sidebar or Split quickly never snaps or queues. Under reduced motion the base rule keeps only the opacity: a cross-fade.
 
