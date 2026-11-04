@@ -23,8 +23,10 @@ function strings(value: unknown): Record<string, string> {
   );
 }
 
+/** The tab strip's order: a list of tab keys, each kept once. Anything else, a stray non-key included, is no order. */
 function keys(value: unknown): string[] {
-  return Array.isArray(value) ? [...new Set(value.filter((key): key is string => typeof key === "string"))] : [];
+  if (!Array.isArray(value) || !value.every((key): key is string => typeof key === "string")) return [];
+  return [...new Set(value)];
 }
 
 export function loadView(core: string, storage: Pick<Storage, "getItem"> = localStorage): View {
@@ -44,11 +46,16 @@ export function loadView(core: string, storage: Pick<Storage, "getItem"> = local
   };
 }
 
-export function saveView(core: string, view: View, storage: Pick<Storage, "setItem"> = localStorage): void {
+/**
+ * Saves this screen's view; null once it is saved, else why the storage refused it (full or denied). A refusal never
+ * throws: the view lives on in memory, and only the next reload loses the tab order and focus.
+ */
+export function saveView(core: string, view: View, storage: Pick<Storage, "setItem"> = localStorage): string | null {
   try {
     storage.setItem(storageKey(core), JSON.stringify(view));
-  } catch {
-    // A full or blocked storage only costs the next reload its focus; the layout itself is in the core.
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
   }
 }
 
