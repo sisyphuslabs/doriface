@@ -6,6 +6,7 @@ import { endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn } from "./machine-switch.ts";
+import { rows } from "./sidebar-measure.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -53,32 +54,32 @@ test("the agents group comes first, and its status groups and counts follow hc's
   await expect(lists.first()).toHaveAccessibleName("Agents", { timeout: 20_000 });
   const working = group(page, "Working");
   const done = group(page, "Done");
-  await expect(working.getByRole("button", { name: /rc-flip/ })).toBeVisible({ timeout: 20_000 });
-  const before = Number(await count(working).textContent());
+  await expect(rows(working).filter({ hasText: "rc-flip" })).toBeVisible({ timeout: 20_000 });
+  const doneBefore = (await done.count()) === 0 ? 0 : Number(await count(done).textContent());
   agent.flip();
-  await expect(done.getByRole("button", { name: /rc-flip/ })).toBeVisible({ timeout: 15_000 });
-  await expect(working.getByRole("button", { name: /rc-flip/ })).toHaveCount(0);
-  await expect(count(working)).not.toHaveText(String(before));
+  await expect(rows(done).filter({ hasText: "rc-flip" })).toBeVisible({ timeout: 15_000 });
+  await expect(rows(working).filter({ hasText: "rc-flip" })).toHaveCount(0);
+  await expect(count(done)).toHaveText(String(doneBefore + 1));
 });
 
 test("sort by space groups the agents under their space, and the choice survives a reload", async ({ page }) => {
   startFlipping("rc-sort", "blocked", "blocked");
   await page.goto("/");
-  await expect(group(page, "Needs you").getByRole("button", { name: /rc-sort/ })).toBeVisible({ timeout: 20_000 });
+  await expect(rows(group(page, "Needs you")).filter({ hasText: "rc-sort" })).toBeVisible({ timeout: 20_000 });
   await sidebar(page).getByRole("button", { name: "Sort agents" }).click();
   await page.getByRole("menuitemradio", { name: "By space" }).click();
-  await expect(group(page, SPACE).getByRole("button", { name: /rc-sort/ })).toBeVisible();
+  await expect(rows(group(page, SPACE)).filter({ hasText: "rc-sort" })).toBeVisible();
   await page.reload();
-  await expect(group(page, SPACE).getByRole("button", { name: /rc-sort/ })).toBeVisible({ timeout: 20_000 });
+  await expect(rows(group(page, SPACE)).filter({ hasText: "rc-sort" })).toBeVisible({ timeout: 20_000 });
   await sidebar(page).getByRole("button", { name: "Sort agents" }).click();
   await page.getByRole("menuitemradio", { name: "By status" }).click();
-  await expect(group(page, "Needs you").getByRole("button", { name: /rc-sort/ })).toBeVisible();
+  await expect(rows(group(page, "Needs you")).filter({ hasText: "rc-sort" })).toBeVisible();
 });
 
 test("hover shows only Pin and More; a pin lifts the agent into Pinned, in hc, across a reload", async ({ page }) => {
   const { address } = startFlipping("rc-pin", "working", "working");
   await page.goto("/");
-  const row = group(page, "Working").getByRole("button", { name: /rc-pin/ });
+  const row = rows(group(page, "Working")).filter({ hasText: "rc-pin" });
   await expect(row).toBeVisible({ timeout: 20_000 });
   const pin = sidebar(page).getByRole("button", { name: "Pin rc-pin" });
   const more = sidebar(page).getByRole("button", { name: "More for rc-pin" });
@@ -88,15 +89,13 @@ test("hover shows only Pin and More; a pin lifts the agent into Pinned, in hc, a
   await expect(more).toBeVisible();
   await expect(row.locator("..").getByRole("button")).toHaveCount(3);
   await pin.click();
-  await expect(group(page, "Pinned").getByRole("button", { name: /rc-pin/ })).toBeVisible();
+  await expect(rows(group(page, "Pinned")).filter({ hasText: "rc-pin" })).toBeVisible();
   await expect.poll(() => hcOn("host", ["get", address, "--json"])).toContain('"herdr.pinned"');
   await page.reload();
-  await expect(group(page, "Pinned").getByRole("button", { name: /rc-pin/ })).toBeVisible({ timeout: 20_000 });
-  await group(page, "Pinned")
-    .getByRole("button", { name: /rc-pin/ })
-    .hover();
+  await expect(rows(group(page, "Pinned")).filter({ hasText: "rc-pin" })).toBeVisible({ timeout: 20_000 });
+  await rows(group(page, "Pinned")).filter({ hasText: "rc-pin" }).hover();
   await sidebar(page).getByRole("button", { name: "Unpin rc-pin" }).click();
-  await expect(group(page, "Working").getByRole("button", { name: /rc-pin/ })).toBeVisible();
+  await expect(rows(group(page, "Working")).filter({ hasText: "rc-pin" })).toBeVisible();
 });
 
 test("with a second machine known, spaces sit under machine rows that start a new space there", async ({ page }) => {
@@ -131,7 +130,7 @@ test("dragging the edge narrow makes the icon rail; dragging back restores a ful
   await page.goto("/");
   const aside = sidebar(page);
   const edge = page.getByRole("separator", { name: "Resize sidebar" });
-  await expect(group(page, "Working").getByRole("button", { name: /rc-rail/ })).toBeVisible({ timeout: 20_000 });
+  await expect(rows(group(page, "Working")).filter({ hasText: "rc-rail" })).toBeVisible({ timeout: 20_000 });
   const box = await edge.boundingBox();
   if (box === null) throw new Error("no sidebar edge");
   const y = box.y + box.height / 2;
@@ -148,7 +147,7 @@ test("dragging the edge narrow makes the icon rail; dragging back restores a ful
   await page.mouse.move(320, y, { steps: 8 });
   await page.mouse.up();
   await expect.poll(async () => Math.round((await aside.boundingBox())?.width ?? 0)).toBeGreaterThan(300);
-  await expect(group(page, "Working").getByRole("button", { name: /rc-rail/ })).toBeVisible();
+  await expect(rows(group(page, "Working")).filter({ hasText: "rc-rail" })).toBeVisible();
 });
 
 test("keyboard: the edge toggles the rail with Enter and steps with arrows; a row's actions follow it", async ({
@@ -157,7 +156,7 @@ test("keyboard: the edge toggles the rail with Enter and steps with arrows; a ro
   startFlipping("rc-keys", "working", "working");
   await page.goto("/");
   const aside = sidebar(page);
-  const row = group(page, "Working").getByRole("button", { name: /rc-keys/ });
+  const row = rows(group(page, "Working")).filter({ hasText: "rc-keys" });
   await expect(row).toBeVisible({ timeout: 20_000 });
   await row.focus();
   await page.keyboard.press("ArrowRight");

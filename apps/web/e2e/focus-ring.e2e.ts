@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { rows } from "./sidebar-measure.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -49,7 +50,7 @@ for (const colorScheme of ["light", "dark"] as const) {
       await openNewTerminal(page);
       await page.locator("body").click({ position: { x: 1, y: 1 } });
       const sidebar = page.getByRole("complementary", { name: "Workspace" });
-      await ringOnTab(page, sidebar.getByRole("region", { name: "Idle" }).getByRole("button").first());
+      await ringOnTab(page, rows(sidebar.getByRole("region", { name: "Idle" })).first());
       await ringOnTab(page, sidebar.getByRole("link", { name: "Settings" }));
       await ringOnTab(page, page.getByRole("tab").first());
     });

@@ -1,4 +1,5 @@
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { rows } from "./sidebar-measure.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -7,8 +8,8 @@ test("the arrow keys, Home and End stay inside the focused list", async ({ page 
   await openNewTerminal(page);
   await openNewTerminal(page);
   const sidebar = page.getByRole("complementary", { name: "Workspace" });
-  const spaces = sidebar.getByRole("region", { name: "Spaces" }).getByRole("button");
-  const idle = sidebar.getByRole("region", { name: "Idle" }).getByRole("button");
+  const spaces = rows(sidebar.getByRole("region", { name: "Spaces" }));
+  const idle = rows(sidebar.getByRole("region", { name: "Idle" }));
   await expect(idle.nth(1)).toBeVisible({ timeout: 15_000 });
   await spaces.last().focus();
   await page.keyboard.press("ArrowDown");

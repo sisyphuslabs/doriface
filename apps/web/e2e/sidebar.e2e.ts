@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures.ts";
 import { devices, type Locator, type Page } from "@playwright/test";
-import { rowEdges, visibleCharacters } from "./sidebar-measure.ts";
+import { rowEdges, rows, visibleCharacters } from "./sidebar-measure.ts";
 import {
   KOREAN_SPACE,
   KOREAN_TITLE,
@@ -46,10 +46,11 @@ test.afterAll(() => {
 test("a space named like one on another machine is selected, and opened, on its own machine only", async ({ page }) => {
   await page.goto("/");
   const spaces = page.getByRole("region", { name: "Spaces" });
-  const shared = spaces.getByRole("button").filter({ hasText: SHARED_SPACE });
+  const shared = rows(spaces).filter({ hasText: SHARED_SPACE });
   await expect(shared).toHaveCount(2, { timeout: 20_000 });
-  const here = shared.filter({ hasNotText: LONG_MACHINE });
-  const there = shared.filter({ hasText: LONG_MACHINE });
+  // This machine's spaces come first, under its own header; the other machine's sit under its row.
+  const here = rows(spaces.locator("section").first()).filter({ hasText: SHARED_SPACE });
+  const there = rows(spaces.getByRole("region", { name: LONG_MACHINE, exact: true })).filter({ hasText: SHARED_SPACE });
   const focused = page.locator('[data-focused="true"] [data-terminal]');
 
   await here.click();
@@ -67,8 +68,8 @@ test("a space named like one on another machine is selected, and opened, on its 
 
 /** Every row of the Idle and Spaces lists ends inside its content box, so every age ends at one edge. */
 async function expectRowsInside(page: Page): Promise<void> {
-  const idleRows = await rowEdges(page.getByRole("region", { name: "Idle" }).getByRole("button"));
-  const spaceRows = await rowEdges(page.getByRole("region", { name: "Spaces" }).getByRole("button"));
+  const idleRows = await rowEdges(rows(page.getByRole("region", { name: "Idle" })));
+  const spaceRows = await rowEdges(rows(page.getByRole("region", { name: "Spaces" })));
   for (const row of [...idleRows, ...spaceRows]) expect(row.overflow).toBeLessThanOrEqual(0.5);
   const ages = idleRows.map((row) => row.age ?? Number.NaN);
   expect(Math.max(...ages) - Math.min(...ages), "every age ends at the same edge").toBeLessThanOrEqual(0.5);
@@ -88,25 +89,25 @@ async function expectRowsKeepFloors(
   await expectRowsInside(page);
   const idle = page.getByRole("region", { name: "Idle" });
   const spaces = page.getByRole("region", { name: "Spaces" });
-  const remote = idle.getByRole("button").filter({ hasText: "OmO - Verify bun" });
+  const remote = rows(idle).filter({ hasText: "OmO - Verify bun" });
 
-  const rows = [
+  const cases = [
     { row: remote, name: "OmO - Verify bun benchmarks on the box", detail: SHARED_SPACE, narrow: true },
     {
-      row: idle.getByRole("button").filter({ hasText: "OmO - Draft the" }),
+      row: rows(idle).filter({ hasText: "OmO - Draft the" }),
       name: "OmO - Draft the onboarding docs",
       detail: KOREAN_SPACE,
       narrow: false,
     },
     {
-      row: idle.getByRole("button").filter({ hasText: KOREAN_TITLE.slice(0, 4) }),
+      row: rows(idle).filter({ hasText: KOREAN_TITLE.slice(0, 4) }),
       name: KOREAN_TITLE,
       detail: KOREAN_SPACE,
       narrow: false,
     },
   ];
   await Promise.all(
-    rows.map(async ({ row, name: title, detail, narrow }) => {
+    cases.map(async ({ row, name: title, detail, narrow }) => {
       const kept = await Promise.all(
         [title, detail, LONG_MACHINE].map(async (text) => {
           const part = row.getByTitle(text, { exact: true });
@@ -135,10 +136,13 @@ async function expectRowsKeepFloors(
   // A space on the long-named machine keeps five characters of its name before the machine's.
   await Promise.all(
     [SHARED_SPACE, KOREAN_SPACE].map(async (name) => {
-      const there = spaces.getByRole("button").filter({ hasText: name }).filter({ hasText: LONG_MACHINE });
+      const group = spaces.getByRole("region", { name: LONG_MACHINE, exact: true });
+      const there = rows(group).filter({ hasText: name });
       const named = there.getByTitle(name, { exact: true });
       await expect(named).toHaveText(name);
-      await expect(there.getByTitle(LONG_MACHINE, { exact: true })).toHaveText(LONG_MACHINE);
+      await expect(group.locator("[data-machine-header]").getByTitle(LONG_MACHINE, { exact: true })).toHaveText(
+        LONG_MACHINE,
+      );
       const { visible, total } = await visibleCharacters(named, name);
       expect(visible, `the space "${name}" keeps five characters`).toBeGreaterThanOrEqual(Math.min(5, total));
     }),
@@ -166,7 +170,7 @@ for (const { name, use } of VIEWPORTS) {
       await page.goto("/");
       const remote = page
         .getByRole("region", { name: "Idle" })
-        .getByRole("button")
+        .locator("button:not([aria-label])")
         .filter({ hasText: "OmO - Verify bun" });
       await expect(remote).toBeVisible({ timeout: 20_000 });
       const phoneList = name === "390";
@@ -201,7 +205,7 @@ test.describe("with an age wider than its 28 px column, as Linux fonts draw <1m"
     });
     await page.goto("/");
     const idle = page.getByRole("region", { name: "Idle" });
-    await expect(idle.getByRole("button").filter({ hasText: "OmO - Verify bun" })).toBeVisible({ timeout: 20_000 });
+    await expect(rows(idle).filter({ hasText: "OmO - Verify bun" })).toBeVisible({ timeout: 20_000 });
     const widest = await idle.locator("time").evaluateAll((ages) => Math.max(...ages.map((age) => age.scrollWidth)));
     expect(widest, "the case is exercised: an age is wider than 28 px").toBeGreaterThan(28);
     await expectRowsInside(page);
@@ -226,7 +230,9 @@ test("a hidden sidebar comes back from a named button at the window's left edge,
   });
   await page.goto("/");
   const sidebar = page.getByRole("complementary", { name: "Workspace" });
-  await sidebar.getByRole("region", { name: "Spaces" }).getByRole("button").first().click({ timeout: 20_000 });
+  await rows(sidebar.getByRole("region", { name: "Spaces" }))
+    .first()
+    .click({ timeout: 20_000 });
   const show = await hideSidebar(page);
   const tablist = page.getByRole("tablist", { name: "Tabs" });
   const [button, tabs] = await Promise.all([show.boundingBox(), tablist.boundingBox()]);
