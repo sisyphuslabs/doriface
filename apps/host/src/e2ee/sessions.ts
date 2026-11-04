@@ -17,15 +17,15 @@ export class LiveSessions {
     this.#log = log;
   }
 
-  /**
-   * Registers a session, then re-checks the stores: a revoke that ran during its handshake still closes it. False when
-   * that re-check closed it.
-   */
   /** Whether an authenticated session from the remote static key `key` (base64url) is open now. */
   has(key: string): boolean {
     return this.#byKey.has(key);
   }
 
+  /**
+   * Registers a session, then re-checks the stores: a revoke that ran during its handshake still closes it. False when
+   * that re-check closed it.
+   */
   add(session: SecureLink): boolean {
     const key = base64urlEncode(session.remoteStatic);
     const sessions = this.#byKey.get(key) ?? new Set();
