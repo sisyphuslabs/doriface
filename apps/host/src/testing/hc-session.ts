@@ -27,7 +27,7 @@ export interface HcSession {
   readonly env: Readonly<Record<string, string | undefined>>;
   /** Spawns `hc connect --session <name>` directly, with its stdout fed to `reader`. */
   connect(): DirectConnection;
-  /** Stops this session's core and deletes its state. */
+  /** Stops this session's core and deletes its state; `stopLeftoverCores` removes the rest of its dir. */
   dispose(): Promise<void>;
 }
 
@@ -38,52 +38,109 @@ export interface DirectConnection {
   end(): void;
 }
 
+function connectTo(hc: string, name: string, env: HcSession["env"]): DirectConnection {
+  const proc = Bun.spawn([hc, "connect", "--session", name], {
+    env,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const reader = new ByteReader();
+  const pump = async (source: ReadableStream<Uint8Array>): Promise<void> => {
+    for await (const chunk of source) reader.push(chunk);
+    reader.end();
+  };
+  void pump(proc.stdout);
+  return {
+    reader,
+    exited: proc.exited,
+    async write(bytes) {
+      proc.stdin.write(bytes);
+      await proc.stdin.flush();
+    },
+    end() {
+      void proc.stdin.end();
+    },
+  };
+}
+
+async function stopCore(session: HcSession): Promise<void> {
+  const control = session.connect();
+  await control.write(encoder.encode('{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n'));
+  await control.reader.line();
+  control.end();
+  // The core closes the connection as it shuts down, which ends this hc connect.
+  await control.exited;
+}
+
+interface Scratch {
+  readonly session: HcSession;
+  readonly dir: string;
+  readonly socket: string;
+}
+
+/** Every scratch session this process made, until `stopLeftoverCores` has checked it. */
+const scratches = new Set<Scratch>();
+
+function isErrno(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+
+/** Whether a core answers on `socket`: a raw connect, since `hc connect` would start one that is not running. */
+async function serving(socket: string): Promise<boolean> {
+  try {
+    const probe = await Bun.connect({ unix: socket, socket: { data: () => {} } });
+    probe.end();
+    return true;
+  } catch (error) {
+    if (isErrno(error, "ENOENT") || isErrno(error, "ECONNREFUSED")) return false;
+    throw error;
+  }
+}
+
+/**
+ * Stops the core of every scratch session that still serves, removes every scratch dir, and returns those sessions'
+ * names. A core can outlive `dispose`: another core whose machine dials this session starts it again.
+ */
+export async function stopLeftoverCores(): Promise<string[]> {
+  const checked = [...scratches];
+  scratches.clear();
+  const leftover = await Promise.all(
+    checked.map(async ({ session, dir, socket }) => {
+      const alive = await serving(socket);
+      if (alive) await stopCore(session);
+      rmSync(dir, { recursive: true, force: true });
+      return alive ? [session.name] : [];
+    }),
+  );
+  return leftover.flat();
+}
+
 /** A scratch hc session: its own core, state dir and socket under $TMPDIR. */
 export function createHcSession(prefix: string): HcSession {
   const hc = resolveHcBin();
   const dir = mkdtempSync(join(tmpdir(), "dh-"));
   const name = `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
+  const socket = join(dir, "c.sock");
   const env = {
     ...process.env,
     HC_SESSION: name,
     XDG_STATE_HOME: join(dir, "state"),
     XDG_RUNTIME_DIR: join(dir, "run"),
     // A deep $TMPDIR (macOS) pushes the default socket path past the 103-byte sun_path limit.
-    HC_SOCKET: join(dir, "c.sock"),
+    HC_SOCKET: socket,
   };
-  const connect = (): DirectConnection => {
-    const proc = Bun.spawn([hc, "connect", "--session", name], {
-      env,
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "inherit",
-    });
-    const reader = new ByteReader();
-    const pump = async (source: ReadableStream<Uint8Array>): Promise<void> => {
-      for await (const chunk of source) reader.push(chunk);
-      reader.end();
-    };
-    void pump(proc.stdout);
-    return {
-      reader,
-      exited: proc.exited,
-      async write(bytes) {
-        proc.stdin.write(bytes);
-        await proc.stdin.flush();
-      },
-      end() {
-        void proc.stdin.end();
-      },
-    };
+  const session: HcSession = {
+    hc,
+    name,
+    env,
+    connect: () => connectTo(hc, name, env),
+    dispose: async () => {
+      await stopCore(session);
+      // `dir` stays until `stopLeftoverCores`: a core started again after this one keeps its socket there.
+      for (const part of ["state", "run"]) rmSync(join(dir, part), { recursive: true, force: true });
+    },
   };
-  const dispose = async (): Promise<void> => {
-    const control = connect();
-    await control.write(encoder.encode('{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n'));
-    await control.reader.line();
-    control.end();
-    // The core closes the connection as it shuts down, which ends this hc connect.
-    await control.exited;
-    rmSync(dir, { recursive: true, force: true });
-  };
-  return { hc, name, env, connect, dispose };
+  scratches.add({ session, dir, socket });
+  return session;
 }
