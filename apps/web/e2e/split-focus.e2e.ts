@@ -86,7 +86,6 @@ function lies(box: Box, from: Box, side: Move): boolean {
   }
 }
 
-/** Presses a split key and returns the new pane once it holds the focus, the keys and the selected tab. */
 /** Each visible terminal's measured cell width: a font metric, the same in every pane whatever its size. */
 const cellWidths = (page: Page): Promise<string[]> =>
   page.evaluate(() =>
@@ -100,6 +99,7 @@ async function expectCellWidth(page: Page, lone: string): Promise<void> {
   await expect.poll(async () => [...new Set(await cellWidths(page))], { timeout: 10_000 }).toEqual([lone]);
 }
 
+/** Presses a split key and returns the new pane once it holds the focus, the keys and the selected tab. */
 async function split(page: Page, platform: Platform, side: "right" | "down", from: string): Promise<string> {
   // The tab strip is read once the selected tab is in the document, so ⌘D creating a tab cannot hide behind that write.
   await expect.poll(() => selectedTabWritten(page), { timeout: 15_000 }).toBe(true);
@@ -166,3 +166,30 @@ for (const platform of ["mac", "other"] as const) {
     expect(await boxes(page, all)).toEqual(placed);
   });
 }
+
+test("two split keys pressed back to back split the pane the first one makes, as Ghostty does", async ({ page }) => {
+  await page.goto("/");
+  const first = await openNewTerminal(page);
+  const one = (await first.getAttribute("data-terminal")) ?? "";
+  await first.getByRole("textbox").focus();
+  const two = await split(page, "other", "right", one);
+  await expect.poll(() => selectedTabWritten(page), { timeout: 15_000 }).toBe(true);
+  const before = await boxOf(page, two);
+
+  // No wait between the keys: the second lands while the first one's terminal is still starting.
+  await page.keyboard.press(KEYS.other.split.right);
+  await page.keyboard.press(KEYS.other.split.down);
+  const shown = page.locator('[role="tabpanel"]:not([hidden]) [data-terminal]');
+  await expect(shown).toHaveCount(4, { timeout: 15_000 });
+  const addresses = await shown.evaluateAll((each) => each.map((node) => node.getAttribute("data-terminal") ?? ""));
+  const fresh = addresses.filter((address) => address !== one && address !== two);
+  await expect.poll(() => focusedAddress(page), { timeout: 15_000 }).not.toBe(two);
+  const last = (await focusedAddress(page)) ?? "";
+  const three = fresh.find((address) => address !== last) ?? "";
+  expect(fresh).toContain(last);
+  await expect.poll(() => keyboardAddress(page), { timeout: 5_000 }).toBe(last);
+  // three split off two to the right, and the down key split three, not the pane in focus when it was pressed.
+  expect(lies(await boxOf(page, three), await boxOf(page, two), "right")).toBe(true);
+  expect(lies(await boxOf(page, last), await boxOf(page, three), "down")).toBe(true);
+  expect((await boxOf(page, two)).height).toBeCloseTo(before.height, 0);
+});

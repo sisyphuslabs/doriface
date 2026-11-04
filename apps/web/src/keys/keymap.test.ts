@@ -92,6 +92,59 @@ describe("triggers", () => {
 });
 
 describe("KeymapStore", () => {
+  test("a binding whose action this build does not know is kept in storage through an unrelated edit", async () => {
+    const storage = memoryStore();
+    await storage.put("keymap", {
+      version: KEYMAP_VERSION,
+      bindings: [
+        ["super+j", "pane.future"],
+        ["super+k", "tab.new"],
+      ],
+    });
+    const store = new KeymapStore(storage);
+    await store.loaded;
+    expect([...store.overrides]).toEqual([["super+k", "tab.new"]]);
+    await store.update((current) => new Map([...current, ["ctrl+alt+x", "tab.close"]]));
+    expect(await storage.get("keymap")).toEqual({
+      version: KEYMAP_VERSION,
+      bindings: [
+        ["super+k", "tab.new"],
+        ["ctrl+alt+x", "tab.close"],
+        ["super+j", "pane.future"],
+      ],
+    });
+  });
+
+  test("a key this build binds again replaces the unknown action saved on it", async () => {
+    const storage = memoryStore();
+    await storage.put("keymap", { version: KEYMAP_VERSION, bindings: [["super+j", "pane.future"]] });
+    const store = new KeymapStore(storage);
+    await store.update((current) => new Map([...current, ["super+j", "tab.close"]]));
+    expect(await storage.get("keymap")).toEqual({ version: KEYMAP_VERSION, bindings: [["super+j", "tab.close"]] });
+  });
+
+  test("a keymap saved before split down arrived reads split as split right, once, and is saved at this version", async () => {
+    const storage = memoryStore();
+    const old = { version: 1, bindings: [["super+k", "pane.split"]] };
+    await storage.put("keymap", old);
+    const store = new KeymapStore(storage);
+    await store.loaded;
+    expect([...store.overrides]).toEqual([["super+k", "pane.split:right"]]);
+    expect(KEYMAP_VERSION).toBeGreaterThan(1);
+    expect(await storage.get("keymap")).toEqual({ version: KEYMAP_VERSION, bindings: [["super+k", "pane.split:right"]] });
+    expect(await storage.get("keymap.backup.v1")).toEqual(old);
+  });
+
+  test("a keymap a newer build saved is never rewritten by this one", async () => {
+    const storage = memoryStore();
+    const newer = { version: KEYMAP_VERSION + 1, bindings: [["super+j", "pane.future"]] };
+    await storage.put("keymap", newer);
+    const store = new KeymapStore(storage);
+    await store.update((current) => new Map([...current, ["ctrl+alt+x", "tab.close"]]));
+    expect(await storage.get("keymap")).toEqual(newer);
+    expect(store.error?.message).toContain("newer");
+  });
+
   test("refuses an invalid write and keeps what it had", async () => {
     const store = new KeymapStore(memoryStore());
     await store.loaded;

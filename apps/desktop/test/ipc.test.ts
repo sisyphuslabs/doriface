@@ -61,17 +61,22 @@ describe("IPC sender gate", () => {
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
   });
 
-  test("the Shell menu takes only its own actions and short trigger text from the page", async () => {
+  test("the Shell menu takes only its own actions and short trigger text from the page, entry by entry", async () => {
     const { handlers, menus } = setup();
     expect(await handlers.setMenuKeys(app, { "pane.split:right": "super+d", "pane.go:up": "super+alt+up" })).toBe(true);
-    expect(await handlers.setMenuKeys(app, { "app.quit": "super+q" })).toBe(false);
-    expect(await handlers.setMenuKeys(app, { "tab.new": "super+t\nRole: quit" })).toBe(false);
+    // One entry the menu cannot take is left out; the rest still reach the menu.
+    expect(await handlers.setMenuKeys(app, { "app.quit": "super+q", "tab.new": "super+t" })).toBe(true);
+    expect(await handlers.setMenuKeys(app, { "tab.new": "super+t\nRole: quit", "tab.close": "super+alt+w" })).toBe(
+      true,
+    );
     expect(await handlers.setMenuKeys(app, ["tab.new"])).toBe(false);
     expect(menus).toEqual([
       new Map([
         ["pane.split:right", "super+d"],
         ["pane.go:up", "super+alt+up"],
       ]),
+      new Map([["tab.new", "super+t"]]),
+      new Map([["tab.close", "super+alt+w"]]),
     ]);
   });
 
