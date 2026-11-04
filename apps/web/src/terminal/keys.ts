@@ -36,13 +36,14 @@ function control(char: string): string {
 
 /**
  * Applies the latched modifiers to one key or one piece of typed text. A terminal has no Cmd, so cmd reads as meta (an
- * ESC prefix), like alt, except in the host's paste chord.
+ * ESC prefix), like alt. ctrl+v stays ^V on every host (vim's visual block, a shell's quoted insert); the paste chord
+ * is cmd+v on a mac host and ctrl+shift+v elsewhere, so a wrong guess of the host only moves the Cmd key.
  */
 export function applyModifiers(data: string, latched: ReadonlySet<string>, host: HostPlatform): ModifiedInput {
   const ctrl = latched.has("ctrl");
   const shift = latched.has("shift");
   const meta = latched.has("alt") || latched.has("cmd");
-  const chord = host === "mac" ? latched.has("cmd") : ctrl;
+  const chord = host === "mac" ? latched.has("cmd") : ctrl && shift;
   if (chord && data.toLowerCase() === "v") return { kind: "paste" };
   const arrow = data.length === 3 && data.startsWith("\u001b[") && "ABCD".includes(data.charAt(2));
   if (arrow) {

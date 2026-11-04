@@ -67,6 +67,14 @@ export function PhoneShell(props: PhoneShellProps) {
     );
   }
   return (
-    <PhoneTerminal connection={connection} terminal={terminal} terminals={terminals} onOpen={onOpen} onBack={onBack} />
+    // Keyed by session: a switch starts with no latched modifier, no open pad and no open menu.
+    <PhoneTerminal
+      key={terminal.address}
+      connection={connection}
+      terminal={terminal}
+      terminals={terminals}
+      onOpen={onOpen}
+      onBack={onBack}
+    />
   );
 }
