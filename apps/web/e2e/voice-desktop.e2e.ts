@@ -143,3 +143,29 @@ test("the desktop's ended view offers no dictation: no mic, no strip, and a boun
     removeTerminal("machine", remote, test.info().outputPath("go"));
   }
 });
+
+test("a tab whose program ended while the page was closed offers no Dictate in the tab bar (#269)", async ({
+  page,
+}) => {
+  const speech = await stubSpeech(page);
+  const ended = startShell("host", "dictate-gone");
+  try {
+    await page.goto("/");
+    await agentRow(page, "dictate-gone", false).click();
+    await expect(page.locator(`[data-terminal="${ended}"]`)).toContainText("$", { timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Dictate into dictate-gone" })).toBeVisible();
+
+    // The page goes away, the program ends on the host, and the page comes back to the same tab.
+    await page.goto("about:blank");
+    hcOn("host", ["kill", ended]);
+    await expect.poll(() => stateOn("host", ended), { timeout: 15_000 }).toBe("finished");
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "This session ended" })).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.getByRole("button", { name: /^Dictate into/ })).toHaveCount(0);
+    await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+    expect(await speech.started()).toEqual([]);
+  } finally {
+    removeTerminal("host", ended, test.info().outputPath("go"));
+  }
+});
