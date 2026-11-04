@@ -123,6 +123,14 @@ export function keepTransient(
   return active.key === TRANSIENT ? "apart" : null;
 }
 
+/**
+ * The tab shown once this screen closes `closed`, the tab in view: the last of the others, as the tab strip closed tabs
+ * before the layout lived in the core, so the keyboard lands in a terminal that is left. Null when no other tab is open.
+ */
+export function afterClosing(tabs: readonly LayoutTab[], closed: string): string | null {
+  return tabs.findLast((tab) => tab.key !== closed)?.key ?? null;
+}
+
 export function findTerminal(tabs: readonly LayoutTab[], address: string): { tab: LayoutTab; pane: LayoutPane } | null {
   for (const tab of tabs) {
     const pane = tab.panes.find((each) => each.address === address);
