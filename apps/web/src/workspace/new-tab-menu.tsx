@@ -4,6 +4,10 @@ import { MenuCaption, MenuItem, MenuSeparator } from "@doriface/ui";
 import { Bot, Plus, SquareTerminal } from "lucide-react";
 import { useEffect, useState } from "react";
 
+// After the menu's own click handling, which focuses the item it closes on: what the choice starts (type-ahead's
+// input for a new terminal) then keeps the keyboard from the first key typed. Still before the next key event.
+const after = (action: () => void) => () => queueMicrotask(action);
+
 /**
  * herdr-app's new menu behind the tab strip's + (#466 item 7): a terminal, the agents hc can start (its templates, read
  * each time the menu opens), and a new space. Ctrl+Shift+T stays a direct new tab.
@@ -29,7 +33,11 @@ export function NewTabMenu(props: {
   }, [connection]);
   return (
     <>
-      <MenuItem icon={<SquareTerminal />} {...(newTabKeys === undefined ? {} : { keys: newTabKeys })} onClick={onNew}>
+      <MenuItem
+        icon={<SquareTerminal />}
+        {...(newTabKeys === undefined ? {} : { keys: newTabKeys })}
+        onClick={after(onNew)}
+      >
         Terminal
       </MenuItem>
       <MenuCaption>Start an agent</MenuCaption>
@@ -39,13 +47,13 @@ export function NewTabMenu(props: {
         </MenuItem>
       ) : (
         agents.map((agent) => (
-          <MenuItem key={agent.name} icon={<Bot />} onClick={() => onAgent(agent.name)}>
+          <MenuItem key={agent.name} icon={<Bot />} onClick={after(() => onAgent(agent.name))}>
             {agent.name}
           </MenuItem>
         ))
       )}
       <MenuSeparator />
-      <MenuItem icon={<Plus />} onClick={onSpace}>
+      <MenuItem icon={<Plus />} onClick={after(onSpace)}>
         New space
       </MenuItem>
     </>

@@ -4,6 +4,7 @@ import { Button, Dialog, Notice } from "@doriface/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTerminalConfig } from "../ghostty/config-store.ts";
 import { single } from "../ghostty/config.ts";
+import { terminalInput } from "./focus-targets.ts";
 import type { LayoutTab } from "./layout-model.ts";
 import { asksBeforeClosing } from "./model.ts";
 import { endSession, sessionCalls } from "./session-actions.ts";
@@ -29,6 +30,11 @@ const counted = (count: number, word: string): string => `${count} ${word}${coun
 export function CloseTabDialog({ connection, terminals, tab, space, onClosed, onDone }: CloseTabDialogProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Asked with focus on the page body (a terminal whose renderer had not started yet), or from an element gone by now,
+  // the question gives focus to the focused pane's terminal, as the session's own question does.
+  const [opener] = useState(() => document.activeElement);
+  const backTo = (): HTMLElement | true =>
+    opener instanceof HTMLElement && opener !== document.body && opener.isConnected ? true : (terminalInput() ?? true);
   const shown = new Set(tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])));
   const live = terminals.filter((terminal) => shown.has(terminal.address) && terminal.state === "live");
   const count = live.length;
@@ -65,6 +71,7 @@ export function CloseTabDialog({ connection, terminals, tab, space, onClosed, on
       onOpenChange={(open) => {
         if (!open) onDone();
       }}
+      finalFocus={backTo}
       title={space === undefined ? "Close this tab?" : "Close space?"}
       description={
         space !== undefined

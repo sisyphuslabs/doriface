@@ -22,6 +22,10 @@ export interface MenuProps {
   readonly onOpenChange?: (open: boolean) => void;
   /** Keeps the requested side even near a viewport edge; for static previews. */
   readonly fixedSide?: boolean;
+  /** Where focus goes once it closes (Base UI's finalFocus); by default back to the trigger. */
+  readonly finalFocus?: ComponentProps<typeof BaseMenu.Popup>["finalFocus"];
+  /** false: the page stays live while it is open, so what an item starts can take the keyboard at once. */
+  readonly modal?: boolean;
 }
 
 /**
@@ -36,11 +40,22 @@ function revealCurrent(popup: HTMLElement | null): void {
 }
 
 export function Menu(props: MenuProps) {
-  const { trigger, children, align = "start", className, defaultOpen, onOpenChange, fixedSide = false } = props;
+  const {
+    trigger,
+    children,
+    align = "start",
+    className,
+    defaultOpen,
+    onOpenChange,
+    fixedSide = false,
+    finalFocus,
+    modal,
+  } = props;
   const popup = useRef<HTMLDivElement | null>(null);
   return (
     <BaseMenu.Root
       {...(defaultOpen === undefined ? {} : { defaultOpen })}
+      {...(modal === undefined ? {} : { modal })}
       {...(onOpenChange === undefined ? {} : { onOpenChange: (open: boolean) => onOpenChange(open) })}
       onOpenChangeComplete={(open) => open && revealCurrent(popup.current)}
     >
@@ -52,7 +67,11 @@ export function Menu(props: MenuProps) {
           sideOffset={6}
           positionMethod="fixed"
         >
-          <BaseMenu.Popup ref={popup} className={cn(overlaySurface, "min-w-48 p-1", bounded, className)}>
+          <BaseMenu.Popup
+            ref={popup}
+            {...(finalFocus === undefined ? {} : { finalFocus })}
+            className={cn(overlaySurface, "min-w-48 p-1", bounded, className)}
+          >
             {children}
           </BaseMenu.Popup>
         </BaseMenu.Positioner>

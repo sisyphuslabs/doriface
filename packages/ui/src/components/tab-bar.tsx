@@ -68,6 +68,10 @@ export function TabBar({
 }: TabBarProps) {
   const list = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  // Whether the New tab menu closed on one of its items, rather than Escape or a click away, and what that item gave the
+  // keyboard to (a terminal being started takes it at once, type-ahead).
+  const chose = useRef(false);
+  const handedTo = useRef<HTMLElement | null>(null);
   // The tabs the strip drew before its last change of tabs: they carry data-arrived, so the DOM move a reorder makes
   // does not replay their arrival; a tab new to the list draws once without it and arrives.
   const ids = tabs.map((tab) => tab.id);
@@ -257,8 +261,33 @@ export function TabBar({
             <IconButton label="New tab" {...(newTabKeys === undefined ? {} : { keys: newTabKeys })} icon={<Plus />} />
           }
           className="w-[250px]"
+          onOpenChange={(open) => {
+            if (!open) return;
+            chose.current = false;
+            handedTo.current = null;
+          }}
+          // A choice starts a tab that takes the keyboard at once, so the page stays live (not modal) and, as the menu
+          // closes, focus goes where the choice put it rather than back to +, where the next keys typed would press it.
+          modal={false}
+          finalFocus={() => (chose.current ? (handedTo.current ?? false) : true)}
         >
-          {newMenu}
+          <div
+            className="contents"
+            onClickCapture={(event) => {
+              chose.current = true;
+              const popup = event.currentTarget;
+              const record = (focus: FocusEvent): void => {
+                if (focus.target instanceof HTMLElement && !popup.contains(focus.target))
+                  handedTo.current = focus.target;
+              };
+              document.addEventListener("focusin", record, true);
+              // Removed once the whole click has been dispatched (microtasks would run between its listeners, before the
+              // item's own handler focuses anything).
+              setTimeout(() => document.removeEventListener("focusin", record, true), 0);
+            }}
+          >
+            {newMenu}
+          </div>
         </Menu>
       )}
       <span role="status" aria-live="polite" className="sr-only">

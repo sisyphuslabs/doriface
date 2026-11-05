@@ -365,6 +365,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           />
           {closing === undefined ? null : (
             <CloseTabDialog
+              key={closing.key}
               connection={connection}
               terminals={terminals}
               tab={closing}
