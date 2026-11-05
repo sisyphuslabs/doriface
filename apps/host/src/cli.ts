@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { PRIVATE_STATE_REFUSED_EXIT_CODE } from "./state/private-state-refused.ts";
+import { PrivateStateRefused } from "./state/private-state-refused.ts";
 import { homedir } from "node:os";
 import { delimiter, dirname } from "node:path";
 import { parseArgs } from "node:util";
@@ -185,6 +187,11 @@ main(Bun.argv.slice(2)).catch((error: unknown) => {
         : "";
     process.stderr.write(`doriface-host: ${error.message}\n${hint}${startupErrorLine(error)}\n`);
     process.exit(STARTUP_EXIT_CODES[error.code]);
+  }
+  if (error instanceof PrivateStateRefused) {
+    // The command line was fine; the state it names is not private. The fix is in the message, not the usage.
+    process.stderr.write(`doriface-host: ${error.message}\n`);
+    process.exit(PRIVATE_STATE_REFUSED_EXIT_CODE);
   }
   const usages: Readonly<Record<string, string>> = {
     pair: PAIR_USAGE,
