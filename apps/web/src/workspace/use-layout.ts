@@ -1,5 +1,5 @@
 import type { JsonObject, Terminal } from "@doriface/protocol";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addTab as addDocTab,
   type Axis,
@@ -16,6 +16,7 @@ import {
   buildTabs,
   findTerminal,
   keepTransient,
+  layoutIds,
   localOf,
   looseKey,
   pick,
@@ -27,6 +28,7 @@ import {
   newMounts,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
+import { tabAddress, tabKey as terminalKey } from "./tab-keys.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
 import type { TabMove } from "./tab-order.ts";
@@ -148,8 +150,33 @@ export function useLayout(
       tellUnsaved.current(reason);
     }
   }, [core, view]);
-  // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
-  const [loose, setLoose] = useState<readonly string[]>([]);
+  // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own. Each is kept
+  // by what its terminal is remembered by (tab-keys.ts), as a document tab is, so a machine rename moves it to the new
+  // address instead of leaving it on one that no longer exists (#459). `setLoose` takes and gives addresses.
+  const [looseKeys, setLooseKeys] = useState<readonly string[]>([]);
+  const ids = useMemo(() => layoutIds(layouts), [layouts]);
+  const idsNow = useRef(ids);
+  idsNow.current = ids;
+  const loose = useMemo(
+    () =>
+      looseKeys.flatMap((key) => {
+        const address = tabAddress(key, ids);
+        return address === undefined ? [] : [address];
+      }),
+    [looseKeys, ids],
+  );
+  const setLoose = useCallback((change: SetStateAction<readonly string[]>): void => {
+    setLooseKeys((keys) => {
+      const now = idsNow.current;
+      const held = keys.map((key) => ({ key, address: tabAddress(key, now) }));
+      const before = held.flatMap(({ address }) => (address === undefined ? [] : [address]));
+      const after = typeof change === "function" ? change(before) : change;
+      // A key whose machine machine.list does not name now stays until it does.
+      const kept = held.filter(({ address }) => address === undefined || after.includes(address)).map(({ key }) => key);
+      const added = after.filter((address) => !before.includes(address)).map((address) => terminalKey(address, now));
+      return [...kept, ...added];
+    });
+  }, []);
   const mounts = useRef(newMounts());
   const tabs = useMemo(
     () => keepMounts(buildTabs(layouts, terminals, loose), mounts.current),
@@ -203,9 +230,9 @@ export function useLayout(
   const keepHere = useCallback(
     (address: string): void => {
       setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
-      show(looseKey(address), TRANSIENT);
+      show(looseKey(address, idsNow.current), TRANSIENT);
     },
-    [show],
+    [setLoose, show],
   );
 
   /** The first live terminal shown alone, written to its own machine's layout, or kept on this screen when it takes none. */

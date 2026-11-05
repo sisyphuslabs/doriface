@@ -3,6 +3,17 @@ import type { Kind } from "./schema.ts";
 
 export const THEME_NAMES = ["Night", "Day", "Graphite", "Paper"] as const;
 
+/** Ghostty's native point uses 72 DPI on Apple platforms, 96 elsewhere. CSS always uses 96 DPI. */
+export function fontPixels(points: number, platform: string): number {
+  return points * (/Mac|iPhone|iPad|iPod/i.test(platform) ? 1 : 96 / 72);
+}
+
+/** A quoted config value names the family inside the quotes, rather than a family whose name contains them. */
+export function fontFamilyName(value: string): string {
+  const quote = value[0];
+  return value.length > 1 && (quote === "'" || quote === '"') && value.endsWith(quote) ? value.slice(1, -1) : value;
+}
+
 /** Ghostty theme names are case sensitive on disk; ours match the built-ins case-insensitively. */
 export function builtinTheme(name: string): BuiltinThemeName | null {
   const key = name.trim().toLowerCase();

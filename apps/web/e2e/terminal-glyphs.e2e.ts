@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { loadKoreanFonts } from "./korean-fonts.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -64,14 +65,16 @@ test("adjust-cell-width widens the cells, not the wide glyph inside them: it sta
         .first()
         .evaluate((row) => getComputedStyle(row).letterSpacing),
     )
-    .toBe("4px");
+    .toBe(
+      await focused.evaluate(
+        (element) => `${4 + parseFloat(getComputedStyle(element).getPropertyValue("--term-native-spacing"))}px`,
+      ),
+    );
   await expectCentred(page, focused);
 });
 
 // CJK fonts with their own Hangul, one for each place the suite runs: the Linux build hosts carry Noto Sans Mono CJK,
 // and CI's Playwright dependencies carry WenQuanYi Zen Hei. Whichever is installed is the user's chosen font.
-const CJK_FONTS = ["Noto Sans Mono CJK KR", "WenQuanYi Zen Hei Mono"] as const;
-
 async function addFontFamily(page: Page, name: string): Promise<void> {
   await page.getByRole("button", { name: "Add font-family", exact: true }).click();
   await page.keyboard.type(name);
@@ -82,12 +85,15 @@ test("a user-chosen font that has Hangul draws it at its own size: only a fallba
   page,
 }) => {
   await page.goto("/");
+  await loadKoreanFonts(page);
   await openNewTerminal(page);
   await openTerminalSettings(page);
-  await addFontFamily(page, CJK_FONTS[0]);
-  await addFontFamily(page, CJK_FONTS[1]);
+  await addFontFamily(page, "Terminal Korean Fixture");
+  await addFontFamily(page, "Terminal Latin Fixture");
   const terminal = await closeSettings(page);
-  await expect.poll(() => terminal.evaluate((element) => getComputedStyle(element).fontFamily)).toContain(CJK_FONTS[0]);
+  await expect
+    .poll(() => terminal.evaluate((element) => getComputedStyle(element).fontFamily))
+    .toContain("Terminal Korean Fixture");
   await print(page, terminal, "\u{D55C}\u{AE00}");
   const syllables = liveWide(terminal).filter({ hasText: /^[\u{AC00}-\u{D7A3}]$/u });
   await expect(syllables).toHaveCount(2, { timeout: 15_000 });
@@ -133,7 +139,7 @@ test("Hangul fills its two cells as Ghostty sizes a fallback font, leaving no wi
       ascent = Math.max(ascent, ink.actualBoundingBoxAscent);
       descent = Math.max(descent, ink.actualBoundingBoxDescent);
     }
-    return { cell: context.measureText("W").width, height: ascent + descent };
+    return { cell: parseFloat(style.getPropertyValue("--term-cell-width")), height: ascent + descent };
   });
   const cells = 2 * ascii.cell;
   // Ghostty's advance for a fallback ideograph next to a font without one: min(ASCII height, two cells).
