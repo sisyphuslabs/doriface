@@ -104,6 +104,78 @@ test("input typed for a terminal that fails to start is reported as not sent, an
   expect(screenOnCore(address)).toEqual(["$"]);
 });
 
+/**
+ * Counts, in the page, the MutationObservers watching the whole body and the terminal.run answers the app has handled:
+ * `runAnswers` moves a task after the WebSocket listener that took the answer, so every reaction to it has run.
+ */
+const COUNT_LATE_WORK = `{
+  const live = new Set();
+  const Base = MutationObserver;
+  window.MutationObserver = class extends Base {
+    observe(target, options) {
+      if (target === document.body && options?.subtree) live.add(this);
+      return super.observe(target, options);
+    }
+    disconnect() {
+      live.delete(this);
+      return super.disconnect();
+    }
+  };
+  window.lateWork = { bodyObservers: () => live.size, runAnswers: 0 };
+  const sockets = [];
+  const Native = WebSocket;
+  window.WebSocket = class extends Native {
+    constructor(...args) {
+      super(...args);
+      sockets.push(this);
+      this.addEventListener("message", (event) => {
+        const text = event.data instanceof ArrayBuffer ? new TextDecoder("latin1").decode(event.data) : String(event.data);
+        const answer = (text.includes('"result":{') && text.includes('"address"')) || text.includes('"error":{');
+        if (!answer) return;
+        // A task after this message's whole dispatch: every listener, and the promise reactions they started, have run.
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => void (window.lateWork.runAnswers += 1);
+        channel.port2.postMessage(0);
+      });
+    }
+  };
+}`;
+
+const bodyObservers = (page: Page) =>
+  page.evaluate(() => (window as unknown as { lateWork: { bodyObservers: () => number } }).lateWork.bodyObservers());
+const runAnswers = (page: Page) =>
+  page.evaluate(() => (window as unknown as { lateWork: { runAnswers: number } }).lateWork.runAnswers);
+
+/** Asks for a new tab with terminal.run held and keys typed for it, then leaves the workspace for Settings. */
+async function leaveWhileStarting(page: Page, link: HcSocket): Promise<(fail?: boolean) => void> {
+  const previous = await openNewTerminal(page);
+  const release = link.hold("terminal.run");
+  await askNewTab(page, previous, "keys");
+  await page.keyboard.type(LINE, { delay: 40 });
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await expect(page.locator("[data-terminal]")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
+  return release;
+}
+
+test("a run that answers after the workspace closed arms no observer or timer and shows no toast", async ({ page }) => {
+  await page.addInitScript({ content: COUNT_LATE_WORK });
+  const link = await routeHcSocket(page);
+  await page.clock.install();
+  await page.goto("/");
+  const release = await leaveWhileStarting(page, link);
+  const observers = await bodyObservers(page);
+  const answers = await runAnswers(page);
+
+  release();
+  await expect.poll(() => runAnswers(page), { timeout: 15_000 }).toBeGreaterThan(answers);
+  // The late answer armed nothing: no observer waits for the new terminal's view, and no budget timer runs out.
+  expect(await bodyObservers(page)).toBe(observers);
+  await page.clock.runFor(16_000);
+  await expect(page.getByText("What you typed was not sent")).toHaveCount(0);
+  await expect(page.getByText(/did not start/)).toHaveCount(0);
+});
+
 test("input typed for a terminal whose view does not open in time is reported as not sent", async ({ page }) => {
   const link = await routeHcSocket(page);
   await page.clock.install();

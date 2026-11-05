@@ -1,7 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import type { TerminalRunParams } from "@doriface/protocol";
 import { useToastManager } from "@doriface/ui";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { failureNotice, startTerminal } from "./start-on.ts";
 import type { TypeAhead } from "./use-type-ahead.ts";
 
@@ -26,11 +26,21 @@ export function useMachineRuns(
   typeAhead: TypeAhead,
 ): MachineRuns {
   const toasts = useToastManager();
+  // A run that answers after the workspace closed starts nothing here: no tab, no handing over of held keys (which would
+  // wait for a view that never mounts), no toast.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const start = useCallback(
     (params: TerminalRunParams, place: (address: string) => void = opened, failed?: () => void): void => {
       const core = connection.hello.core.name;
       const hold = typeAhead.hold();
       void startTerminal((run) => connection.call("terminal.run", run), params, core).then((started) => {
+        if (!mounted.current) return undefined;
         if (started.ok) {
           place(started.address);
           return typeAhead.deliver(hold, started.address);
