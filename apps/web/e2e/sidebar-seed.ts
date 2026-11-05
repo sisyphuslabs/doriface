@@ -2,6 +2,8 @@
 // name, and idle sessions with long titles. Each spec seeds what it needs and removes it afterwards.
 import { execFileSync } from "node:child_process";
 import { E2E_HOST_ENV } from "./config.ts";
+import { LAYOUT_DOC, seedSpaces, type SeedSpace } from "./layout-doc.ts";
+import { setCoreDoc } from "./core-doc.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
@@ -46,6 +48,32 @@ export function start(seed: Seed, machine: string): string {
   const address = typeof started === "object" && started !== null ? Reflect.get(started, "address") : undefined;
   if (typeof address !== "string") throw new Error(`hc run ${seed.name} printed no address`);
   return address;
+}
+
+/**
+ * The seeds' spaces in each machine's layout, each seed a tab of the space its label names: the sidebar lists the
+ * layout's spaces (#404). `addresses` are the started seeds', in SEEDS order.
+ */
+export function seedLayouts(addresses: readonly string[], machine: string): void {
+  const spacesOf = (remote: boolean): SeedSpace[] => {
+    const spaces = new Map<string, SeedSpace>();
+    SEEDS.forEach((seed, index) => {
+      const address = addresses[index];
+      if ((seed.remote === true) !== remote || address === undefined) return;
+      const id = `spc-${seed.space}`;
+      const space = spaces.get(id) ?? { id, name: seed.space, folder: "", tabs: [] };
+      const terminal = remote ? address.slice(machine.length + 1) : address;
+      spaces.set(id, { ...space, tabs: [...space.tabs, { id: `tb-${seed.name}`, name: "", terminal }] });
+    });
+    return [...spaces.values()];
+  };
+  seedSpaces(spacesOf(false));
+  seedSpaces(spacesOf(true), machine);
+}
+
+/** Clears the added machine's layout that seedLayouts wrote, while it still has the name it was written under. */
+export function clearMachineLayout(machine: string): void {
+  setCoreDoc(LAYOUT_DOC, null, machine);
 }
 
 /** Ends and removes the sessions a spec started, before the machine gets its usual name back. */
