@@ -6,13 +6,18 @@ describe("the desktop reads doriface-host's startup-error line", () => {
   test("with the host's own prefix, and every field the host writes", () => {
     expect(DESKTOP_PREFIX).toBe(STARTUP_ERROR_PREFIX);
     const line = startupErrorLine(
-      new StartupError("port-in-use", "127.0.0.1:1 is already in use", { address: "127.0.0.1:1", path: "/s" }),
+      new StartupError("port-in-use", "127.0.0.1:1 is already in use", {
+        address: "127.0.0.1:1",
+        path: "/s",
+        version: "0.1.0",
+      }),
     );
     expect(parseStartupError(line)).toEqual({
       code: "port-in-use",
       message: "127.0.0.1:1 is already in use",
       address: "127.0.0.1:1",
       path: "/s",
+      version: "0.1.0",
     });
   });
 });

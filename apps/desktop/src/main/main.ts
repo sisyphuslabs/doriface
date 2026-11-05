@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, nativeTheme, screen, session, shell } from "electron";
+import { installHc } from "@doriface/host/hc-install";
 import electronUpdater from "electron-updater";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -183,6 +184,12 @@ function ready(): void {
     },
     takeUpdate: () => updates?.ready ?? null,
     installUpdate: () => updates?.install() ?? false,
+    // Kept as the chosen hc, so a Retry starts the one just installed even where another hc comes first on PATH.
+    installHc: async (onPhase) => {
+      const installed = await installHc({ home: context.home, env: process.env, onPhase });
+      saveHc(savedFile("hc.json"), installed.path);
+      return installed;
+    },
   });
   if (updates !== undefined) {
     updates.start();
