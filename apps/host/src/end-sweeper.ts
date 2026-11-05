@@ -34,6 +34,8 @@ export function endSweeper(
   let child: KillableLink | undefined;
   let childOpen = false;
   let stopped = false;
+  // A hello the core never answers would hold `stop` for the handshake deadline; stopping ends it instead.
+  const stopping = new AbortController();
   const watch = async (): Promise<HcConnection> => {
     const next = link(core);
     const gone = Promise.withResolvers<void>();
@@ -46,7 +48,7 @@ export function endSweeper(
     exited = gone.promise;
     let connection: HcConnection;
     try {
-      connection = await HcConnection.open(next);
+      connection = await HcConnection.open(next, { signal: stopping.signal });
     } catch (error) {
       next.close();
       throw error;
@@ -121,7 +123,7 @@ export function endSweeper(
             return connection;
           },
           (error: unknown) => {
-            log(`end: not watching the core: ${String(error)}`);
+            if (!stopped) log(`end: not watching the core: ${String(error)}`);
             if (watching === started) watching = undefined;
             return undefined;
           },
@@ -132,6 +134,7 @@ export function endSweeper(
     },
     stop: async () => {
       stopped = true;
+      stopping.abort(new Error("the host is stopping"));
       (await watching)?.close();
       await exited;
     },
