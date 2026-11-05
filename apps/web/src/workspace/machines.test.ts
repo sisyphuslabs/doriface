@@ -16,6 +16,8 @@ const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => 
   ...fields,
 });
 
+const STUDIO = { id: "studio-core", name: "studio" };
+
 const view = (name: string, state: string): MachineView => ({
   name,
   state,
@@ -35,10 +37,18 @@ describe("machineEntries", () => {
       terminal("boxb/t3", { state: "finished" }),
       terminal("t2"),
     ];
-    expect(machineEntries("studio", [view("boxb", "connected"), view("lab", "unreachable")], terminals)).toEqual([
-      { id: "local", name: "studio", local: true, state: "connected", live: 2, first: "t1" },
-      { id: "machine:boxb", name: "boxb", local: false, state: "connected", live: 2, first: "boxb/t1" },
-      { id: "machine:lab", name: "lab", local: false, state: "unreachable", live: 0, first: undefined },
+    expect(machineEntries(STUDIO, [view("boxb", "connected"), view("lab", "unreachable")], terminals)).toEqual([
+      { id: "local", core: "studio-core", name: "studio", local: true, state: "connected", live: 2, first: "t1" },
+      {
+        id: "machine:boxb",
+        core: "boxb-id",
+        name: "boxb",
+        local: false,
+        state: "connected",
+        live: 2,
+        first: "boxb/t1",
+      },
+      { id: "machine:lab", core: "lab-id", name: "lab", local: false, state: "unreachable", live: 0, first: undefined },
     ]);
   });
 
@@ -66,14 +76,18 @@ describe("machineEntries", () => {
 
 describe("onlyThisMachine", () => {
   test("true with only this machine, false once one is added", () => {
-    expect(onlyThisMachine(machineEntries("studio", [], []))).toBe(true);
-    expect(onlyThisMachine(machineEntries("studio", [view("boxb", "connected")], []))).toBe(false);
+    expect(onlyThisMachine(machineEntries(STUDIO, [], []))).toBe(true);
+    expect(onlyThisMachine(machineEntries(STUDIO, [view("boxb", "connected")], []))).toBe(false);
   });
 });
 
 describe("selection with an added machine named like this one", () => {
   test("rows get distinct ids, and only the machine the active terminal is on is selected", () => {
-    const entries = machineEntries("boxb", [view("boxb", "connected")], [terminal("t1"), terminal("boxb/t1")]);
+    const entries = machineEntries(
+      { id: "boxb-core", name: "boxb" },
+      [view("boxb", "connected")],
+      [terminal("t1"), terminal("boxb/t1")],
+    );
     expect(new Set(entries.map((entry) => entry.id)).size).toBe(2);
     const selected = (active: string) => entries.filter((entry) => entry.id === machineId(active));
     expect(selected("boxb/t1").map((entry) => entry.local)).toEqual([false]);
