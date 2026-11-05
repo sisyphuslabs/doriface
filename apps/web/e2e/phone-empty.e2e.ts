@@ -1,4 +1,5 @@
 import { devices } from "@playwright/test";
+import { endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { hcOn } from "./machine-switch.ts";
 
@@ -29,4 +30,10 @@ test("with no terminals the phone says so and offers a new terminal and adding a
   await expect(empty.getByRole("button", { name: "Add a machine" })).toBeVisible();
   await empty.getByRole("button", { name: "New terminal" }).click();
   await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible({ timeout: 15_000 });
+
+  // The terminal it opened is the core's only one; ending it leaves the core as empty as the spec found it.
+  await expect.poll(liveAddresses, { timeout: 15_000 }).toHaveLength(1);
+  const [own = ""] = liveAddresses();
+  endAgent("host", own);
+  expect(liveAddresses()).toEqual([]);
 });

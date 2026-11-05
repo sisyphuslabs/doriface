@@ -68,6 +68,33 @@ export async function runSeeds(
   }
 }
 
+const SEEDS_LISTED_WITHIN_MS = 60_000;
+
+/** How many live terminals the core in `env` lists on the machine named `name`. */
+async function listedOn(hc: string, env: Record<string, string | undefined>, name: string): Promise<number> {
+  const ls = Bun.spawn([hc, "ls", "--json"], { env, stdout: "pipe", stderr: "pipe" });
+  const [out, code] = [await new Response(ls.stdout).text(), await ls.exited];
+  if (code !== 0) throw new Error(`hc ls failed: ${await new Response(ls.stderr).text()}`);
+  const terminals: unknown = Reflect.get(JSON.parse(out), "terminals");
+  if (!Array.isArray(terminals)) throw new Error("hc ls printed no terminal list");
+  return terminals.filter((t: unknown) => String(Reflect.get(Object(t), "address")).startsWith(`${name}/`)).length;
+}
+
+/**
+ * Resolves once the core in `env` lists every seed of the machine it added. The added machine's terminals reach that
+ * core through its machine list, after `hc machine add` has returned, and hc gives no word when they have: the list is
+ * read again until they are all there, or the bound runs out and setup fails.
+ */
+async function seedsListed(hc: string, env: Record<string, string | undefined>, spec: MachineSpec): Promise<void> {
+  const deadline = Date.now() + SEEDS_LISTED_WITHIN_MS;
+  // oxlint-disable-next-line no-await-in-loop -- each read waits on hc; the next one only if the seeds are not all there
+  while ((await listedOn(hc, env, spec.name)) < spec.seeds.length) {
+    if (Date.now() > deadline) throw new Error(`${spec.name}'s ${spec.seeds.length} seeds were not listed in time`);
+    // oxlint-disable-next-line no-await-in-loop -- as above
+    await Bun.sleep(100);
+  }
+}
+
 /** Starts the second core (with its demo terminals when `withSeeds`) and adds it; resolves with its stop. */
 export async function addMachine(
   hc: string,
@@ -112,6 +139,7 @@ export async function addMachine(
     if ((await add.exited) !== 0) {
       throw new Error(`hc machine add for the second core failed: ${await new Response(add.stderr).text()}`);
     }
+    if (withSeeds) await seedsListed(hc, env, spec);
   } catch (error) {
     await stop();
     throw error;

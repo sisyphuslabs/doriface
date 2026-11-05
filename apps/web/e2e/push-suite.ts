@@ -8,7 +8,11 @@ import { hcOn } from "./machine-switch.ts";
 import { askHost, stubPushManager, TestPushService } from "./push.ts";
 
 /** Registers the suite's hooks; call once at a spec file's top level. The getter is valid inside tests. */
-export function pushSuite(): { readonly service: () => TestPushService; readonly later: (end: () => void) => void } {
+export function pushSuite(): {
+  readonly service: () => TestPushService;
+  /** Ends what a test started (its agents) once that test is done, before the next one: a spec ends what it opens. */
+  readonly endAfterTest: (end: () => void) => void;
+} {
   // One push service and one subscription on the shared e2e host: the specs run in order.
   test.describe.configure({ mode: "serial" });
   // The headless shell answers Notification.permission with "denied" whatever was granted; full Chromium honours it.
@@ -19,7 +23,6 @@ export function pushSuite(): { readonly service: () => TestPushService; readonly
     service = await TestPushService.start();
   });
   test.afterAll(async () => {
-    for (const end of ends.splice(0)) end();
     await service?.close();
   });
   test.beforeEach(async ({ page, context }) => {
@@ -34,18 +37,22 @@ export function pushSuite(): { readonly service: () => TestPushService; readonly
       };
     });
   });
-  // Through the hosts, not the page: a test may have closed its page, and no subscription may outlive its test.
+  // Through the hosts, not the page: a test may have closed its page, and no subscription or agent may outlive its test.
   test.afterEach(async () => {
-    const endpoint = service?.endpoint ?? "";
-    await askHost({ t: "unsubscribe", endpoint });
-    await askHost({ t: "unsubscribe", endpoint }, E2E_LAYOUT_PORT);
+    try {
+      for (const end of ends.splice(0)) end();
+    } finally {
+      const endpoint = service?.endpoint ?? "";
+      await askHost({ t: "unsubscribe", endpoint });
+      await askHost({ t: "unsubscribe", endpoint }, E2E_LAYOUT_PORT);
+    }
   });
   return {
     service: () => {
       if (service === undefined) throw new Error("the push service did not start");
       return service;
     },
-    later: (end) => void ends.push(end),
+    endAfterTest: (end) => void ends.push(end),
   };
 }
 
@@ -84,13 +91,13 @@ export async function turnOn(page: Page): Promise<void> {
 const osc = (fields: string): string => `printf '\\033]7501;${fields}\\033\\\\'`;
 
 /** An agent that works until it gets a line, then reports its turn done; returns its address. */
-export function finishingAgent(name: string, later: (end: () => void) => void): string {
+export function finishingAgent(name: string, endAfterTest: (end: () => void) => void): string {
   const script = [osc("state=working:app=claude"), "read go", osc("state=done:app=claude"), "exec sleep 600"].join(
     "; ",
   );
   const out = hcOn("host", ["run", "--bg", "--name", name, "--label", "space=push", "--", "sh", "-c", script]);
   const address = String(Reflect.get(JSON.parse(out), "address"));
-  later(() => endAgent("host", address));
+  endAfterTest(() => endAgent("host", address));
   return address;
 }
 
