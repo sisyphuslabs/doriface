@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { socketSafeBase } from "./short-tmp.ts";
 
 /** Set by `pinRunDir` in a Playwright runner to the run's own dir; its workers and web servers inherit it. */
 export const E2E_RUN_DIR = "DORIFACE_E2E_RUN_DIR";
@@ -37,8 +37,7 @@ export async function stopLeftUnder(dir: string, waitMs = 0): Promise<LeftProces
 export function pinRunDir(prefix: string): string {
   const pinned = process.env[E2E_RUN_DIR];
   if (pinned !== undefined && pinned !== "") return pinned;
-  // Short on macOS, whose $TMPDIR is deep: a scratch socket under it must stay within the 103-byte sun_path limit.
-  const base = process.platform === "darwin" ? "/tmp" : tmpdir();
+  const base = socketSafeBase();
   // Resolved, since a process is seen holding resolved paths (macOS: /var and /tmp are links into /private).
   const dir = realpathSync(mkdtempSync(join(base, prefix)));
   process.env[E2E_RUN_DIR] = dir;
