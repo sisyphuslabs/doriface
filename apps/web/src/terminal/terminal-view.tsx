@@ -22,6 +22,7 @@ import { Ended } from "./ended.tsx";
 import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
+import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
 
 /** Typed text, or the bytes a bound key sends. */
 export type TerminalInput = string | Uint8Array;
@@ -140,6 +141,7 @@ export function TerminalView(props: TerminalViewProps) {
   }, []);
   useTerminalPort(handle, send, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
+  useWideGlyphScale(wt, config);
   useTerminalActions(wt, send, focused);
   useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);

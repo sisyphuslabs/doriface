@@ -65,3 +65,35 @@ test("a connection attempt that fails closes its link before the next attempt", 
   expect(closedByFeed).toBe(true);
   await feed.stop();
 });
+
+test("kill ends a child that closing its stdin did not, and names its pid; a child already gone is not killed", async () => {
+  const closes = new Set<(error: Error | undefined) => void>();
+  const signals: string[] = [];
+  // A core that never answers the hello and ignores a closed stdin: only a kill ends it.
+  const hung = {
+    pid: 4242,
+    send: () => {},
+    onData: () => () => {},
+    onClose: (listener: (error: Error | undefined) => void) => {
+      closes.add(listener);
+      return () => closes.delete(listener);
+    },
+    close: () => {},
+    kill: (signal: "SIGKILL") => {
+      signals.push(signal);
+      for (const listener of closes) listener(undefined);
+    },
+  };
+  const feed = startCoreFeed(
+    { hc: "hc" },
+    service,
+    () => {},
+    () => hung,
+  );
+  const stopped = feed.stop();
+  expect(feed.kill()).toEqual([4242]);
+  expect(signals).toEqual(["SIGKILL"]);
+  await stopped;
+  expect(feed.kill()).toEqual([]);
+  expect(signals).toEqual(["SIGKILL"]);
+});

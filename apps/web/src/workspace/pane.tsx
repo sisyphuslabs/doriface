@@ -15,6 +15,8 @@ export interface PaneProps {
   readonly split: boolean;
   readonly onFocus: () => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
+  /** The view showed that its program had already ended when it attached: there is no terminal left to type into. */
+  readonly onEnded: (address: string, pid: number | null) => void;
   /** The view's input path, for input from outside the pane (dictation); null once the view unmounts. */
   readonly onPort: (port: TerminalPort | null) => void;
   /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
@@ -26,7 +28,7 @@ export interface PaneProps {
  * tab strip carries its session actions. Inside a split each pane gets a slim header naming its terminal, as herdr-app
  * frames panes only once a tab is split, since the tab can name only one of them.
  */
-export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onPort, dock }: PaneProps) {
+export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onEnded, onPort, dock }: PaneProps) {
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   return (
@@ -66,6 +68,7 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onP
           focused={focused}
           label={`${title} output`}
           onEnd={onEnd}
+          onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
           onPort={onPort}
         />
       )}

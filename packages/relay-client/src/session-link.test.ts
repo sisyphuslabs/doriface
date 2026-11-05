@@ -14,7 +14,11 @@ function closeCodes(frames: readonly Uint8Array[]): number[] {
 function recordingLink(): { readonly link: SessionLink; readonly frames: Uint8Array[] } {
   const frames: Uint8Array[] = [];
   return {
-    link: new SessionLink(5, undefined, { sendFrame: (frame) => frames.push(frame) > 0, release: () => {} }),
+    link: new SessionLink(5, undefined, {
+      sendFrame: (frame) => frames.push(frame) > 0,
+      release: () => {},
+      answer: () => true,
+    }),
     frames,
   };
 }
@@ -37,8 +41,8 @@ function backToBack(): { readonly a: SessionLink; readonly b: SessionLink; reado
       if (decoded.type === MuxType.Credit) other?.credited(decoded.bytes);
       return true;
     };
-  const a = new SessionLink(1, undefined, { sendFrame: wire("a"), release: () => {} });
-  const b = new SessionLink(1, undefined, { sendFrame: wire("b"), release: () => {} });
+  const a = new SessionLink(1, undefined, { sendFrame: wire("a"), release: () => {}, answer: () => true });
+  const b = new SessionLink(1, undefined, { sendFrame: wire("b"), release: () => {}, answer: () => true });
   Object.assign(ends, { a, b });
   a.onData(() => {});
   b.onData(() => {});
@@ -56,7 +60,7 @@ describe("SessionLink", () => {
   });
 
   test("a write the uplink can no longer carry rejects instead of vanishing", async () => {
-    const link = new SessionLink(1, undefined, { sendFrame: () => false, release: () => {} });
+    const link = new SessionLink(1, undefined, { sendFrame: () => false, release: () => {}, answer: () => true });
     await expect(link.send(new Uint8Array([1]))).rejects.toBeInstanceOf(LinkClosedError);
   });
 
@@ -70,6 +74,7 @@ describe("SessionLink", () => {
     const link = new SessionLink(7, "Q7M", {
       sendFrame: (frame) => frames.push(frame) > 0,
       release: () => {},
+      answer: () => true,
     });
     link.close(code, "refused");
     const [frame] = frames;
@@ -82,6 +87,7 @@ describe("SessionLink", () => {
     const link = new SessionLink(1, undefined, {
       sendFrame: (frame) => frames.push(frame) > 0,
       release: () => {},
+      answer: () => true,
     });
     await link.send(new Uint8Array([9]));
     expect(frames).toEqual([new Uint8Array([2, 1, 0, 0, 0, 9])]);
