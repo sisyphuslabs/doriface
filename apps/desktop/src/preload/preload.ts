@@ -76,6 +76,19 @@ const bridge: DorifaceBridge = {
     const installing: unknown = await ipcRenderer.invoke(Channel.installUpdate);
     return installing === true;
   },
+  async noticesSupported() {
+    const supported: unknown = await ipcRenderer.invoke(Channel.noticesSupported);
+    return supported === true;
+  },
+  async showNotice(notice) {
+    const shown: unknown = await ipcRenderer.invoke(Channel.showNotice, notice);
+    return shown === true;
+  },
+  onNoticeClick(listener) {
+    ipcRenderer.on(Channel.noticeClicked, (_event, terminal: unknown) => {
+      if (terminal === null || typeof terminal === "string") listener(terminal);
+    });
+  },
 };
 
 contextBridge.exposeInMainWorld("doriface", bridge);

@@ -3,6 +3,8 @@ import { terminalLinkTarget } from "../config/terminal-link.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import {
+  type DesktopNotice,
+  isDesktopNotice,
   isZoomStep,
   type LocalHostEndpoint,
   type LocalHostStartFailed,
@@ -31,6 +33,8 @@ export interface IpcDeps {
   readonly takeUpdate: () => UpdateReady | null;
   /** Quits and installs the staged update; false when none is staged. */
   readonly installUpdate: () => boolean;
+  readonly noticesSupported: () => boolean;
+  readonly showNotice: (notice: DesktopNotice) => void;
 }
 
 export interface IpcHandlers {
@@ -53,6 +57,9 @@ export interface IpcHandlers {
   takeUpdate(event: IpcSender): UpdateReady | null;
   /** Restart to update: false when no update is staged. */
   installUpdate(event: IpcSender): Promise<boolean>;
+  noticesSupported(event: IpcSender): Promise<boolean>;
+  /** Shows a native notification; only a known kind and a terminal address are taken, never text. */
+  showNotice(event: IpcSender, candidate: unknown): Promise<boolean>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -137,6 +144,16 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async installUpdate(event) {
       assertAppFrame(event, deps.origin);
       return deps.installUpdate();
+    },
+    async noticesSupported(event) {
+      assertAppFrame(event, deps.origin);
+      return deps.noticesSupported();
+    },
+    async showNotice(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (!isDesktopNotice(candidate)) return false;
+      deps.showNotice({ kind: candidate.kind, terminal: candidate.terminal });
+      return true;
     },
   };
 }
