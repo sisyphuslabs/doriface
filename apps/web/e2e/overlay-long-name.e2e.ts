@@ -84,8 +84,9 @@ for (const width of [320, 390] as const) {
         await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
         await agentRow(page, LONG, false).click({ timeout: 20_000 });
         const header = page.getByRole("banner");
-        await expect(header.getByRole("heading", { name: LONG })).toBeVisible({ timeout: 15_000 });
+        // The heading reads the tab (its number, #466 ruling A); the session actions carry the name.
         const actions = header.getByRole("button", { name: `Session actions for ${LONG}` });
+        await expect(actions).toBeVisible({ timeout: 15_000 });
 
         await actions.hover();
         await expectInside(tooltip(page, `Session actions for ${LONG}`), "the session actions tooltip");
@@ -131,7 +132,9 @@ for (const colorScheme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
       await agentRow(page, LONG, false).click({ timeout: 20_000 });
       const header = page.getByRole("banner");
-      await expect(header.getByRole("heading", { name: LONG })).toBeVisible({ timeout: 15_000 });
+      await expect(header.getByRole("button", { name: `Session actions for ${LONG}` })).toBeVisible({
+        timeout: 15_000,
+      });
       const keyboard = page.getByRole("button", { name: "Show keyboard" });
       await expect(keyboard).toBeVisible({ timeout: 15_000 });
       const button = await keyboard.boundingBox();

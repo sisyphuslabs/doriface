@@ -77,7 +77,8 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
     await agentRow(page, first, false).click();
-    await expect(header(page).getByRole("heading", { name: first })).toBeVisible({ timeout: 15_000 });
+    // The heading reads the tab as the desktop strip does: these tabs have no name, so their number (#466 ruling A).
+    await expect(header(page).getByRole("heading", { name: "1", exact: true })).toBeVisible({ timeout: 15_000 });
 
     // Where: the space, and this tab's place among the space's tabs.
     await expect(header(page).getByText(space, { exact: true })).toBeVisible();
@@ -120,7 +121,7 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await expect(agentRow(section, first, false)).toHaveAttribute("aria-current", "true");
     await agentRow(section, second, false).click();
     await expect(sheet).toBeHidden();
-    await expect(header(page).getByRole("heading", { name: second })).toBeVisible({ timeout: 15_000 });
+    await expect(header(page).getByRole("heading", { name: "2", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(header(page).getByText("2/2", { exact: true })).toBeVisible();
 
     // A new tab in the same space, saved by another device, is counted at once.

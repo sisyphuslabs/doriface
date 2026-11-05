@@ -3,6 +3,7 @@
 import { devices, type Page } from "@playwright/test";
 import { endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
+import { seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
@@ -61,6 +62,10 @@ for (const [script, title] of Object.entries(TITLES)) {
     page,
   }) => {
     const address = startNamed(`title-${script}`, title);
+    // The header reads the tab's name, as the desktop strip does (#466 ruling A): the tab carries the long title.
+    seedSpaces([
+      { id: "spc-titles", name: "titles", folder: "", tabs: [{ id: "tb-title", name: title, terminal: address }] },
+    ]);
     try {
       await page.goto("/");
       await page.getByRole("region", { name: "Agents" }).getByRole("button").filter({ hasText: title }).click();

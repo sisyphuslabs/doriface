@@ -30,6 +30,8 @@ export interface PhoneTerminalProps {
   readonly terminals: readonly Session[];
   /** The terminals of the tab that shows this one, in its panes' order; one when that tab is not split. */
   readonly panes: readonly string[];
+  /** Its tab as the strip reads it (its name, else its number); null when it is in no tab. */
+  readonly tabTitle: string | null;
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   /** Where this terminal registers its dictation for the shell's palette row and bound key; null while it takes none. */
@@ -37,7 +39,8 @@ export interface PhoneTerminalProps {
 }
 
 /** One session full screen on a phone, its terminal kept clear of the soft keyboard and the keys bar riding on it. */
-export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, onBack, dictate }: PhoneTerminalProps) {
+export function PhoneTerminal(props: PhoneTerminalProps) {
+  const { connection, terminal, terminals, panes, tabTitle, onOpen, onBack, dictate } = props;
   const port = useRef<TerminalPort | null>(null);
   const onPort = useCallback((next: TerminalPort | null) => {
     port.current = next;
@@ -85,6 +88,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
       <PhoneHeader
         terminal={terminal}
         terminals={terminals}
+        tabTitle={tabTitle}
         onBack={onBack}
         onOpen={onOpen}
         action={offline || ended ? null : <DictateButton voice={voice} target={title} ref={mic} />}
