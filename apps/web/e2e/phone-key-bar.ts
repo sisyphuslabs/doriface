@@ -7,10 +7,11 @@ export const PHONE = { ...iphone, viewport: { width: 390, height: 844 } };
 /**
  * Call before page.goto: replaces visualViewport with one that a 336 px soft keyboard shrinks while a text field has
  * the focus, as a phone's does; `showKeyboard(page, px)` moves it on its own (0: closed by its own key). Headless
- * Chromium has no soft keyboard.
+ * Chromium has no soft keyboard. With `raiseOnFocus: false` a focus alone raises nothing (a keyboard only
+ * `showKeyboard` brings up), as on a screen whose keyboard the person opens themselves.
  */
-export async function fakeSoftKeyboard(page: Page): Promise<void> {
-  await page.addInitScript(() => {
+export async function fakeSoftKeyboard(page: Page, { raiseOnFocus = true } = {}): Promise<void> {
+  await page.addInitScript((raise: boolean) => {
     let keyboard = 0;
     const viewport = Object.defineProperties(new EventTarget(), {
       height: { get: (): number => window.innerHeight - keyboard },
@@ -27,7 +28,7 @@ export async function fakeSoftKeyboard(page: Page): Promise<void> {
       viewport.dispatchEvent(new Event("resize"));
     };
     document.addEventListener("focusin", () => {
-      if (document.activeElement instanceof HTMLTextAreaElement && keyboard === 0) softKeyboard(336);
+      if (raise && document.activeElement instanceof HTMLTextAreaElement && keyboard === 0) softKeyboard(336);
     });
     document.addEventListener("focusout", () =>
       queueMicrotask(() => {
@@ -35,7 +36,7 @@ export async function fakeSoftKeyboard(page: Page): Promise<void> {
       }),
     );
     Object.assign(window, { softKeyboard });
-  });
+  }, raiseOnFocus);
 }
 
 export async function showKeyboard(page: Page, px: number): Promise<void> {
