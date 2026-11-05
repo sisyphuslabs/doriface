@@ -3,7 +3,9 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
+import { seedSpaces } from "./layout-doc.ts";
 import { E2E_HOST_ENV } from "./config.ts";
 import { readSavedEnv } from "./saved-env.ts";
 import { rows } from "./sidebar-measure.ts";
@@ -42,11 +44,7 @@ function startIn(cwd: string, space: string): string {
 }
 
 function stop(addresses: readonly string[]): void {
-  const { hc, env } = readSavedEnv(E2E_HOST_ENV);
-  for (const address of addresses) {
-    execFileSync(hc, ["kill", address], { env: { ...process.env, ...env } });
-    execFileSync(hc, ["rm", address], { env: { ...process.env, ...env } });
-  }
+  for (const address of addresses) endAgent("host", address);
 }
 
 test("a space row shows its branch, ahead and uncommitted changes, or detached, and nothing on a clean main", async ({
@@ -64,8 +62,18 @@ test("a space row shows its branch, ahead and uncommitted changes, or detached, 
   const detached = repo(join(root, "detached"));
   git(detached, "checkout", "-q", "--detach", "HEAD");
 
-  const addresses = [startIn(feature, "git-feature"), startIn(clean, "git-clean"), startIn(detached, "git-detached")];
+  const dirs = { "git-feature": feature, "git-clean": clean, "git-detached": detached };
+  const addresses = Object.entries(dirs).map(([space, dir]) => startIn(dir, space));
   try {
+    // The sidebar lists the layout's spaces (#404): each named, on its repository's folder, showing its session.
+    seedSpaces(
+      Object.entries(dirs).map(([name, folder], index) => ({
+        id: `spc-${name}`,
+        name,
+        folder,
+        tabs: [{ id: `tb-${name}`, name: "", terminal: addresses[index] ?? "" }],
+      })),
+    );
     await page.goto("/");
     const spaces = page.getByRole("region", { name: "Spaces" });
     const row = (space: string) => rows(spaces).filter({ hasText: space });

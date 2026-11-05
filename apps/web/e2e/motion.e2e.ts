@@ -147,8 +147,10 @@ test("a kept tab on an added machine does not arrive late on the way back from S
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
-  // New tab opens on the focused pane's machine: focus a local tab, so the control opens nothing on the added machine.
-  await localTab.click();
+  // New tab opens on the focused pane's machine: focus the local terminal, so the control opens nothing on the added
+  // machine. Its tab is in this machine's space, which the strip does not show beside the remote one (#404).
+  await agentRow(page, "nearby", false).click();
+  await expect(localTab).toHaveAttribute("aria-selected", "true");
   await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", /^[^/]+$/);
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
