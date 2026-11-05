@@ -1,4 +1,14 @@
-export { addTab, docSpaces, editTab, LAYOUT_DOC, moveTab, readDocument, removeTab, tabsOf } from "./document.ts";
+export {
+  addTab,
+  docSpaces,
+  editTab,
+  LAYOUT_DOC,
+  moveTab,
+  readDocument,
+  removeTab,
+  renameSpace,
+  tabsOf,
+} from "./document.ts";
 export type { DocSpace, DocTab, NewSpace, ReadDocument } from "./document.ts";
 export {
   childrenOf,

@@ -1,7 +1,7 @@
 import type { JsonObject, Terminal } from "@doriface/protocol";
 import { addTab, docSpaces, freshId, type Node, panesOf, tabsOf, terminalBlock } from "@doriface/protocol/layout";
 import { spaceKey, tabKey, type View } from "../layout/view.ts";
-import { machineOf } from "./model.ts";
+import { machineOf, SPACE_LABEL } from "./model.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
 export interface LayoutPane {
@@ -222,6 +222,7 @@ export const HOME_SPACE = "Home";
 
 /**
  * The document with every live terminal of its machine that no tab shows adopted as a tab of its own (#404): in the space
+ * its `space` label names (made when there is none, as that label named its space before #404), else in the space
  * whose folder holds its working directory (the deepest such folder), else in the machine's Home space, made when there
  * is none. A terminal another one started (`parent`) is not a tab of its own. Null when every terminal has a tab, so
  * nothing is written; read inside the document's edit, so a reload or a second device adopts nothing twice.
@@ -257,7 +258,11 @@ export function adoptLoose(
       name: "",
       root: { children: [terminalBlock(makeId("p"), localOf(terminal.address))], id, type: "row" },
     };
-    if (owner !== undefined) {
+    const label = terminal.labels[SPACE_LABEL] ?? "";
+    if (label !== "") {
+      const named = next === null ? undefined : docSpaces(next).find((space) => space.name === label);
+      next = addTab(next, { id: named?.id ?? makeId("spc"), folder: named?.folder ?? "", name: label }, tab);
+    } else if (owner !== undefined) {
       next = addTab(next, { id: owner.id, folder: owner.folder }, tab);
     } else {
       home ??= makeId("spc");

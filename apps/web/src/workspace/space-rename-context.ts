@@ -6,7 +6,7 @@ export interface SpaceRenaming {
   readonly ask: (id: string) => void;
   /** Why `name` cannot become space `id`'s name, or null when it can. */
   readonly problem: (id: string, name: string) => string | null;
-  /** Writes the name in hc; rejects with why it was not written. */
+  /** Writes the name in the space's layout document; rejects with why it was not written. */
   readonly rename: (id: string, name: string) => Promise<void>;
 }
 

@@ -64,8 +64,12 @@ function canMove(id: string, { keys, active }: Strip): boolean {
   return id === "tab.move:left" ? at > 0 : at < keys.length - 1;
 }
 
-/** Splitting needs a terminal in view whose layout takes edits; until then it is listed as unavailable, with why. */
+/**
+ * Splitting needs a terminal in view whose layout takes edits, and renaming its space a layout that takes edits; until
+ * then each is listed as unavailable, with why.
+ */
 function unavailable(id: string, inView: boolean, readOnly: string | null): string | undefined {
+  if (id === "space.rename") return readOnly ?? undefined;
   if (!id.startsWith("pane.split:")) return undefined;
   return inView ? (readOnly ?? undefined) : "No terminal to split";
 }

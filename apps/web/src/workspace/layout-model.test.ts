@@ -188,6 +188,24 @@ describe("adoptLoose (#404)", () => {
     ).toBeNull();
   });
 
+  test("a terminal labelled with a space goes to the space of that name, made when there is none (#395)", () => {
+    const adopted = adoptLoose(
+      saved,
+      [
+        loose("t2", "/w/api", { labels: { space: "api-x" } }),
+        loose("t3", "/tmp", { labels: { space: "api-x" } }),
+        loose("t4", "/tmp"),
+      ],
+      ids(),
+    );
+    expect(adopted === null ? null : docSpaces(adopted).map((space) => [space.name, space.tabs.length])).toEqual([
+      ["", 1],
+      ["", 0],
+      ["api-x", 2],
+      [HOME_SPACE, 1],
+    ]);
+  });
+
   test("adopting again adopts nothing more, and an existing Home is reused", () => {
     const once = adoptLoose(null, [loose("t1", "/a")], ids());
     expect(once === null ? null : adoptLoose(once, [loose("t1", "/a")])).toBeNull();

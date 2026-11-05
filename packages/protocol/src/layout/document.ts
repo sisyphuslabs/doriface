@@ -128,6 +128,18 @@ export function docSpaces(doc: JsonObject): readonly DocSpace[] {
 }
 
 /**
+ * The document with space `spaceId` named `name`, as herdr-app's rename sets the space's `name`; null when the space is
+ * gone or already has that name, so nothing is written. Every other space and the space's own fields stay as read.
+ */
+export function renameSpace(doc: JsonObject, spaceId: string, name: string): JsonObject | null {
+  const spaces = spacesOf(doc);
+  const at = spaces.findIndex((space) => text(space["id"]) === spaceId);
+  const space = spaces[at];
+  if (space === undefined || text(space["name"]) === name) return null;
+  return { ...doc, spaces: spaces.with(at, { ...space, name }) };
+}
+
+/**
  * The document with a tab moved to index `to` among its own space's tabs (clamped), the others keeping their order; null
  * when the tab is gone or already there, so nothing is written.
  */
