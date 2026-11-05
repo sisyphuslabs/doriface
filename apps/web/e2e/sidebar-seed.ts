@@ -48,9 +48,12 @@ export function start(seed: Seed, machine: string): string {
   return address;
 }
 
-/** Ends the sessions a spec started, before the machine gets its usual name back. */
+/** Ends and removes the sessions a spec started, before the machine gets its usual name back. */
 export function stop(addresses: readonly string[]): void {
-  for (const address of addresses) hc(["kill", address]);
+  for (const address of addresses) {
+    hc(["kill", address]);
+    hc(["rm", address]);
+  }
 }
 
 function machineState(name: string): string | undefined {
