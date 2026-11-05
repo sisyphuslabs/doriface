@@ -15,8 +15,14 @@ export const TRAFFIC_LIGHT_POSITION = {
 
 export const TRAFFIC_LIGHTS = { ...TRAFFIC_LIGHT_POSITION, ...WINDOW_BUTTONS_SIZE } as const;
 
-/** Where content beside the window buttons may start, one button-gap past the last button. */
-export const TITLEBAR_INSET_START = TRAFFIC_LIGHTS.x + TRAFFIC_LIGHTS.width + 12;
+/**
+ * herdr-app's gap between the last window button and the first item beside it (its app icon, then the name): 12 pt,
+ * measured from its macOS titlebar (#392).
+ */
+export const TITLEBAR_TITLE_GAP = 12;
+
+/** Where content beside the window buttons may start, one title gap past the last button. */
+export const TITLEBAR_INSET_START = TRAFFIC_LIGHTS.x + TRAFFIC_LIGHTS.width + TITLEBAR_TITLE_GAP;
 
 /**
  * Controls inside a titlebar row that must keep taking clicks instead of moving the window; a whole tab pill

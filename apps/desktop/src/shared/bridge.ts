@@ -6,7 +6,6 @@ export const Channel = {
   startLocalHost: "doriface:start-local-host",
   setWindowBackground: "doriface:set-window-background",
   closeWindow: "doriface:close-window",
-  zoomWindow: "doriface:zoom-window",
   /** Main to renderer: show an app path in the one window (the app menu, a new-window click). */
   navigate: "doriface:navigate",
   /** Main to renderer: a pairing link is waiting; it carries no data. */
@@ -61,11 +60,6 @@ export function isDesktopNotice(value: unknown): value is DesktopNotice {
   );
 }
 
-/** One step of the window zoom, as Cmd/Ctrl + = / - / 0 and View > Zoom In / Zoom Out / Actual Size take it. */
-export type ZoomStep = "in" | "out" | "reset";
-
-export const isZoomStep = (value: unknown): value is ZoomStep => value === "in" || value === "out" || value === "reset";
-
 export interface LocalHostEndpoint {
   /** The loopback gateway, e.g. `ws://127.0.0.1:52011/v1/hc`. */
   readonly url: string;
@@ -118,8 +112,6 @@ export interface DorifaceBridge {
   setWindowBackground(color: string): Promise<boolean>;
   /** Closes the window as File > Close Window does; the page's own window.close() would skip the close events. */
   closeWindow(): Promise<void>;
-  /** Zooms the whole window one step, as the View menu's zoom items do; the zoom is restored at the next launch. */
-  zoomWindow(step: ZoomStep): Promise<void>;
   /** Calls `listener` with each pairing link fragment the app is opened with (a doriface: link or an in-app click). */
   onPairingLink(listener: (fragment: string) => void): void;
   /** Calls `listener` with each action id a Shell menu item asks the page to run. */

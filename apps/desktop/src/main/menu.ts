@@ -1,5 +1,5 @@
 import type { MenuItemConstructorOptions } from "electron";
-import type { DesktopPlatform, ZoomStep } from "../shared/bridge.ts";
+import type { DesktopPlatform } from "../shared/bridge.ts";
 import { shellMenu } from "./shell-menu.ts";
 
 export const REPOSITORY_URL = "https://github.com/sisyphuslabs/doriface";
@@ -8,7 +8,6 @@ export interface MenuOptions {
   readonly platform: DesktopPlatform;
   readonly openExternal: (url: string) => void;
   readonly openSettings: () => void;
-  readonly zoomWindow: (step: ZoomStep) => void;
   /** The page's trigger per Shell menu action, as it last reported them; empty until it has. */
   readonly keys: ReadonlyMap<string, string>;
   readonly runAction: (action: string) => void;
@@ -49,17 +48,17 @@ const MAC_FILE_MENU: MenuItemConstructorOptions = {
 };
 
 /**
- * The standard View menu, except that its zoom items zoom the whole window through the app (saved for the next launch)
- * and show their shortcuts without registering them: the page's keymap owns those keys and zooms the same way, so a
- * key press never reaches Chromium's separate page zoom.
+ * The standard View menu, except that in place of page zoom it sizes the terminal text, as Ghostty and herdr-app do: the
+ * items run the page's own text-size actions and show their shortcuts without registering them, since the page's keymap
+ * owns those keys. The window itself is never zoomed, so the chrome keeps its size beside the window buttons (#388).
  */
-function viewMenu(zoomWindow: (step: ZoomStep) => void): MenuItemConstructorOptions {
-  const zoomItem = (id: string, label: string, accelerator: string, step: ZoomStep): MenuItemConstructorOptions => ({
+function viewMenu(runAction: (action: string) => void): MenuItemConstructorOptions {
+  const textItem = (id: string, label: string, accelerator: string, action: string): MenuItemConstructorOptions => ({
     id,
     label,
     accelerator,
     registerAccelerator: false,
-    click: () => zoomWindow(step),
+    click: () => runAction(action),
   });
   return {
     label: "View",
@@ -68,9 +67,9 @@ function viewMenu(zoomWindow: (step: ZoomStep) => void): MenuItemConstructorOpti
       { role: "forceReload" },
       { role: "toggleDevTools" },
       { type: "separator" },
-      zoomItem("zoom-reset", "Actual Size", "CommandOrControl+0", "reset"),
-      zoomItem("zoom-in", "Zoom In", "CommandOrControl+Plus", "in"),
-      zoomItem("zoom-out", "Zoom Out", "CommandOrControl+-", "out"),
+      textItem("font-size-reset", "Default Text Size", "CommandOrControl+0", "app.zoom_reset"),
+      textItem("font-size-increase", "Bigger Text", "CommandOrControl+Plus", "app.zoom_in"),
+      textItem("font-size-decrease", "Smaller Text", "CommandOrControl+-", "app.zoom_out"),
       { type: "separator" },
       { role: "togglefullscreen" },
     ],
@@ -84,7 +83,7 @@ export function menuTemplate(options: MenuOptions): MenuItemConstructorOptions[]
     mac ? MAC_FILE_MENU : { role: "fileMenu" },
     { role: "editMenu" },
     shellMenu(options.platform, options.keys, options.runAction),
-    viewMenu(options.zoomWindow),
+    viewMenu(options.runAction),
     { role: "windowMenu" },
     {
       role: "help",
