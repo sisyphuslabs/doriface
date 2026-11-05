@@ -5,12 +5,13 @@
  * stops each process the run left running (a herdr core, found by its mark or by the files it holds in the run's dir,
  * or a shell that could start one) and fails the run naming them.
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUN_MARK, stopRunProcesses, type TestRun } from "../src/testing/run-cores.ts";
 
-const run: TestRun = { mark: crypto.randomUUID(), dir: mkdtempSync(join(tmpdir(), "dh-run-")) };
+// Resolved, since lsof reports the paths a process holds resolved (macOS: /var and /tmp are links into /private).
+const run: TestRun = { mark: crypto.randomUUID(), dir: realpathSync(mkdtempSync(join(tmpdir(), "dh-run-"))) };
 const suite = Bun.spawn([process.execPath, "test", ...Bun.argv.slice(2)], {
   env: { ...process.env, [RUN_MARK]: run.mark, TMPDIR: run.dir },
   stdio: ["inherit", "inherit", "inherit"],

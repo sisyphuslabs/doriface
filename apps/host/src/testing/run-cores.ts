@@ -11,6 +11,7 @@ export const RUN_MARK = "DORIFACE_TEST_RUN";
  */
 export interface TestRun {
   readonly mark: string;
+  /** Resolved (no symlink in it): the paths a process is seen holding are. */
   readonly dir: string;
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveHcBin } from "./hc-session.ts";
@@ -7,7 +7,10 @@ import { RUN_MARK, runCores, runProcesses, stopRunProcesses, type TestRun } from
 
 const encoder = new TextEncoder();
 
-const newRun = (): TestRun => ({ mark: crypto.randomUUID(), dir: mkdtempSync(join(tmpdir(), "dh-run-")) });
+const newRun = (): TestRun => ({
+  mark: crypto.randomUUID(),
+  dir: realpathSync(mkdtempSync(join(tmpdir(), "dh-run-"))),
+});
 
 /**
  * Starts a core through `hc connect` on a scratch session in `run`'s dir and leaves it running. With `marked` false its
