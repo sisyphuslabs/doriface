@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { contentSecurityPolicy } from "../src/config/csp.ts";
+import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
+import { BASE_UI_SCROLLBAR_STYLE_HASH, contentSecurityPolicy } from "../src/config/csp.ts";
 import { allowedExternal, isAllowedExternal } from "../src/config/external.ts";
 import { APP_ORIGIN, isSameOrigin, loopbackDevUrl } from "../src/config/origin.ts";
 import { isGrantable } from "../src/config/permissions.ts";
@@ -81,7 +83,7 @@ describe("content security policy", () => {
     const csp = directives(contentSecurityPolicy());
     expect(csp.get("default-src")).toEqual(["'self'"]);
     expect(csp.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'"]);
-    expect(csp.get("style-src")).toEqual(["'self'"]);
+    expect(csp.get("style-src")).toEqual(["'self'", BASE_UI_SCROLLBAR_STYLE_HASH]);
     for (const name of ["object-src", "frame-src", "frame-ancestors", "base-uri", "form-action"]) {
       expect(csp.get(name)).toEqual(["'none'"]);
     }
@@ -94,11 +96,23 @@ describe("content security policy", () => {
     const prod = directives(contentSecurityPolicy());
     const dev = directives(contentSecurityPolicy({ devServer: "http://localhost:5173" }));
     expect(dev.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'", "'unsafe-inline'"]);
-    expect(dev.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+    expect(dev.get("style-src")).toEqual(["'self'", BASE_UI_SCROLLBAR_STYLE_HASH, "'unsafe-inline'"]);
     expect([...dev.keys()]).toEqual([...prod.keys()]);
     for (const [name, sources] of prod) {
       if (name !== "script-src" && name !== "style-src") expect(dev.get(name)).toEqual(sources);
     }
+  });
+
+  test("the one allowed inline style is Base UI's scrollbar rule, hashed from the installed Base UI (#499)", async () => {
+    // The package exports no utils path, so the module is loaded by file from the installed package the UI uses.
+    const ui = join(import.meta.dirname, "../../../packages/ui");
+    const root = dirname(Bun.resolveSync("@base-ui/react/scroll-area", ui));
+    const styles: unknown = await import(join(root, "..", "utils", "styles.mjs"));
+    const element = Reflect.get(Reflect.get(Object(styles), "styleDisableScrollbar"), "getElement")(undefined);
+    const css: unknown = element.props.children;
+    expect(typeof css).toBe("string");
+    const hash = createHash("sha256").update(String(css)).digest("base64");
+    expect(BASE_UI_SCROLLBAR_STYLE_HASH).toBe(`'sha256-${hash}'`);
   });
 });
 

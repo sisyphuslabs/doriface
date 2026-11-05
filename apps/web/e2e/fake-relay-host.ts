@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { addMachine, DEMO_MACHINE } from "./machine.ts";
+import { shellEnv } from "./shell-env.ts";
 
 const [webOrigin, relayAddress] = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 if (webOrigin === undefined || !/^https?:\/\//.test(webOrigin) || relayAddress === undefined) {
@@ -25,13 +26,13 @@ const stateDir = mkdtempSync(join(tmpdir(), "dw-fake-relay-"));
 const relay = new FakeRelay();
 const bridge = new RelayClientBridge(relay);
 const hc = createHcSession("web-e2e-fake-relay");
+const env = { ...hc.env, ...shellEnv(stateDir) };
 let host: Awaited<ReturnType<typeof startHost>> | undefined;
 let stopMachine: (() => Promise<void>) | undefined;
 async function stopAll(): Promise<void> {
-  // Its own core first, then the added machine's: while the core runs, it redials a stopped machine and starts that
-  // machine's core again, which then outlives the run (#502), as host.ts orders its shutdown.
   await host?.stop();
   await hc.dispose();
+  // Stop the dialer before its target: otherwise it can restart the second core during this teardown.
   await stopMachine?.();
   await bridge.stop();
   await relay.stop();
@@ -43,7 +44,7 @@ try {
     token: `fake-relay-host-${crypto.randomUUID()}`,
     hc: hc.hc,
     session: hc.name,
-    env: hc.env,
+    env,
     stateDir,
     relay: { url: relay.url },
     log: () => {},
@@ -51,13 +52,13 @@ try {
   await relay.answers.next();
   // With --machine, the host's core also has an added machine, as a host with more than one computer does.
   if (process.argv.includes("--machine")) {
-    stopMachine = await addMachine(hc.hc, hc.env, join(stateDir, "machine"), false, {
+    stopMachine = await addMachine(hc.hc, env, join(stateDir, "machine"), false, {
       ...DEMO_MACHINE,
       dir: join(stateDir, "machine-files"),
     });
   }
 } catch (error) {
-  // A start that fails stops what it started, so no core outlives it, and exits with the reason on stderr.
+  // A start that fails stops what it started, so no core outlives it, and exits with the reason on stderr (#502).
   console.error(error);
   await stopAll();
   process.exit(1);
