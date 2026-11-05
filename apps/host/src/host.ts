@@ -189,6 +189,7 @@ async function serve(
             lanUrls: e2ee.lanUrls,
           },
     relayUrl: uplink === undefined ? undefined : options.relay?.url,
+    hostInfoSettled: () => info?.settled ?? Promise.resolve(),
     stop() {
       const pushStopped = push?.stop();
       e2ee?.slots.stop();
