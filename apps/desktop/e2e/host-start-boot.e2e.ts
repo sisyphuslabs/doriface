@@ -41,8 +41,11 @@ test("booting with a saved This computer link and no herdr-core shows Retry and 
 
     const app = await launch();
     try {
-      // Counts every socket the page opens, from its very first script on the reload below.
-      await app.context().addInitScript(() => {
+      const page = await app.firstWindow();
+      await page.waitForSelector("#root > *");
+      // Counts every socket the page opens, from its very first script on the reload below. On the page, not the
+      // context: unpackaged, a context init script never reaches the reloaded app:// page.
+      await page.addInitScript(() => {
         const opened: string[] = [];
         Object.assign(window, { openedSockets: opened });
         const Native = window.WebSocket;
@@ -53,8 +56,6 @@ test("booting with a saved This computer link and no herdr-core shows Retry and 
           }
         };
       });
-      const page = await app.firstWindow();
-      await page.waitForSelector("#root > *");
       const sockets: string[] = [];
       page.on("websocket", (socket) => sockets.push(socket.url()));
       await page.reload();
@@ -69,7 +70,8 @@ test("booting with a saved This computer link and no herdr-core shows Retry and 
       await expect(notice.getByRole("link", { name: "Open settings" })).toBeVisible();
       await page.screenshot({ path: test.info().outputPath("host-start-boot.png") });
       // The boot has settled on the notice: nothing connected to the saved link behind it.
-      expect(await page.evaluate(() => Reflect.get(window, "openedSockets") as string[])).toEqual([]);
+      // The counter is installed (an array), and it counted nothing.
+      expect(await page.evaluate(() => Reflect.get(window, "openedSockets") as unknown)).toEqual([]);
       expect(sockets).toEqual([]);
     } finally {
       await app.close();
