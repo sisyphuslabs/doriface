@@ -4,6 +4,7 @@
 // layout host is stopped here too, and fails the run on any hc process it had to stop as it shut down (#251).
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
+import { sweepRunDir } from "@doriface/host/testing/run-dir";
 import type { FullConfig } from "@playwright/test";
 import { E2E_LAYOUT_ENV, E2E_LAYOUT_LEFT, hostEnvOf, hostPortOf } from "./config.ts";
 import { readSavedEnv } from "./saved-env.ts";
@@ -70,8 +71,12 @@ export default async function leftoverHosts(config: FullConfig): Promise<void> {
     if (existsSync(file)) left.push(`slot ${slot}: ${await stopHost(file)}`);
   }
   const layout = await stopLayoutHost();
+  // Last, once every host has stopped: any hc process still holding a file under the run's dir (a spec's own scratch
+  // session, a core launchd started on macOS) outlived what started it (#470).
+  const swept = await sweepRunDir();
   const failures: string[] = [];
   if (left.length > 0) failures.push(`e2e hosts outlived their workers (now stopped): ${left.join(", ")}`);
   if (layout.length > 0) failures.push(`hc processes left by the layout host (now stopped):\n  ${layout.join("\n  ")}`);
+  if (swept.length > 0) failures.push(`hc processes outlived the web e2e run (now stopped):\n  ${swept.join("\n  ")}`);
   if (failures.length > 0) throw new Error(failures.join("\n"));
 }

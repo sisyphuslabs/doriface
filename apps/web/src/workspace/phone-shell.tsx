@@ -8,7 +8,7 @@ import { NEW_TAB } from "../keys/actions.ts";
 import { AgentLists } from "./agent-lists.tsx";
 import { onlyThisMachine } from "./machines.ts";
 import type { Session } from "./model.ts";
-import { ReconnectStatus } from "./reconnect-status.tsx";
+import { ConnectionLine, ReconnectStatus } from "./reconnect-status.tsx";
 import { usePendingUpdate } from "../update/update-store.ts";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { PhoneTerminal } from "./phone-terminal.tsx";
@@ -69,6 +69,7 @@ export function PhoneShell(props: PhoneShellProps) {
             render={<Link to="/settings" />}
           />
         </header>
+        <ConnectionLine />
         <ScrollArea slot="agents-list" className="flex-1">
           {empty ? (
             <PhoneEmpty host={connection.hello.core.name} onNew={onNew} onAddMachine={machines.openAddMachine} />
@@ -83,7 +84,7 @@ export function PhoneShell(props: PhoneShellProps) {
           start={
             <>
               <StatusBarItem icon={<Monitor aria-hidden />}>{`${connection.hello.core.name} · ${route}`}</StatusBarItem>
-              <ReconnectStatus />
+              <ReconnectStatus compact />
             </>
           }
         />

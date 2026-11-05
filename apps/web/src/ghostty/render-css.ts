@@ -3,6 +3,8 @@ import { effective, single, type TerminalConfig } from "./config.ts";
 import {
   builtinTheme,
   featureToCss,
+  fontFamilyName,
+  fontPixels,
   parseColor,
   parseMetric,
   parsePadding,
@@ -19,7 +21,7 @@ type Declarations = Record<string, string>;
 const cssString = (name: string): string => `"${name.replace(/[\\"]/g, (char) => `\\${char}`)}"`;
 
 const family = (names: readonly string[], fallback = "var(--font-term)"): string =>
-  [...names.map(cssString), fallback].join(", ");
+  [...names.map((name) => cssString(fontFamilyName(name))), fallback].join(", ");
 
 function cellColor(value: string, fallback: string): string {
   if (value === "cell-foreground") return "var(--term-cell-fg, var(--term-fg))";
@@ -44,18 +46,21 @@ function block(selector: string, declarations: Declarations): string {
 }
 
 function rowHeight(config: TerminalConfig): string {
-  const base = "calc(var(--term-font-size) * var(--term-line-height))";
+  const base = "calc(var(--term-font-pixels) * var(--term-line-height))";
+  const pixel = "var(--term-device-pixel, 1px)";
   const metric = parseMetric(single(config, "adjust-cell-height"));
-  if (metric === null) return `round(${base}, 1px)`;
+  if (metric === null) return `round(${base}, ${pixel})`;
   return metric.percent
-    ? `round(calc(${base} * ${1 + metric.amount / 100}), 1px)`
-    : `round(calc(${base} + ${metric.amount}px), 1px)`;
+    ? `round(calc(${base} * ${1 + metric.amount / 100}), ${pixel})`
+    : `round(calc(${base} + ${metric.amount}px), ${pixel})`;
 }
 
 /** Turns the config into one stylesheet scoped to terminals; colors cascade into wterm's --term-* vars. */
 export function terminalCss(config: TerminalConfig): string {
   const vars: Declarations = {
     "--term-font-size": `${single(config, "font-size")}pt`,
+    "--term-font-pixels": `${fontPixels(Number(single(config, "font-size")), typeof navigator === "undefined" ? "" : navigator.platform)}px`,
+    "font-size": "var(--term-font-pixels)",
     "--term-row-height": rowHeight(config),
   };
   const families = effective(config, "font-family");
@@ -124,10 +129,11 @@ function styleRules(config: TerminalConfig): string[] {
   if (single(config, "font-thicken") === "true")
     rules.push(block(`${T} .term-row`, { "-webkit-text-stroke": "0.25px currentColor" }));
   const width = parseMetric(single(config, "adjust-cell-width"));
+  const nativeSpacing = "var(--term-native-spacing, 0px)";
   if (width !== null) {
     const spacing = width.percent ? `calc(1ch * ${width.amount / 100})` : `${width.amount}px`;
-    rules.push(block(`${T} .term-row`, { "letter-spacing": spacing }));
-  }
+    rules.push(block(`${T} .term-row`, { "letter-spacing": `calc(${nativeSpacing} + ${spacing})` }));
+  } else rules.push(block(`${T} .term-row`, { "letter-spacing": nativeSpacing }));
   const unfocused = single(config, "unfocused-split-opacity");
   rules.push(block('[data-split="true"][data-focused="false"] .wterm', { opacity: unfocused }));
   return rules;

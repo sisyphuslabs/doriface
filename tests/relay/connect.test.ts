@@ -5,14 +5,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { KnownHosts } from "../../apps/host/src/state/known-hosts.ts";
 import { HELLO, rpcFrame } from "../../apps/host/src/testing/hc-session.ts";
+import { DIAL_TIMEOUT_MS } from "../../apps/host/src/commands/connect.ts";
 import { runConnect } from "./support/connect-cli.ts";
 import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "./support/relayed-host.ts";
 import { within } from "./support/watch.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 
 const decoder = new TextDecoder();
-/** A refusal must end the process well inside hc's 20 s dial deadline, never by it. */
-const REFUSAL_MS = 5_000;
+/**
+ * A refusal must end the process before connect's own dial deadline would (`DIAL_TIMEOUT_MS`, inside hc's 20 s), so the
+ * reason on stderr is the refusal's, which each case checks. The refusal itself is cheap: from spawn to exit, 60 refusals
+ * at load 93-109 took p50 0.43 s and at most 1.47 s, of which starting the CLI was up to 0.46 s; under load ~150 a start
+ * alone crossed the 5 s this used to be (#468).
+ */
+const REFUSAL_MS = DIAL_TIMEOUT_MS;
 const phone = generateX25519();
 const scratch = mkdtempSync(join(tmpdir(), "connect-"));
 const deviceState = join(scratch, "device");

@@ -27,7 +27,7 @@ import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } fr
 import { QuietBusy } from "./quiet-busy.tsx";
 import { TerminalLinks } from "./terminal-links.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
-import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
+import { useTerminalFont } from "./use-terminal-font.ts";
 import { wideGlyphScaler } from "./face-scales.ts";
 import { GlyphWarmup } from "./glyph-warmup.ts";
 
@@ -185,7 +185,7 @@ export function TerminalView(props: TerminalViewProps) {
   outputShown.current = scroll.changed;
   useTerminalPort(handle, typed, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
-  useWideGlyphScale(wt, config);
+  useTerminalFont(wt, config);
   // Wide characters in the output are laid out in idle time, so scrolling back to them is not the first time (#286).
   const warmup = useRef<GlyphWarmup | null>(null);
   useEffect(() => {
