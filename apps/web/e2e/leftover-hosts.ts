@@ -1,10 +1,11 @@
 // Global teardown: each worker stops its own e2e host (and its cores) when it ends, and the host deletes its saved
 // environment as it goes. A saved environment still here means a host outlived its worker: stop it, and fail the run
-// naming it, so no core is left running (the web e2e counterpart of the host tests' leftover-core guard).
+// naming it, so no core is left running (the web e2e counterpart of the host tests' leftover-core guard). The shared
+// layout host is stopped here too, and fails the run on any hc process it had to stop as it shut down (#251).
 import { execFileSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import type { FullConfig } from "@playwright/test";
-import { hostEnvOf, hostPortOf } from "./config.ts";
+import { E2E_LAYOUT_ENV, E2E_LAYOUT_LEFT, hostEnvOf, hostPortOf } from "./config.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
 const STOP_WITHIN_MS = 30_000;
@@ -39,6 +40,28 @@ async function stopHost(file: string): Promise<string> {
   return session;
 }
 
+/** How long the layout host's shutdown may take: its cores stop, then its leftover check waits for and stops the rest. */
+const LAYOUT_STOP_WITHIN_MS = 60_000;
+
+/**
+ * Stops the layout host (a webServer, which Playwright stops only after this teardown) and returns what it left running
+ * once it had stopped its cores, as "pid N: arguments" (never an environment); host.ts has stopped those already.
+ */
+export async function stopLayoutHost(envFile = E2E_LAYOUT_ENV, leftFile = E2E_LAYOUT_LEFT): Promise<string[]> {
+  const pid = existsSync(envFile) ? readSavedEnv(envFile).pid : undefined;
+  if (pid !== undefined && alive(pid)) {
+    process.kill(pid, "SIGTERM");
+    const deadline = Date.now() + LAYOUT_STOP_WITHIN_MS;
+    // oxlint-disable-next-line no-await-in-loop -- the host is not this process's child: no exit event to wait on
+    while (alive(pid) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 200));
+    if (alive(pid)) return [`pid ${pid}: the layout host, still running ${LAYOUT_STOP_WITHIN_MS} ms after SIGTERM`];
+  }
+  if (!existsSync(leftFile)) return pid === undefined ? [] : [`pid ${pid}: the layout host stopped without its check`];
+  const left = JSON.parse(readFileSync(leftFile, "utf8")) as { pid: number; command: string }[];
+  rmSync(leftFile, { force: true });
+  return left.map((one) => `pid ${one.pid}: ${one.command}`);
+}
+
 export default async function leftoverHosts(config: FullConfig): Promise<void> {
   const left: string[] = [];
   for (let slot = 0; slot < config.workers; slot++) {
@@ -46,5 +69,9 @@ export default async function leftoverHosts(config: FullConfig): Promise<void> {
     // oxlint-disable-next-line no-await-in-loop -- one host at a time, each fully stopped before the next
     if (existsSync(file)) left.push(`slot ${slot}: ${await stopHost(file)}`);
   }
-  if (left.length > 0) throw new Error(`e2e hosts outlived their workers (now stopped): ${left.join(", ")}`);
+  const layout = await stopLayoutHost();
+  const failures: string[] = [];
+  if (left.length > 0) failures.push(`e2e hosts outlived their workers (now stopped): ${left.join(", ")}`);
+  if (layout.length > 0) failures.push(`hc processes left by the layout host (now stopped):\n  ${layout.join("\n  ")}`);
+  if (failures.length > 0) throw new Error(failures.join("\n"));
 }
