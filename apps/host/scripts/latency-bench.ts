@@ -7,7 +7,7 @@ import { generateX25519, rawStaticKey, secureLink } from "@doriface/crypto";
 import { connectRelayClient, lookupPairSlot, pairSlotOf } from "@doriface/relay-client";
 import { parseArgs } from "node:util";
 import { ProcessLink } from "@doriface/client/process-link";
-import { summarize } from "./percentiles.ts";
+import { measure, summarize } from "./bench-stats.ts";
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -49,17 +49,6 @@ function directLink(hc: string, session: string | undefined): ByteLink {
   return new ProcessLink(Bun.spawn([hc, "connect", ...args], { stdin: "pipe", stdout: "pipe", stderr: "pipe" }));
 }
 
-async function time(connection: HcConnection, calls: number, warmup: number): Promise<number[]> {
-  const once = async (left: number, samples: number[]): Promise<number[]> => {
-    if (left === 0) return samples;
-    const started = performance.now();
-    await connection.call("terminal.list", {}, { timeoutMs: 15_000 });
-    return once(left - 1, [...samples, performance.now() - started]);
-  };
-  await once(warmup, []);
-  return once(calls, []);
-}
-
 const [mode] = positionals;
 let link: ByteLink;
 if (mode === "relay") {
@@ -73,7 +62,10 @@ if (mode === "relay") {
   );
 }
 const connection = await HcConnection.open(link);
-const samples = await time(connection, Number(values.calls), Number(values.warmup));
+const { samples } = await measure(() => connection.call("terminal.list", {}, { timeoutMs: 15_000 }), {
+  calls: Number(values.calls),
+  warmup: Number(values.warmup),
+});
 connection.close();
 process.stdout.write(`${JSON.stringify({ mode, ...summarize(samples) })}\n`);
 process.exit(0);
