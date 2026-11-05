@@ -11,6 +11,9 @@ export const UNWIND_DEADLINE_MS = 5_000;
 /** How long a killed part may take to finish stopping, so its child is reaped before the startup error exits. */
 export const KILL_GRACE_MS = 1_000;
 
+/** One turn of the event loop, after the microtasks queued so far. */
+const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 export interface StopStartedOptions {
   readonly deadlineMs?: number;
   /** Settles when the deadline has passed; a test passes one it controls instead of waiting `deadlineMs`. */
@@ -43,7 +46,8 @@ export async function stopStarted(
         settled = true;
       });
     try {
-      await Promise.race([stopped, expired]);
+      // Past the deadline a stop still gets one turn, so one that settles at once is not reported as hung.
+      await Promise.race([stopped, expired.then(turn)]);
     } catch (error) {
       log(`startup: stopping the ${part.name} failed: ${String(error)}`);
       return;

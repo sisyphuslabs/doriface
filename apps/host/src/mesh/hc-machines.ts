@@ -32,6 +32,9 @@ export interface ChildByteLink extends ByteLink {
   kill(signal: "SIGKILL"): void;
 }
 
+/** A link that may be a child process (a test's link is not), so a stop that closing it did not end can kill it. */
+export type KillableLink = ByteLink & Partial<Pick<ChildByteLink, "pid" | "kill">>;
+
 /** A `hc connect` child's stdio as the client's ByteLink. */
 class ChildLink implements ChildByteLink {
   readonly #child: Subprocess<"pipe", "pipe", "inherit">;

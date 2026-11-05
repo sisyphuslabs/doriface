@@ -148,7 +148,11 @@ async function serve(
     );
   }
   const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
-  started("end sweeper", () => ends.stop());
+  started(
+    "end sweeper",
+    () => ends.stop(),
+    () => ends.kill().map((pid) => `hc connect pid ${pid}`),
+  );
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
