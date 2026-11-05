@@ -2,7 +2,7 @@ import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
 import { Button } from "./button.tsx";
-import { backdropClass } from "./overlay.ts";
+import { backdropClass, wrapAnywhere } from "./overlay.ts";
 
 const SIDE = {
   right:
@@ -33,6 +33,7 @@ export function SheetPanel({ title, side = "bottom", children }: Pick<SheetProps
       aria-label={typeof title === "string" ? title : undefined}
       className={cn(
         "flex flex-col border-border bg-popover text-popover-foreground shadow-overlay",
+        wrapAnywhere,
         side === "bottom" ? "rounded-t-xl border-t" : "border-l",
       )}
     >
@@ -59,6 +60,7 @@ export function Sheet({ title, side = "right", children, trigger, open, onOpenCh
         <BaseDialog.Popup
           className={cn(
             "fixed flex flex-col border-border bg-popover text-popover-foreground shadow-overlay outline-none",
+            wrapAnywhere,
             "transition-transform duration-(--duration-standard) ease-out motion-reduce:transition-opacity",
             SIDE[side],
           )}
