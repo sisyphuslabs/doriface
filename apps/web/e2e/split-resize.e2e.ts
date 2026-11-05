@@ -278,6 +278,67 @@ test("a pane whose program ends while its layout write is refused stays, says so
   expect(savedTab("tb-pair")).toBe(saved);
 });
 
+/** A tab of the given panes side by side, each a shell named for its pane; returns the shells in order. */
+function sideBySide(id: string, names: readonly string[]): string[] {
+  const started = names.map(shell);
+  seedLayout([
+    {
+      id,
+      name: id,
+      root: started.map((terminal, index) => ({ pane: `p${index + 1}`, terminal, weight: 1 / started.length })),
+    },
+  ]);
+  return started;
+}
+
+/** Focuses each pane in turn, so the last is the focused one and the others are its focus history, oldest first. */
+async function focusInTurn(page: Page, addresses: readonly string[]): Promise<void> {
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  await addresses.reduce<Promise<void>>(async (previous, address) => {
+    await previous;
+    await paneOf(page, address).getByRole("textbox").focus();
+    await expect(focused).toHaveAttribute("data-terminal", address);
+  }, Promise.resolve());
+}
+
+test("a background pane whose program ends while its layout write is refused leaves focus where it is", async ({
+  page,
+}) => {
+  const [left = "", right = ""] = sideBySide("tb-pair", ["left", "right"]);
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  await focusInTurn(page, [right, left]);
+  const saved = savedTab("tb-pair");
+
+  socket.staleWrites(true);
+  hcOn("host", ["kill", right]);
+  await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  // The page undoes a refused drop as soon as the refusal arrives; a later update from the core renders after that.
+  hcOn("host", ["label", left, "herdr.name=after-the-refusal"]);
+  await expect(page.locator('[data-focused="true"]')).toHaveAttribute("aria-label", "after-the-refusal terminal", {
+    timeout: 15_000,
+  });
+  expect(savedTab("tb-pair")).toBe(saved);
+});
+
+test("a pane a refused write kept goes back to its place in the focus history, not to its end", async ({ page }) => {
+  const [a = "", b = "", c = ""] = sideBySide("tb-three", ["a", "b", "c"]);
+  const socket = await routeHcSocket(page);
+  await page.goto("/");
+  // Focus history c, b, a: closing a hands focus to b, the pane focused before it.
+  await focusInTurn(page, [c, b, a]);
+
+  socket.staleWrites(true);
+  hcOn("host", ["kill", c]);
+  await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  socket.staleWrites(false);
+  await paneOf(page, a).getByRole("textbox").focus();
+  await page.keyboard.type("exit\r");
+  await expect(paneOf(page, a)).toHaveCount(0, { timeout: 15_000 });
+  // Kept at the end of the history instead, c would be the pane before a, and focus would land on its ended session.
+  await expect(page.locator('[data-focused="true"]')).toHaveAttribute("aria-label", "resize-b terminal");
+});
+
 test("zoomed, moving focus or splitting shows every pane again, so a close acts on a pane in view", async ({
   page,
 }) => {
