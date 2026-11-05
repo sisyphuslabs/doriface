@@ -70,6 +70,21 @@ function expectThumbMatches(m: Measure): void {
   expect(Math.abs(m.thumb.top - top)).toBeLessThanOrEqual(1);
 }
 
+/**
+ * The view once the bar has drawn it. A scroll re-measures the bar on the next animation frame and React draws it after
+ * that, so a measure taken the moment scrollTop lands can still read the thumb where the view was (#335).
+ */
+async function settled(terminal: Locator): Promise<Measure> {
+  let settledView: Measure | undefined;
+  await expect(async () => {
+    const m = await measure(terminal);
+    expectThumbMatches(m);
+    settledView = m;
+  }).toPass({ timeout: 5_000 });
+  if (settledView === undefined) throw new Error("the scrollbar never matched the view");
+  return settledView;
+}
+
 /** The scrollTop a thumb top (relative to the track) lands on, row by row, as the drag should put it. */
 function scrollTopForThumbTop(m: Measure, top: number): number {
   const travel = m.track.height - m.thumb.height;
@@ -167,8 +182,7 @@ test("at 1440 the scrollbar overlays the padding without reflow, matches the vie
   ).toBe(0);
 
   // At the bottom: the thumb ends the track, there is nothing to jump to, and the bar sits in the right padding.
-  let m = await measure(terminal);
-  expectThumbMatches(m);
+  let m = await settled(terminal);
   expect(m.thumb.top + m.thumb.height).toBeCloseTo(m.track.top + m.track.height, 0);
   expect(m.track.right).toBeCloseTo(m.pane.right, 0);
   expect(m.thumb.right - m.thumb.left).toBeCloseTo(4, 0);
@@ -177,8 +191,7 @@ test("at 1440 the scrollbar overlays the padding without reflow, matches the vie
   // The scroll-to-top key: the thumb goes to the top, and the jump button shows, with no new output yet.
   await page.keyboard.press("Shift+Home");
   await expect.poll(async () => (await measure(terminal)).scrollTop).toBe(0);
-  m = await measure(terminal);
-  expectThumbMatches(m);
+  m = await settled(terminal);
   await expect(jump(terminal)).toBeVisible();
   await expect(jump(terminal)).not.toHaveAttribute("data-unread");
 
@@ -189,7 +202,7 @@ test("at 1440 the scrollbar overlays the padding without reflow, matches the vie
   expect((await measure(terminal)).scrollTop).toBe(0);
 
   // Dragging the thumb 120 px down lands on the row that thumb top stands for.
-  m = await measure(terminal);
+  m = await settled(terminal);
   const grabX = (m.thumb.left + m.thumb.right) / 2;
   const grabY = m.thumb.top + m.thumb.height / 2;
   await page.mouse.move(grabX, grabY);
@@ -198,10 +211,8 @@ test("at 1440 the scrollbar overlays the padding without reflow, matches the vie
   await page.mouse.up();
   const dragged = scrollTopForThumbTop(m, m.thumb.top - m.track.top + 120);
   await expect.poll(async () => Math.abs((await measure(terminal)).scrollTop - dragged)).toBeLessThan(1);
-  expectThumbMatches(await measure(terminal));
-
   // A click on the track below the thumb centres the thumb there.
-  m = await measure(terminal);
+  m = await settled(terminal);
   const clickY = m.track.top + m.track.height * 0.75;
   await page.mouse.click((m.track.left + m.track.right) / 2, clickY);
   const clicked = scrollTopForThumbTop(m, clickY - m.track.top - m.thumb.height / 2);
@@ -261,12 +272,12 @@ test.describe("on a phone", () => {
     await expect(bar(terminal)).toBeVisible();
     expect(await gridSize(terminal)).toBe(before.grid);
     expect(coreSize(address)).toBe(before.pty);
-    expectThumbMatches(await measure(terminal));
+    await settled(terminal);
 
     // A swipe up into the scrollback, as a finger scrolls it.
     await scrollTo(terminal, 0);
     await expect(jump(terminal)).toBeVisible();
-    expectThumbMatches(await measure(terminal));
+    await settled(terminal);
     const button = await jump(terminal).boundingBox();
     const keys = await keysBar(page).boundingBox();
     if (button === null || keys === null) throw new Error("no box for the jump button or the key bar");
