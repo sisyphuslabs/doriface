@@ -14,6 +14,7 @@ import {
   openFile,
   READ_CONTROL,
   readSddl,
+  resolveSidAlias,
 } from "./native.ts";
 import { parseSddl } from "./sddl.ts";
 
@@ -32,7 +33,7 @@ const descriptorOf = (path: string, folder = false) => {
     flags: folder ? FILE_FLAG_BACKUP_SEMANTICS : 0,
   });
   try {
-    return parseSddl(readSddl(handle));
+    return parseSddl(readSddl(handle), resolveSidAlias);
   } finally {
     closeHandle(handle);
   }

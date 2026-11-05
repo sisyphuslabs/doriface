@@ -65,6 +65,7 @@ function load() {
     OpenProcessToken: { args: [u64, u32, pointer], returns: i32 },
     GetTokenInformation: { args: [u64, u32, pointer, u32, pointer], returns: i32 },
     ConvertSidToStringSidW: { args: [u64, pointer], returns: i32 },
+    ConvertStringSidToSidW: { args: [pointer, pointer], returns: i32 },
     GetSecurityInfo: { args: [u64, u32, u32, pointer, pointer, pointer, pointer, pointer], returns: u32 },
     SetSecurityInfo: { args: [u64, u32, u32, u64, u64, u64, u64], returns: u32 },
     ConvertSecurityDescriptorToStringSecurityDescriptorW: { args: [u64, u32, u32, pointer, pointer], returns: i32 },
@@ -138,6 +139,28 @@ export function currentUserSid(): string {
     }
   } finally {
     closeHandle(valueOf(token));
+  }
+}
+
+/**
+ * The full `S-1-…` SID for an SDDL alias, as Windows itself resolves it on this computer (domain-relative aliases such
+ * as `LA` included); undefined when Windows does not know the alias.
+ */
+export function resolveSidAlias(alias: string): string | undefined {
+  const { a } = api();
+  const text = wide(alias);
+  const sid = outPointer();
+  if (a.ConvertStringSidToSidW(ptr(text), ptr(sid)) === 0) return undefined;
+  try {
+    const out = outPointer();
+    if (a.ConvertSidToStringSidW(valueOf(sid), ptr(out)) === 0) fail("ConvertSidToStringSidW");
+    try {
+      return readWide(valueOf(out));
+    } finally {
+      localFree(valueOf(out));
+    }
+  } finally {
+    localFree(valueOf(sid));
   }
 }
 

@@ -39,6 +39,7 @@ import {
   writeAll,
   writeOwnerAndProtectedDacl,
   currentUserSid,
+  resolveSidAlias,
 } from "./native.ts";
 import { checkNamespace, type ChainFolder } from "./namespace.ts";
 import { parseSddl, SddlError } from "./sddl.ts";
@@ -95,7 +96,7 @@ function custodyOf(handle: Handle): Custody {
   }
   if (facts.links !== 1) return { verdict: "unsupported", reason: `it has ${String(facts.links)} hard links` };
   try {
-    return classifyCustody(parseSddl(readSddl(handle)), user());
+    return classifyCustody(parseSddl(readSddl(handle), resolveSidAlias), user());
   } catch (error) {
     if (error instanceof SddlError) return { verdict: "unsupported", reason: `its permissions: ${error.message}` };
     throw error;
@@ -123,7 +124,7 @@ function chainOf(dir: string): ChainFolder[] {
     chain.push(
       withHandle(openFile(current, folderOptions), (handle) => ({
         path: current,
-        descriptor: parseSddl(readSddl(handle)),
+        descriptor: parseSddl(readSddl(handle), resolveSidAlias),
         reparsePoint: (fileFacts(handle).attributes & FILE_ATTRIBUTE_REPARSE_POINT) !== 0,
       })),
     );
@@ -166,7 +167,7 @@ export function openPrivateStateDir(requested: string): string {
     const repairs: string[] = [];
     const leftovers: string[] = [];
     const problems: string[] = [];
-    const folderCustody = classifyCustody(parseSddl(readSddl(folder)), user());
+    const folderCustody = classifyCustody(parseSddl(readSddl(folder), resolveSidAlias), user());
     if (folderCustody.verdict === "repairable") repairs.push(dir);
     else if (folderCustody.verdict !== "private") problems.push(refusal(dir, folderCustody));
     const names = new Set<string>(PRIVATE_STATE_FILES);
@@ -201,7 +202,7 @@ function protect(path: string, folder: boolean): void {
   });
   withHandle(handle, () => {
     writeOwnerAndProtectedDacl(handle, folder ? ownerOnlyFolder(user()) : ownerOnlyFile(user()));
-    const after = classifyCustody(parseSddl(readSddl(handle)), user());
+    const after = classifyCustody(parseSddl(readSddl(handle), resolveSidAlias), user());
     if (after.verdict !== "private")
       throw new PrivateStateRefused(`${path} could not be made private: ${after.verdict}`);
   });

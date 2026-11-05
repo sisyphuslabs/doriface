@@ -72,10 +72,13 @@ const RIGHTS: Readonly<Record<string, number>> = {
 const INHERIT_FLAGS = /^(?:OI|CI|NP|IO|ID)*$/;
 const SID = /^S-1-\d+(?:-\d+)+$/;
 
-function sidOf(token: string): string {
+/** Resolves an SDDL alias the table cannot, e.g. a domain-relative one like `LA`; undefined when it is not one. */
+export type AliasResolver = (alias: string) => string | undefined;
+
+function sidOf(token: string, resolve: AliasResolver | undefined): string {
   if (SID.test(token)) return token;
-  const alias = ALIASES[token];
-  if (alias === undefined) throw new SddlError(`unknown SID or alias ${JSON.stringify(token)}`);
+  const alias = ALIASES[token] ?? (/^[A-Z]{2}$/.test(token) ? resolve?.(token) : undefined);
+  if (alias === undefined || !SID.test(alias)) throw new SddlError(`unknown SID or alias ${JSON.stringify(token)}`);
   return alias;
 }
 
@@ -92,7 +95,7 @@ function maskOf(rights: string): number {
   return mask;
 }
 
-function parseAce(body: string): Ace {
+function parseAce(body: string, resolve: AliasResolver | undefined): Ace {
   const fields = body.split(";");
   if (fields.length !== 6) throw new SddlError(`an ACE needs 6 fields, got ${String(fields.length)}`);
   const [type = "", flags = "", rights = "", object = "", inheritObject = "", sid = ""] = fields;
@@ -100,20 +103,26 @@ function parseAce(body: string): Ace {
   if (type !== "A" && type !== "D") throw new SddlError(`unsupported ACE type ${JSON.stringify(type)}`);
   if (!INHERIT_FLAGS.test(flags)) throw new SddlError(`unsupported ACE flags ${JSON.stringify(flags)}`);
   if (object !== "" || inheritObject !== "") throw new SddlError("an object ACE");
-  return { type, flags, mask: maskOf(rights), sid: sidOf(sid) };
+  return { type, flags, mask: maskOf(rights), sid: sidOf(sid, resolve) };
 }
 
 /** Parses `O:<sid>D:<flags>(<ace>)…`; any other section (group, SACL) or any unsupported token throws SddlError. */
-export function parseSddl(sddl: string): Descriptor {
+export function parseSddl(sddl: string, resolve?: AliasResolver): Descriptor {
   const match = /^O:([^:()]+?)D:([A-Z_]*)((?:\([^()]*\))*)$/.exec(sddl.trim());
   if (match === null) throw new SddlError("not an owner-and-DACL descriptor");
   const [, ownerToken = "", daclFlags = "", aceText = ""] = match;
   if (!/^(?:P|AI|AR|NO_ACCESS_CONTROL)*$/.test(daclFlags)) throw new SddlError(`unsupported DACL flags ${daclFlags}`);
-  const owner = sidOf(ownerToken);
+  const owner = sidOf(ownerToken, resolve);
   if (daclFlags.includes("NO_ACCESS_CONTROL")) {
     if (aceText !== "") throw new SddlError("a null DACL with ACEs");
     return { owner, dacl: undefined, protected: daclFlags.includes("P") };
   }
-  const dacl = aceText === "" ? [] : aceText.slice(1, -1).split(")(").map(parseAce);
+  const dacl =
+    aceText === ""
+      ? []
+      : aceText
+          .slice(1, -1)
+          .split(")(")
+          .map((ace) => parseAce(ace, resolve));
   return { owner, dacl, protected: daclFlags.includes("P") };
 }

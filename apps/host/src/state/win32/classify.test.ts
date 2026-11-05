@@ -78,3 +78,20 @@ describe("parseSddl refuses what a private file may not carry (S9)", () => {
     });
   });
 });
+
+describe("parseSddl resolves aliases the table does not hold (#406)", () => {
+  const MACHINE_ADMIN = "S-1-5-21-1000-2000-3000-500";
+  const resolve = (alias: string) => (alias === "LA" ? MACHINE_ADMIN : undefined);
+
+  test("a domain-relative alias such as LA expands through the resolver", () => {
+    expect(parseSddl(`O:LAD:P(A;;FA;;;LA)`, resolve)).toMatchObject({
+      owner: MACHINE_ADMIN,
+      dacl: [{ sid: MACHINE_ADMIN }],
+    });
+  });
+
+  test("an alias neither the table nor the resolver knows is still refused", () => {
+    expect(() => parseSddl(`O:LAD:P(A;;FA;;;ZZ)`, resolve)).toThrow(SddlError);
+    expect(() => parseSddl(`O:LAD:P(A;;FA;;;LA)`)).toThrow(SddlError);
+  });
+});
