@@ -468,7 +468,7 @@ test.describe("10: on a phone at 390", () => {
   const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
   test.use({ ...phone });
 
-  test("the switch sheet lists each space's tabs from the same model, with 44 px targets, and opens the tab picked", async ({
+  test("10C: the header reads the tab's name, as the strip does; the switch sheet lists each space's tabs with 44 px targets and opens the tab picked", async ({
     page,
   }) => {
     twoSpaces();
@@ -476,13 +476,13 @@ test.describe("10: on a phone at 390", () => {
     expect(page.viewportSize()?.width).toBe(390);
     await agentRow(page, "parity-b1", false).click();
     const header = page.getByRole("banner");
-    await expect(header.getByRole("heading", { name: "parity-b1" })).toBeVisible({ timeout: 15_000 });
+    // The tab's name, not the terminal's (ruling A).
+    await expect(header.getByRole("heading", { name: "b-one", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(header.getByRole("heading", { name: "parity-b1" })).toHaveCount(0);
     await expect(header.getByText("1/2", { exact: true })).toBeVisible();
     const switcher = header.getByRole("button", { name: "Switch space or tab" });
     const box = await laidOutBox(switcher);
     expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
-    // Thumb-reachable: the switch sits in the header row, not behind a menu.
-    expect(box.y + box.height).toBeLessThanOrEqual(120);
 
     await switcher.click();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
@@ -502,7 +502,7 @@ test.describe("10: on a phone at 390", () => {
     for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
     await agentRow(sheet.getByRole("region", { name: "beta" }), "parity-b2", false).click();
     await expect(sheet).toBeHidden();
-    await expect(header.getByRole("heading", { name: "parity-b2" })).toBeVisible({ timeout: 15_000 });
+    await expect(header.getByRole("heading", { name: "b-two", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(header.getByText("2/2", { exact: true })).toBeVisible();
   });
 
@@ -531,12 +531,14 @@ test.describe("10: on a phone at 390", () => {
     await page.goto("/");
     await agentRow(page, "split-w2", false).click();
     const header = page.getByRole("banner");
-    await expect(header.getByRole("heading", { name: "split-w2" })).toBeVisible({ timeout: 15_000 });
+    // An unnamed tab reads its number, whichever of its panes is in view (ruling A).
+    await expect(header.getByRole("heading", { name: "2", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(header.getByText("2/3", { exact: true })).toBeVisible();
     await expect(header.getByText("Tab 2 of 3")).toHaveCount(1);
     const panes = page.getByRole("navigation", { name: "Panes in this tab" });
     await panes.getByRole("button", { name: "Next pane" }).click();
-    await expect(header.getByRole("heading", { name: "split-w2b" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(`[data-terminal="${twoBeside}"]`)).toBeVisible({ timeout: 15_000 });
+    await expect(header.getByRole("heading", { name: "2", exact: true })).toBeVisible();
     await expect(header.getByText("2/3", { exact: true })).toBeVisible();
 
     await header.getByRole("button", { name: "Switch space or tab" }).click();

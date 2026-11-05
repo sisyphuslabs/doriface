@@ -8,6 +8,7 @@ import {
   liveTabs,
   runsProgram,
   tabPosition,
+  tabTitle,
   terminalTitle,
   layoutSpaces,
   type SpacesSource,
@@ -220,6 +221,14 @@ describe("agentStatus", () => {
       const section = status === "unknown" ? [] : groups[status];
       expect(section.map((agent) => agent.id)).toContain(entry.address);
     }
+  });
+});
+
+describe("tabTitle", () => {
+  test("a tab reads its name, else its place counted from 1", () => {
+    expect(tabTitle("fix login", 3)).toBe("fix login");
+    expect(tabTitle("", 0)).toBe("1");
+    expect(tabTitle("", 8)).toBe("9");
   });
 });
 

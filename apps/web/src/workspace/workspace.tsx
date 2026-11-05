@@ -30,7 +30,7 @@ import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { GitFactsContext, useGitFacts } from "./git-facts.ts";
-import { layoutSpaces } from "./model.ts";
+import { layoutSpaces, tabTitle } from "./model.ts";
 import { SpaceSelectionContext } from "./space-selection.ts";
 import { useAdoptLoose } from "./use-adopt-loose.ts";
 import { orderNotSaved } from "./machine-order.ts";
@@ -232,6 +232,14 @@ export function Workspace({ connection }: WorkspaceProps) {
   const closing = layout.tabs.find((tab) => tab.key === closingTab);
   const phoneTab = phoneOpen === null ? null : findTerminal(layout.tabs, phoneOpen);
   const phonePanes = phoneTab?.tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
+  // The phone's header reads the tab as the desktop strip does: its name, else its place among its space's tabs.
+  const phoneTitle =
+    phoneTab === null
+      ? null
+      : tabTitle(
+          phoneTab.tab.name,
+          layout.tabs.filter((tab) => tab.spaceKey === phoneTab.tab.spaceKey).indexOf(phoneTab.tab),
+        );
   usePushPresence(inView);
   useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
   const spaces = useMemo(() => layoutSpaces(layouts, terminals, gitOf), [layouts, terminals, gitOf]);
@@ -307,6 +315,7 @@ export function Workspace({ connection }: WorkspaceProps) {
                     terminals={terminals}
                     open={phoneOpen}
                     panes={phonePanes}
+                    tabTitle={phoneTitle}
                     onOpen={showOnPhone}
                     onBack={() => setPhoneKey(null)}
                     onNew={() => newTerminal()}

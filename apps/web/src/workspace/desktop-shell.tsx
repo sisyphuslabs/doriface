@@ -15,7 +15,7 @@ import { useActionKeys } from "../keys/use-action-keys.ts";
 import { DictateButton } from "../voice/dictate-button.tsx";
 import { useDictation } from "../voice/use-dictation.ts";
 import { VoiceDock } from "../voice/voice-dock.tsx";
-import { agentStatus, machineOf, programKind, type Session, spaceName, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, programKind, type Session, spaceName, tabTitle, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
@@ -60,7 +60,7 @@ function tabEntry(tab: LayoutTab, position: number, byAddress: ReadonlyMap<strin
   const status = URGENCY.find((each) => statuses.has(each));
   return {
     id: tab.key,
-    title: tab.name !== "" ? tab.name : String(position + 1),
+    title: tabTitle(tab.name, position),
     controls: panelId(tab.key),
     ...(kind === undefined ? {} : { icon: PROGRAM_ICON[kind] }),
     ...(status === undefined ? {} : { status }),

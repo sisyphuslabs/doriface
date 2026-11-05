@@ -20,6 +20,8 @@ import { useNow } from "./use-now.ts";
 export interface PhoneHeaderProps {
   readonly terminal: Session;
   readonly terminals: readonly Session[];
+  /** Its tab as the desktop strip reads it (its name, else its number); null when it is in no tab. */
+  readonly tabTitle: string | null;
   readonly onBack: () => void;
   readonly onOpen: (address: string) => void;
   /** One more header control before the switch, such as the mic (#227). */
@@ -32,9 +34,10 @@ const COUNTED = [
   { status: "idle", word: "idle" },
 ] as const;
 
-/** The phone terminal's header, after herdr-app's: name and state, where it is (n/m), the agent counts, a switch. */
-export function PhoneHeader({ terminal, terminals, onBack, onOpen, action }: PhoneHeaderProps) {
-  const title = terminalTitle(terminal);
+/** The phone terminal's header, after herdr-app's: its tab and state, where it is (n/m), the agent counts, a switch. */
+export function PhoneHeader({ terminal, terminals, tabTitle, onBack, onOpen, action }: PhoneHeaderProps) {
+  // The tab, as the desktop strip names it (#466 ruling A); a terminal in no tab has only its own title.
+  const title = tabTitle ?? terminalTitle(terminal);
   const heading = useRef<HTMLHeadingElement>(null);
   const titleLines = useFittedLines(heading, title);
   const machine = machineOf(terminal.address);
@@ -99,7 +102,7 @@ export function PhoneHeader({ terminal, terminals, onBack, onOpen, action }: Pho
         {action}
       </span>
       <SpaceSwitcher terminals={terminals} active={terminal.address} onOpen={onOpen} />
-      <SessionMenu address={terminal.address} title={title} placement="header" />
+      <SessionMenu address={terminal.address} title={terminalTitle(terminal)} placement="header" />
     </header>
   );
 }
