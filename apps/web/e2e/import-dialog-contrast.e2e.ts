@@ -4,7 +4,7 @@ import { SCREENS, STARTS } from "./layout-screens.ts";
 import { expect, test } from "./fixtures.ts";
 import { clearLayoutHost, clearLayouts } from "./layout-doc.ts";
 
-const DIALOGS = ["dialog-import-config", "dialog-import-keybinds"];
+const DIALOGS = new Set(["dialog-import-config", "dialog-import-keybinds"]);
 
 /** Each text in the open dialog, with its contrast ratio and whether it counts as large text. */
 function dialogContrasts(): { readonly text: string; readonly ratio: number; readonly large: boolean }[] {
@@ -21,11 +21,13 @@ function dialogContrasts(): { readonly text: string; readonly ratio: number; rea
     const [r = 0, g = 0, b = 0, a = 0] = paint.getImageData(0, 0, 1, 1).data;
     return [r, g, b, a / 255];
   };
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- page.evaluate sends this function as source, so its helpers live inside it
   const over = (top: [number, number, number, number], under: [number, number, number]): [number, number, number] => [
     top[0] * top[3] + under[0] * (1 - top[3]),
     top[1] * top[3] + under[1] * (1 - top[3]),
     top[2] * top[3] + under[2] * (1 - top[3]),
   ];
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- page.evaluate sends this function as source, so its helpers live inside it
   const luminance = ([r, g, b]: [number, number, number]): number => {
     const [lr, lg, lb] = [r, g, b].map((value) => {
       const c = value / 255;
@@ -55,7 +57,7 @@ function dialogContrasts(): { readonly text: string; readonly ratio: number; rea
     const style = getComputedStyle(el);
     const ground = behind(el);
     const ink = over(rgba(style.color), ground);
-    const [hi, lo] = [luminance(ink), luminance(ground)].sort((a, b) => b - a);
+    const [hi, lo] = [luminance(ink), luminance(ground)].toSorted((a, b) => b - a);
     const size = Number.parseFloat(style.fontSize);
     const bold = Number.parseInt(style.fontWeight, 10) >= 700;
     found.push({ text, ratio: ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05), large: size >= 24 || (bold && size >= 18.66) });
@@ -66,7 +68,7 @@ function dialogContrasts(): { readonly text: string; readonly ratio: number; rea
 test.use({ serviceWorkers: "block" });
 
 for (const theme of ["day", "night"] as const) {
-  for (const screen of SCREENS.filter(({ name }) => DIALOGS.includes(name))) {
+  for (const screen of SCREENS.filter(({ name }) => DIALOGS.has(name))) {
     test(`${screen.name} in ${theme}: every text meets WCAG AA contrast`, async ({ browser }) => {
       clearLayouts();
       clearLayoutHost();
