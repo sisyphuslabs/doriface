@@ -28,7 +28,7 @@ const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
 
 const split = (inView: boolean, readOnly: string | null = null) =>
   paletteCommands({ ...source([]), actions: availableActions("desktop", inView, readOnly) }).find(
-    (command) => command.id === "pane.split",
+    (command) => command.id === "pane.split:right",
   );
 
 describe("paletteCommands", () => {

@@ -123,6 +123,22 @@ export function onDesktopPairingLink(open: (fragment: string) => void, scope: ob
   });
 }
 
+/** Runs each action a desktop menu item asks for, as its key would; does nothing outside the desktop app. */
+export function onDesktopRunAction(run: (action: string) => void, scope: object = globalThis): void {
+  bridgeMethod(
+    "onRunAction",
+    scope,
+  )?.((action: unknown) => {
+    if (typeof action === "string") run(action);
+  });
+}
+
+/** Tells the desktop menu the keymap's trigger for each action it lists, so its shortcuts follow the person's keys. */
+export function setDesktopMenuKeys(keys: Readonly<Record<string, string>>, scope: object = globalThis): void {
+  const shown = bridgeMethod("setMenuKeys", scope)?.(keys);
+  if (shown instanceof Promise) shown.catch((error: unknown) => console.error(`menu shortcuts: ${String(error)}`));
+}
+
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
   if (typeof bridge !== "object" || bridge === null) return null;
