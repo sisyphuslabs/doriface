@@ -18,6 +18,8 @@ export interface AppActionTargets {
   readonly onCloseTab: (key: string) => void;
   /** Closes the focused pane, asking first whether its session keeps running. */
   readonly onClosePane: (address: string) => void;
+  /** Asks for a new name for the tab, as herdr-app's `tab.rename` (F2). */
+  readonly onRenameTab: (key: string) => void;
   readonly onToggleSidebar: () => void;
   /** Moves focus from the terminal to the sidebar, or back. */
   readonly onFocusSidebar: () => void;
@@ -144,6 +146,7 @@ export function desktopActions(
     onSplit,
     onCloseTab,
     onClosePane,
+    onRenameTab,
     onToggleSidebar,
     onFocusSidebar,
     onSession,
@@ -173,6 +176,11 @@ export function desktopActions(
         return selectTab(layout, keys[Number(argument) - 1] ?? null);
       case "tab.last":
         return selectTab(layout, keys.at(-1) ?? null);
+      case "tab.rename":
+        // A tab of no document has no name to keep: the key is left to the terminal.
+        if (layout.active === null || layout.active.transient) return false;
+        onRenameTab(layout.active.key);
+        return true;
       case "tab.move":
         return moveTab(layout, focusedTab?.() ?? active, argument);
       case "pane.split":

@@ -78,7 +78,18 @@ test("closing the tab in view shows the last of the others, so the keyboard land
   ];
   expect(afterClosing(tabs, "closed")).toBe("remaining");
   expect(afterClosing(tabs, "remaining")).toBe("closed");
+  expect(afterClosing(tabs, "inherited")).toBe("remaining");
   expect(afterClosing([alone], alone.key)).toBeNull();
+});
+
+test("closing a space's last tab shows the space that takes its place, else the last, on the tab it showed last", () => {
+  const [alone] = buildTabs([here], [live]);
+  if (alone === undefined) throw new Error("no tab for the live terminal");
+  const tab = (key: string, spaceKey: string): LayoutTab => ({ ...alone, key, spaceKey });
+  const tabs = [tab("a1", "a"), tab("b1", "b"), tab("c1", "c"), tab("c2", "c")];
+  expect(afterClosing(tabs, "b1", { c: "c2" })).toBe("c2");
+  expect(afterClosing(tabs, "b1")).toBe("c1");
+  expect(afterClosing(tabs.slice(0, 2), "b1")).toBe("a1");
 });
 
 const alone = (address: string): LayoutTab => ({

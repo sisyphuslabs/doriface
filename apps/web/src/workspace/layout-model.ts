@@ -206,14 +206,30 @@ export function keepTransient(
 }
 
 /**
- * The tab shown once this screen closes `closed`, the tab in view: the last of the others in its own space, else the last
- * of all the others, so the keyboard lands in a terminal that is left and the space stays in view while it has a tab.
+ * The tab shown once this screen closes `closed`, the tab in view, as herdr-app's `remove_tab` picks it: the tab that
+ * slides into its place in its space, else that space's last. A space left with no tab goes (`remove_space`): the space
+ * that slides into its place, else the last one, is shown on the tab it showed last (`remembered`), else its first.
  * Null when no other tab is open.
  */
-export function afterClosing(tabs: readonly LayoutTab[], closed: string): string | null {
-  const space = tabs.find((tab) => tab.key === closed)?.spaceKey;
+export function afterClosing(
+  tabs: readonly LayoutTab[],
+  closed: string,
+  remembered: Readonly<Record<string, string>> = {},
+): string | null {
+  const at = tabs.findIndex((tab) => tab.key === closed);
+  const space = tabs[at]?.spaceKey;
   const others = tabs.filter((tab) => tab.key !== closed);
-  return (others.findLast((tab) => tab.spaceKey === space) ?? others.at(-1))?.key ?? null;
+  const same = tabs.filter((tab) => tab.spaceKey === space);
+  const slot = same.findIndex((tab) => tab.key === closed);
+  const kept = same.filter((tab) => tab.key !== closed);
+  const inSpace = kept[slot] ?? kept.at(-1);
+  if (inSpace !== undefined) return inSpace.key;
+  const order = [...new Set(tabs.map((tab) => tab.spaceKey))];
+  const left = order.filter((key) => key !== space);
+  const next = order.slice(order.indexOf(space ?? "") + 1).find((key) => key !== space) ?? left.at(-1);
+  if (next === undefined) return null;
+  const shown = others.filter((tab) => tab.spaceKey === next);
+  return (shown.find((tab) => tab.key === remembered[next]) ?? shown[0])?.key ?? null;
 }
 
 export function findTerminal(tabs: readonly LayoutTab[], address: string): { tab: LayoutTab; pane: LayoutPane } | null {

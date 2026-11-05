@@ -363,7 +363,7 @@ export function useLayout(
     },
     [focusedIn],
   );
-  const { dropPane, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView, leavePane);
+  const { dropPane, closeTab } = useTabClose(tabs, active, view.spaces, layoutOf, setLoose, setView, leavePane);
 
   const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
