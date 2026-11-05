@@ -20,6 +20,7 @@ import {
   type MergeDeps,
   type MergeResult,
   mergeBatch,
+  owesAck,
   owesAdmission,
   type RecordDraft,
 } from "./merge.ts";
@@ -113,7 +114,16 @@ export class Gossip implements SyncHost {
       const admitted = ackAdmission(this.#claims.signing(options));
       if (admitted !== undefined) this.#changed(admitted, true);
     };
-    this.#claims = new Claims(options.clock, own, (peer) => this.#known.nameOf(peer), options.log, ack, admit);
+    this.#claims = new Claims(
+      options.clock,
+      own,
+      (peer) => this.#known.nameOf(peer),
+      options.log,
+      ack,
+      admit,
+      () => owesAck(options),
+    );
+    this.#claims.recheckAckOnce();
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
   }

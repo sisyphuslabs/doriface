@@ -32,10 +32,13 @@ export class Claims {
   readonly #ack: () => boolean;
   /** Signs the joiner's ack of its own admission when it is still owed. */
   readonly #admit: () => void;
+  /** Whether the stored records owe this host's automatic ack (see `owesAck`). */
+  readonly #owed: () => boolean;
   readonly #held = new Map<string, Held>();
   readonly #ignoredUntil = new Map<string, number>();
   #ackOwed = false;
   #admissionOwed = false;
+  #recheck = false;
   /** Whether a peer's hello has been read, or the wait for one passed: until then a claim may not have shown yet. */
   #heard = false;
   #cancelWait: (() => void) | undefined;
@@ -47,6 +50,7 @@ export class Claims {
     log: (line: string) => void,
     ack: () => boolean,
     admit: () => void,
+    owed: () => boolean,
   ) {
     this.#clock = clock;
     this.#own = own;
@@ -54,6 +58,7 @@ export class Claims {
     this.#log = log;
     this.#ack = ack;
     this.#admit = admit;
+    this.#owed = owed;
   }
 
   /**
@@ -63,15 +68,18 @@ export class Claims {
   oweAdmission(): boolean {
     if (this.#admissionOwed) return false;
     this.#admissionOwed = true;
-    if (!this.#heard && this.#cancelWait === undefined) {
-      this.#cancelWait = deadline(this.#clock, CLAIM_MS, () => {
-        this.#cancelWait = undefined;
-        this.#heard = true;
-        this.release();
-      });
-    }
+    this.#awaitHello();
     this.release();
     return true;
+  }
+
+  /**
+   * After a start: an ack a claim held back before the stop lived only in memory, so the first release (a hello read, or
+   * none within {@link CLAIM_MS}, and no claim standing) asks the stored records whether one is owed (#156).
+   */
+  recheckAckOnce(): void {
+    this.#recheck = true;
+    this.#awaitHello();
   }
 
   /** A peer's hello claims counter `n` of this host's key; true when it holds this host's own records back. */
@@ -115,7 +123,11 @@ export class Claims {
   /** No claim stands: the ack a claim held back is signed now. */
   release(): void {
     if (this.#held.size > 0) return;
-    if (this.#ackOwed) this.#ackOwed = this.#ack();
+    if (this.#recheck && this.#heard) {
+      this.#recheck = false;
+      if (this.#owed()) this.#ackOwed = true;
+    }
+    if (this.#ackOwed && this.#heard) this.#ackOwed = this.#ack();
     if (this.#admissionOwed && this.#heard) {
       this.#admissionOwed = false;
       this.#admit();
@@ -150,6 +162,15 @@ export class Claims {
     this.#cancelWait = undefined;
     for (const held of this.#held.values()) held.cancel();
     this.#held.clear();
+  }
+
+  #awaitHello(): void {
+    if (this.#heard || this.#cancelWait !== undefined) return;
+    this.#cancelWait = deadline(this.#clock, CLAIM_MS, () => {
+      this.#cancelWait = undefined;
+      this.#heard = true;
+      this.release();
+    });
   }
 
   #hold(peer: string, n: number): void {

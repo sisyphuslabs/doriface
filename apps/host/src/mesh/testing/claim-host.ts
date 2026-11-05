@@ -16,16 +16,23 @@ export function hostB(records: readonly Signed[], seed: number) {
   const logs: string[] = [];
   const store = storeOf(b, records);
   const meshId = meshIdOfRecords(records);
-  const gossip = new Gossip({
-    store,
-    identity: b.machine.identity,
-    meshId,
-    clock,
-    random: seededRandom(seed),
-    policy: new DialPolicy({ clock, random: seededRandom(seed + 1), onDue: () => undefined }),
-    dial: () => Promise.reject(new Error("b dials nobody here")),
-    log: (line) => void logs.push(line),
-  });
+  const make = (): Gossip =>
+    new Gossip({
+      store,
+      identity: b.machine.identity,
+      meshId,
+      clock,
+      random: seededRandom(seed),
+      policy: new DialPolicy({ clock, random: seededRandom(seed + 1), onDue: () => undefined }),
+      dial: () => Promise.reject(new Error("b dials nobody here")),
+      log: (line) => void logs.push(line),
+    });
+  let gossip = make();
+  /** b stops and starts again on the same store: what lived only in memory (claims, owed acks) is gone. */
+  const restart = (): void => {
+    gossip.stop();
+    gossip = make();
+  };
   const stored = (): readonly Signed[] => store.read()?.records ?? [];
   const connect = (from: Peer = a, heads: readonly string[] = headsOfRecords(stored())) => {
     const [ours, theirs] = memoryLinkPair(true);
@@ -57,7 +64,20 @@ export function hostB(records: readonly Signed[], seed: number) {
   const at = async (ms: number): Promise<void> => clock.advance(ms - clock.now());
   /** Stores records past gossip's merge (no counter catch-up), as only a store-level merge would. */
   const storeOnly = (batch: readonly Signed[]): void => void store.merge(batch);
-  return { gossip, stored, connect, signs, own, ownNs, cooldowns, at, storeOnly };
+  return {
+    get gossip(): Gossip {
+      return gossip;
+    },
+    restart,
+    stored,
+    connect,
+    signs,
+    own,
+    ownNs,
+    cooldowns,
+    at,
+    storeOnly,
+  };
 }
 
 /** b restored from a backup taken before its own records `1..count`: a holds them, each acking the one before. */
