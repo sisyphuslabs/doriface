@@ -12,17 +12,8 @@ export interface WorkspaceTab {
   readonly title: string;
   readonly icon?: ReactNode;
   readonly status?: AgentStatus;
-  /** The machine it runs on, for a tab that is not on this one: shown after the title and in its tooltip. */
-  readonly machine?: string;
-  /** The "Go to tab N" chord that selects this tab by position, as written on this platform: shown in the tooltip. */
-  readonly shortcut?: string;
   /** The id of the tab panel it shows (WAI-ARIA tabs: `aria-controls`). */
   readonly controls?: string;
-}
-
-function tooltipOf(tab: WorkspaceTab): string {
-  const named = tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`;
-  return tab.shortcut === undefined ? named : `${named} (${tab.shortcut})`;
 }
 
 /** A tab that moved, by any path (drag, its menu, a key); counted so moving it to the same place again is news. */
@@ -53,7 +44,10 @@ export interface TabBarProps {
   readonly className?: string;
 }
 
-/** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars; tabs reorder by drag. */
+/**
+ * herdr-app's tab strip: raised pill for the active tab, which alone shows its close button; status glyph instead of
+ * colour bars, no tooltip; tabs reorder by drag, the wheel steps through them, and a tab's menu renames, adds or closes.
+ */
 export function TabBar({
   tabs,
   activeId,
@@ -118,6 +112,13 @@ export function TabBar({
         role="tablist"
         aria-label="Tabs"
         onClickCapture={onClickCapture}
+        // As herdr-app's strip: a vertical wheel step selects the previous or next tab; sideways scrolls the strip.
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) < 1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+          const at = tabs.findIndex((tab) => tab.id === activeId);
+          const next = tabs[at + (event.deltaY > 0 ? 1 : -1)];
+          if (at !== -1 && next !== undefined) onSelect?.(next.id);
+        }}
         className="relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
       >
         {drag === null ? null : <DropIndicator drag={drag} />}
@@ -141,10 +142,10 @@ export function TabBar({
               }}
               style={place.offset === 0 ? undefined : { translate: `${place.offset}px 0` }}
               className={cn(
-                "group relative motion-arrive flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
+                "group relative motion-arrive flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
                 active
-                  ? "border-border bg-raised text-foreground"
-                  : "border-transparent text-muted-foreground hover:bg-hover",
+                  ? "border-border bg-raised pr-1 text-foreground"
+                  : "border-transparent pr-2.5 text-muted-foreground hover:bg-hover",
                 lifted === tab.id && "border-border bg-raised shadow-overlay hover:bg-raised",
                 place.className,
               )}
@@ -158,32 +159,23 @@ export function TabBar({
                 role="tab"
                 aria-selected={active}
                 aria-controls={tab.controls}
-                title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
                 onDoubleClick={() => onRename?.(tab.id)}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
-                <span title={tooltipOf(tab)} className="truncate">
-                  {tab.title}
-                </span>
-                {tab.machine === undefined ? null : (
-                  <span title={tab.machine} className="max-w-24 shrink-0 truncate text-2xs text-muted-foreground">
-                    {tab.machine}
-                  </span>
-                )}
+                <span className="truncate">{tab.title}</span>
                 {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
               </button>
-              <IconButton
-                label={`Close ${tab.title}`}
-                icon={<X />}
-                data-tab-close
-                onClick={() => onClose?.(tab.id)}
-                className={cn(
-                  "size-5 [&_svg]:size-3",
-                  !active && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-                )}
-              />
+              {active ? (
+                <IconButton
+                  label={`Close ${tab.title}`}
+                  icon={<X />}
+                  data-tab-close
+                  onClick={() => onClose?.(tab.id)}
+                  className="size-5 [&_svg]:size-3"
+                />
+              ) : null}
             </div>
           );
           if (onMove === undefined) return item;
@@ -218,6 +210,16 @@ export function TabBar({
               {onRename === undefined ? null : (
                 <MenuItem icon={<Pencil />} onClick={() => onRename(tab.id)}>
                   Rename tab…
+                </MenuItem>
+              )}
+              {onNew === undefined ? null : (
+                <MenuItem icon={<Plus />} onClick={onNew}>
+                  New tab
+                </MenuItem>
+              )}
+              {onClose === undefined ? null : (
+                <MenuItem icon={<X />} onClick={() => onClose(tab.id)}>
+                  Close tab
                 </MenuItem>
               )}
             </ContextMenu>
