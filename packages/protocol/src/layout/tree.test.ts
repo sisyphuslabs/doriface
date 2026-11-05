@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type Node } from "./node.ts";
-import { equalize, panesOf, removePane, resizeAt, splitPane } from "./tree.ts";
+import { equalize, movePane, panesOf, removePane, resizeAt, splitPane, swapPanes } from "./tree.ts";
 
 const block = (id: string, weight?: number): Node => ({
   content: { terminal: `t-${id}` },
@@ -127,5 +127,76 @@ describe("resizing and equalizing", () => {
       ]),
     );
     expect(equalize(even)).toBe(even);
+  });
+});
+
+const row = (): Node => box("row", "root", [block("a"), block("b"), block("c")]);
+
+describe("moving a pane within its tab (herdr-app's move_pane)", () => {
+  test("onto a pane's right edge: it leaves its place to the pane it was split from, then halves the target's share", () => {
+    expect(movePane(row(), "a", "c", "right", "s1")).toEqual(
+      box("row", "root", [block("b", 2), block("c", 0.5), block("a", 0.5)]),
+    );
+  });
+
+  test("onto the left edge it lands before the target, the halves as on the right", () => {
+    expect(movePane(row(), "c", "a", "left", "s1")).toEqual(
+      box("row", "root", [block("c", 0.5), block("a", 0.5), block("b", 2)]),
+    );
+  });
+
+  test("onto a top or bottom edge across the row it wraps the target in a column that keeps the target's slot", () => {
+    const sized = box("row", "root", [block("a", 0.25), block("b", 0.5), block("c", 0.25)]);
+    expect(movePane(sized, "c", "a", "bottom", "s1")).toEqual(
+      box("row", "root", [box("column", "s1", [block("a"), block("c")], 0.25), block("b", 0.75)]),
+    );
+    expect(movePane(sized, "c", "a", "top", "s1")).toEqual(
+      box("row", "root", [box("column", "s1", [block("c"), block("a")], 0.25), block("b", 0.75)]),
+    );
+  });
+
+  test("out of a column left with one pane, that pane takes the column's slot before the move lands", () => {
+    const root = box("row", "root", [block("a", 0.5), box("column", "c", [block("x"), block("y")], 0.5)]);
+    expect(movePane(root, "y", "a", "left", "s1")).toEqual(
+      box("row", "root", [block("y", 0.25), block("a", 0.25), block("x", 0.5)]),
+    );
+  });
+
+  test("keeps the panes' content, so the same terminals are drawn in their new places", () => {
+    const moved = movePane(row(), "a", "c", "right", "s1") ?? {};
+    expect(panesOf(moved).map((pane) => `${pane.id}:${pane.terminal}`)).toEqual(["b:t-b", "c:t-c", "a:t-a"]);
+  });
+
+  test("a pane onto itself, or a pane that is not in the tree, moves nothing", () => {
+    expect(movePane(row(), "a", "a", "right", "s1")).toBeNull();
+    expect(movePane(row(), "a", "zz", "right", "s1")).toBeNull();
+    expect(movePane(row(), "zz", "a", "right", "s1")).toBeNull();
+    expect(movePane(row(), "root", "a", "right", "s1")).toBeNull();
+  });
+});
+
+describe("swapping two panes (herdr-app's Node::swap)", () => {
+  test("each place keeps its size, so only where the two panes are drawn changes", () => {
+    const root = box("row", "root", [
+      block("a", 2),
+      block("b", 0.5),
+      box("column", "c", [block("x", 0.3), block("y")]),
+    ]);
+    expect(swapPanes(root, "a", "y")).toEqual(
+      box("row", "root", [block("y", 2), block("b", 0.5), box("column", "c", [block("x", 0.3), block("a")])]),
+    );
+  });
+
+  test("leaves every node off the two paths the object it was", () => {
+    const keep = box("column", "c", [block("x"), block("y")]);
+    const next = swapPanes(box("row", "root", [block("a"), block("b"), keep]), "a", "b");
+    expect(next?.["children"]).toContain(keep);
+  });
+
+  test("a pane with itself, a container, or a pane not in the tree swaps nothing", () => {
+    const root = box("row", "root", [block("a"), box("column", "c", [block("x"), block("y")])]);
+    expect(swapPanes(root, "a", "a")).toBeNull();
+    expect(swapPanes(root, "a", "c")).toBeNull();
+    expect(swapPanes(root, "a", "zz")).toBeNull();
   });
 });
