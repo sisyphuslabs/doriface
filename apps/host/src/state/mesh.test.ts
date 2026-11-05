@@ -163,7 +163,7 @@ const indexMachines = {
 describe("the index follows the view", () => {
   test(
     "members, over-cap members and every key a revoked member's cards named",
-    cpuHeadroom(17, () => {
+    cpuHeadroom(5, () => {
       const dir = scratch();
       const { founder, member, others, thirteenth } = indexMachines;
       const mesh = new MeshFixture(dir, founder);

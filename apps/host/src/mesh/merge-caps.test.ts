@@ -46,7 +46,7 @@ describe("the record cap a sync merge relies on (section 3.3)", () => {
   test(
     "the door refuses the 4097th record: a full log takes nothing more",
     cpuHeadroom(
-      40,
+      20,
       () => {
         const [a, b] = [peer("a"), peer("b")];
         const stored: Signed[] = [...meshOf([a, b]).records];
@@ -70,7 +70,7 @@ describe("the dangling cap through a sync merge (section 3.3)", () => {
   test(
     "the pool keeps the newest 256 held records",
     cpuHeadroom(
-      50,
+      20,
       () => {
         const { b, records, meshId, held } = heldFixture;
         const store = storeOf(b, records);
