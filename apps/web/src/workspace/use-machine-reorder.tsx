@@ -1,6 +1,7 @@
 import { RowDropCaret, RowDropIndicator, rowPlacement, useListDrag } from "@doriface/ui";
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RowReorder } from "./machine-group.tsx";
+import { refocusMoved } from "./refocus-moved.ts";
 import type { MachineEntry } from "./machines.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -71,9 +72,7 @@ export function useMachineReorder(
 
   useLayoutEffect(() => {
     if (moved === null || focused.current !== moved.core) return;
-    const button = buttons.current.get(moved.core);
-    const dropped = document.activeElement === null || document.activeElement === document.body;
-    if (button !== undefined && dropped) button.focus();
+    refocusMoved(buttons.current.get(moved.core), document.activeElement, document.body);
   }, [moved, entries]);
 
   useEffect(() => {
