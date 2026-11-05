@@ -3,8 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { Monitor, Server } from "lucide-react";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
-import { desktopBridge, type DesktopBridge, HostStartError, type HostStartFailure } from "../desktop/bridge.ts";
-import { startThisComputer } from "../desktop/local-host.ts";
+import { desktopBridge, type DesktopBridge, type HostStartFailure } from "../desktop/bridge.ts";
+import { startFailure, startThisComputer } from "../desktop/local-host.ts";
 import { HostStartNotice } from "./host-start-notice.tsx";
 import { Steps } from "./steps.tsx";
 
@@ -36,8 +36,7 @@ function LocalFirstRun({ bridge, offline }: { readonly bridge: DesktopBridge; re
     setStarting(true);
     startThisComputer(bridge, connectionStore).catch((cause: unknown) => {
       setStarting(false);
-      const message = cause instanceof Error ? cause.message : String(cause);
-      setFailure(cause instanceof HostStartError ? cause.failure : { code: "unknown", message, details: message });
+      setFailure(startFailure(cause));
     });
   };
   return (

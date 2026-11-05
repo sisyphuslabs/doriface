@@ -1,6 +1,6 @@
-import { HcConnection } from "@doriface/client";
+import { type ByteLink, HcConnection } from "@doriface/client";
 import { HcRpcError } from "@doriface/protocol";
-import { type HcTarget, spawnHcLink } from "../mesh/hc-machines.ts";
+import { type ChildByteLink, type HcTarget, spawnHcLink } from "../mesh/hc-machines.ts";
 import type { PushCore, PushService } from "./push-service.ts";
 
 const RETRY_MS = 5_000;
@@ -8,14 +8,29 @@ const RETRY_MS = 5_000;
 export interface CoreFeed {
   /** Settles once the first snapshot is the baseline (or the first attempt failed and a retry is due). */
   readonly ready: Promise<void>;
-  stop(): void;
+  /** Settles once the feed's `hc connect` child has exited. */
+  stop(): Promise<void>;
+  /** Kills the feed's child if it has not exited (one that ignores a closed stdin), and returns the pids it killed. */
+  kill(): readonly number[];
 }
 
+/** The feed's line to the core: a child it can kill, or a link that has none (a test's). */
+type FeedLink = ByteLink & Partial<Pick<ChildByteLink, "pid" | "kill">>;
+
 /** The push service's own line to this host's core: its events feed the notices, its calls answer prompts. */
-export function startCoreFeed(target: HcTarget, service: PushService, log: (line: string) => void): CoreFeed {
+export function startCoreFeed(
+  target: HcTarget,
+  service: PushService,
+  log: (line: string) => void,
+  openLink: (core: HcTarget) => FeedLink = spawnHcLink,
+): CoreFeed {
   const first = Promise.withResolvers<void>();
   let stopped = false;
   let current: HcConnection | undefined;
+  let link: FeedLink | undefined;
+  let linkOpen = false;
+  /** Settles once the latest `hc connect` child has exited, so `stop` leaves no child behind. */
+  let exited: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const retry = (): void => {
     service.attach(undefined);
@@ -23,8 +38,17 @@ export function startCoreFeed(target: HcTarget, service: PushService, log: (line
     if (!stopped) timer = setTimeout(() => void open(), RETRY_MS);
   };
   const open = async (): Promise<void> => {
+    const child = openLink(target);
+    const gone = Promise.withResolvers<void>();
+    child.onClose(() => {
+      if (link === child) linkOpen = false;
+      gone.resolve();
+    });
+    link = child;
+    linkOpen = true;
+    exited = gone.promise;
     try {
-      const connection = await HcConnection.open(spawnHcLink(target));
+      const connection = await HcConnection.open(child);
       if (stopped) return connection.close();
       current = connection;
       const feed = await connection.subscribe();
@@ -39,6 +63,9 @@ export function startCoreFeed(target: HcTarget, service: PushService, log: (line
       });
       service.attach(coreOf(connection));
     } catch (error) {
+      // The child of a failed attempt goes before the next one starts its own.
+      child.close();
+      if (stopped) return;
       log(`push: cannot follow this host's core: ${String(error)}`);
       first.resolve();
       retry();
@@ -52,7 +79,14 @@ export function startCoreFeed(target: HcTarget, service: PushService, log: (line
       clearTimeout(timer);
       service.attach(undefined);
       current?.close();
+      link?.close();
       first.resolve();
+      return exited;
+    },
+    kill() {
+      if (link?.kill === undefined || link.pid === undefined || !linkOpen) return [];
+      link.kill("SIGKILL");
+      return [link.pid];
     },
   };
 }
