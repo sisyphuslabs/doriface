@@ -33,6 +33,15 @@ test("Settings > Connections offers no relay address to edit and no Loopback dev
   await expect(page.getByText("relay.custom.invalid")).toHaveCount(0);
 });
 
+test("a link to this computer offers its gateway but no Connect through switch either", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Connections" }).click();
+  await expect(page.getByRole("textbox", { name: "Gateway", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Connect through")).toHaveCount(0);
+  await expect(page.getByText("Loopback dev")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Relay address" })).toHaveCount(0);
+});
+
 test("with a custom relay address saved, the app dials the production relay and never the saved one", async ({
   page,
 }) => {

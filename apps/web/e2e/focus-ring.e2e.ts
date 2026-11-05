@@ -78,7 +78,8 @@ for (const colorScheme of ["light", "dark"] as const) {
         await nav.getByRole("button", { name }).click();
       };
       await open("Connections");
-      await ringOnTab(page, page.getByLabel("Connect through").getByRole("button", { name: "Relay" }));
+      // A release build has no Connect through switch (#389): the gateway of this loopback link is the section's control.
+      await ringOnTab(page, page.getByRole("textbox", { name: "Gateway", exact: true }));
       await open("Appearance");
       await ringOnTab(page, page.getByLabel("Appearance", { exact: true }).getByRole("button", { name: "System" }));
       await ringOnTab(page, page.getByRole("searchbox", { name: "Search themes" }));

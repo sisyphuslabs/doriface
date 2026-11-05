@@ -60,11 +60,10 @@ export function ConnectionSection() {
         {row("directUrl", "Direct address", "The host on your network; preferred when it answers within 300 ms.")}
       </>
     ) : (
-      <SettingRow
-        title="Connect through"
-        description="doriface-host on this computer, without leaving it."
-        control={<span className="text-sm text-muted-foreground">This computer</span>}
-      />
+      <>
+        {row("loopbackUrl", "Gateway", "The /v1/hc address doriface-host prints.")}
+        {row("token", "Token", "Printed by doriface-host --print-token.", true)}
+      </>
     );
   }
 
