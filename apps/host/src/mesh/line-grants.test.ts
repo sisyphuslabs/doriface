@@ -98,6 +98,21 @@ describe("line grants (section 7.2)", () => {
     expect(toB.closes).toEqual([{ code: 4401, reason: "revoked from the mesh" }]);
     expect(toM.closes).toEqual([{ code: 4401, reason: "past the mesh's 12-member cap" }]);
   });
+
+  test("a line whose dial finishes after its member was revoked is closed, never handed over (#420)", async () => {
+    let view: MeshView = { members: [a, b], overCap: [], revoked: [] };
+    const policy = new DialPolicy({ clock: new FakeClock(), random: seededRandom(3), onDue: () => undefined });
+    const dialing = Promise.withResolvers<ByteLink>();
+    const grants = new LineGrants({ view: () => view, policy, dial: () => dialing.promise, waitMs: 10 });
+    const granting = grants.grant(b.hostId);
+    await Promise.resolve();
+    view = { members: [a], overCap: [], revoked: [b.signPub] };
+    grants.closeRevoked(view);
+    const late = closingLink();
+    dialing.resolve(late);
+    expect(await granting).toEqual({ ok: false, code: 4401, reason: "not a member of this mesh" });
+    expect(late.closes).toEqual([{ code: 4401, reason: "revoked from the mesh" }]);
+  });
 });
 
 describe("a host that keeps no relay uplink (L-E5)", () => {
