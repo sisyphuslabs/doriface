@@ -16,7 +16,7 @@ import { type Browser, devices, type Locator, type Page } from "@playwright/test
 import { agentRow } from "./agents.ts";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { getCoreDoc } from "./core-doc.ts";
-import { expect, laidOutBox, test, pressNewTab } from "./fixtures.ts";
+import { expect, laidOutBox, opened, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { LAYOUT_DOC, paneOf, seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
@@ -492,7 +492,8 @@ test.describe("10: on a phone at 390", () => {
 
     await switcher.click();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
-    await expect(sheet).toBeVisible();
+    // Measured at rest: a frame of the open transition reads a row a hair under 44 (#583).
+    await opened(sheet);
     // Each row is named as the strip names its tab, the terminal it opens after it (ruling A).
     const rows = [
       ["alpha", "a-one"],
@@ -552,7 +553,8 @@ test.describe("10: on a phone at 390", () => {
     // Its middle opens the spaces sheet, for a tab of another space.
     await bar.getByRole("button", { name: /^Switch tab, b-two/ }).tap();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
-    await expect(sheet).toBeVisible();
+    // Measured at rest: a frame of the open transition reads a row a hair under 44 (#583).
+    await opened(sheet);
     await tabRow(sheet.getByRole("region", { name: "alpha" }), "a-two").tap();
     await expect(sheet).toBeHidden();
     await expect(header.getByRole("heading", { name: "a-two", exact: true })).toBeVisible({ timeout: 15_000 });
@@ -598,6 +600,7 @@ test.describe("10: on a phone at 390", () => {
     await expect(tabSwitch).toContainText("2/3");
 
     await tabSwitch.click();
+    await opened(page.getByRole("dialog", { name: "Spaces" }));
     const web = page.getByRole("dialog", { name: "Spaces" }).getByRole("region", { name: "web" });
     // One row per tab, read as the strip reads it (its number); the split tab's row opens the pane in view.
     await expect(web.getByRole("button")).toHaveCount(3);
