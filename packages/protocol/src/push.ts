@@ -90,6 +90,10 @@ export type PushHostLine =
   | { readonly t: "notice"; readonly terminal: string | null; readonly kind: NoticeKind | null }
   | { readonly t: "answered"; readonly terminal: string }
   | { readonly t: "stale"; readonly terminal: string | null }
+  /** The answer did not go through (a dropped link, a lapsed claim): nothing was pressed. */
+  | { readonly t: "failed"; readonly terminal: string | null; readonly reason: string }
+  /** The key press itself failed after it was sent: it may have reached the agent. */
+  | { readonly t: "unknown"; readonly terminal: string }
   | { readonly t: "error"; readonly reason: string };
 
 export class PushLineError extends Error {
@@ -224,6 +228,14 @@ export function parsePushHostLine(line: string): PushHostLine {
       return { t: "answered", terminal: text(value["terminal"], MAX_ID, "terminal") };
     case "stale":
       return { t: "stale", terminal: terminalOf(value["terminal"]) };
+    case "failed":
+      return {
+        t: "failed",
+        terminal: terminalOf(value["terminal"]),
+        reason: typeof value["reason"] === "string" ? value["reason"] : "",
+      };
+    case "unknown":
+      return { t: "unknown", terminal: text(value["terminal"], MAX_ID, "terminal") };
     case "error":
       return { t: "error", reason: typeof value["reason"] === "string" ? value["reason"] : "" };
     default:

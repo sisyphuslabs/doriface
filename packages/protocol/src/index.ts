@@ -23,7 +23,12 @@ export {
 export { promptStillThere, readApproval, type ApprovalCore } from "./approval-live.ts";
 export {
   answerApproval,
+  approvalClock,
+  CLAIM_TTL_MS,
+  FENCE_MARGIN_MS,
+  type ApprovalClock,
   readApprovalRecord,
+  type AnswerOptions,
   type AnswerResult,
   type Answerer,
   type ApprovalOutcome,
