@@ -162,6 +162,11 @@ function cardBodyOf(body: JsonObject): CardBody | undefined {
 const checkedCards = new Map<string, CardBody | null>();
 const MAX_CHECKED_CARDS = 4096;
 
+/** For tests that time a first read, as a new process makes it: every card is checked again. */
+export function forgetCheckedCards(): void {
+  checkedCards.clear();
+}
+
 /** The card's body when it is well formed and its signature verifies under its own signPub; otherwise undefined. */
 export function verifyCard(card: Signed): CardBody | undefined {
   if (!isSigned(card) || !fitsBody(card.body)) return undefined;

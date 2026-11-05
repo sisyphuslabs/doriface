@@ -2,7 +2,15 @@ import { expect, test } from "bun:test";
 import { base64urlEncode } from "@doriface/crypto";
 import { mergeAtDoor } from "../src/dangling.ts";
 import { door } from "../src/door.ts";
-import { hashOf, meshIdOf, parseRecord, signCard, signRecord, verifies } from "../src/records/codec.ts";
+import {
+  forgetCheckedCards,
+  hashOf,
+  meshIdOf,
+  parseRecord,
+  signCard,
+  signRecord,
+  verifies,
+} from "../src/records/codec.ts";
 import { MAX_MESH_MEMBERS, MAX_RECORDS, type Signed } from "../src/records/types.ts";
 import { keyOf } from "./fixtures/signed.ts";
 
@@ -90,7 +98,11 @@ test("M-14 (door): a merge into a set the door has indexed re-reads none of it",
   const merge = (): void => {
     if (mergeAtDoor(indexed, [], [last]).added.length !== 1) throw new Error("the last welcome record was not added");
   };
-  const fresh = (): void => void door(last, [...indexed]);
+  // A fresh index is a first read, as in a new process: its cards are checked again (#94 keeps them per process).
+  const fresh = (): void => {
+    forgetCheckedCards();
+    door(last, [...indexed]);
+  };
   const mergeMs = Math.min(timed(merge), timed(merge), timed(merge));
   const freshMs = Math.min(timed(fresh), timed(fresh), timed(fresh));
   console.log(
