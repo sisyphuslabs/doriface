@@ -13,6 +13,7 @@ import { pendingFromWire } from "../state/pairing.ts";
 import { FakeRelay } from "../testing/fake-relay.ts";
 import { createHcSession, type HcSession } from "../testing/hc-session.ts";
 import { RelayClientBridge } from "../testing/relay-client-bridge.ts";
+import { DIAL_LIMITS } from "./dial-policy.ts";
 import { openHcControl } from "./hc-machines.ts";
 import { meshHostOf, shellQuote } from "./via.ts";
 
@@ -136,8 +137,14 @@ const machinesOf = async (entry: Running): Promise<readonly string[]> => {
 
 const added = (entry: Running): number => entry.logged.filter((line) => line.startsWith("mesh: added machine")).length;
 
-/** Design section 8.2: `machine.list` on every online member reflects a join within 60 s. */
-const JOIN_BOUND_MS = 60_000;
+/**
+ * Design section 8.2 (#106, M-E3): a newcomer joining N - 1 members starts 3N - 3 charged relay upgrades (its pairing
+ * dial, N - 2 ack pushes, and herdr's probe and the line for each of the N - 1 machines it adds) against the budget per
+ * window, so `machine.list` on every online member reflects the join within that many windows: 60 s up to 5 members,
+ * 120 s up to 9, 180 s up to 12.
+ */
+const joinBoundMs = (members: number): number =>
+  Math.ceil((3 * members - 3) / DIAL_LIMITS.budget) * DIAL_LIMITS.windowMs;
 
 describe("sync runs in the running host (sections 5.1 and 5.3)", () => {
   test("b joins a, c joins b: all three converge by sync alone, and every core lists the other two as mesh machines", async () => {
@@ -171,7 +178,8 @@ describe("sync runs in the running host (sections 5.1 and 5.3)", () => {
     const joined = performance.now();
     await joinVia(fifth, first);
     const everyone = Promise.all(all.map((entry) => entry.logsUntil(() => added(entry) >= 4)));
-    const bound = new Promise<"late">((resolve) => setTimeout(() => resolve("late"), JOIN_BOUND_MS));
+    expect(joinBoundMs(all.length)).toBe(60_000);
+    const bound = new Promise<"late">((resolve) => setTimeout(() => resolve("late"), joinBoundMs(all.length)));
     expect(await Promise.race([everyone.then(() => "in time" as const), bound])).toBe("in time");
     console.log(
       `five-host join: every core added every member ${Math.round(performance.now() - joined)} ms after the join`,
