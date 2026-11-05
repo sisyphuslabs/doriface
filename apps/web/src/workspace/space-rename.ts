@@ -1,5 +1,5 @@
 import type { Terminal } from "@doriface/protocol";
-import { machineId, spaceId, spaceName } from "./model.ts";
+import { spaceId } from "./model.ts";
 import { isGone, type SessionCalls } from "./session-actions.ts";
 
 /**
@@ -12,20 +12,21 @@ export const SPACE_LABEL = "space";
 const membersOf = (terminals: readonly Terminal[], id: string): Terminal[] =>
   terminals.filter((terminal) => terminal.state === "live" && spaceId(terminal) === id);
 
+/** The id `terminal`'s space has once it carries `name` as its space label. */
+const renamedId = (terminal: Terminal, name: string): string =>
+  spaceId({ ...terminal, labels: { ...terminal.labels, [SPACE_LABEL]: name } });
+
 /** Why `name` cannot become space `id`'s name, or null when it can; its own name is fine (nothing changes). */
 export function spaceNameProblem(terminals: readonly Terminal[], id: string, name: string): string | null {
   const wanted = name.trim();
   if (wanted === "") return "A space needs a name.";
-  const machine = membersOf(terminals, id)[0];
-  if (machine === undefined) return "This space has no running terminal left to rename.";
-  const taken = terminals.some(
-    (terminal) =>
-      terminal.state === "live" &&
-      machineId(terminal.address) === machineId(machine.address) &&
-      spaceName(terminal) === wanted &&
-      spaceId(terminal) !== id,
-  );
-  // The two would become one space for good: nothing tells their terminals apart afterwards.
+  const member = membersOf(terminals, id)[0];
+  if (member === undefined) return "This space has no running terminal left to rename.";
+  const target = renamedId(member, wanted);
+  // Another space already labelled so on this machine: the two would become one for good, as nothing tells their
+  // terminals apart afterwards. A folder space whose directory ends the same way stays its own row (#397).
+  const taken =
+    target !== id && terminals.some((terminal) => terminal.state === "live" && spaceId(terminal) === target);
   return taken ? `Another space on this machine is already called ${wanted}.` : null;
 }
 
@@ -47,5 +48,5 @@ export async function renameSpace(
   const failed = outcomes.find((outcome) => outcome.status === "rejected" && !isGone(outcome.reason));
   if (failed?.status === "rejected") throw failed.reason;
   const first = members[0];
-  return first === undefined ? id : `${machineId(first.address)}/${wanted}`;
+  return first === undefined ? id : renamedId(first, wanted);
 }
