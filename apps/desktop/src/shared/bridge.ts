@@ -6,7 +6,6 @@ export const Channel = {
   startLocalHost: "doriface:start-local-host",
   setWindowBackground: "doriface:set-window-background",
   closeWindow: "doriface:close-window",
-  zoomWindow: "doriface:zoom-window",
   /** Main to renderer: show an app path in the one window (the app menu, a new-window click). */
   navigate: "doriface:navigate",
   /** Main to renderer: a pairing link is waiting; it carries no data. */
@@ -25,17 +24,16 @@ export const Channel = {
   takeUpdate: "doriface:take-update",
   /** Renderer to main: quit and install the staged update (Restart to update). */
   installUpdate: "doriface:install-update",
+  /** Renderer to main: download, verify and install herdr-core for this user (Install herdr-core). */
+  installHc: "doriface:install-hc",
+  /** Main to renderer: the phase an Install herdr-core has reached, e.g. `download`. */
+  hcInstallPhase: "doriface:hc-install-phase",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
 export const VERSION_ARG = "--doriface-app-version=";
 
 export type DesktopPlatform = "darwin" | "linux" | "win32";
-
-/** One step of the window zoom, as Cmd/Ctrl + = / - / 0 and View > Zoom In / Zoom Out / Actual Size take it. */
-export type ZoomStep = "in" | "out" | "reset";
-
-export const isZoomStep = (value: unknown): value is ZoomStep => value === "in" || value === "out" || value === "reset";
 
 export interface LocalHostEndpoint {
   /** The loopback gateway, e.g. `ws://127.0.0.1:52011/v1/hc`. */
@@ -54,6 +52,8 @@ export interface LocalHostFailure {
   readonly message: string;
   readonly path?: string;
   readonly address?: string;
+  /** For `hc-version-failed`: the version of an hc older than doriface-host supports. */
+  readonly version?: string;
   /** For `hc-binary-missing`: the folders searched for hc after PATH, on this platform. */
   readonly searched?: readonly string[];
   /** The host's own output, for a Details disclosure; never its usage text. */
@@ -67,6 +67,21 @@ export interface UpdateReady {
 
 export const isUpdateReady = (value: unknown): value is UpdateReady =>
   typeof value === "object" && value !== null && typeof Reflect.get(value, "version") === "string";
+
+/** What Install herdr-core answers: the installed version and binary, or why it failed (as a value, like a start). */
+export type HcInstallAnswer =
+  | { readonly installed: { readonly version: string; readonly path: string } }
+  | { readonly failed: { readonly phase: string; readonly message: string } };
+
+const strings = (part: unknown, keys: readonly string[]): boolean =>
+  typeof part === "object" && part !== null && keys.every((key) => typeof Reflect.get(part, key) === "string");
+
+export function isHcInstallAnswer(value: unknown): value is HcInstallAnswer {
+  if (typeof value !== "object" || value === null) return false;
+  const installed: unknown = Reflect.get(value, "installed");
+  const failed: unknown = Reflect.get(value, "failed");
+  return strings(installed, ["version", "path"]) || strings(failed, ["phase", "message"]);
+}
 
 /** A failed start crosses IPC as a value: Electron hands the renderer only the message of a thrown error. */
 export interface LocalHostStartFailed {
@@ -89,8 +104,6 @@ export interface DorifaceBridge {
   setWindowBackground(color: string): Promise<boolean>;
   /** Closes the window as File > Close Window does; the page's own window.close() would skip the close events. */
   closeWindow(): Promise<void>;
-  /** Zooms the whole window one step, as the View menu's zoom items do; the zoom is restored at the next launch. */
-  zoomWindow(step: ZoomStep): Promise<void>;
   /** Calls `listener` with each pairing link fragment the app is opened with (a doriface: link or an in-app click). */
   onPairingLink(listener: (fragment: string) => void): void;
   /** Calls `listener` with each action id a Shell menu item asks the page to run. */
@@ -99,6 +112,8 @@ export interface DorifaceBridge {
   setMenuKeys(keys: Readonly<Record<string, string>>): Promise<boolean>;
   /** Asks for herdr-core's hc in a file dialog and keeps it; resolves with its path, or null when cancelled. */
   chooseHc(): Promise<string | null>;
+  /** Downloads, verifies and installs herdr-core for this user, calling `onPhase` as it goes; later starts use it. */
+  installHc(onPhase: (phase: string) => void): Promise<HcInstallAnswer>;
   /** Calls `listener` once an update is staged, at once when one already is. */
   onUpdateReady(listener: (update: UpdateReady) => void): void;
   /** Quits and installs the staged update; resolves false when none is staged. */
@@ -125,7 +140,8 @@ export function isLocalHostStartFailed(value: unknown): value is LocalHostStartF
     typeof Reflect.get(failure, "message") === "string" &&
     typeof Reflect.get(failure, "details") === "string" &&
     optionalString(failure, "path") &&
-    optionalString(failure, "address")
+    optionalString(failure, "address") &&
+    optionalString(failure, "version")
   );
 }
 

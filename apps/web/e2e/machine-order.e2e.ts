@@ -56,6 +56,8 @@ async function dragRow(page: Page, name: string, dy: number, drop = true): Promi
 
 test.use({ serviceWorkers: "block" });
 test.beforeEach(() => setCoreDoc(ORDER_DOC, null));
+// The order is the core's, shared by every spec on this worker: leave none behind for the next one.
+test.afterEach(() => setCoreDoc(ORDER_DOC, null));
 
 test.describe("machine order", () => {
   test("a row dragged above another lands there, is announced, and keeps its place after a reload", async ({

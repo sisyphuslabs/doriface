@@ -5,7 +5,6 @@
 export type StartupErrorCode =
   | "hc-binary-missing"
   | "hc-version-failed"
-  | "hc-too-old"
   | "port-in-use"
   | "permission-denied"
   | "already-running"
@@ -19,8 +18,6 @@ export const STARTUP_EXIT_CODES: Readonly<Record<StartupErrorCode, number>> = {
   "port-in-use": 6,
   "permission-denied": 7,
   "already-running": 8,
-  // 9 is the state lock's (LOCK_WEDGED_EXIT_CODE).
-  "hc-too-old": 10,
 };
 
 export interface StartupErrorDetail {
@@ -28,6 +25,8 @@ export interface StartupErrorDetail {
   readonly path?: string | undefined;
   /** The `host:port` it tried to listen on. */
   readonly address?: string | undefined;
+  /** The version the hc answered with, when it is older than the host supports. */
+  readonly version?: string | undefined;
 }
 
 export class StartupError extends Error {
@@ -73,13 +72,15 @@ export function parseStartupErrorLine(line: string): StartupErrorReport | undefi
   const message: unknown = Reflect.get(value, "message");
   const path: unknown = Reflect.get(value, "path");
   const address: unknown = Reflect.get(value, "address");
+  const version: unknown = Reflect.get(value, "version");
   if (!isStartupErrorCode(code) || typeof message !== "string") return undefined;
-  if (!optionalString(path) || !optionalString(address)) return undefined;
+  if (!optionalString(path) || !optionalString(address) || !optionalString(version)) return undefined;
   return {
     code,
     message,
     ...(typeof path === "string" ? { path } : {}),
     ...(typeof address === "string" ? { address } : {}),
+    ...(typeof version === "string" ? { version } : {}),
   };
 }
 

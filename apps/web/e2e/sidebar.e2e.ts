@@ -12,6 +12,7 @@ import {
   start,
   stop,
 } from "./sidebar-seed.ts";
+import { machineCore, setCoreDoc } from "./core-doc.ts";
 
 /** What the macOS app sets beside its window buttons (apps/desktop TITLEBAR_INSET_START), and removes in full screen. */
 const TITLEBAR_INSET_START = 78;
@@ -43,28 +44,39 @@ test.afterAll(() => {
   }
 });
 
-test("a space named like one on another machine is selected, and opened, on its own machine only", async ({ page }) => {
-  await page.goto("/");
-  const spaces = page.getByRole("region", { name: "Spaces" });
-  const shared = rows(spaces).filter({ hasText: SHARED_SPACE });
-  await expect(shared).toHaveCount(2, { timeout: 20_000 });
-  // This machine's spaces come first, under its own header; the other machine's sit under its row.
-  const here = rows(spaces.locator("section").first()).filter({ hasText: SHARED_SPACE });
-  const there = rows(spaces.getByRole("region", { name: LONG_MACHINE, exact: true })).filter({ hasText: SHARED_SPACE });
-  const focused = page.locator('[data-focused="true"] [data-terminal]');
-
-  await here.click();
-  await expect(focused).toHaveAttribute("data-terminal", /^t[0-9a-z]+$/, { timeout: 15_000 });
-  await expect(here).toHaveAttribute("aria-current", "true");
-  await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
-
-  await there.click();
-  await expect(focused).toHaveAttribute("data-terminal", new RegExp(`^${LONG_MACHINE}/t[0-9a-z]+$`), {
-    timeout: 15_000,
+/**
+ * Counts the selected rows in the Spaces list after every change to the page, from its first render on, so a moment with
+ * two selected spaces fails the test even when it is gone by the next assertion. `window.spacesSelection` keeps the
+ * highest count and the rows marked at that moment.
+ */
+const WATCH_SPACES_SELECTION = `(() => {
+  const record = { most: 0, rows: [] };
+  window.spacesSelection = record;
+  const count = () => {
+    for (const section of document.querySelectorAll("section[aria-labelledby]")) {
+      const heading = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
+      if (heading?.textContent?.trim() !== "Spaces") continue;
+      const marked = [...section.querySelectorAll('[aria-current="true"]')];
+      if (marked.length > record.most) {
+        record.most = marked.length;
+        record.rows = marked.map((row) => row.textContent ?? "");
+      }
+    }
+  };
+  new MutationObserver(count).observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["aria-current"],
   });
-  await expect(there).toHaveAttribute("aria-current", "true");
-  await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
-});
+})();`;
+
+interface SpacesSelection {
+  readonly most: number;
+  readonly rows: readonly string[];
+}
+
+test.afterEach(() => setCoreDoc("doriface", null));
 
 /** Every row of the Idle and Spaces lists ends inside its content box, so every age ends at one edge. */
 async function expectRowsInside(page: Page): Promise<void> {
@@ -269,3 +281,50 @@ test("with the macOS app's titlebar inset, the button that brings the sidebar ba
   const box = await laidOutBox(await hideSidebar(page));
   expect(box.x).toBe(TITLEBAR_INSET_START);
 });
+
+// The machine order is the person's (#141), kept in the core's `doriface` document: the same-named spaces must open on
+// their own machine whichever machine the person put first, so the test runs in both orders and leaves none behind.
+const ORDERS = [
+  { title: "in the default order", order: (): unknown => null },
+  {
+    title: "with the other machine ordered first",
+    order: (): unknown => ({ machine_order: [machineCore(LONG_MACHINE)] }),
+  },
+] as const;
+
+for (const { title, order } of ORDERS) {
+  test(`a space named like one on another machine is selected, and opened, on its own machine only, ${title}`, async ({
+    page,
+  }) => {
+    setCoreDoc("doriface", order());
+    await page.addInitScript(WATCH_SPACES_SELECTION);
+    await page.goto("/");
+    const spaces = page.getByRole("region", { name: "Spaces" });
+    const shared = rows(spaces).filter({ hasText: SHARED_SPACE });
+    await expect(shared).toHaveCount(2, { timeout: 20_000 });
+    // Each machine's spaces sit under its own header, in the order the person put the machines. This machine's group is
+    // the one whose header says so; never "the first group", which the machine order can move.
+    const thisMachine = spaces
+      .locator("[data-drag-id]")
+      .filter({ has: page.locator("[data-machine-header]").filter({ hasText: "this machine" }) });
+    const here = rows(thisMachine).filter({ hasText: SHARED_SPACE });
+    const there = rows(spaces.getByRole("region", { name: LONG_MACHINE, exact: true })).filter({
+      hasText: SHARED_SPACE,
+    });
+    const focused = page.locator('[data-focused="true"] [data-terminal]');
+
+    await here.click();
+    await expect(focused).toHaveAttribute("data-terminal", /^t[0-9a-z]+$/, { timeout: 15_000 });
+    await expect(here).toHaveAttribute("aria-current", "true");
+    await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
+
+    await there.click();
+    await expect(focused).toHaveAttribute("data-terminal", new RegExp(`^${LONG_MACHINE}/t[0-9a-z]+$`), {
+      timeout: 15_000,
+    });
+    await expect(there).toHaveAttribute("aria-current", "true");
+    await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
+    const seen = await page.evaluate(() => (window as unknown as { spacesSelection: SpacesSelection }).spacesSelection);
+    expect(seen.most, `at most one space was ever selected; at the peak: ${seen.rows.join(" | ")}`).toBe(1);
+  });
+}

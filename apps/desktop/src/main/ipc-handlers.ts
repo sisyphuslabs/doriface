@@ -2,12 +2,13 @@ import { allowedExternal } from "../config/external.ts";
 import { terminalLinkTarget } from "../config/terminal-link.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
+import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
 import {
-  isZoomStep,
+  Channel,
+  type HcInstallAnswer,
   type LocalHostEndpoint,
   type LocalHostStartFailed,
   type UpdateReady,
-  type ZoomStep,
 } from "../shared/bridge.ts";
 import { LocalHostStartError } from "./local-host.ts";
 import { SHELL_MENU_ACTIONS } from "./shell-menu.ts";
@@ -17,13 +18,17 @@ export interface IpcSender {
   readonly senderFrame: { readonly url: string } | null;
 }
 
+/** A sender the main process can answer on its own channel as well, as Install herdr-core's progress does. */
+export interface IpcReplySender extends IpcSender {
+  readonly sender: { send(channel: string, ...args: unknown[]): void };
+}
+
 export interface IpcDeps {
   readonly origin: string;
   readonly startLocalHost: () => Promise<LocalHostEndpoint>;
   readonly openExternal: (url: string) => Promise<void>;
   readonly setWindowBackground: (color: string) => void;
   readonly closeWindow: () => void;
-  readonly zoomWindow: (step: ZoomStep) => void;
   readonly takePairingLink: () => string | undefined;
   readonly setMenuKeys: (keys: ReadonlyMap<string, string>) => void;
   /** Shows the file dialog for hc and keeps the choice; undefined when it was cancelled. */
@@ -31,6 +36,8 @@ export interface IpcDeps {
   readonly takeUpdate: () => UpdateReady | null;
   /** Quits and installs the staged update; false when none is staged. */
   readonly installUpdate: () => boolean;
+  /** Installs herdr-core for this user and keeps it as the hc later starts use; throws HcInstallError with why not. */
+  readonly installHc: (onPhase: (phase: string) => void) => Promise<HcInstalled>;
 }
 
 export interface IpcHandlers {
@@ -42,8 +49,6 @@ export interface IpcHandlers {
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
   closeWindow(event: IpcSender): Promise<void>;
-  /** Zooms the window one step, as its View menu does; anything but `in`, `out` or `reset` is refused. */
-  zoomWindow(event: IpcSender, candidate: unknown): Promise<boolean>;
   takePairingLink(event: IpcSender): string | null;
   /** Shows the page's shortcuts in the Shell menu; only its own action ids and short trigger text are taken. */
   setMenuKeys(event: IpcSender, candidate: unknown): Promise<boolean>;
@@ -53,6 +58,8 @@ export interface IpcHandlers {
   takeUpdate(event: IpcSender): UpdateReady | null;
   /** Restart to update: false when no update is staged. */
   installUpdate(event: IpcSender): Promise<boolean>;
+  /** Install herdr-core: each phase is sent to the page as it starts; a failure is answered as a value. */
+  installHc(event: IpcReplySender): Promise<HcInstallAnswer>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -109,12 +116,6 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
       assertAppFrame(event, deps.origin);
       deps.closeWindow();
     },
-    async zoomWindow(event, candidate) {
-      assertAppFrame(event, deps.origin);
-      if (!isZoomStep(candidate)) return false;
-      deps.zoomWindow(candidate);
-      return true;
-    },
     takePairingLink(event) {
       assertAppFrame(event, deps.origin);
       return deps.takePairingLink() ?? null;
@@ -137,6 +138,16 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async installUpdate(event) {
       assertAppFrame(event, deps.origin);
       return deps.installUpdate();
+    },
+    async installHc(event) {
+      assertAppFrame(event, deps.origin);
+      try {
+        const installed = await deps.installHc((phase) => event.sender.send(Channel.hcInstallPhase, phase));
+        return { installed: { version: installed.version, path: installed.path } };
+      } catch (error) {
+        if (error instanceof HcInstallError) return { failed: { phase: error.phase, message: error.message } };
+        throw error;
+      }
     },
   };
 }
