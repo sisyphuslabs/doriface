@@ -13,6 +13,8 @@ export interface HostPush {
   prune(): void;
   /** Settles once the core feed's `hc connect` child, if it started one, has exited. */
   stop(): Promise<void>;
+  /** Kills the core feed's child if it has not exited, and returns the pids it killed. */
+  kill(): readonly number[];
 }
 
 export interface HostPushOptions {
@@ -66,5 +68,6 @@ export async function startHostPush(options: HostPushOptions): Promise<HostPush>
     stop() {
       return feed?.stop() ?? Promise.resolve();
     },
+    kill: () => feed?.kill() ?? [],
   };
 }
