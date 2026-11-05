@@ -4,11 +4,33 @@ import { PlugZap } from "lucide-react";
 import { hostFailure } from "../connection/host-failure.ts";
 import { staysOnThisComputer } from "../connection/settings.ts";
 import { connectionStore, useConnection } from "../connection/store.ts";
+import { desktopBridge, type HostStartFailure } from "../desktop/bridge.ts";
+import { startFailure, startThisComputer } from "../desktop/local-host.ts";
 import { FirstRun } from "../pair/first-run.tsx";
+import { HostStartNotice } from "../pair/host-start-notice.tsx";
 import { useOnline } from "../pwa/use-online.ts";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 
 const Workspace = lazy(() => import("../workspace/workspace.tsx").then((module) => ({ default: module.Workspace })));
+
+/** This computer's host did not start at launch: why, with Retry to start it again and Settings to choose another. */
+function HostStartFailed({ failure }: { readonly failure: HostStartFailure }) {
+  const [retrying, setRetrying] = useState(false);
+  const retry = (): void => {
+    const bridge = desktopBridge();
+    if (bridge === null) return;
+    setRetrying(true);
+    startThisComputer(bridge, connectionStore).catch((cause: unknown) => {
+      setRetrying(false);
+      connectionStore.hostStartFailed(startFailure(cause));
+    });
+  };
+  return (
+    <main className="grid min-h-dvh place-items-center p-6">
+      <HostStartNotice failure={failure} retrying={retrying} onRetry={retry} settings />
+    </main>
+  );
+}
 
 /** The workspace once connected (and while it reconnects); otherwise what is happening and the next step. */
 export function WorkspaceRoute() {
@@ -30,6 +52,7 @@ export function WorkspaceRoute() {
     );
   }
 
+  if (state.phase === "host-failed") return <HostStartFailed failure={state.failure} />;
   // Nothing chosen yet: always the first-run steps, so being offline is never a dead end (#216).
   if (state.phase === "unconfigured") return <FirstRun offline={!online} />;
   const settings = (
