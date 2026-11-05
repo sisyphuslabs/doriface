@@ -7,10 +7,12 @@ import { assignColors, type AgentSort } from "./sidebar-model.ts";
 export interface SidebarPrefs {
   readonly sort: AgentSort;
   readonly colors: Readonly<Record<string, AvatarColor>>;
+  /** Machines (by id) whose spaces are folded under their header. */
+  readonly collapsed: readonly string[];
 }
 
 export const SIDEBAR_KEY = "doriface.sidebar";
-const DEFAULT: SidebarPrefs = { sort: "status", colors: {} };
+const DEFAULT: SidebarPrefs = { sort: "status", colors: {}, collapsed: [] };
 
 const isColor = (value: unknown): value is AvatarColor => AVATAR_COLORS.some((color) => color === value);
 
@@ -24,11 +26,16 @@ export function loadSidebarPrefs(storage: Pick<Storage, "getItem"> = localStorag
   if (typeof parsed !== "object" || parsed === null) return DEFAULT;
   const sort: unknown = Reflect.get(parsed, "sort");
   const colors: unknown = Reflect.get(parsed, "colors");
+  const collapsed: unknown = Reflect.get(parsed, "collapsed");
   const kept =
     typeof colors === "object" && colors !== null
       ? Object.fromEntries(Object.entries(colors).filter((entry): entry is [string, AvatarColor] => isColor(entry[1])))
       : {};
-  return { sort: sort === "space" ? "space" : "status", colors: kept };
+  return {
+    sort: sort === "space" ? "space" : "status",
+    colors: kept,
+    collapsed: Array.isArray(collapsed) ? collapsed.filter((id): id is string => typeof id === "string") : [],
+  };
 }
 
 class SidebarPrefsStore {
@@ -65,4 +72,14 @@ export function useSpaceColors(ids: readonly string[]): Readonly<Record<string, 
   if (next !== saved)
     queueMicrotask(() => sidebarPrefs.update({ colors: assignColors(sidebarPrefs.value.colors, ids) }));
   return next;
+}
+
+/** Whether a machine's spaces are folded, and the toggle; the choice outlives a reload. */
+export function useCollapsed(): readonly [readonly string[], (id: string) => void] {
+  const collapsed = useSyncExternalStore(sidebarPrefs.subscribe, () => sidebarPrefs.value.collapsed);
+  const toggle = (id: string): void => {
+    const now = sidebarPrefs.value.collapsed;
+    sidebarPrefs.update({ collapsed: now.includes(id) ? now.filter((one) => one !== id) : [...now, id] });
+  };
+  return [collapsed, toggle];
 }

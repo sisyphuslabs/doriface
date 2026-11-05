@@ -1,4 +1,4 @@
-import { Monitor, Plus, Server } from "lucide-react";
+import { ChevronDown, Monitor, Plus, Server } from "lucide-react";
 import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
@@ -13,6 +13,10 @@ export interface MachineHeaderProps {
   readonly alarm?: boolean;
   /** Live terminals on it. */
   readonly live: number;
+  /** Its spaces are folded away under the header. */
+  readonly collapsed?: boolean;
+  /** Folds or unfolds its spaces; without it there is no chevron. */
+  readonly onToggle?: () => void;
   readonly selected?: boolean;
   /** Opens its first terminal; left out when it has none (the header stays a stop for its action). */
   readonly onOpen?: () => void;
@@ -26,8 +30,9 @@ export interface MachineHeaderProps {
 }
 
 /**
- * The head of one machine's spaces, shown once more than one machine is known: icon, name, state, terminal count,
- * and "New space on <name>". The row is the group's first stop; the action follows it with ArrowRight.
+ * The head of one machine's spaces, shown once more than one machine is known: icon, name, state, terminal count, then
+ * herdr-app's New space on <name>, status dot and fold chevron. The row is the group's first stop; the actions follow it
+ * with ArrowRight.
  */
 export function MachineHeader({
   name,
@@ -35,6 +40,8 @@ export function MachineHeader({
   state,
   alarm = false,
   live,
+  collapsed = false,
+  onToggle,
   selected = false,
   onOpen,
   onNewSpace,
@@ -67,7 +74,9 @@ export function MachineHeader({
             <span title={name} className={cn("min-w-0 flex-1 truncate", quiet)}>
               {name}
             </span>
-            <span className={cn("shrink-0 text-2xs font-normal", alarm && "text-status-blocked-text")}>{state}</span>
+            <span className={cn("min-w-0 truncate text-2xs font-normal", alarm && "text-status-blocked-text")}>
+              {state}
+            </span>
             <span data-numeric aria-label={`${live} terminals`} className={cn("w-4 shrink-0 text-right", quiet)}>
               {live}
             </span>
@@ -80,7 +89,33 @@ export function MachineHeader({
           icon={<Plus />}
           disabled={!connected}
           onClick={onNewSpace}
-          className="mr-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 coarse:opacity-100 data-disabled:opacity-0 group-hover:data-disabled:opacity-45"
+          className="size-6 text-muted-foreground data-disabled:opacity-45"
+        />
+      )}
+      {rail ? null : (
+        <span
+          aria-hidden
+          data-machine-dot={connected ? "online" : "offline"}
+          className={cn(
+            "mx-1.5 size-1.5 shrink-0 rounded-full",
+            connected ? "bg-online" : alarm ? "bg-status-blocked" : "bg-status-unknown",
+          )}
+        />
+      )}
+      {rail || onToggle === undefined ? null : (
+        <IconButton
+          label={`${collapsed ? "Expand" : "Collapse"} ${name}`}
+          aria-expanded={!collapsed}
+          icon={
+            <ChevronDown
+              className={cn(
+                "transition-transform duration-(--duration-micro) motion-reduce:transition-none",
+                collapsed && "-rotate-90",
+              )}
+            />
+          }
+          onClick={onToggle}
+          className="mr-1 size-6 text-muted-foreground"
         />
       )}
     </div>
