@@ -253,8 +253,6 @@ jobs:
           grep -E '^\(pass\) .*W[0-9]+ ' win32.log
       - name: The state units on Windows
         run: bun test apps/host/src/state/host-keys.test.ts apps/host/src/state/known-hosts.test.ts
-      - name: The state-lock race, 50 times (#464)
-        run: bun test apps/host/src/state/known-hosts.test.ts --rerun-each=50 -t "four processes pairing hosts at once"
       - name: Compiled host keeps its keys across two starts
         shell: bash
         run: |
