@@ -1,0 +1,123 @@
+{
+  "spaces": [
+    {
+      "folder": "/home/user/project",
+      "id": "spc7dbfbc748e22fdf381f5be842712129",
+      "name": "",
+      "tabs": [
+        {
+          "id": "tbff1e9c7fe9d99f6cd247be825a5da61a",
+          "name": "",
+          "root": {
+            "children": [
+              {
+                "content": {
+                  "terminal": "t1"
+                },
+                "id": "p5de884413ed6ec6e525cea922cedfd72",
+                "size": {
+                  "weight": 0.5
+                },
+                "type": "block"
+              },
+              {
+                "children": [
+                  {
+                    "content": {
+                      "terminal": "t2"
+                    },
+                    "id": "p81b6ae4f3d637b3683b2d984cedbc05d",
+                    "type": "block"
+                  },
+                  {
+                    "children": [
+                      {
+                        "content": {
+                          "terminal": "t3"
+                        },
+                        "id": "p45315301f267a123d2ebfc2e3f229135",
+                        "type": "block"
+                      },
+                      {
+                        "children": [
+                          {
+                            "content": {
+                              "terminal": "t4"
+                            },
+                            "id": "pa853cad46b4b009631af3261dbc92aa1",
+                            "type": "block"
+                          },
+                          {
+                            "content": {
+                              "terminal": "t5"
+                            },
+                            "id": "p986c8fa4187d4d895e540c2850573fac",
+                            "type": "block"
+                          }
+                        ],
+                        "id": "sf6d3d8827ec31eb2a182ebbbac99f876",
+                        "type": "column"
+                      }
+                    ],
+                    "id": "sd19dac4d92f11030759dcf4d9df85915",
+                    "type": "row"
+                  }
+                ],
+                "id": "s94e4cc5415d3de326f8d27235ef98c59",
+                "size": {
+                  "weight": 0.5
+                },
+                "type": "column"
+              }
+            ],
+            "id": "tbff1e9c7fe9d99f6cd247be825a5da61a",
+            "type": "row"
+          }
+        },
+        {
+          "id": "tb75ab417b08a576fc183e9e363e046aab",
+          "name": "build",
+          "root": {
+            "children": [
+              {
+                "children": [
+                  {
+                    "content": {
+                      "terminal": "t6"
+                    },
+                    "id": "pa1ac18cbd58508cb4e5871c0f7741528",
+                    "type": "block"
+                  },
+                  {
+                    "children": [
+                      {
+                        "content": {
+                          "terminal": "t7"
+                        },
+                        "id": "p50ebd0db9b3558600959fbad256a2908",
+                        "type": "block"
+                      },
+                      {
+                        "content": {
+                          "mod": "files"
+                        },
+                        "id": "p5533ee0bdeff07266d8c4362fa847ac2",
+                        "type": "block"
+                      }
+                    ],
+                    "id": "sed0cf1a1b59892095909f14c9508901e",
+                    "type": "row"
+                  }
+                ],
+                "id": "s3227ca1825d9f7a51458f7c3c71e3fed",
+                "type": "column"
+              }
+            ],
+            "id": "tb75ab417b08a576fc183e9e363e046aab",
+            "type": "row"
+          }
+        }
+      ]
+    }
+  ]
+}

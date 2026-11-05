@@ -3,7 +3,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_PUSH_ORIGIN, E2E_TOKEN } from "./config.ts";
+import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_ENV, E2E_LAYOUT_PORT, E2E_PUSH_ORIGIN, E2E_TOKEN } from "./config.ts";
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
@@ -39,11 +39,12 @@ writeFileSync(
   JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: layout ? LAYOUT_CORE : "studio" }),
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
-// Only the main host owns it: the layout host runs beside it and must not overwrite or delete it.
-// The pid lets the run's leftover check stop a host that outlived its worker. The file is saved again with `ready` once
-// setup has finished: a worker waits for that, so the core it first sees already holds every seed (#226).
+// Each host owns its own file: the layout host runs beside the main ones and must not overwrite or delete theirs.
+// The pid lets the run's leftover check stop a host that outlived its worker. The main host's file is saved again with
+// `ready` once setup has finished: a worker waits for that, so the core it first sees already holds every seed (#226).
+const savedEnv = layout ? E2E_LAYOUT_ENV : E2E_HOST_ENV;
 const saved = { hc, env: own, pid: process.pid };
-if (!layout) writeSavedEnv(E2E_HOST_ENV, saved);
+writeSavedEnv(savedEnv, saved);
 const host = Bun.spawn(
   [
     "bun",
@@ -82,7 +83,7 @@ async function shutdown(): Promise<void> {
   await host.exited;
   await stopCore();
   await stopMachine?.();
-  if (!layout) rmSync(E2E_HOST_ENV, { force: true });
+  rmSync(savedEnv, { force: true });
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);
 }

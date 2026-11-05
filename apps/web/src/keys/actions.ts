@@ -28,7 +28,7 @@ export const ACTIONS: readonly ActionDef[] = [
   app("tab.last", "Go to last tab", "last_tab"),
   app("tab.move:left", "Move tab left", "move_tab:-1"),
   app("tab.move:right", "Move tab right", "move_tab:1"),
-  app("pane.split", "Split or unsplit"),
+  app("pane.split", "Split right", "new_split:right"),
   app("pane.close", "Close pane"),
   app("pane.go:left", "Focus pane left", "goto_split:left"),
   app("pane.go:right", "Focus pane right", "goto_split:right"),
