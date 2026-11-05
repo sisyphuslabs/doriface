@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { deviceStore, memoryStore, type KeyValueStore } from "../storage/idb.ts";
 import { EMPTY_CONFIG, type TerminalConfig } from "./config.ts";
 import { KEY_BY_NAME } from "./keys.ts";
+import { guardedLocalStorage } from "../storage/guarded.ts";
 
 const KEY = "terminal-config";
 const LEGACY_APPEARANCE = "doriface.appearance";
@@ -43,7 +44,7 @@ function parseAppearance(storage: Pick<Storage, "getItem">): Record<string, unkn
   }
 }
 
-export function legacyFontSize(storage: Pick<Storage, "getItem" | "setItem"> = localStorage): LegacyFontSize {
+export function legacyFontSize(storage: Pick<Storage, "getItem" | "setItem"> = guardedLocalStorage()): LegacyFontSize {
   return {
     read: () => {
       const size = parseAppearance(storage)?.["fontSize"];

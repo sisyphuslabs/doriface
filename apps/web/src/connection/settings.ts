@@ -1,3 +1,4 @@
+import { guardedLocalStorage, type StorageLike } from "../storage/guarded.ts";
 export type ConnectionMode = "relay" | "loopback";
 
 export interface ConnectionSettings {
@@ -43,14 +44,13 @@ function text(value: unknown, fallback: string): string {
 
 /**
  * Reads stored settings; anything malformed falls back field by field to the defaults, and a release build drops a saved
- * custom relay address. With no localStorage at all (bun's test runner, which loads store.ts and with it this read), the
- * defaults: reading the global at module load must not depend on which test file installed one first (#490).
+ * custom relay address. Refused or missing storage (bun's test runner, which loads store.ts and with it this read) gives
+ * the defaults (#490, #551).
  */
 export function loadSettings(
-  storage: Storage | undefined = Reflect.get(globalThis, "localStorage") as Storage | undefined,
+  storage: StorageLike = guardedLocalStorage(),
   { devBuild = DEV_BUILD }: { readonly devBuild?: boolean } = {},
 ): ConnectionSettings {
-  if (storage === undefined) return DEFAULT_SETTINGS;
   let parsed: unknown;
   try {
     parsed = JSON.parse(storage.getItem(KEY) ?? "null");
@@ -74,7 +74,7 @@ export function loadSettings(
   );
 }
 
-export function saveSettings(settings: ConnectionSettings, storage: Storage = localStorage): void {
+export function saveSettings(settings: ConnectionSettings, storage: StorageLike = guardedLocalStorage()): void {
   storage.setItem(KEY, JSON.stringify(settings));
 }
 

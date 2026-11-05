@@ -1,95 +1,39 @@
-import * as jsc from "bun:jsc";
 import { describe, expect, test } from "bun:test";
-import { Dag } from "../src/view/dag.ts";
-import { ViewCache, viewOfRecords } from "../src/view/engine.ts";
-import { bigMesh } from "./fixtures/big-mesh.ts";
+import { KEPT_DAGS } from "./fixtures/view-reachable.ts";
 
-/** The parts of a JSC GCDebugging heap snapshot that reachable() reads. */
-interface DebugSnapshot {
-  /** <id, size, class name index, flags, label index, cell address, wrapped address> per node. */
-  readonly nodes: readonly (number | string)[];
-  readonly nodeClassNames: readonly string[];
-  /** <from id, to id, edge type index, edge data> per edge. */
-  readonly edges: readonly number[];
-  /** <node id, reason label index, description label index> per GC root. */
-  readonly roots: readonly number[];
-  readonly labels: readonly string[];
+/** Prints a fixture's one JSON reading, run in a fresh bun process so no other test's heap moves or slows it. */
+async function reading(fixture: string, arg: string): Promise<unknown> {
+  const child = Bun.spawn([process.execPath, new URL(fixture, import.meta.url).pathname, arg], {
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  expect(code).toBe(0);
+  return JSON.parse(text);
 }
 
-/** A snapshot with its GC roots and their reasons, which Bun.generateHeapSnapshot() leaves out (not in bun-types). */
-function debugSnapshot(): DebugSnapshot {
-  const generate: unknown = Reflect.get(jsc, "generateHeapSnapshotForDebugging");
-  if (typeof generate !== "function") throw new Error("bun:jsc has no generateHeapSnapshotForDebugging");
-  return generate() as DebugSnapshot;
+/** The class counts a probe of test/fixtures/view-reachable.ts read in its own heap. */
+async function reachableIn(probe: string): Promise<{ counts: Record<string, number> } & Record<string, unknown>> {
+  const out = await reading("./fixtures/view-reachable.ts", probe);
+  if (typeof out !== "object" || out === null || !("counts" in out) || typeof out.counts !== "object")
+    throw new Error(`unreadable probe reading: ${JSON.stringify(out)}`);
+  return out as { counts: Record<string, number> } & Record<string, unknown>;
 }
 
 /**
- * The global property reachable() holds its subjects under while it takes its snapshot: the global object is a recorded
- * root, where this test file's own module state is not (it is reached through the test runner's stack).
+ * The bound for each heap-probe test: one bun process that runs the probe and takes one debug snapshot of its own heap
+ * (16-19k nodes, whatever the test process holds). On agents-seoul-1, 20 runs each at load1 67-115 took at most 1.45 s
+ * (single-record) and 0.45 s (clear), and 20 runs each at load1 115-130 took at most 2.29 s and 0.96 s. The bound is that
+ * worst case with about 3x margin. The in-process probes it replaces snapshotted the whole test process: 72k nodes after
+ * the mesh suite, and 41 s in rev-157's whole-repository run (#542).
  */
-const MEASURED = Symbol("view-memory: measured subjects");
-
+export const HEAP_PROBE_TEST_MS = 7_000;
 /**
- * Instances of each class still reachable after a full collection from `subjects` or from the heap's recorded roots
- * (handles, the global object, the state of every module the tests import), walked in a JSC heap snapshot. Two roots are left out, because
- * no program reference is behind them and they keep a released cell alive only by chance (#401): the conservative
- * scan of the native stack and registers, which the snapshot does not record (a stale slot there was seen keeping a
- * finished merge's Engine and its Dag alive at the same address run after run), and the JIT worklist, which holds the
- * cells a concurrent compile in flight was planned with. A value the test holds only in a local is therefore not
- * counted unless it is passed in `subjects`.
+ * The bound for each cache-heap test, per shape: a cold view in a fresh bun process, CPU-bound, so its wall time follows
+ * the load. Worst of 20 runs each on agents-seoul-1 at load1 67-130: names-only 66.4 s (about 27 s of CPU in the cold
+ * view at the cap), admits-only-2048 20.9 s, partition 6.95 s. Each bound is that worst case with about 3x margin.
  */
-function reachable(classes: readonly string[], ...subjects: unknown[]): Record<string, number> {
-  Reflect.set(globalThis, MEASURED, subjects);
-  Bun.gc(true);
-  const snapshot = debugSnapshot();
-  Reflect.deleteProperty(globalThis, MEASURED);
-  const jit = snapshot.labels.indexOf("JITWorkList");
-  const { edges } = snapshot;
-  let ids = 0;
-  for (let i = 0; i < snapshot.nodes.length; i += 7) ids = Math.max(ids, Number(snapshot.nodes[i]) + 1);
-  // The edges out of each node id, as one array sliced by `start`.
-  const start = new Int32Array(ids + 1);
-  for (let i = 0; i < edges.length; i += 4) {
-    const at = (edges[i] ?? 0) + 1;
-    start[at] = (start[at] ?? 0) + 1;
-  }
-  for (let id = 0; id < ids; id++) start[id + 1] = (start[id + 1] ?? 0) + (start[id] ?? 0);
-  const fill = start.slice(0, ids);
-  const to = new Int32Array(edges.length / 4);
-  for (let i = 0; i < edges.length; i += 4) {
-    const from = edges[i] ?? 0;
-    const at = fill[from] ?? 0;
-    to[at] = edges[i + 1] ?? 0;
-    fill[from] = at + 1;
-  }
-  const seen = new Uint8Array(ids);
-  const queue: number[] = [];
-  const visit = (id: number): void => {
-    if (seen[id] === 1) return;
-    seen[id] = 1;
-    queue.push(id);
-  };
-  for (let i = 0; i < snapshot.roots.length; i += 3) if (snapshot.roots[i + 1] !== jit) visit(snapshot.roots[i] ?? 0);
-  for (let id = queue.pop(); id !== undefined; id = queue.pop())
-    for (let e = start[id] ?? 0; e < (start[id + 1] ?? 0); e++) visit(to[e] ?? 0);
-  const wanted = new Map(classes.map((cls) => [snapshot.nodeClassNames.indexOf(cls), cls]));
-  const counts = Object.fromEntries(classes.map((cls) => [cls, 0]));
-  for (let i = 0; i < snapshot.nodes.length; i += 7) {
-    const cls = wanted.get(Number(snapshot.nodes[i + 2]));
-    if (cls !== undefined && seen[Number(snapshot.nodes[i])] === 1) counts[cls] = (counts[cls] ?? 0) + 1;
-  }
-  return counts;
-}
-
-const MERGES = 256;
-
-/**
- * The bound for each heap-probe test (two full collections and two debug snapshots around the work it measures). On
- * agents-seoul-1 at load5 115-142, 20 runs of the single-record test took 1.3-9.0 s (median 3.1 s, p90 5.3 s); dev's
- * version with plain snapshots took 1.8-7.2 s (median 3.2 s, p90 5.4 s), so bun's 5 s default already failed it about
- * one run in ten under load. The bound is the worst case measured with about 3x margin.
- */
-export const HEAP_PROBE_TEST_MS = 30_000;
+export const CACHE_HEAP_TEST_MS = { "names-only": 200_000, "admits-only-2048": 63_000, partition: 21_000 } as const;
 
 /** Heap one cold view at the cap may leave in a cache for a names-only mesh: views and history, no per-context statuses. */
 const NAMES_BUDGET_MB = 96;
@@ -103,68 +47,64 @@ const ADMITS_BUDGET_MB = 320;
 
 /** The heap a cache holds after one cold view of `shape`, read in a fresh bun process (test/fixtures/cache-heap.ts). */
 async function heldMb(shape: string): Promise<number> {
-  const child = Bun.spawn([process.execPath, new URL("./fixtures/cache-heap.ts", import.meta.url).pathname, shape], {
-    stdout: "pipe",
-    stderr: "inherit",
-  });
-  const [text, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-  expect(code).toBe(0);
-  const reading: unknown = JSON.parse(text);
-  if (typeof reading !== "object" || reading === null || !("heldMb" in reading) || typeof reading.heldMb !== "number")
-    throw new Error(`unreadable heap reading: ${text}`);
-  console.log(`${shape}: the cache holds ${reading.heldMb.toFixed(1)} MB`);
-  return reading.heldMb;
+  const out = await reading("./fixtures/cache-heap.ts", shape);
+  if (typeof out !== "object" || out === null || !("heldMb" in out) || typeof out.heldMb !== "number")
+    throw new Error(`unreadable heap reading: ${JSON.stringify(out)}`);
+  console.log(`${shape}: the cache holds ${out.heldMb.toFixed(1)} MB`);
+  return out.heldMb;
 }
 
 describe("M-14: a ViewCache holds one mesh's history, not one engine per merge", () => {
   test(
     "single-record merges through one cache leave no per-merge Dag or Engine reachable",
-    () => {
-      const mesh = bigMesh({ records: MERGES, revokes: 4, seed: 3 });
-      const cache = new ViewCache();
-      const held = reachable(["Dag", "Engine"], cache);
-      for (let n = 2; n <= mesh.length; n++) viewOfRecords(mesh.slice(0, n), cache);
-      // The positive control shares the snapshot: two Dags still held must be seen, on top of what the cache keeps.
-      const kept = [new Dag(mesh), new Dag(mesh)];
-      const left = reachable(["Dag", "Engine"], cache, kept);
-      const dags = (left["Dag"] ?? 0) - (held["Dag"] ?? 0);
-      expect(dags).toBeGreaterThanOrEqual(kept.length);
-      expect(dags - kept.length).toBeLessThanOrEqual(1);
-      expect((left["Engine"] ?? 0) - (held["Engine"] ?? 0)).toBeLessThanOrEqual(1);
+    async () => {
+      // One snapshot in a process that built no Dag before: the cache may keep one, the positive control keeps two.
+      const { counts } = await reachableIn("single-record");
+      expect(counts["Dag"] ?? 0).toBeGreaterThanOrEqual(KEPT_DAGS);
+      expect((counts["Dag"] ?? 0) - KEPT_DAGS).toBeLessThanOrEqual(1);
+      expect(counts["Engine"] ?? 0).toBeLessThanOrEqual(1);
     },
     HEAP_PROBE_TEST_MS,
   );
 
   test(
     "cache.clear() releases the history and the per-record results it held",
-    () => {
-      const mesh = bigMesh({ records: 64, revokes: 2, seed: 5 });
-      const cache = new ViewCache();
-      viewOfRecords(mesh, cache);
-      const held = reachable(["History", "Shared"], cache);
-      cache.clear();
-      const left = reachable(["History", "Shared"], cache);
-      expect([left["History"], left["Shared"]]).toEqual([(held["History"] ?? 0) - 1, (held["Shared"] ?? 0) - 1]);
-      expect(viewOfRecords(mesh, cache).members).toEqual(viewOfRecords(mesh).members);
+    async () => {
+      // One snapshot with a cleared cache and an uncleared control: only the control's History and Shared remain.
+      const { counts, members, fresh } = await reachableIn("clear");
+      expect([counts["History"], counts["Shared"]]).toEqual([1, 1]);
+      expect(members).toEqual(fresh);
     },
     HEAP_PROBE_TEST_MS,
   );
 
-  test(`a cold view of a names-only mesh at the cap keeps under ${NAMES_BUDGET_MB} MB in its cache`, async () => {
-    const held = await heldMb("names-only");
-    expect(held).toBeGreaterThan(0);
-    expect(held).toBeLessThan(NAMES_BUDGET_MB);
-  }, 120_000);
+  test(
+    `a cold view of a names-only mesh at the cap keeps under ${NAMES_BUDGET_MB} MB in its cache`,
+    async () => {
+      const held = await heldMb("names-only");
+      expect(held).toBeGreaterThan(0);
+      expect(held).toBeLessThan(NAMES_BUDGET_MB);
+    },
+    CACHE_HEAP_TEST_MS["names-only"],
+  );
 
-  test(`a partition with revokes across it keeps under ${PARTITION_BUDGET_MB} MB in its cache`, async () => {
-    const held = await heldMb("partition");
-    expect(held).toBeGreaterThan(0);
-    expect(held).toBeLessThan(PARTITION_BUDGET_MB);
-  }, 120_000);
+  test(
+    `a partition with revokes across it keeps under ${PARTITION_BUDGET_MB} MB in its cache`,
+    async () => {
+      const held = await heldMb("partition");
+      expect(held).toBeGreaterThan(0);
+      expect(held).toBeLessThan(PARTITION_BUDGET_MB);
+    },
+    CACHE_HEAP_TEST_MS.partition,
+  );
 
-  test(`2048 admissions, most of them over the cap, keep under ${ADMITS_BUDGET_MB} MB in the cache`, async () => {
-    const held = await heldMb("admits-only-2048");
-    expect(held).toBeGreaterThan(0);
-    expect(held).toBeLessThan(ADMITS_BUDGET_MB);
-  }, 120_000);
+  test(
+    `2048 admissions, most of them over the cap, keep under ${ADMITS_BUDGET_MB} MB in the cache`,
+    async () => {
+      const held = await heldMb("admits-only-2048");
+      expect(held).toBeGreaterThan(0);
+      expect(held).toBeLessThan(ADMITS_BUDGET_MB);
+    },
+    CACHE_HEAP_TEST_MS["admits-only-2048"],
+  );
 });

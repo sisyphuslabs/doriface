@@ -3,6 +3,7 @@ import { DEFAULT_PUSH_PREFS, type HcEvent, parsePushClientLine, type PushPrefs }
 import { type ConnectionState, connectionStore } from "../connection/store.ts";
 import { NoticeTrigger, type Trigger, wanted } from "./notice-trigger.ts";
 import type { PushView } from "./push-settings.ts";
+import { guardedLocalStorage } from "../storage/guarded.ts";
 
 /** The desktop shell's native notifications (apps/desktop/src/shared/bridge.ts), read as an untrusted boundary. */
 export interface NoticeBridge {
@@ -195,4 +196,4 @@ const bridge = noticeBridge();
 
 /** The desktop app's notifications; null in a browser, where web push does this. */
 export const desktopNotices: DesktopNotices | null =
-  bridge === null ? null : new DesktopNotices({ bridge, storage: localStorage, connection: connectionStore });
+  bridge === null ? null : new DesktopNotices({ bridge, storage: guardedLocalStorage(), connection: connectionStore });

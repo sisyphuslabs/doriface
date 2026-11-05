@@ -2,7 +2,7 @@ import type { MouseEvent } from "react";
 import { terminalInput } from "./focus-targets.ts";
 
 const LINK =
-  "sr-only rounded-md bg-popover px-3 py-1.5 text-sm text-foreground shadow-(--overlay-shadow) focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-[var(--titlebar-inset-start,0.5rem)] focus-visible:z-50 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring";
+  "sr-only rounded-md bg-popover px-3 py-1.5 text-sm text-foreground shadow-(--overlay-shadow) focus-visible:not-sr-only focus-visible:absolute focus-visible:top-[calc(var(--safe-top)+0.5rem)] focus-visible:left-[calc(var(--safe-left)+var(--titlebar-inset-start,0.5rem))] focus-visible:z-50 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring";
 
 function jump(event: MouseEvent<HTMLAnchorElement>, go: () => void): void {
   event.preventDefault();

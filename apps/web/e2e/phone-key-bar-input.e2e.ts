@@ -15,7 +15,8 @@ test("ctrl latches for one key: ctrl then c interrupts a running command", async
   const terminal = await openPhoneTerminal(page);
   // bash (macOS /bin/sh) can continue a semicolon list after SIGINT; && depends on sleep succeeding on every shell.
   await page.keyboard.type("sleep 30 && echo slept-$((1+1))\r");
-  await expect(page.locator("header h1")).toHaveText("sleep");
+  // The header names the tab (#466); the session's actions name the program in the foreground.
+  await expect(page.getByRole("button", { name: "Session actions for sleep" })).toBeVisible();
   const ctrl = key(page, "Control");
   await ctrl.click();
   await expect(ctrl).toHaveAttribute("aria-pressed", "true");
