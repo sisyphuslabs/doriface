@@ -1,6 +1,6 @@
-import { type ByteLink, HcConnection } from "@doriface/client";
+import { HcConnection } from "@doriface/client";
 import { END_LABEL, eventAddress, type HcEvent, HcRpcError, type Terminal } from "@doriface/protocol";
-import { type HcTarget, spawnHcLink } from "./mesh/hc-machines.ts";
+import { type HcTarget, type KillableLink, spawnHcLink } from "./mesh/hc-machines.ts";
 
 export interface EndSweeper {
   /**
@@ -9,6 +9,8 @@ export interface EndSweeper {
    */
   ensure(): Promise<void>;
   stop(): Promise<void>;
+  /** Kills the watch's child if it has not exited (one that ignores a closed stdin), and returns the pids it killed. */
+  kill(): readonly number[];
 }
 
 /** hc's reason for a program that `terminal.kill` ended, as End's kill does; a program that exits by itself is "exited". */
@@ -23,23 +25,30 @@ const KILLED = "killed";
 export function endSweeper(
   core: HcTarget,
   log: (line: string) => void,
-  link: (core: HcTarget) => ByteLink = spawnHcLink,
+  link: (core: HcTarget) => KillableLink = spawnHcLink,
 ): EndSweeper {
   let watching: Promise<HcConnection | undefined> | undefined;
   let open: HcConnection | undefined;
   /** Settles once the latest `hc connect` child has exited, so `stop` leaves no child behind. */
   let exited: Promise<void> = Promise.resolve();
+  let child: KillableLink | undefined;
+  let childOpen = false;
   let stopped = false;
   const watch = async (): Promise<HcConnection> => {
-    const child = link(core);
+    const next = link(core);
     const gone = Promise.withResolvers<void>();
-    child.onClose(() => gone.resolve());
+    next.onClose(() => {
+      if (child === next) childOpen = false;
+      gone.resolve();
+    });
+    child = next;
+    childOpen = true;
     exited = gone.promise;
     let connection: HcConnection;
     try {
-      connection = await HcConnection.open(child);
+      connection = await HcConnection.open(next);
     } catch (error) {
-      child.close();
+      next.close();
       throw error;
     }
     try {
@@ -125,6 +134,11 @@ export function endSweeper(
       stopped = true;
       (await watching)?.close();
       await exited;
+    },
+    kill: () => {
+      if (child?.kill === undefined || child.pid === undefined || !childOpen) return [];
+      child.kill("SIGKILL");
+      return [child.pid];
     },
   };
 }
