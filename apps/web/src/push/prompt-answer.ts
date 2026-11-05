@@ -5,9 +5,10 @@ import { useSyncExternalStore } from "react";
  * An answer the page sends for a permission notice's Allow, in #192's banner states. `waiting`: the page is not on
  * screen yet, so nothing is sent; `sending`: the host is checking the prompt is still on the live screen;
  * `answered`: the agent got its key; `stale`: the prompt was answered or changed, so nothing was sent; `failed`: the
- * host could not be reached, so nothing was sent.
+ * answer did not go through (the host could not be reached, or its link dropped), so nothing was sent; `unknown`: the
+ * key press failed after it was sent, so it may have reached the agent.
  */
-export type AnswerPhase = "waiting" | "sending" | "answered" | "stale" | "failed";
+export type AnswerPhase = "waiting" | "sending" | "answered" | "stale" | "failed" | "unknown";
 
 export interface PromptAnswerState {
   readonly terminal: string;
@@ -67,7 +68,7 @@ export async function allowFromPage(
   let phase: AnswerPhase;
   try {
     const reply = await send();
-    phase = reply.t === "answered" ? "answered" : reply.t === "stale" ? "stale" : "failed";
+    phase = reply.t === "answered" || reply.t === "stale" || reply.t === "unknown" ? reply.t : "failed";
   } catch {
     phase = "failed";
   }
