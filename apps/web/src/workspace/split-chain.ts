@@ -16,12 +16,20 @@ export interface SplitLink {
 export class SplitChain {
   /** Per tab, the pane the last split in flight hands to the next: its own new pane, or its source if it failed. */
   readonly #handoff = new Map<string, Promise<string>>();
+  /**
+   * Per tab, the last split that landed (the pane it came off and the pane it made) until the screen shows focus
+   * after it (#326). Landing focuses the new pane through a state update that renders later, so a key read in between
+   * still sees the pane it came off as focused; it splits the new pane instead, as it would a moment later.
+   */
+  readonly #landed = new Map<string, { readonly from: string; readonly pane: string }>();
 
   /** `source` is the pane named for this split; null splits the focused pane, or the one an earlier split makes. */
   next(tab: string, focused: string, source: string | null): SplitLink {
     const before = this.#handoff.get(tab);
+    const landed = this.#landed.get(tab);
+    const current = landed !== undefined && landed.from === focused ? landed.pane : focused;
     const from: Promise<string> =
-      before === undefined ? Promise.resolve(source ?? focused) : before.then((handed) => source ?? handed);
+      before === undefined ? Promise.resolve(source ?? current) : before.then((handed) => source ?? handed);
     const pane = freshId("p");
     const { promise, resolve } = Promise.withResolvers<string>();
     this.#handoff.set(tab, promise);
@@ -34,11 +42,18 @@ export class SplitChain {
       place: (apply) =>
         void from.then((at) => {
           apply(at);
+          this.#landed.set(tab, { from: at, pane });
           settle(pane);
           return at;
         }),
       fail: () => void from.then(settle),
     };
+  }
+
+  /** The screen now shows `focused` as the tab's focused pane: a landed split no longer needs handing on. */
+  shown(tab: string, focused: string): void {
+    const landed = this.#landed.get(tab);
+    if (landed !== undefined && focused !== landed.from) this.#landed.delete(tab);
   }
 }
 
