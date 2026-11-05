@@ -152,15 +152,21 @@ describe("H-3: counter discipline", () => {
   });
 });
 
+/** The index test's machines, their keys generated once per file: key generation is setup, not the property (#149). */
+const indexMachines = {
+  founder: machine("founder"),
+  member: machine("member"),
+  others: Array.from({ length: 11 }, (_, i) => machine(`m${i}`)),
+  thirteenth: machine("m11"),
+};
+
 describe("the index follows the view", () => {
   test(
     "members, over-cap members and every key a revoked member's cards named",
     cpuHeadroom(17, () => {
       const dir = scratch();
-      const founder = machine("founder");
+      const { founder, member, others, thirteenth } = indexMachines;
       const mesh = new MeshFixture(dir, founder);
-      const member = machine("member");
-      const others = Array.from({ length: 11 }, (_, i) => machine(`m${i}`));
       mesh.admitAll(founder, [member, ...others]);
       const old = member.identity.noise;
       const fresh = { publicKey: crypto.getRandomValues(new Uint8Array(32)), secretKey: new Uint8Array(32) };
@@ -173,7 +179,6 @@ describe("the index follows the view", () => {
       expect(index.deviceRefusal(base64urlEncode(old.publicKey))).toBe("revoked mesh member");
       expect(index.deviceRefusal(base64urlEncode(fresh.publicKey))).toBe("revoked mesh member");
       expect(index.member(noiseOf(last))).toBeDefined();
-      const thirteenth = machine("m11");
       mesh.admit(founder, thirteenth);
       expect(mesh.store.authorizeIndex()?.deviceRefusal(noiseOf(thirteenth))).toBe("over-cap mesh member");
       expect(mesh.store.authorizeIndex()?.member(noiseOf(thirteenth))).toBeUndefined();
