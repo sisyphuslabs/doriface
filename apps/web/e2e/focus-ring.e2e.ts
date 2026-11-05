@@ -9,6 +9,10 @@ async function tabTo(page: Page, target: Locator, limit = 160): Promise<void> {
   await expect(target).toBeVisible();
   const reached = async (): Promise<boolean> => {
     if (await target.evaluate((el) => el === document.activeElement)) return true;
+    // A terminal takes the keyboard once its view is ready, which can land after the spec left it, and there every Tab
+    // goes to the shell (#335): leave it again before the next Tab.
+    const inTerminal = await page.evaluate(() => document.activeElement?.closest("[data-terminal]") != null);
+    if (inTerminal) await page.locator("body").click({ position: { x: 1, y: 1 } });
     await page.keyboard.press("Tab");
     return false;
   };
