@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProcessLink } from "../../packages/client/src/testing/process-link.ts";
+import { ProcessLink } from "@doriface/client/process-link";
 import { KnownHosts } from "../../apps/host/src/state/known-hosts.ts";
 import { createHcSession, type HcSession } from "../../apps/host/src/testing/hc-session.ts";
 import { connectCommand, runConnect } from "./support/connect-cli.ts";

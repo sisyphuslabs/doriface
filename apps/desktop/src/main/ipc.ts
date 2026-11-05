@@ -11,8 +11,12 @@ export function registerIpc(deps: IpcDeps): void {
     handlers.setWindowBackground(event, candidate),
   );
   ipcMain.handle(Channel.closeWindow, (event) => handlers.closeWindow(event));
-  ipcMain.handle(Channel.zoomWindow, (event, candidate: unknown) => handlers.zoomWindow(event, candidate));
   ipcMain.handle(Channel.takePairingLink, (event) => handlers.takePairingLink(event));
   ipcMain.handle(Channel.setMenuKeys, (event, candidate: unknown) => handlers.setMenuKeys(event, candidate));
   ipcMain.handle(Channel.chooseHc, (event) => handlers.chooseHc(event));
+  ipcMain.handle(Channel.takeUpdate, (event) => handlers.takeUpdate(event));
+  ipcMain.handle(Channel.installUpdate, (event) => handlers.installUpdate(event));
+  ipcMain.handle(Channel.installHc, (event) => handlers.installHc(event));
+  ipcMain.handle(Channel.noticesSupported, (event) => handlers.noticesSupported(event));
+  ipcMain.handle(Channel.showNotice, (event, candidate: unknown) => handlers.showNotice(event, candidate));
 }

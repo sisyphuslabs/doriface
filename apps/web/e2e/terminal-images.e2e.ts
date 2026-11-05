@@ -89,8 +89,7 @@ test("closing a terminal frees its engine", async ({ page }) => {
     .getByRole("button", { name: /^Close / })
     .first()
     .click();
-  // Closing the tab of a running shell asks first; Keep running closes the tab and leaves the session on the core.
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
+  // Closing the tab of a shell at its prompt ends it without asking.
   await expect(tabs).toHaveCount(open - 1, { timeout: 20_000 });
   await expect.poll(deinits, { timeout: 15_000 }).toBeGreaterThan(before);
 });

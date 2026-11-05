@@ -130,7 +130,7 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
     ["key", true],
     ["relay", false],
   ])(
-    "a fresh link whose %s differs from the saved one is refused without --replace, and writes nothing",
+    "a fresh link whose %s differs from the saved one is refused without --replace, writes nothing, and still pairs",
     async (what, newKey) => {
       const changed = join(scratch, `changed-${what}`);
       const oldKey = newKey ? generateX25519().publicKey : host().hostKey;
@@ -138,7 +138,8 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
       new KnownHosts(changed).add({ hostId: host().hostId, hostKey: oldKey, relayUrl: oldRelay });
       const saved = readFileSync(join(changed, "known-hosts.json"));
       const paired = host().logs.filter((line) => line.startsWith("paired device")).length;
-      const run = runConnect(changed, host().relayUrl, await host().pairingLink(), "--name", "changed");
+      const link = await host().pairingLink();
+      const run = runConnect(changed, host().relayUrl, link, "--name", "changed");
       expect(await within(run.exited, "the refusal", REFUSAL_MS)).toBe(1);
       const stderr = await run.stderr();
       const notice = newKey
@@ -148,6 +149,16 @@ describe("doriface-host connect: stdin and stdout piped to the host's hc connect
       expect(stderr.trim().split("\n").at(-1)).toContain("--replace");
       expect(readFileSync(join(changed, "known-hosts.json"))).toEqual(saved);
       expect(host().logs.filter((line) => line.startsWith("paired device")).length).toBe(paired);
+
+      // The refusal spent nothing: the same single-use link pairs once --replace allows the change.
+      const again = runConnect(changed, host().relayUrl, link, "--name", "changed", "--replace");
+      await again.write(HELLO);
+      expect(
+        JSON.parse(decoder.decode(await within(again.reader.line(), "hello on the same link"))).result.framed,
+      ).toBe(true);
+      again.end();
+      expect(await within(again.exited, "exit")).toBe(0);
+      expect(new KnownHosts(changed).get(host().hostId)?.hostKey).toEqual(host().hostKey);
     },
     30_000,
   );

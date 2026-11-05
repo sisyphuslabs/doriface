@@ -12,6 +12,10 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { createPrivateFile, openPrivateStateDir, readPrivateFile, replacePrivateFile } from "./win32/private-state.ts";
+
+/** Windows keeps private state with ACLs, not mode bits (#406); every other platform keeps the POSIX rules. */
+const WINDOWS = process.platform === "win32";
 
 /** $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host, else ~/.local/state/doriface-host. */
 export function defaultStateDir(env: Readonly<Record<string, string | undefined>> = process.env): string {
@@ -23,6 +27,7 @@ export function defaultStateDir(env: Readonly<Record<string, string | undefined>
 
 /** Creates the state dir owner-only (0700); an existing dir is tightened to 0700 too. */
 export function ensureStateDir(dir: string): string {
+  if (WINDOWS) return openPrivateStateDir(dir);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
   return dir;
@@ -32,6 +37,10 @@ const isMissing = (error: unknown): boolean => error instanceof Error && "code" 
 
 /** The parsed JSON at `path`, or undefined when the file does not exist. */
 export function readJson(path: string): unknown {
+  if (WINDOWS) {
+    const bytes = readPrivateFile(path);
+    return bytes === undefined ? undefined : JSON.parse(bytes.toString("utf8"));
+  }
   let text: string;
   try {
     text = readFileSync(path, "utf8");
@@ -42,20 +51,22 @@ export function readJson(path: string): unknown {
   return JSON.parse(text);
 }
 
+const jsonBytes = (value: unknown): Uint8Array => Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+
 const temporaryFor = (path: string): string => `${path}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp`;
 
 /**
- * Writes a fresh temporary file and flushes it to disk, so a rename after a crash never publishes an empty file; a
- * failed write removes what it created, but never another writer's file.
+ * Writes a fresh temporary file and, when `durable`, flushes it to disk, so a rename after a crash never publishes an
+ * empty file; a failed write removes what it created, but never another writer's file.
  */
-function writeTemporary(path: string, value: unknown): string {
+function writeTemporary(path: string, value: unknown, durable: boolean): string {
   const temporary = temporaryFor(path);
   const text = `${JSON.stringify(value, null, 2)}\n`;
   let fd: number | undefined;
   try {
     fd = openSync(temporary, "wx", 0o600);
     writeFileSync(fd, text);
-    fsyncSync(fd);
+    if (durable) fsyncSync(fd);
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) rmSync(temporary, { force: true });
     throw error;
@@ -75,27 +86,34 @@ function syncDirectory(path: string): void {
   }
 }
 
-/** Writes `value` as JSON readable by the owner only (0600), replacing the file atomically. */
-export function writePrivateJson(path: string, value: unknown): void {
-  const temporary = writeTemporary(path, value);
+/**
+ * Writes `value` as JSON readable by the owner only (0600), replacing the file atomically. `durable: false` skips the
+ * flushes to disk (the file's and its directory's): the replacement is still atomic, but a crash may lose it. Only for
+ * state whose crash safety is not what a test checks (#91).
+ */
+export function writePrivateJson(path: string, value: unknown, durable = true): void {
+  if (WINDOWS) return replacePrivateFile(path, jsonBytes(value));
+  const temporary = writeTemporary(path, value, durable);
   try {
     renameSync(temporary, path);
   } catch (error) {
     rmSync(temporary, { force: true });
     throw error;
   }
-  syncDirectory(path);
+  if (durable) syncDirectory(path);
 }
 
 /**
  * Creates `path` with `value` only if it does not exist yet, publishing the fully written file with a hard link (which
  * never replaces), so a concurrent reader sees no file or the whole file. Returns false when another writer won.
+ * `durable` as for {@link writePrivateJson}.
  */
-export function createPrivateJson(path: string, value: unknown): boolean {
-  const temporary = writeTemporary(path, value);
+export function createPrivateJson(path: string, value: unknown, durable = true): boolean {
+  if (WINDOWS) return createPrivateFile(path, jsonBytes(value));
+  const temporary = writeTemporary(path, value, durable);
   try {
     linkSync(temporary, path);
-    syncDirectory(path);
+    if (durable) syncDirectory(path);
     return true;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;

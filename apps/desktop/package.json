@@ -1,6 +1,6 @@
 {
   "name": "@doriface/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "doriface desktop shell",
   "homepage": "https://github.com/sisyphuslabs/doriface",
@@ -24,7 +24,8 @@
     "@playwright/test": "1.64.1",
     "@types/node": "24.19.2",
     "electron": "45.2.1",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "electron-updater": "6.8.11"
   },
   "productName": "doriface"
 }

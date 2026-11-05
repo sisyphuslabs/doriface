@@ -35,6 +35,10 @@ export const ACTIONS: readonly ActionDef[] = [
   app("pane.go:right", "Focus pane right", "goto_split:right"),
   app("pane.go:up", "Focus pane up", "goto_split:up"),
   app("pane.go:down", "Focus pane down", "goto_split:down"),
+  app("pane.swap:left", "Swap pane left"),
+  app("pane.swap:right", "Swap pane right"),
+  app("pane.swap:up", "Swap pane up"),
+  app("pane.swap:down", "Swap pane down"),
   app("pane.resize:left", "Move the pane's edge left", "resize_split:left,10"),
   app("pane.resize:right", "Move the pane's edge right", "resize_split:right,10"),
   app("pane.resize:up", "Move the pane's edge up", "resize_split:up,10"),
@@ -47,6 +51,7 @@ export const ACTIONS: readonly ActionDef[] = [
   app("layout.focus:sidebar", "Move focus between the terminal and the sidebar"),
   app("session.rename", "Rename session…"),
   app("session.end", "End session…"),
+  app("space.rename", "Rename space…"),
   // No default chord (#194): any free one would collide with a terminal program; it is bound in Settings > Keybindings.
   app("voice.dictate", "Dictate"),
   app("app.palette", "Command palette", "toggle_command_palette"),

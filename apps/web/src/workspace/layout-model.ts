@@ -9,6 +9,8 @@ export interface LayoutPane {
   /** The terminal's address as this core names it (`build-box/t3`), or null for a herdr-app panel. */
   readonly address: string | null;
   readonly mod: string | null;
+  /** The id its view is mounted under, when that is not `id` (see `keepMounts`). */
+  readonly mount?: string;
 }
 
 export interface LayoutTab {
@@ -22,6 +24,60 @@ export interface LayoutTab {
   readonly readOnly: string | null;
   /** Not in any document (the first live terminal shown alone, or a loose tab); written once it is split. */
   readonly transient: boolean;
+  /** The key its panel is mounted under, when that is not `key` (see `keepMounts`). */
+  readonly mount?: string;
+}
+
+/** Where a view is mounted: its tab's panel key and its pane's key. */
+export interface Mount {
+  readonly tab: string;
+  readonly pane: string;
+}
+
+/** What keepMounts remembers from one render to the next. */
+export interface Mounts {
+  /** Terminals shown in a tab of no document (transient or loose), by address: where their views are mounted. */
+  readonly shown: Map<string, Mount>;
+  /**
+   * Per document tab, decided when it first shows and kept for good (a tab's id is never reused): the view it took over
+   * (its pane id and that mount), or none. A tab that drops out of a render and comes back keeps its decision.
+   */
+  readonly taken: Map<string, { readonly pane: string; readonly mount: Mount } | null>;
+}
+
+export const newMounts = (): Mounts => ({ shown: new Map(), taken: new Map() });
+
+/**
+ * A document tab that takes over a terminal this screen showed in a tab of no document (the first live terminal shown
+ * alone while its tab was still being written, or a loose tab) keeps that tab's panel and pane keys, so the terminal's
+ * view is not mounted again: a remount drops the keys typed into it meanwhile (#381). Decided when the document tab
+ * first shows and kept while it lives; nothing else changes, since tabs and panes are still named by `key` and `id`.
+ */
+export function keepMounts(tabs: readonly LayoutTab[], mounts: Mounts): LayoutTab[] {
+  const inUse = new Set(tabs.flatMap((tab) => (tab.transient ? [tab.key] : [])));
+  for (const taken of mounts.taken.values()) if (taken !== null) inUse.add(taken.mount.tab);
+  const kept = tabs.map((tab): LayoutTab => {
+    if (tab.transient) {
+      const pane = tab.panes[0];
+      if (pane?.address != null) mounts.shown.set(pane.address, { tab: tab.key, pane: pane.id });
+      return tab;
+    }
+    if (!mounts.taken.has(tab.key)) {
+      const pane = tab.panes.find((each) => each.address !== null && mounts.shown.has(each.address));
+      const mount = pane?.address == null ? undefined : mounts.shown.get(pane.address);
+      const free = mount !== undefined && !inUse.has(mount.tab);
+      mounts.taken.set(tab.key, pane !== undefined && mount !== undefined && free ? { pane: pane.id, mount } : null);
+      if (pane?.address != null && free) {
+        mounts.shown.delete(pane.address);
+        inUse.add(mount.tab);
+      }
+    }
+    const taken = mounts.taken.get(tab.key);
+    if (taken === null || taken === undefined) return tab;
+    const panes = tab.panes.map((pane) => (pane.id === taken.pane ? { ...pane, mount: taken.mount.pane } : pane));
+    return { ...tab, mount: taken.mount.tab, panes };
+  });
+  return kept;
 }
 
 export const TRANSIENT = "transient";
@@ -75,8 +131,8 @@ function looseTab(address: string, layouts: readonly MachineLayout[]): LayoutTab
  * Every tab of every machine's document, this core's first, then the terminals opened on this screen while their
  * machine's layout could not take a tab (`loose`: offline, loading). With no tab at all, the first live terminal is
  * shown alone, as it opened before the layout lived in the core, but only while this core has no layout yet: a layout
- * whose tabs the person closed (Keep running on the last one) shows none, so the workspace is empty and the terminal
- * waits in the sidebar (#354).
+ * whose tabs were all closed shows none while a terminal runs on outside any tab (started outside the app, or kept by an
+ * older build's Keep running), so the workspace is empty and the terminal waits in the sidebar (#354).
  */
 export function buildTabs(
   layouts: readonly MachineLayout[],

@@ -27,6 +27,12 @@ export function useSidebarSize(): readonly [Pick<Layout, "sidebarWidth" | "rail"
   return [{ sidebarWidth: width, rail }, (patch) => layoutStore.update(patch)];
 }
 
+/** The Agents section's share of the sidebar's list height, and its setter. */
+export function useAgentsShare(): readonly [number, (share: number) => void] {
+  const share = useSyncExternalStore(layoutStore.subscribe, () => layoutStore.value.agentsShare);
+  return [share, (agentsShare) => layoutStore.update({ agentsShare })];
+}
+
 /** Whether the desktop sidebar is shown, and its setter (a value or an updater, like useState's). */
 export function useSidebarShown(): readonly [boolean, (next: boolean | ((shown: boolean) => boolean)) => void] {
   const shown = useSyncExternalStore(layoutStore.subscribe, () => layoutStore.value.sidebar);

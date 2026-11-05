@@ -1,4 +1,6 @@
 import { app, BrowserWindow, dialog, Menu, nativeTheme, screen, session, shell } from "electron";
+import { installHc } from "@doriface/host/hc-install";
+import electronUpdater from "electron-updater";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { contextMenuTemplate } from "../config/context-menu.ts";
@@ -14,12 +16,12 @@ import { findHc, hostCommand, type HostContext, saveHc, savedHc, usualHcDirs } f
 import { registerIpc } from "./ipc.ts";
 import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
+import { noticesSupported, showNotice } from "./notice.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
-import { windowZoom, type WindowZoom } from "./zoom.ts";
 import { revealWhenReady } from "./window-reveal.ts";
-import type { ZoomStep } from "../shared/bridge.ts";
+import { UpdateWatch } from "./updater.ts";
 
 const platform = parsePlatform(process.platform);
 const devSetting = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
@@ -63,25 +65,24 @@ function showWindow(path = "/"): BrowserWindow {
   return window;
 }
 
+/** Brings the one window forward (making it at `/` when there is none) and hands its page `value` once loaded. */
+function sendToPage(channel: string, value: string | null): void {
+  const window = showWindow();
+  const contents = window.webContents;
+  if (contents.isLoading()) contents.once("did-finish-load", () => contents.send(channel, value));
+  else contents.send(channel, value);
+}
+
 /** Shows an app path in the one window: an in-app navigation once its page has loaded, the first page otherwise. */
 function navigate(path: string): void {
-  const existing = liveWindow();
-  if (existing === undefined) return void showWindow(path);
-  showWindow();
-  const contents = existing.webContents;
-  if (contents.isLoading()) contents.once("did-finish-load", () => contents.send(Channel.navigate, path));
-  else contents.send(Channel.navigate, path);
+  if (liveWindow() === undefined) return void showWindow(path);
+  sendToPage(Channel.navigate, path);
 }
 
 const openSettings = (): void => navigate("/settings");
 
-let zoom: WindowZoom | undefined;
-const currentZoom = (): WindowZoom => (zoom ??= windowZoom(savedFile("window-zoom.json")));
-
-const zoomWindow = (step: ZoomStep): void => {
-  const window = liveWindow();
-  if (window !== undefined) currentZoom().step(window, step);
-};
+/** How often a long-running app looks for a release again after the check at launch. */
+const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000;
 
 /** A Shell menu item runs its action in the page, as its key would. */
 function runAction(action: string): void {
@@ -90,7 +91,7 @@ function runAction(action: string): void {
 
 function showMenu(keys: ReadonlyMap<string, string>): void {
   Menu.setApplicationMenu(
-    Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, zoomWindow, keys, runAction })),
+    Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, keys, runAction })),
   );
 }
 
@@ -99,10 +100,8 @@ function createWindow(path: string): BrowserWindow {
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
   const placement = restorePlacement(savedPlacement(placementFile), workAreas, screen.getPrimaryDisplay().workArea);
   const background = launchBackground(readSaved(savedFile("window-background.json")), nativeTheme.shouldUseDarkColors);
-  const opening = { ...webPreferences, zoomFactor: currentZoom().factor };
-  const window = new BrowserWindow(windowOptions(platform, opening, { background, placement }));
+  const window = new BrowserWindow(windowOptions(platform, webPreferences, { background, placement }));
   mainWindow = window;
-  currentZoom().applyOnEveryLoad(window);
   revealWhenReady({
     show: () => window.show(),
     isVisible: () => window.isVisible(),
@@ -146,6 +145,14 @@ function ready(): void {
     log: (line) => console.log(line),
   });
   app.on("will-quit", () => void localHost.stop());
+  // A checkout has no release feed (app-update.yml) to update from; only the packaged app looks for one.
+  const updates = app.isPackaged
+    ? new UpdateWatch(
+        electronUpdater.autoUpdater,
+        () => liveWindow()?.webContents.send(Channel.updateReady),
+        (line) => console.log(line),
+      )
+    : undefined;
   lockPermissions(session.defaultSession, origin);
   if (devUrl === undefined) serveApp(webRoot(), csp);
   else applyDevCsp(session.defaultSession, origin, csp);
@@ -156,7 +163,6 @@ function ready(): void {
     openExternal: (url) => shell.openExternal(url),
     setWindowBackground,
     closeWindow: () => liveWindow()?.close(),
-    zoomWindow,
     takePairingLink,
     setMenuKeys: showMenu,
     chooseHc: async () => {
@@ -168,7 +174,22 @@ function ready(): void {
       if (chosen !== undefined) saveHc(savedFile("hc.json"), chosen);
       return chosen;
     },
+    takeUpdate: () => updates?.ready ?? null,
+    installUpdate: () => updates?.install() ?? false,
+    // Kept as the chosen hc, so a Retry starts the one just installed even where another hc comes first on PATH.
+    installHc: async (onPhase) => {
+      const installed = await installHc({ home: context.home, env: process.env, onPhase });
+      saveHc(savedFile("hc.json"), installed.path);
+      return installed;
+    },
+    noticesSupported,
+    // A click brings the window back (or makes it, on macOS with none left) and opens the pane in it.
+    showNotice: (notice) => showNotice(notice, (terminal) => sendToPage(Channel.noticeClicked, terminal)),
   });
+  if (updates !== undefined) {
+    updates.start();
+    setInterval(() => updates.check(), UPDATE_CHECK_MS);
+  }
   // In a checkout the executable is Electron itself, which must not become the OS handler for doriface: links.
   if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
   routeDeepLinksTo(revealWindow);

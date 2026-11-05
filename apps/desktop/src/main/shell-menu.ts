@@ -19,6 +19,15 @@ const ITEMS: readonly (readonly [string, string] | null | readonly [string, read
       ],
     ],
     [
+      "Swap Pane",
+      [
+        ["pane.swap:left", "Left"],
+        ["pane.swap:right", "Right"],
+        ["pane.swap:up", "Up"],
+        ["pane.swap:down", "Down"],
+      ],
+    ],
+    [
       "Resize Pane",
       [
         ["pane.resize:left", "Move Edge Left"],

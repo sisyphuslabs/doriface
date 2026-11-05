@@ -93,6 +93,12 @@ export class LineGrants {
     try {
       const link = await this.#options.dial(member);
       policy.report(member.signPub, "connected");
+      // A revocation that landed while this dial was in flight already ran closeRevoked, which could not see this line.
+      const now = this.#member(hostId);
+      if (!("signPub" in now) || now.signPub !== member.signPub) {
+        link.close(4401, this.#closeReason(this.#options.view(), member.signPub));
+        return "signPub" in now ? { ok: false, code: 4401, reason: "not a member of this mesh" } : now;
+      }
       this.#register(member.signPub, link);
       return { ok: true, link };
     } catch (error) {
@@ -173,12 +179,17 @@ export class LineGrants {
 
   closeRevoked(view: MeshView): void {
     const current = new Set(view.members.map((member) => member.signPub));
-    const capped = new Set(view.overCap.map((member) => member.signPub));
     for (const [key, links] of this.#open) {
       if (current.has(key)) continue;
-      const reason = capped.has(key) ? "past the mesh's 12-member cap" : "revoked from the mesh";
+      const reason = this.#closeReason(view, key);
       for (const link of links) link.close(4401, reason);
     }
+  }
+
+  #closeReason(view: MeshView, key: string): string {
+    return view.overCap.some((member) => member.signPub === key)
+      ? "past the mesh's 12-member cap"
+      : "revoked from the mesh";
   }
 
   #register(key: string, link: ByteLink): void {

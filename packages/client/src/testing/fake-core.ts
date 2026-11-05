@@ -1,5 +1,5 @@
 import { FrameDecoder, LineDecoder, parseJsonRpc, type Frame, type JsonRpcRequest } from "@doriface/protocol";
-import { createMemoryLinkPair, type ByteLink } from "../link.ts";
+import { createMemoryLinkPair, LinkClosedError, type ByteLink } from "../link.ts";
 import { bytes, frame } from "./fixtures.ts";
 
 const FAKE_CORE_WAIT_MS = 2_000;
@@ -96,4 +96,22 @@ export class FakeCore {
       check();
     });
   }
+}
+
+/**
+ * `core.client` as a WebSocket that went away before it said so: once `refuse()` runs, every send throws, as a
+ * closed socket's does, while no close has been reported yet (#403).
+ */
+export function refusingLink(core: FakeCore): { readonly link: ByteLink; readonly refuse: () => void } {
+  let refused = false;
+  const link: ByteLink = {
+    send: (data) => {
+      if (refused) throw new LinkClosedError("the socket is closed");
+      core.client.send(data);
+    },
+    onData: (listener) => core.client.onData(listener),
+    onClose: (listener) => core.client.onClose(listener),
+    close: () => core.client.close(),
+  };
+  return { link, refuse: () => void (refused = true) };
 }

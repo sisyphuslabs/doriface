@@ -27,6 +27,8 @@ export function publishHostInfo(
   const info = hostInfoFor(platform);
   if (info === undefined) return { settled: Promise.resolve(), stop: () => Promise.resolve(), kill: () => [] };
   let stopped = false;
+  // A hello the core never answers would hold `stop` for the handshake deadline; stopping ends it instead.
+  const stopping = new AbortController();
   const child = link(core);
   let childOpen = true;
   const exited = new Promise<void>((resolve) =>
@@ -36,7 +38,7 @@ export function publishHostInfo(
     }),
   );
   const write = async (): Promise<void> => {
-    const connection = await HcConnection.open(child);
+    const connection = await HcConnection.open(child, { signal: stopping.signal });
     try {
       await writeHostInfo(connection, info);
     } finally {
@@ -53,6 +55,7 @@ export function publishHostInfo(
     settled,
     stop() {
       stopped = true;
+      stopping.abort(new Error("the host is stopping"));
       child.close();
       return exited;
     },

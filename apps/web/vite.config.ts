@@ -23,7 +23,8 @@ export default defineConfig({
     themeColor,
     tailwindcss(),
     VitePWA({
-      registerType: "autoUpdate",
+      // A new worker waits for Reload to update in Settings (src/sw.ts takes SKIP_WAITING from updateSW).
+      registerType: "prompt",
       // Our own worker (src/sw.ts): the same precache as before, plus the push and notification-click handlers.
       strategies: "injectManifest",
       srcDir: "src",

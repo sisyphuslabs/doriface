@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
 import { agentRow, startShell } from "./agents.ts";
+import { SPACE_RENAME_SHOTS } from "./capture-space-rename-shots.ts";
 import { VOICE_SHOTS } from "./capture-voice-shots.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
@@ -17,6 +18,8 @@ export interface Shot {
   /** Only at this width: the phone views exist below `md` only. */
   readonly only?: Width;
   readonly storageFails?: true;
+  /** The shot shows a drag in progress: the pointer stays where `run` left it, still pressed. */
+  readonly holdsPointer?: true;
   readonly run: (page: Page, width: Width) => Promise<void>;
   /** Ends what `run` started, once the shot is taken. */
   readonly cleanup?: () => void;
@@ -150,6 +153,29 @@ export const SHOTS: readonly Shot[] = [
     },
   },
   {
+    name: "pane-drop",
+    start: "connected",
+    only: "1440",
+    holdsPointer: true,
+    run: async (page) => {
+      await page.goto("/");
+      await openTerminal(page, /shell/, "$");
+      await openTerminal(page, /deploy/, "Waiting for approval");
+      await page.getByRole("button", { name: "Split right" }).click();
+      await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
+      // The deploy pane's header held and carried onto the shell pane's right edge: the half it would take shows.
+      const title = await page.getByLabel("deploy terminal").locator("header h2").boundingBox();
+      const target = await page
+        .locator("section[data-split='true']:visible:not([aria-label='deploy terminal'])")
+        .boundingBox();
+      if (title === null || target === null) throw new Error("no header or target pane to drag");
+      await page.mouse.move(title.x + title.width / 2, title.y + title.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(target.x + target.width * 0.92, target.y + target.height / 2, { steps: 12 });
+      await expect(page.locator("[data-pane-drop='right']")).toBeVisible();
+    },
+  },
+  {
     name: "terminal",
     start: "connected",
     run: async (page, width) => {
@@ -230,6 +256,7 @@ export const SHOTS: readonly Shot[] = [
     },
   },
   ...VOICE_SHOTS,
+  ...SPACE_RENAME_SHOTS,
   {
     // A session whose program ended while its machine was offline, so its view first attaches to a finished terminal.
     name: "session-ended",

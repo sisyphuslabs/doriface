@@ -13,6 +13,8 @@ export interface HostStartFailure {
   readonly message: string;
   readonly path?: string;
   readonly address?: string;
+  /** For `hc-version-failed`: the version of an hc older than the host supports. */
+  readonly version?: string;
   /** For `hc-binary-missing`: the folders the shell searched for hc after PATH, on this platform. */
   readonly searched?: readonly string[];
   readonly details: string;
@@ -43,17 +45,19 @@ function failureOf(value: unknown): HostStartFailure | undefined {
   const details: unknown = Reflect.get(failure, "details");
   const path = optionalString(failure, "path");
   const address = optionalString(failure, "address");
+  const version = optionalString(failure, "version");
   const searched: unknown = Reflect.get(failure, "searched");
   const folders =
     Array.isArray(searched) && searched.every((dir): dir is string => typeof dir === "string") ? searched : undefined;
   if (typeof code !== "string" || typeof message !== "string" || typeof details !== "string") return undefined;
-  if (path === null || address === null) return undefined;
+  if (path === null || address === null || version === null) return undefined;
   return {
     code,
     message,
     details,
     ...(path === undefined ? {} : { path }),
     ...(address === undefined ? {} : { address }),
+    ...(version === undefined ? {} : { version }),
     ...(folders === undefined ? {} : { searched: folders }),
   };
 }
@@ -98,17 +102,6 @@ export function closeDesktopWindow(scope: object = globalThis): boolean {
   if (close === null) return false;
   const closed = close();
   if (closed instanceof Promise) closed.catch((error: unknown) => console.error(`close window: ${String(error)}`));
-  return true;
-}
-
-export type ZoomStep = "in" | "out" | "reset";
-
-/** Asks the desktop shell to zoom its whole window one step; false outside the desktop app. */
-export function zoomDesktopWindow(step: ZoomStep, scope: object = globalThis): boolean {
-  const zoom = bridgeMethod("zoomWindow", scope);
-  if (zoom === null) return false;
-  const zoomed = zoom(step);
-  if (zoomed instanceof Promise) zoomed.catch((error: unknown) => console.error(`zoom window: ${String(error)}`));
   return true;
 }
 
@@ -160,6 +153,24 @@ export function setDesktopMenuKeys(keys: Readonly<Record<string, string>>, scope
   if (shown instanceof Promise) shown.catch((error: unknown) => console.error(`menu shortcuts: ${String(error)}`));
 }
 
+/** Runs `ready` with the version of each release the desktop app staged; does nothing outside the desktop app. */
+export function onDesktopUpdateReady(ready: (version: string) => void, scope: object = globalThis): void {
+  bridgeMethod(
+    "onUpdateReady",
+    scope,
+  )?.((update: unknown) => {
+    const version = typeof update === "object" && update !== null ? Reflect.get(update, "version") : undefined;
+    if (typeof version === "string") ready(version);
+  });
+}
+
+/** Asks the desktop app to quit and install its staged release (Restart to update). */
+export function installDesktopUpdate(scope: object = globalThis): void {
+  const installing = bridgeMethod("installUpdate", scope)?.();
+  if (installing instanceof Promise)
+    installing.catch((error: unknown) => console.error(`install update: ${String(error)}`));
+}
+
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
   if (typeof bridge !== "object" || bridge === null) return null;
@@ -173,6 +184,32 @@ export function desktopBridge(scope: object = globalThis): DesktopBridge | null 
       if (!isEndpoint(answer)) throw new Error("the desktop app returned no local host address");
       return answer;
     },
+  };
+}
+
+/** How Install herdr-core ended: the installed version, or the cause it failed with. */
+export type HcInstallOutcome = { readonly version: string } | { readonly error: string };
+
+/**
+ * The shell's Install herdr-core (a verified download it installs for this user and keeps as the hc), or null when it
+ * offers none: a browser, or a desktop build without it.
+ */
+export function desktopHcInstaller(
+  scope: object = globalThis,
+): ((onPhase: (phase: string) => void) => Promise<HcInstallOutcome>) | null {
+  const install = bridgeMethod("installHc", scope);
+  if (install === null) return null;
+  return async (onPhase) => {
+    const answer: unknown = await install((phase: unknown) => {
+      if (typeof phase === "string") onPhase(phase);
+    });
+    const installed = typeof answer === "object" && answer !== null ? Reflect.get(answer, "installed") : undefined;
+    const failed = typeof answer === "object" && answer !== null ? Reflect.get(answer, "failed") : undefined;
+    const version: unknown =
+      typeof installed === "object" && installed !== null ? Reflect.get(installed, "version") : undefined;
+    const message: unknown = typeof failed === "object" && failed !== null ? Reflect.get(failed, "message") : undefined;
+    if (typeof version === "string") return { version };
+    return { error: typeof message === "string" ? message : "the desktop app gave no answer" };
   };
 }
 

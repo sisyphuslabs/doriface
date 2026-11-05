@@ -48,6 +48,8 @@ const layout: Layout = {
   resizeFocused: () => false,
   equalize: () => true,
   toggleZoom: () => true,
+  move: () => Promise.resolve(false),
+  swap: () => true,
   moveTab: noop,
   restored: true,
   lastMove: null,
@@ -157,6 +159,17 @@ describe("session actions", () => {
   test.each(["desktop", "phone"] as const)("%s: with no session in view they are left out, not disabled", (shell) => {
     expect(sessionRows(shell, false)).toEqual([]);
   });
+});
+
+describe("space rename (#395)", () => {
+  test.each(["desktop", "phone"] as const)(
+    "%s: Rename space is a palette row with a session in view, and left out without",
+    (shell) => {
+      const rename = (inView: boolean) => availableActions(shell, inView).filter(({ id }) => id === "space.rename");
+      expect(rename(true)).toEqual([{ id: "space.rename" }]);
+      expect(rename(false)).toEqual([]);
+    },
+  );
 });
 
 describe("dictation (#194)", () => {

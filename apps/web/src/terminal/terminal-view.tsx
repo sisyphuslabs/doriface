@@ -17,6 +17,7 @@ import { readThemeColors } from "./theme-colors.ts";
 import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
+import { useSelectionCells } from "./use-selection-cells.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import { Ended } from "./ended.tsx";
@@ -195,6 +196,7 @@ export function TerminalView(props: TerminalViewProps) {
   }, [wt]);
   useTerminalActions(wt, typed, focused);
   useFocusAfterSelect(wt);
+  useSelectionCells(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
   const program = useRef(pid);
@@ -338,7 +340,15 @@ export function TerminalView(props: TerminalViewProps) {
       <Ended closeLabel={closeLabel} className={className} onClose={() => onEndNow.current?.(address, "finished")} />
     );
   }
-  if (unopened !== null) return <Unopened why={unopened} className={className} onRetry={() => setUnopened(null)} />;
+  if (unopened !== null) {
+    // Try again mounts a new terminal: until it attaches it is starting, so in a pane that is not focused its start-time
+    // focus goes back where it was, as on the first start (#163).
+    const retry = (): void => {
+      setWt(null);
+      setUnopened(null);
+    };
+    return <Unopened why={unopened} className={className} onRetry={retry} />;
+  }
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
     // The scrollbar and the jump button overlay the terminal: neither takes room from the grid.

@@ -1,6 +1,7 @@
 import { base64urlDecode, base64urlEncode, generateX25519, type KeyPair, x25519FromSecret } from "@doriface/crypto";
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { PrivateStateRefused } from "./private-state-refused.ts";
 import { createPrivateJson, ensureStateDir, isRecord, readJson, stringField, writePrivateJson } from "./files.ts";
 import { DEFAULT_LOCK_TIMEOUT_MS, withStateLock } from "./lock.ts";
 
@@ -22,9 +23,10 @@ export function loadDeviceKey(stateDir: string): KeyPair {
   const path = join(ensureStateDir(stateDir), DEVICE_FILE);
   const existing = readJson(path);
   if (existing !== undefined) {
-    const mode = statSync(path).mode & 0o777;
+    // POSIX mode bits only: on Windows readJson has already checked the file's ACL on the handle it read (#406).
+    const mode = process.platform === "win32" ? 0 : statSync(path).mode & 0o777;
     if ((mode & 0o077) !== 0) {
-      throw new Error(
+      throw new PrivateStateRefused(
         `${path} is readable by other users (mode ${mode.toString(8)}): chmod 600 it, or delete it and pair again`,
       );
     }
@@ -39,6 +41,12 @@ function parseDevice(value: unknown): KeyPair {
   if (!isRecord(value) || value["version"] !== 1) throw new Error(`${DEVICE_FILE}: unsupported format`);
   return x25519FromSecret(base64urlDecode(stringField(value, "secret", DEVICE_FILE)));
 }
+
+const sameHost = (a: KnownHost, b: KnownHost | undefined): boolean =>
+  b !== undefined &&
+  a.relayUrl === b.relayUrl &&
+  a.hostKey.byteLength === b.hostKey.byteLength &&
+  a.hostKey.every((byte, index) => byte === b.hostKey[index]);
 
 export class KnownHosts {
   readonly #dir: string;
@@ -62,6 +70,24 @@ export class KnownHosts {
       () => {
         const others = this.#read().filter((known) => known.hostId !== host.hostId);
         this.#write([...others, host]);
+      },
+      this.#lockTimeoutMs,
+    );
+  }
+
+  /**
+   * Saves `host` as a pairing does, comparing and saving under one lock hold: when the record now saved for its hostId
+   * is neither `checked` (what the pairing confirmed before it dialed) nor `host` itself, another pairing saved it in
+   * between, and `confirm` sees it first and throws to refuse the save.
+   */
+  replace(host: KnownHost, checked: KnownHost | undefined, confirm: (saved: KnownHost) => void): void {
+    withStateLock(
+      this.#dir,
+      () => {
+        const hosts = this.#read();
+        const saved = hosts.find((known) => known.hostId === host.hostId);
+        if (saved !== undefined && !sameHost(saved, checked) && !sameHost(saved, host)) confirm(saved);
+        this.#write([...hosts.filter((known) => known.hostId !== host.hostId), host]);
       },
       this.#lockTimeoutMs,
     );

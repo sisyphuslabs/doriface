@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   agentCounts,
   agentStatus,
+  asksBeforeClosing,
   firstInSpace,
   groupAgents,
+  runsProgram,
   spaceId,
   tabPosition,
   terminalTitle,
@@ -24,6 +26,37 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
   ...fields,
 });
 
+const front = (argv: string[]) => ({ argv, cwd: "/work", name: argv[0] ?? "", pid: 2 });
+const reportedState = (state: string) => ({ state }) as unknown as NonNullable<Terminal["status"]>;
+const read = (fields: Partial<Terminal>) => runsProgram(terminal(fields));
+
+describe("closing", () => {
+  test("a shell at its prompt and an agent between turns run nothing; a program in front or an agent's turn does", () => {
+    expect([
+      read({ argv: ["/bin/zsh"], foreground: front(["-zsh"]) }),
+      read({ argv: ["/bin/sh"] }),
+      read({ argv: ["cmd.exe"] }),
+      read({ argv: ["/bin/zsh"], foreground: front(["vim", "notes.md"]) }),
+      read({ argv: ["htop"] }),
+      read({ argv: ["/bin/zsh"], foreground: front(["claude"]), status: reportedState("working") }),
+      read({ argv: ["/bin/zsh"], foreground: front(["claude"]), status: reportedState("idle") }),
+      read({ argv: ["/bin/zsh"], foreground: front(["vim"]), state: "finished" }),
+    ]).toEqual([false, false, false, true, true, true, false, false]);
+  });
+
+  test("confirm-close-surface: false never asks, always always does, and the default asks while a program runs", () => {
+    const idle = terminal({ argv: ["/bin/sh"] });
+    const busy = terminal({ argv: ["/bin/sh"], foreground: front(["sleep", "600"]) });
+    expect([
+      asksBeforeClosing("false", [busy]),
+      asksBeforeClosing("always", [idle]),
+      asksBeforeClosing("true", [idle]),
+      asksBeforeClosing("true", [idle, busy]),
+      asksBeforeClosing("", [busy]),
+    ]).toEqual([false, true, false, true, true]);
+  });
+});
+
 describe("spaces", () => {
   test("one name on two machines is two spaces, each opening and matching its own machine's terminal", () => {
     const here = terminal({ address: "t1", cwd: "/home/me/api" });
@@ -36,6 +69,28 @@ describe("spaces", () => {
       expect(selected).toHaveLength(1);
       expect(firstInSpace([here, there], selected[0]?.id ?? "")).toBe(active.address);
     }
+  });
+});
+
+describe("same-named spaces on one machine (#397)", () => {
+  test("two directories ending the same way are two spaces, told apart by their parent, each selecting only itself", () => {
+    const home = terminal({ address: "t1", cwd: "/Users/yeongyu" });
+    const other = terminal({ address: "t2", cwd: "/Volumes/data/yeongyu" });
+    const spaces = toSpaces([home, other]);
+    expect(spaces.map((space) => space.name)).toEqual(["yeongyu · Users", "yeongyu · data"]);
+    for (const active of [home, other]) {
+      const selected = spaces.filter((space) => space.id === spaceId(active));
+      expect(selected).toHaveLength(1);
+      expect(firstInSpace([home, other], selected[0]?.id ?? "")).toBe(active.address);
+    }
+  });
+
+  test("a space label still gathers terminals from any directory, and an unshared name gets no suffix", () => {
+    const spaces = toSpaces([
+      terminal({ address: "t1", cwd: "/a/x", labels: { space: "api" } }),
+      terminal({ address: "t2", cwd: "/b/y", labels: { space: "api" } }),
+    ]);
+    expect(spaces.map((space) => [space.name, space.tabs])).toEqual([["api", 2]]);
   });
 });
 

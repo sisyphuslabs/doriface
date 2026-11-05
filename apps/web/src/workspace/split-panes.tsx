@@ -1,6 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { type Axis, type Node, nodeAt, pathTo, resizeAt } from "@doriface/protocol/layout";
+import { dropPreview } from "../layout/drop-zone.ts";
 import { arrange, type Rect } from "../layout/rects.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { LayoutPane, LayoutTab } from "./layout-model.ts";
@@ -10,6 +11,7 @@ import { Pane } from "./pane.tsx";
 import { PaneDivider } from "./pane-divider.tsx";
 import { linePosition } from "./line-position.ts";
 import { usePaneMotion, type PaneMotion } from "./pane-motion.ts";
+import { usePaneDrag } from "./use-pane-drag.ts";
 import type { Layout, PaneTarget } from "./use-layout.ts";
 
 /** Space between panes, px: the gap shows the canvas, so panes read as separate cards. */
@@ -107,6 +109,13 @@ export function SplitPanes(props: SplitPanesProps) {
     if (held !== null && preview === null) setPreview(null);
   }, [held, preview]);
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
+  // Each tab's panes as last laid out, in the box's coordinates: what a pane drag measures its drop zones against.
+  const laidOut = useRef(new Map<string, ReadonlyMap<string, Rect>>());
+  const { drag, grab } = usePaneDrag(
+    ref,
+    (tab) => laidOut.current.get(tab),
+    (_tab, pane, target) => void layout.move(pane, target.pane, target.zone),
+  );
   // A divider drag lays panes out on every move; like a window resize it plays no motion, its release included: the
   // dropped drag stays on screen until its write lands, and that render changes the frame, so it moves no pane either.
   const frame = `${box.width}x${box.height}${preview === null ? "" : `:${preview.delta}`}`;
@@ -120,9 +129,15 @@ export function SplitPanes(props: SplitPanesProps) {
             preview?.tab === tab.key ? resizeAt(tab.root, preview.container, preview.index, preview.delta) : null;
           const root = dragged ?? tab.root;
           const { panes, dividers, containers } = arrange(root, box, PANE_GAP, zoomed);
+          laidOut.current.set(tab.key, panes);
+          // herdr-app drags panes only in a split tab that is not zoomed, and only where the layout takes edits.
+          const movable =
+            selected && zoomed === null && tab.panes.length > 1 && !tab.transient && tab.readOnly === null;
+          const dropping = drag?.tab === tab.key ? drag.target : null;
+          const dropOn = dropping === null ? undefined : panes.get(dropping.pane);
           return (
             <div
-              key={tab.key}
+              key={tab.mount ?? tab.key}
               id={panelId(tab.key)}
               role="tabpanel"
               aria-label={titles.get(tab.key) ?? (tab.name === "" ? "Tab" : tab.name)}
@@ -136,7 +151,7 @@ export function SplitPanes(props: SplitPanesProps) {
                 // A pane a zoom hides stays mounted, so its stream and scrollback are there when it comes back.
                 return (
                   <PaneFrame
-                    key={pane.id}
+                    key={pane.mount ?? pane.id}
                     motion={{ rect: placed ?? HIDDEN, frame, grow, bump }}
                     hidden={placed === undefined}
                   >
@@ -159,6 +174,7 @@ export function SplitPanes(props: SplitPanesProps) {
                       onEnded={onEnded}
                       sends={sends}
                       dock={selected && layout.focused?.id === pane.id ? dock : null}
+                      onGrab={movable ? grab(tab.key, pane.id) : undefined}
                     />
                   </PaneFrame>
                 );
@@ -189,6 +205,17 @@ export function SplitPanes(props: SplitPanesProps) {
                     />
                   ))
                 : null}
+              {drag?.tab === tab.key ? <div aria-hidden className="absolute inset-0 z-10 cursor-grabbing" /> : null}
+              {dropping !== null && dropOn !== undefined ? (
+                <div
+                  aria-hidden
+                  data-pane-drop={dropping.zone}
+                  className="pointer-events-none absolute z-20 rounded-lg border-2 border-ring bg-ring/15"
+                  style={(({ x, y, width, height }) => ({ left: x, top: y, width, height }))(
+                    dropPreview(dropOn, dropping.zone),
+                  )}
+                />
+              ) : null}
             </div>
           );
         })}
@@ -214,6 +241,7 @@ interface PaneSlotProps {
   readonly onEnded: (address: string, pid: number | null) => void;
   readonly sends: PaneSends;
   readonly dock: ReactNode;
+  readonly onGrab: Parameters<typeof Pane>[0]["onGrab"];
 }
 
 function PaneSlot(props: PaneSlotProps) {
@@ -233,6 +261,7 @@ function PaneSlot(props: PaneSlotProps) {
     onSplit,
     onZoom,
     onClose,
+    onGrab,
   } = props;
   if (terminal !== undefined) {
     return (
@@ -251,6 +280,7 @@ function PaneSlot(props: PaneSlotProps) {
         onEnded={onEnded}
         onPort={sends.onPort(terminal.address)}
         dock={dock}
+        onGrab={onGrab}
       />
     );
   }

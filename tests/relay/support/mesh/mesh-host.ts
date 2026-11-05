@@ -2,7 +2,7 @@ import { HcConnection } from "@doriface/client";
 import { mkdirSync, mkdtempSync, rmSync, watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { ProcessLink } from "../../../../packages/client/src/testing/process-link.ts";
+import { ProcessLink } from "@doriface/client/process-link";
 import { createHcSession, type HcSession } from "../../../../apps/host/src/testing/hc-session.ts";
 import { Matches } from "../watch.ts";
 import type { Owned } from "./processes.ts";

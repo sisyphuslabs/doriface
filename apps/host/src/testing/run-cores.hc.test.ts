@@ -1,13 +1,34 @@
 import { expect, test } from "bun:test";
-import { createHcSession, type HcSession } from "./hc-session.ts";
-import { markedCores, RUN_MARK, stopRunProcesses } from "./run-cores.ts";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolveHcBin } from "./hc-session.ts";
+import { recordLeft, RUN_MARK, runCores, runProcesses, stopRunProcesses, type TestRun } from "./run-cores.ts";
 
 const encoder = new TextEncoder();
 
-/** Starts `session`'s core through `hc connect`, with `run` in its environment, and leaves it running. */
-async function startMarked(session: HcSession, run: string): Promise<void> {
-  const proc = Bun.spawn([session.hc, "connect", "--session", session.name], {
-    env: { ...session.env, [RUN_MARK]: run },
+const newRun = (): TestRun => ({
+  mark: crypto.randomUUID(),
+  dir: realpathSync(mkdtempSync(join(tmpdir(), "dh-run-"))),
+});
+
+/**
+ * Starts a core through `hc connect` on a scratch session in `run`'s dir and leaves it running. With `marked` false its
+ * environment has no run mark, as a core launchd starts on macOS has none.
+ */
+async function startCore(run: TestRun, marked: boolean): Promise<string> {
+  const dir = mkdtempSync(join(run.dir, "dh-"));
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    HC_SESSION: "run-cores",
+    HC_SOCKET: join(dir, "c.sock"),
+    XDG_STATE_HOME: join(dir, "state"),
+    XDG_RUNTIME_DIR: join(dir, "run"),
+    [RUN_MARK]: run.mark,
+  };
+  if (!marked) delete env[RUN_MARK];
+  const proc = Bun.spawn([resolveHcBin(), "connect", "--session", "run-cores"], {
+    env,
     stdin: "pipe",
     stdout: "pipe",
     stderr: "inherit",
@@ -19,11 +40,10 @@ async function startMarked(session: HcSession, run: string): Promise<void> {
   reader.releaseLock();
   void proc.stdin.end();
   await proc.exited;
+  return join(dir, "c.sock");
 }
 
-async function serving(session: HcSession): Promise<boolean> {
-  const socket = session.env["HC_SOCKET"];
-  if (socket === undefined) throw new Error("no HC_SOCKET");
+async function serving(socket: string): Promise<boolean> {
   try {
     (await Bun.connect({ unix: socket, socket: { data: () => {} } })).end();
     return true;
@@ -34,19 +54,80 @@ async function serving(session: HcSession): Promise<boolean> {
   }
 }
 
-test("a core a run left running is found by its mark and stopped; another run's core is not touched", async () => {
-  const [mine, other] = [createHcSession("run-mine"), createHcSession("run-other")];
-  const [run, otherRun] = [crypto.randomUUID(), crypto.randomUUID()];
-  await Promise.all([startMarked(mine, run), startMarked(other, otherRun)]);
+function alive(pid: number): boolean {
   try {
-    expect((await markedCores(run)).length).toBeGreaterThan(0);
-    const stopped = await stopRunProcesses(run);
-    expect(stopped.length).toBeGreaterThan(0);
-    expect(stopped.every((core) => core.command.includes("serve"))).toBe(true);
-    expect(await markedCores(run)).toEqual([]);
-    expect(await serving(mine)).toBe(false);
-    expect(await serving(other)).toBe(true);
-  } finally {
-    await Promise.all([mine.dispose(), other.dispose()]);
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ESRCH") return false;
+    throw error;
   }
-}, 30_000);
+}
+
+test("a core a run left without its mark is found by the file it holds in the run's dir and stopped; another run's core is not touched", async () => {
+  const [mine, other] = [newRun(), newRun()];
+  try {
+    const [socket, otherSocket] = await Promise.all([startCore(mine, false), startCore(other, true)]);
+    const found = await runCores(mine);
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every((core) => core.where.startsWith(`holds ${mine.dir}/`))).toBe(true);
+    const stopped = await stopRunProcesses(mine);
+    expect(stopped.map((core) => core.pid).filter(alive)).toEqual([]);
+    expect(await runCores(mine)).toEqual([]);
+    expect(await serving(socket)).toBe(false);
+    expect(await serving(otherSocket)).toBe(true);
+  } finally {
+    await Promise.all([stopRunProcesses(mine), stopRunProcesses(other)]);
+    for (const run of [mine, other]) rmSync(run.dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("a process carrying a run's mark is found by it and stopped", async () => {
+  const run = newRun();
+  try {
+    // Bun, not /bin/sleep: macOS hides the environment of Apple platform binaries from ps -E (the next test's case).
+    const marked = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 60_000)"], {
+      env: { ...process.env, [RUN_MARK]: run.mark },
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    expect((await runProcesses(run)).map((found) => found.pid)).toContain(marked.pid);
+    expect((await stopRunProcesses(run)).map((found) => found.pid)).toContain(marked.pid);
+    await marked.exited;
+    expect(await runProcesses(run)).toEqual([]);
+  } finally {
+    await stopRunProcesses(run);
+    rmSync(run.dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("processes the suite recorded as left are found and stopped whatever their program, with no mark", async () => {
+  const run = newRun();
+  // Two Apple platform binaries on macOS, whose environment ps -E never shows, below a parent that prints their pids.
+  const parent = Bun.spawn(["/bin/sh", "-c", "/bin/sleep 60 & a=$!; /bin/sleep 60 & echo $a $!; wait"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  try {
+    const reader = parent.stdout.getReader();
+    const line = new TextDecoder().decode((await reader.read()).value);
+    reader.releaseLock();
+    const sleepers = line
+      .trim()
+      .split(" ")
+      .map(Number)
+      .toSorted((a, b) => a - b);
+    await recordLeft(run.dir, parent.pid);
+    expect((await runProcesses(run)).map((one) => one.pid).toSorted((a, b) => a - b)).toEqual(sleepers);
+    const stopped = await stopRunProcesses(run);
+    expect(stopped.map((one) => one.pid).toSorted((a, b) => a - b)).toEqual(sleepers);
+    expect(sleepers.filter(alive)).toEqual([]);
+    // Its children stopped, the parent's wait returns.
+    await parent.exited;
+    expect(await runProcesses(run)).toEqual([]);
+  } finally {
+    parent.kill();
+    await stopRunProcesses(run);
+    rmSync(run.dir, { recursive: true, force: true });
+  }
+}, 60_000);

@@ -1,6 +1,5 @@
 import type { Terminal } from "@doriface/protocol";
 import { useNavigate } from "@tanstack/react-router";
-import { type ZoomStep, zoomDesktopWindow } from "../desktop/bridge.ts";
 import { terminalConfigStore } from "../ghostty/config-store.ts";
 import { single, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
 import { KEY_BY_NAME } from "../ghostty/keys.ts";
@@ -22,7 +21,7 @@ export interface AppActionTargets {
   readonly onToggleSidebar: () => void;
   /** Moves focus from the terminal to the sidebar, or back. */
   readonly onFocusSidebar: () => void;
-  /** Renames or ends the session in view; false when there is none. */
+  /** Renames or ends the session in view, or renames its space; false when there is none. */
   readonly onSession: SessionVerb;
   /** Starts dictating into the session in view, or ends the dictation under way; false with no session in view. */
   readonly onDictate: () => boolean;
@@ -30,12 +29,13 @@ export interface AppActionTargets {
   readonly focusedTab?: () => string | null;
 }
 
-export type SessionVerb = (verb: "rename" | "end") => boolean;
+export type SessionVerb = (verb: "rename" | "end" | "rename-space") => boolean;
 
 function sessionAction(action: string, onSession: SessionVerb): boolean {
   if (action === "session.rename") return onSession("rename");
   if (action === "session.end") return onSession("end");
-  return zoomAction(action);
+  if (action === "space.rename") return onSession("rename-space");
+  return stepTerminalFont(action);
 }
 
 const FONT_STEP = 1;
@@ -49,8 +49,22 @@ export function zoomedConfig(config: TerminalConfig, delta: number | null): Term
   return withValues(config, "font-size", [String(size)]);
 }
 
-function zoom(delta: number | null): void {
+/** The text-size actions and their steps; null resets the size to the default. */
+const FONT_DELTA: Readonly<Record<string, number | null>> = {
+  "app.zoom_in": FONT_STEP,
+  "app.zoom_out": -FONT_STEP,
+  "app.zoom_reset": null,
+};
+
+/**
+ * Steps the terminal text size, as Ghostty and herdr-app do, in the desktop app and a browser alike; false for any other
+ * action. The window is never zoomed, so the chrome beside the macOS window buttons keeps its size (#388).
+ */
+export function stepTerminalFont(action: string): boolean {
+  const delta = FONT_DELTA[action];
+  if (delta === undefined) return false;
   void terminalConfigStore.update((current) => zoomedConfig(current, delta));
+  return true;
 }
 
 /** Whether selecting the address does anything: a null target or the active tab leaves the key unhandled. */
@@ -63,25 +77,6 @@ export function neighbour(list: readonly string[], current: string | null, step:
   const index = current === null ? -1 : list.indexOf(current);
   const target = list[(index + step + list.length) % list.length] ?? null;
   return target === current ? null : target;
-}
-
-const ZOOM_STEPS: Readonly<Record<string, ZoomStep>> = {
-  "app.zoom_in": "in",
-  "app.zoom_out": "out",
-  "app.zoom_reset": "reset",
-};
-
-const FONT_DELTA: Readonly<Record<ZoomStep, number | null>> = { in: FONT_STEP, out: -FONT_STEP, reset: null };
-
-/**
- * The desktop app zooms its whole window, as its View menu does; a browser keeps its own page zoom, which a page cannot
- * set, so there the keys step the terminal text size.
- */
-function zoomAction(verb: string): boolean {
-  const step = ZOOM_STEPS[verb];
-  if (step === undefined) return false;
-  if (!zoomDesktopWindow(step)) zoom(FONT_DELTA[step]);
-  return true;
 }
 
 /** The phone shell's app actions: new terminal, settings and terminal text size; it has no tabs, panes or sidebar. */
@@ -185,6 +180,8 @@ export function desktopActions(
         return true;
       case "pane.go":
         return isDirection(argument) && layout.go(argument);
+      case "pane.swap":
+        return isDirection(argument) && layout.swap(argument);
       case "pane.resize":
         return isDirection(argument) && layout.resizeFocused(argument);
       case "pane.equalize":

@@ -28,14 +28,16 @@ describe("machines follow the mesh by themselves (goal 1 and 2, R-13)", () => {
     const clock = new FakeClock();
     const net = new MeshNet(clock, seededRandom(17));
     const { records: base } = meshOf([pa, pb]);
-    const opened = new Map<string, ByteLink[]>();
+    // Each line's close, subscribed the moment it is dialed: an hc line closes when its `hc connect` child exits, in real
+    // time, after the revocation's closeRevoked has ended its stdin, so the test awaits these instead of reading once.
+    const closes = new Map<string, Promise<void>[]>();
     const dial = dialCore([coreOf(pb, b), coreOf(pe, e)]);
     const recordLink = async (member: MemberEntry): Promise<ByteLink> => {
       const link = await dial(member);
-      opened.set(member.name, [...(opened.get(member.name) ?? []), link]);
+      const closed = new Promise<void>((resolve) => link.onClose(() => resolve()));
+      closes.set(member.name, [...(closes.get(member.name) ?? []), closed]);
       return link;
     };
-    const closed: string[] = [];
     const reconciler = new Reconciler({
       machines: a.control.machines,
       program: local.program,
@@ -69,12 +71,14 @@ describe("machines follow the mesh by themselves (goal 1 and 2, R-13)", () => {
     await reconciler.idle();
     expect(await names()).toEqual(["auto-b", "auto-e"]);
     expect((await a.control.machines.connect("auto-e")).state).toBe("connected");
-    for (const link of opened.get("auto-e") ?? []) link.onClose(() => closed.push("e"));
 
     hostB.gossip.append({ type: "revoke", signPubs: [pe.signPub], reason: "revoke" });
     await clock.advance(15_000);
     await reconciler.idle();
     expect(await names()).toEqual(["auto-b"]);
-    expect(closed.length).toBeGreaterThan(0);
+    // Every line the revoked machine had is closed, however late its child exits; the test's timeout bounds the wait.
+    const linesOfE = closes.get("auto-e") ?? [];
+    expect(linesOfE.length).toBeGreaterThan(0);
+    await Promise.all(linesOfE);
   }, 60_000);
 });

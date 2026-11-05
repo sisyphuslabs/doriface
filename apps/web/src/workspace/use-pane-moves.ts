@@ -1,4 +1,16 @@
-import { childrenOf, editTab, equalize, nodeAt, pathTo, resizeAt, type Node } from "@doriface/protocol/layout";
+import {
+  childrenOf,
+  editTab,
+  equalize,
+  freshId,
+  movePane,
+  nodeAt,
+  pathTo,
+  resizeAt,
+  swapPanes,
+  type Edge,
+  type Node,
+} from "@doriface/protocol/layout";
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { paneMove, type Direction } from "../layout/neighbor.ts";
 import { arrange } from "../layout/rects.ts";
@@ -29,6 +41,13 @@ export interface PaneMoves {
   readonly resizeFocused: (direction: Direction) => boolean;
   readonly equalize: () => boolean;
   readonly toggleZoom: () => boolean;
+  /**
+   * Moves pane `source` of the tab in view beside pane `target` on `edge`, or swaps the two (`swap`), as herdr-app's
+   * pane drag, and focuses it; true once the write landed, false when nothing was written.
+   */
+  readonly move: (source: string, target: string, edge: Edge | "swap") => Promise<boolean>;
+  /** Swaps the focused pane with its nearest neighbour that way, as herdr-app's `pane.swap`; focus stays with it. */
+  readonly swap: (direction: Direction) => boolean;
 }
 
 export interface PaneMovesContext {
@@ -60,9 +79,9 @@ export function usePaneMoves({ active, focused, layoutOf, show, setView, history
     [active, focused, show],
   );
 
-  // Pane sizes are shared in the herdr-app document, as herdr-app keeps them; this is the one place that writes them,
-  // so keeping them per device instead would change only this function.
-  // The write, or null when the tab in view takes no size edits.
+  // Pane sizes and places are shared in the herdr-app document, as herdr-app keeps them; this is the one place that
+  // writes them, so keeping them per device instead would change only this function.
+  // The write, or null when the tab in view takes no edits.
   const editSizes = useCallback(
     (change: (root: Node) => Node | null): Promise<boolean> | null => {
       if (active === null || active.transient) return null;
@@ -102,7 +121,34 @@ export function usePaneMoves({ active, focused, layoutOf, show, setView, history
     return true;
   }, [active, focused]);
 
-  return { go, bumped, resize, resizeFocused, equalize: equalizeTab, toggleZoom };
+  const move = useCallback(
+    (source: string, target: string, edge: Edge | "swap"): Promise<boolean> => {
+      if (active === null) return Promise.resolve(false);
+      const key = active.key;
+      const written = editSizes((root) =>
+        edge === "swap" ? swapPanes(root, source, target) : movePane(root, source, target, edge, freshId("s")),
+      );
+      if (written === null) return Promise.resolve(false);
+      show(key, source);
+      return written;
+    },
+    [active, editSizes, show],
+  );
+
+  // herdr-app's swap goes by geometry only: the nearest pane that way, not the one last visited.
+  const swap = useCallback(
+    (direction: Direction): boolean => {
+      if (active === null || focused === null) return false;
+      const { panes } = arrange(active.root, MEASURE, 8, null);
+      const next = paneMove(focused.id, direction, panes, []);
+      if (next.kind === "pass") return false;
+      if (next.kind === "go") editSizes((root) => swapPanes(root, focused.id, next.to));
+      return true;
+    },
+    [active, editSizes, focused],
+  );
+
+  return { go, bumped, resize, resizeFocused, equalize: equalizeTab, toggleZoom, move, swap };
 }
 
 /** The line Ghostty's `resize_split` moves: in the nearest row (left, right) or column (up, down) around the pane. */

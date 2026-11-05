@@ -138,10 +138,23 @@ const CODE_KEYS: Readonly<Record<string, string>> = {
   End: "end",
 };
 
-/** The trigger a key event matches, or null for a lone modifier. */
+/**
+ * A character typed through AltGr, which Windows reports as Ctrl+Alt: AZERTY's `}` is AltGr+=. It is text for the
+ * terminal, never a Ctrl+Alt binding (#403). The terminal's own input (wterm) uses the same rule.
+ */
+const typedThroughAltGr = (event: Partial<Pick<KeyboardEvent, "key" | "metaKey" | "getModifierState">>): boolean =>
+  event.metaKey !== true &&
+  event.getModifierState?.("AltGraph") === true &&
+  Array.from(event.key ?? "").length === 1 &&
+  (event.key ?? "") >= " " &&
+  event.key !== "\u007f";
+
+/** The trigger a key event matches, or null for a lone modifier or a character typed through AltGr. */
 export function triggerFromEvent(
-  event: Pick<KeyboardEvent, "code" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">,
+  event: Pick<KeyboardEvent, "code" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey"> &
+    Partial<Pick<KeyboardEvent, "key" | "getModifierState">>,
 ): string | null {
+  if (typedThroughAltGr(event)) return null;
   const code = event.code;
   const key = /^Key[A-Z]$/.test(code)
     ? code.slice(3).toLowerCase()
