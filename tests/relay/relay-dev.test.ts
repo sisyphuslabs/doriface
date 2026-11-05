@@ -121,4 +121,20 @@ describe("startLocalRelay", () => {
     expect(await liveAmong(pids)).toEqual([]);
     expect(relayDirsIn(tmp)).toEqual([]);
   }, 180_000);
+
+  test("a file's afterAll stop that must escalate to SIGKILL finishes inside its hook and leaves no process", async () => {
+    const tmp = scratchTmp();
+    const fixture = join(import.meta.dir, "fixtures", "relay-stop-escalates.fixture.ts");
+    const proc = Bun.spawn(
+      [process.execPath, "test", "--path-ignore-patterns", ".relay/**", `./${relative(process.cwd(), fixture)}`],
+      { env: { ...process.env, TMPDIR: tmp }, stdout: "pipe", stderr: "pipe" },
+    );
+    const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+    expect(stderr).not.toContain("hook timed out");
+    expect(code).toBe(0);
+    const pids: unknown = JSON.parse(readFileSync(join(tmp, "pids.json"), "utf8"));
+    if (!Array.isArray(pids) || !pids.every((pid) => typeof pid === "number")) throw new Error("bad pid list");
+    expect(await liveAmong(pids)).toEqual([]);
+    expect(relayDirsIn(tmp)).toEqual([]);
+  }, 180_000);
 });
