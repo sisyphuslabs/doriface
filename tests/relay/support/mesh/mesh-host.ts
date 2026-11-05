@@ -1,5 +1,5 @@
 import { HcConnection } from "@doriface/client";
-import { mkdirSync, mkdtempSync, rmSync, watch } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ProcessLink } from "@doriface/client/process-link";
@@ -51,6 +51,8 @@ export interface MeshHostOptions {
   readonly name: string;
   readonly relayUrl: string;
   readonly tap?: Tap | undefined;
+  /** What its hc core calls itself, instead of this machine's hostname: a capture then shows no real host. */
+  readonly coreName?: string | undefined;
 }
 
 /** Ends a child the host's own teardown no longer needs, and waits until it is gone. */
@@ -68,11 +70,19 @@ async function textOf(stream: ReadableStream<Uint8Array>, each: (chunk: string) 
 }
 
 export async function startMeshHost(options: MeshHostOptions): Promise<MeshHost> {
-  const { name, relayUrl, tap } = options;
+  const { name, relayUrl, tap, coreName } = options;
   const scratch = mkdtempSync(join(tmpdir(), `mh-${name}-`));
   const stateDir = join(scratch, "state");
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const session = createHcSession(`doriface-mesh-${name}`);
+  if (coreName !== undefined) {
+    const coreDir = join(session.env["XDG_STATE_HOME"] ?? "", "herdr-core", session.name);
+    mkdirSync(coreDir, { recursive: true });
+    writeFileSync(
+      join(coreDir, "core.json"),
+      JSON.stringify({ id: crypto.randomUUID().replaceAll("-", ""), name: coreName }),
+    );
+  }
   const sessionDir = dirname(session.env["HC_SOCKET"] ?? "");
   const logs: string[] = [];
   const lines = new Matches<string>();
