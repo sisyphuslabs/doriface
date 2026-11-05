@@ -2,20 +2,30 @@ import { SettingRow } from "@doriface/ui";
 import { Monitor, Server } from "lucide-react";
 import { useSyncExternalStore, type ReactNode } from "react";
 import type { ConnectionSettings } from "../connection/settings.ts";
+import { hostFailure } from "../connection/host-failure.ts";
 import { connectionStore, useConnection, type ConnectionState } from "../connection/store.ts";
 
 function useConnectionSettings(): ConnectionSettings {
   return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
 }
 
-function describe(state: ConnectionState): string {
+function describe(state: ConnectionState): ReactNode {
   switch (state.phase) {
     case "open":
       return "Connected";
     case "connecting":
       return "Connecting";
     case "failed":
-      return state.error.message;
+      return (
+        <>
+          {hostFailure(state.error)}
+          {/* The transport's own words (a close code) only behind a disclosure, for a report (#477). */}
+          <details className="mt-1 text-xs">
+            <summary className="cursor-pointer">Details</summary>
+            <span className="[overflow-wrap:anywhere]">{state.error.message}</span>
+          </details>
+        </>
+      );
     case "host-failed":
       return state.failure.message;
     case "unconfigured":
