@@ -6,12 +6,11 @@
  * or a shell that could start one) and fails the run naming them.
  */
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RUN_DIR, RUN_MARK, stopRunProcesses, type TestRun } from "../src/testing/run-cores.ts";
+import { socketSafeBase } from "../src/testing/short-tmp.ts";
 
-// Short on macOS, whose $TMPDIR is deep: a scratch socket under it must stay within the 103-byte sun_path limit.
-const base = process.platform === "darwin" ? "/tmp" : tmpdir();
+const base = socketSafeBase();
 // Resolved, since lsof reports the paths a process holds resolved (macOS: /var and /tmp are links into /private).
 const run: TestRun = { mark: crypto.randomUUID(), dir: realpathSync(mkdtempSync(join(base, "dh-run-"))) };
 const suite = Bun.spawn([process.execPath, "test", ...Bun.argv.slice(2)], {
