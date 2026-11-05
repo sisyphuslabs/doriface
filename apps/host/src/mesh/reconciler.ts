@@ -5,7 +5,7 @@ import type { HcMachines } from "./hc-machines.ts";
 import { fallbacks } from "@doriface/mesh";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshView } from "./mesh-view.ts";
-import { BUDGET_REFUSAL } from "./line-grants.ts";
+import { type AddReservation, BUDGET_REFUSAL } from "./line-grants.ts";
 import { meshHostOf, meshVia } from "./via.ts";
 
 /** Section 8.1: a named STUCK state is retried when the view or `machine.list` changes, or every 10 minutes. */
@@ -24,6 +24,11 @@ export interface ReconcilerOptions {
   readonly selfHostId: string;
   readonly clock: Clock;
   readonly log: (line: string) => void;
+  /**
+   * Takes both relay upgrades of a `machine.add` ahead (the running host's LineGrants.reserveAdd), so an add starts
+   * only when the dial budget has room for herdr's probe and the line together (section 8.2, #106).
+   */
+  readonly reserve?: (hostId: string) => Promise<AddReservation>;
 }
 
 export interface MeshEntry {
@@ -228,7 +233,7 @@ export class Reconciler {
       return this.#stick(member, attempt.key, `name_taken: "${member.name}" and its fallbacks are used on this core`);
     }
     try {
-      await this.#options.machines.add(name, attempt.via);
+      await this.#reservedAdd(member, name, attempt.via);
       this.#retried(member.hostId);
       this.status.set(member.hostId, { state: "ok" });
       this.#options.log(`mesh: added machine ${name}`);
@@ -272,11 +277,29 @@ export class Reconciler {
       return this.#stick(member, attempt.key, `copied core: ${member.name}'s core is another member's`);
     }
     await machines.rm(old.name);
-    await machines.add(name, attempt.via);
+    await this.#reservedAdd(member, name, attempt.via);
     this.#retried(member.hostId);
     const note = `replaced machine "${old.name}" (doriface-host connect) with the mesh line`;
     this.status.set(member.hostId, { state: "ok", note });
     this.#options.log(`mesh: ${note}`);
+  }
+
+  /** `machine.add` once both of its upgrades are reserved; a refused reservation throws as herdr's refusal would. */
+  async #reservedAdd(member: MemberEntry, name: string, via: string): Promise<void> {
+    const reserved = await this.#options.reserve?.(member.hostId);
+    if (reserved !== undefined && !reserved.ok) {
+      throw new HcRpcError({
+        code: -32000,
+        message: `doriface-host connect: ${reserved.reason}`,
+        data: { kind: "unreachable" },
+      });
+    }
+    try {
+      await this.#options.machines.add(name, via);
+    } catch (error) {
+      if (reserved?.ok === true) reserved.failed();
+      throw error;
+    }
   }
 
   #stick(member: MemberEntry, key: string, reason: string): void {

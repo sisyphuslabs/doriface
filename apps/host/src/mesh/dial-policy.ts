@@ -16,6 +16,9 @@ export const DIAL_LIMITS = {
 
 export type DialLimits = { readonly [K in keyof typeof DIAL_LIMITS]: number };
 
+/** The relay upgrades one `machine.add` starts: herdr's hello probe, then the line (section 8.2). */
+export const ADD_UPGRADES = 2;
+
 /** Highest priority first: a revoke push, then other pushes and sweeps, then hc lines, then probes. */
 export type DialPurpose = "revoke-push" | "push" | "sweep" | "line" | "probe";
 const PRIORITY: Readonly<Record<DialPurpose, number>> = { "revoke-push": 0, push: 1, sweep: 1, line: 2, probe: 3 };
@@ -41,6 +44,8 @@ export interface Gate {
 interface Waiter {
   readonly priority: number;
   readonly seq: number;
+  /** The tokens it takes at once: 2 for a `machine.add` (#106), 1 for any other dial. */
+  readonly need: number;
   readonly resolve: (grant: Grant) => void;
   cancel: () => void;
 }
@@ -68,7 +73,8 @@ export class DialPolicy {
   /** Each member's first miss since it was last reached: the evidence section 8.6's 7-day unreachable flag reads. */
   readonly #firstMiss = new Map<string, number>();
   readonly #present = new Set<string>();
-  readonly #budgetRefused = new Set<string>();
+  /** Members a dial refused for the budget, with the tokens each needs at once (2 for a machine.add, 1 for a line). */
+  readonly #budgetRefused = new Map<string, number>();
   /**
    * Members whose dial met a refused relay pass (4412): due again when a new pass arrives, never gated. Each one's
    * fallback makes it due anyway after the first probe wait, in case no new pass ever comes.
@@ -117,17 +123,8 @@ export class DialPolicy {
    * `waitMs` bounds the wait for a token.
    */
   acquire(member: string, purpose: DialPurpose, options: { direct?: boolean; waitMs?: number } = {}): Promise<Grant> {
-    const now = this.#clock.now();
-    const gate = this.#gates.get(member);
-    const probeDue = gate !== undefined && now >= gate.nextAt;
-    if (gate !== undefined && purpose !== "sweep" && !probeDue) {
-      const nextInMs = gate.nextAt - now;
-      if (gate.cause === "rate-limited") return Promise.resolve({ ok: false, reason: "rate-limited", nextInMs });
-      return Promise.resolve({ ok: false, reason: "offline", misses: gate.misses, nextInMs });
-    }
-    if (purpose === "line" && !this.#present.has(member) && now < this.#settleUntil) {
-      return Promise.resolve({ ok: false, reason: "settling", nextInMs: this.#settleUntil - now });
-    }
+    const refused = this.#refusal(member, purpose);
+    if (refused !== undefined) return Promise.resolve(refused);
     if (options.direct === true) return Promise.resolve({ ok: true, chargedAt: undefined });
     const taken = this.#take(PRIORITY[purpose], options.waitMs);
     if (purpose !== "line") return taken;
@@ -138,24 +135,60 @@ export class DialPolicy {
   }
 
   /**
-   * A line refused for the budget (herdr cannot wait past its own deadline) is due again the moment a token is free
-   * for it: the window slid or a dial gave its token back, and no dial of higher priority waits. While the window
-   * stays full, nothing is due, so herdr is not asked to add a line that would only be refused again.
+   * The relay upgrades of one `machine.add` of `member`, taken together (#106, M-E3): herdr's probe and then the line,
+   * both charged (section 8.2). Both are granted at once, waiting like a line for the window to have room for both, so
+   * an add never spends a probe whose line the window then refuses; a refusal spends nothing, and the member is due
+   * again once both fit.
    */
-  #lineRefused(member: string): void {
-    this.#budgetRefused.add(member);
+  acquireAdd(member: string): Promise<Grant> {
+    const refused = this.#refusal(member, "line");
+    if (refused !== undefined) return Promise.resolve(refused);
+    return this.#take(PRIORITY.line, this.#limits.lineWaitMs, ADD_UPGRADES).then((grant) => {
+      if (!grant.ok && grant.reason === "budget") this.#lineRefused(member, ADD_UPGRADES);
+      return grant;
+    });
+  }
+
+  /** Why `member` may not be dialed for `purpose` now (its gate, or the settle after an outage), if it may not. */
+  #refusal(member: string, purpose: DialPurpose): Grant | undefined {
+    const now = this.#clock.now();
+    const gate = this.#gates.get(member);
+    const probeDue = gate !== undefined && now >= gate.nextAt;
+    if (gate !== undefined && purpose !== "sweep" && !probeDue) {
+      const nextInMs = gate.nextAt - now;
+      if (gate.cause === "rate-limited") return { ok: false, reason: "rate-limited", nextInMs };
+      return { ok: false, reason: "offline", misses: gate.misses, nextInMs };
+    }
+    if (purpose === "line" && !this.#present.has(member) && now < this.#settleUntil) {
+      return { ok: false, reason: "settling", nextInMs: this.#settleUntil - now };
+    }
+    return undefined;
+  }
+
+  /**
+   * A line or an add refused for the budget (herdr cannot wait past its own deadline) is due again the moment the
+   * tokens it needs are free: the window slid or a dial gave its token back, and no dial of higher priority waits.
+   * Until then nothing is due, so herdr is not asked to add a line that would only be refused again.
+   */
+  #lineRefused(member: string, need = 1): void {
+    this.#budgetRefused.set(member, Math.max(need, this.#budgetRefused.get(member) ?? 0));
     this.#armBudgetWake();
   }
 
   #armBudgetWake(): void {
     if (this.#budgetWake !== undefined || this.#budgetRefused.size === 0) return;
     const now = this.#clock.now();
-    const free = this.#waiters.length === 0 && this.#used() < this.budget;
-    const at = free ? now : (this.#charged[0] ?? now) + this.#limits.windowMs;
+    const need = Math.max(...this.#budgetRefused.values());
+    const used = this.#used();
+    const free = this.#waiters.length === 0 && used + need <= this.budget;
+    // The window has room for `need` once that many of the oldest charges have slid out of it.
+    const freedBy = this.#charged[Math.max(0, used + need - this.budget - 1)] ?? now;
+    const at = free ? now : freedBy + this.#limits.windowMs;
     this.#budgetWake = this.#clock.after(Math.max(0, at - now), () => {
       this.#budgetWake = undefined;
-      if (this.#waiters.length > 0 || this.#used() >= this.budget) return this.#armBudgetWake();
-      const members = [...this.#budgetRefused];
+      const needed = Math.max(...this.#budgetRefused.values());
+      if (this.#waiters.length > 0 || this.#used() + needed > this.budget) return this.#armBudgetWake();
+      const members = [...this.#budgetRefused.keys()];
       this.#budgetRefused.clear();
       for (const refused of members) this.#onDue(refused, "budget");
     });
@@ -265,13 +298,15 @@ export class DialPolicy {
     return this.#charged.length;
   }
 
-  #take(priority: number, waitMs: number | undefined): Promise<Grant> {
-    if (this.#waiters.length === 0 && this.#used() < this.budget) {
-      this.#charged.push(this.#clock.now());
-      return Promise.resolve({ ok: true, chargedAt: this.#clock.now() });
+  #take(priority: number, waitMs: number | undefined, need = 1): Promise<Grant> {
+    if (this.#waiters.length === 0 && this.#used() + need <= this.budget) {
+      // One reading of the clock: release() finds the charge by this exact value, and a monotonic clock never repeats.
+      const chargedAt = this.#clock.now();
+      for (let i = 0; i < need; i++) this.#charged.push(chargedAt);
+      return Promise.resolve({ ok: true, chargedAt });
     }
     const { promise, resolve } = Promise.withResolvers<Grant>();
-    const waiter: Waiter = { priority, seq: this.#seq++, resolve, cancel: () => undefined };
+    const waiter: Waiter = { priority, seq: this.#seq++, need, resolve, cancel: () => undefined };
     if (waitMs !== undefined) {
       waiter.cancel = this.#clock.after(waitMs, () => {
         this.#drop(waiter);
@@ -291,12 +326,13 @@ export class DialPolicy {
 
   #serve(): void {
     this.#wake = undefined;
-    while (this.#waiters.length > 0 && this.#used() < this.budget) {
+    while (this.#waiters.length > 0 && this.#used() + (this.#waiters[0]?.need ?? 1) <= this.budget) {
       const waiter = this.#waiters.shift();
       if (waiter === undefined) break;
       waiter.cancel();
-      this.#charged.push(this.#clock.now());
-      waiter.resolve({ ok: true, chargedAt: this.#clock.now() });
+      const chargedAt = this.#clock.now();
+      for (let i = 0; i < waiter.need; i++) this.#charged.push(chargedAt);
+      waiter.resolve({ ok: true, chargedAt });
     }
     this.#schedule();
     this.#budgetWake?.();

@@ -138,10 +138,10 @@ const machinesOf = async (entry: Running): Promise<readonly string[]> => {
 const added = (entry: Running): number => entry.logged.filter((line) => line.startsWith("mesh: added machine")).length;
 
 /**
- * Design section 8.2 (#106, M-E3): a newcomer joining N - 1 members needs at least 3N - 3 charged relay upgrades (its
- * pairing dial, N - 2 ack pushes, and herdr's probe and the line for each of the N - 1 machines it adds). Up to 5
- * members that fits one window of the budget, so `machine.list` on every online member reflects the join within 60 s.
- * Above 5 the bound is not guaranteed yet (#106 follow-up), so this test stays at 5.
+ * Design section 8.2 (#106, M-E3): a newcomer joining N - 1 members starts exactly 3N - 3 charged relay upgrades (its
+ * pairing dial, N - 2 ack pushes, and the two upgrades of each of the N - 1 machines it adds, reserved together), so
+ * `machine.list` on every online member reflects the join within ceil((3N - 3) / 12) windows of the budget: one window
+ * at 5 members, checked here with real herdr. join-bound.test.ts checks 6, 7 and 12 on a fake clock.
  */
 const joinBoundMs = (members: number): number =>
   Math.ceil((3 * members - 3) / DIAL_LIMITS.budget) * DIAL_LIMITS.windowMs;
