@@ -58,7 +58,8 @@ export const COLOR_KEYS: readonly KeyDef[] = [
     kind: { type: "theme" },
     repeatable: false,
     defaults: [""],
-    description: "A built-in theme (Night, Day, Graphite, Paper), or light:X,dark:Y to follow the system.",
+    description:
+      "A theme by its name in Appearance (Night, Day, Dracula, ...), or light:X,dark:Y to follow the system.",
     support: LIVE,
   },
   {

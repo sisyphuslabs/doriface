@@ -15,7 +15,7 @@ import {
   onDesktopRunAction,
   setDesktopBackground,
 } from "./desktop/bridge.ts";
-import { bootConnection } from "./desktop/local-host.ts";
+import { bootConnection, startFailure } from "./desktop/local-host.ts";
 import { captureInstallPrompt } from "./device/install.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
@@ -25,6 +25,8 @@ import { followConnection } from "./push/push-settings.ts";
 import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { reportMenuKeys } from "./keys/menu-keys.ts";
 import { router } from "./router.tsx";
+import { guardedSessionStorage } from "./storage/guarded.ts";
+import { reloadIntoWaitingWorker, resumeUpdate } from "./update/reload-into-waiting.ts";
 import { updateStore } from "./update/update-store.ts";
 import { stepTerminalFont } from "./workspace/use-app-actions.ts";
 
@@ -34,24 +36,31 @@ captureInstallPrompt();
 // so earlier desktop builds' workers and caches are removed instead.
 if (location.protocol === "https:" || location.protocol === "http:") {
   // A new worker waits until Reload to update (the sidebar's Settings dot says one does), so no page is swapped mid-use.
-  const updateSW = registerSW({
+  const updateDeps = {
+    workers: navigator.serviceWorker,
+    reload: () => location.reload(),
+    storage: guardedSessionStorage(),
+    after: (ms: number, run: () => void) => void setTimeout(run, ms),
+  };
+  registerSW({
     immediate: true,
     onNeedRefresh: () =>
       updateStore.set({
         apply: "reload",
-        run: () => {
-          // updateSW reloads only when the page had a worker as it registered; on a first visit it had none.
-          navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), { once: true });
-          void updateSW(true);
-        },
+        run: () => void reloadIntoWaitingWorker(updateDeps),
       }),
   });
+  void resumeUpdate(updateDeps);
   // A tapped notification opens the app at /?notice=<id>, or reaches an open window as a message.
   captureNotice();
   listenForNotices(() => void router.navigate({ to: "/" }));
   followConnection();
 } else void removeServiceWorkers();
-void bootConnection(desktopBridge(), connectionStore);
+const desktop = desktopBridge();
+// This computer's host, if it dies while the app runs, is started again before the link to it is tried again (#515).
+if (desktop !== null)
+  connectionStore.restartsLocalHost({ start: () => desktop.startLocalHost(), failure: startFailure });
+void bootConnection(desktop, connectionStore);
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
 function paintWindow(): void {
   setDesktopBackground(getComputedStyle(document.documentElement).getPropertyValue("--background").trim());

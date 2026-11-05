@@ -57,10 +57,64 @@ export type LockStepHook = (step: LockStep, generation: number) => void;
 
 const errorCode = (error: unknown): unknown => (error instanceof Error && "code" in error ? error.code : undefined);
 
+/** How long a delete-pending file is waited for before its EPERM counts as a real one (#464). */
+export const DELETE_PENDING_WAIT_MS = 1000;
+const DELETE_PENDING_POLL_MS = 5;
+
+/**
+ * Runs `read`, waiting out a file another process is deleting. On Windows such a file stays listed until its last handle
+ * closes, and opening it fails with ERROR_ACCESS_DENIED (EPERM) meanwhile: a generation the next holder is sweeping, or
+ * one its holder is removing, reads that way for a moment (#464). So on win32 an EPERM is retried until `waitMs` has
+ * passed; one that outlasts it is a real refusal and is thrown, as is any other error, and EPERM elsewhere at once.
+ */
+export function whileDeletePending<T>(
+  read: () => T,
+  platform: NodeJS.Platform = process.platform,
+  waitMs = DELETE_PENDING_WAIT_MS,
+): T {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      return read();
+    } catch (error) {
+      if (platform !== "win32" || errorCode(error) !== "EPERM" || Date.now() >= deadline) throw error;
+      Bun.sleepSync(DELETE_PENDING_POLL_MS);
+    }
+  }
+}
+
+/**
+ * Removes a lock file that other processes may be removing too (a generation every taker sweeps, a v0.1.0 guard). On
+ * Windows a second delete of a file another process is already deleting fails while that delete is pending: Bun
+ * reports it as EPERM or EFAULT (#464). That file is going anyway, so the failure is waited out until the file is gone;
+ * one that outlasts `waitMs` with the file still there is a real refusal and is thrown, as is anything else.
+ */
+export function removeLockFile(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+  waitMs = DELETE_PENDING_WAIT_MS,
+  io: { readonly remove: (path: string) => void; readonly exists: (path: string) => boolean } = {
+    remove: (target) => rmSync(target, { force: true }),
+    exists: existsSync,
+  },
+): void {
+  try {
+    io.remove(path);
+  } catch (error) {
+    const code = errorCode(error);
+    if (platform !== "win32" || (code !== "EPERM" && code !== "EFAULT")) throw error;
+    const deadline = Date.now() + waitMs;
+    while (io.exists(path)) {
+      if (Date.now() >= deadline) throw error;
+      Bun.sleepSync(DELETE_PENDING_POLL_MS);
+    }
+  }
+}
+
 /** The file's content, or undefined if it is gone or is a directory. */
 function readLock(path: string): string | undefined {
   try {
-    return readFileSync(path, "utf8");
+    return whileDeletePending(() => readFileSync(path, "utf8"));
   } catch (error) {
     if (errorCode(error) === "ENOENT" || errorCode(error) === "EISDIR") return undefined;
     throw error;
@@ -69,7 +123,7 @@ function readLock(path: string): string | undefined {
 
 function emptyLockIsFresh(path: string): boolean {
   try {
-    return Date.now() - statSync(path).mtimeMs < EMPTY_LOCK_STALE_MS;
+    return Date.now() - whileDeletePending(() => statSync(path)).mtimeMs < EMPTY_LOCK_STALE_MS;
   } catch (error) {
     if (errorCode(error) === "ENOENT") return true;
     throw error;
@@ -185,14 +239,14 @@ function breakStaleLock(path: string, observed: string): boolean {
   const token = holderContent();
   if (!tryAcquire(guard, token)) {
     const breaker = readLock(guard);
-    if (breaker !== undefined && !isHeld(guard, breaker) && readLock(guard) === breaker) rmSync(guard, { force: true });
+    if (breaker !== undefined && !isHeld(guard, breaker) && readLock(guard) === breaker) removeLockFile(guard);
     return false;
   }
   try {
-    if (readLock(path) === observed) rmSync(path, { force: true });
+    if (readLock(path) === observed) removeLockFile(path);
     return true;
   } finally {
-    if (readLock(guard) === token) rmSync(guard, { force: true });
+    if (readLock(guard) === token) removeLockFile(guard);
   }
 }
 
@@ -236,7 +290,7 @@ function sweep(dir: string, mine: number): void {
     const stale = GENERATION.test(name)
       ? Number(name) < mine
       : name.endsWith(".tmp") && !pidIsLive(Number(name.split(".")[1]));
-    if (stale) rmSync(join(dir, name), { force: true });
+    if (stale) removeLockFile(join(dir, name));
   }
 }
 
@@ -261,7 +315,7 @@ function attempt(dir: string, content: string, step: LockStepHook): number | "wa
   if (!tryAcquire(join(dir, String(mine)), content)) return "retry";
   step("published", mine);
   if (highest(dir) !== mine) {
-    rmSync(join(dir, String(mine)), { force: true });
+    removeLockFile(join(dir, String(mine)));
     step("stale", mine);
     return "retry";
   }
@@ -375,7 +429,7 @@ function hold<T>(
       const failure = release(free, join(dir, String(mine + 1)), io.link);
       if (failure === undefined) {
         step("released", mine + 1);
-        rmSync(join(dir, String(mine)), { force: true });
+        removeLockFile(join(dir, String(mine)));
       } else {
         io.wedged(failure.error, dir);
       }

@@ -63,6 +63,14 @@ function inTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement && !NOT_TEXT.has(target.type);
 }
 
+/**
+ * Actions the browser itself carries out for a terminal, so their key must reach it uncancelled: paste runs as the
+ * browser's own paste event (bracketed when the program asked, and through clipboard-paste-protection). The terminal's
+ * key handling never sees the key, or it would encode it (ctrl+shift+v as ^V, shift+insert as ^[[2;2~) and cancel the
+ * paste (#510).
+ */
+const BROWSER_RUNS = new Set(["terminal.paste"]);
+
 /** A focused row of a list that can be reordered (`data-reorder-keys`) moves itself with the tab move keys (#140). */
 function inReorderableRow(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest("[data-reorder-keys]") !== null;
@@ -86,7 +94,7 @@ export function useKeymapDispatcher(): void {
       if (dispatch(action.scope, id)) {
         event.preventDefault();
         event.stopPropagation();
-      }
+      } else if (BROWSER_RUNS.has(id)) event.stopPropagation();
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });

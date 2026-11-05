@@ -79,6 +79,15 @@ export const BEHAVIOR_KEYS: readonly KeyDef[] = [
     support: LIVE,
   },
   {
+    key: "clipboard-trim-trailing-spaces",
+    group: "behavior",
+    kind: BOOL,
+    repeatable: false,
+    defaults: ["true"],
+    description: "Leave out the spaces at the end of each copied line and the blank rows after the last text.",
+    support: LIVE,
+  },
+  {
     key: "confirm-close-surface",
     group: "behavior",
     kind: { type: "enum", values: ["true", "false", "always"] },

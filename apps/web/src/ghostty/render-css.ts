@@ -1,4 +1,4 @@
-import { BUILTIN_PALETTES, resolveTheme, themeVariables } from "@doriface/ui";
+import { resolveTheme, themeVariables } from "@doriface/ui";
 import { effective, single, type TerminalConfig } from "./config.ts";
 import {
   builtinTheme,
@@ -30,9 +30,9 @@ function cellColor(value: string, fallback: string): string {
 }
 
 function themeDeclarations(name: string): Declarations {
-  const key = builtinTheme(name);
-  if (key === null) return {};
-  const vars = themeVariables(resolveTheme(BUILTIN_PALETTES[key]));
+  const palette = builtinTheme(name);
+  if (palette === null) return {};
+  const vars = themeVariables(resolveTheme(palette));
   const term = Object.entries(vars).filter(([prop]) => prop.startsWith("term-") && prop !== "term-cursor");
   return {
     ...Object.fromEntries(term.map(([prop, value]) => [`--${prop}`, value])),

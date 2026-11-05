@@ -91,6 +91,8 @@ test("a tab shows its herdr-app split tree, four levels of rows and columns, and
 test("a fresh device focuses a split tab's first pane, and Ctrl+Alt+arrows move focus between its panes", async ({
   page,
 }) => {
+  // Ctrl+Alt is the non-Mac focus chord; select that keymap on every runner (#500).
+  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" }));
   const [t1, t2, t3] = [shell("left"), shell("top"), shell("bottom")] as const;
   seedLayout([
     {

@@ -120,7 +120,9 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onDrop }: S
     end();
   });
   if (ask === null || !(live || keep || ended)) return null;
-  if (quiet && error === null) return null;
+  // A close that needed no question stays without one while its End settles, also once the terminal has left the list
+  // (which ends `quiet`); it shows only to say why that End failed (#518).
+  if ((quiet || endedQuietly.current === ask) && error === null) return null;
   const title = (asked.ask === ask ? asked.name : null) ?? current ?? "";
   // Asked with focus on the page body (a terminal whose renderer had not started yet), or from an element that is gone
   // by now, the question gives focus to the focused pane's terminal instead of leaving keys with nowhere to go.
