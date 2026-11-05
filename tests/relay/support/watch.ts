@@ -14,6 +14,10 @@ export class Matches<T> {
   readonly seen: T[] = [];
   readonly #waiters = new Set<{ readonly test: (item: T) => boolean; readonly resolve: (item: T) => void }>();
 
+  /**
+   * Waits not yet matched. Test-only: watch.test.ts reads it to prove a matched wait leaves no waiter behind, a leak no
+   * returned value would show. Nothing else should depend on it.
+   */
   get waiting(): number {
     return this.#waiters.size;
   }
