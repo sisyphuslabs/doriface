@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
+import * as mesh from "@doriface/mesh";
 import { hashOf, type Signed, viewOf } from "@doriface/mesh";
 import type { MeshTx } from "../state/mesh-tx.ts";
 import * as authorize from "./authorize-index.ts";
@@ -14,6 +15,10 @@ interface AckWork {
   readonly rebuilds: number;
   /** Records the view evaluations and the authorize index rebuilds read. */
   readonly read: number;
+  /** Distinct records AckCover parsed or hashed. */
+  readonly covered: number;
+  /** Distinct records anything parsed or hashed (the heads, the counter, the door; all memoized per record). */
+  readonly touched: number;
 }
 
 /**
@@ -44,6 +49,24 @@ function acksOver(size: number): { readonly stored: number; readonly acks: reado
     },
   });
   const rebuilds = spyOn(authorize, "indexOf");
+  // Which reads are AckCover's is told by the stack: the codec is shared by every caller in the sign.
+  const covered = new Set<Signed>();
+  const touched = new Set<Signed>();
+  const read = (record: Signed): void => {
+    touched.add(record);
+    if (new Error().stack?.includes("ack-cover.ts") === true) covered.add(record);
+  };
+  const { parseRecord, hashOf: hash } = mesh;
+  const reads = [
+    spyOn(mesh, "parseRecord").mockImplementation((record) => {
+      read(record);
+      return parseRecord(record);
+    }),
+    spyOn(mesh, "hashOf").mockImplementation((record) => {
+      read(record);
+      return hash(record);
+    }),
+  ];
   const acks: AckWork[] = [];
   const counted = (tx: MeshTx): MeshTx => ({
     get records() {
@@ -56,12 +79,16 @@ function acksOver(size: number): { readonly stored: number; readonly acks: reado
     view: () => tx.view(),
     sign: (identity, build) => {
       const before = { evaluations, evaluated, rebuilds: rebuilds.mock.calls.length };
+      covered.clear();
+      touched.clear();
       const record = tx.sign(identity, build);
       const calls = rebuilds.mock.calls.slice(before.rebuilds);
       acks.push({
         evaluations: evaluations - before.evaluations,
         rebuilds: calls.length,
         read: evaluated - before.evaluated + calls.reduce((sum, [set]) => sum + set.length, 0),
+        covered: covered.size,
+        touched: touched.size,
       });
       return record;
     },
@@ -78,27 +105,34 @@ function acksOver(size: number): { readonly stored: number; readonly acks: reado
     };
     if (mergeBatch(deps, [admit]).ack === undefined) throw new Error("b signed no ack");
   } finally {
-    rebuilds.mockRestore();
+    for (const spy of [rebuilds, ...reads]) spy.mockRestore();
   }
   return { stored: all.length, acks };
 }
 
 /**
- * Counted, not timed (#567): an S-3 fold ack persists the counter before it is signed, and that write used to evaluate
- * the whole view again and rebuild the authorize index from every record, so each ack cost O(records). An own ack that
- * witnesses no revoke conflict leaves the index as it is, so every ack after the first reads none of the set, at any
- * size. The first ack follows the merge, whose new records the index must cover: it is the control that the counters
- * see a rebuild.
+ * Counted, not timed (#567): an S-3 fold signs its acks in one transaction (`fitHeads`), and each persists the counter
+ * before it is signed. That write used to evaluate the whole view again and rebuild the authorize index from every
+ * record, for every ack. Now an own ack that witnesses no revoke conflict keeps the index: no ack after the merge's
+ * first evaluates or rebuilds. What stays per transaction is AckCover, which reads the stored set once, at the second
+ * ack, and one record (the ack it checks) at each later one. The first ack follows the merge, whose new records the
+ * index must cover: it is the control that the counters see a rebuild.
  */
-test("each own fold ack after the merge's first evaluates no view and rebuilds no index, at 256 and 2048 records", () => {
+test("own fold acks after the merge's first evaluate no view and rebuild no index; the cover reads the set once", () => {
   const work = [256, 2048].map(acksOver);
   for (const { stored, acks } of work) console.log(`${stored} records: ${JSON.stringify(acks)}`);
   for (const { stored, acks } of work) {
-    const [first, ...rest] = acks;
-    expect(first?.rebuilds).toBe(1);
+    const [first, second, ...rest] = acks;
+    expect(first).toMatchObject({ rebuilds: 1, covered: 0 });
     expect(first?.read).toBeGreaterThanOrEqual(stored);
-    expect(rest.length).toBeGreaterThanOrEqual(2);
-    for (const ack of rest) expect(ack).toEqual({ evaluations: 0, rebuilds: 0, read: 0 });
+    expect(second).toMatchObject({ evaluations: 0, rebuilds: 0, read: 0 });
+    expect(second?.covered).toBeGreaterThanOrEqual(stored);
+    expect(rest.length).toBeGreaterThanOrEqual(1);
+    for (const ack of rest) expect(ack).toMatchObject({ evaluations: 0, rebuilds: 0, read: 0, covered: 1 });
   }
-  expect(work[0]?.acks.slice(1)).toEqual(work[1]?.acks.slice(1) ?? []);
+  const later = (at: number) =>
+    work[at]?.acks
+      .slice(2)
+      .map(({ evaluations, rebuilds, read, covered }) => ({ evaluations, rebuilds, read, covered }));
+  expect(later(0)).toEqual(later(1) ?? []);
 }, 120_000);
