@@ -55,9 +55,10 @@ function watched(record: ApprovalRecord, clock: ApprovalClock): number {
 
 /**
  * Whether this record keeps a new answer from claiming its prompt. Our own unsettled claim holds like any other, except
- * the one claim whose attempt id the caller names in `retake`: an answer of its own that it knows ended without a press.
+ * the one claim whose attempt id the caller names in `retake`, and only when that claim is this client's own (`client`):
+ * an answer of its own that it knows ended without a press. Another client's attempt id never takes over its claim.
  */
-export function holds(record: ApprovalRecord, clock: ApprovalClock, retake?: string): boolean {
+export function holds(record: ApprovalRecord, clock: ApprovalClock, retake?: string, client?: string): boolean {
   switch (record.outcome) {
     case "sent":
     case "stale":
@@ -66,7 +67,7 @@ export function holds(record: ApprovalRecord, clock: ApprovalClock, retake?: str
     case "failed":
       return false;
     case "claimed":
-      if (retake !== undefined && record.attempt === retake) return false;
+      if (retake !== undefined && record.attempt === retake && record.client === client) return false;
       return watched(record, clock) < CLAIM_TTL_MS;
   }
 }
