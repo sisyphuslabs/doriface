@@ -17,6 +17,7 @@ import { createHcSession, type HcSession } from "../../../apps/host/src/testing/
 import { RecordingLink, type Tap, taps, tappedHc } from "./byte-tap.ts";
 import { socketFrom, testIp } from "./probe.ts";
 import { type LocalRelay, startLocalRelay } from "./relay-dev.ts";
+import { rethrowAfter, settleAll } from "./settle.ts";
 import { within } from "./watch.ts";
 
 const CLI = join(import.meta.dir, "..", "..", "..", "apps", "host", "src", "cli.ts");
@@ -63,6 +64,10 @@ export interface RelayedHostOptions {
   readonly pushTestOrigins?: readonly string[];
   /** Where the scratch dir is made (the system tmp dir by default), so a test can check that its own is removed. */
   readonly scratchRoot?: string;
+  /** For tests of this helper: told each part as it starts, so a test can check that a failed start stopped them all. */
+  readonly started?: (
+    part: { readonly relay: LocalRelay } | { readonly session: HcSession } | { readonly host: Host },
+  ) => unknown;
 }
 
 const UPLINK_TIMEOUT_MS = 30_000;
@@ -80,16 +85,23 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
   let relay: LocalRelay | undefined;
   let session: HcSession | undefined;
   let host: Host | undefined;
+  // Every step runs, whatever an earlier one threw: a host that fails to stop still has its core and relay stopped.
+  const teardown = [
+    () => host?.stop(),
+    () => session?.dispose(),
+    () => relay?.stop(),
+    () => rmSync(scratch, { recursive: true, force: true }),
+  ];
   const stop = async (): Promise<void> => {
     if (logs.length > 0) console.log(`host log:\n${logs.join("\n")}`);
-    await host?.stop();
-    await session?.dispose();
-    await relay?.stop();
-    rmSync(scratch, { recursive: true, force: true });
+    const failures = await settleAll(teardown);
+    if (failures.length > 0) throw new AggregateError(failures, "the relayed host did not stop cleanly");
   };
   try {
     relay = await startLocalRelay();
+    await options.started?.({ relay });
     session = createHcSession(prefix);
+    await options.started?.({ session });
     host = await startHost({
       listen: { hostname: "127.0.0.1", port: 0 },
       token: "relayed-host-token-relayed-host-token-relayed",
@@ -104,6 +116,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
         if (line.startsWith("relay: connected")) connected.resolve();
       },
     });
+    await options.started?.({ host });
     const uplinkMs = options.uplinkTimeoutMs ?? UPLINK_TIMEOUT_MS;
     await within(connected.promise, "the host's relay uplink", uplinkMs);
     const e2ee = host.e2ee;
@@ -120,8 +133,8 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
       stop,
     });
   } catch (error) {
-    await stop();
-    throw error;
+    if (logs.length > 0) console.log(`host log:\n${logs.join("\n")}`);
+    return rethrowAfter(error, teardown);
   }
 }
 
