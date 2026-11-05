@@ -1,4 +1,5 @@
 import { DeviceNotPairedError } from "./connect.ts";
+import { LoopbackAddressError } from "./loopback-address.ts";
 
 const BY_CODE: Readonly<Record<number, string>> = {
   4400: "The secure connection to your host failed. If the host was set up again, pair this device again.",
@@ -12,7 +13,7 @@ const FALLBACK = "Your host isn't answering. Check that its computer is on and d
 
 /** Why this device cannot reach its host, in plain words: the close code decides, never the transport's message. */
 export function hostFailure(error: Error): string {
-  if (error instanceof DeviceNotPairedError) return error.message;
+  if (error instanceof DeviceNotPairedError || error instanceof LoopbackAddressError) return error.message;
   const code = "code" in error && typeof error.code === "number" ? error.code : undefined;
   return (code === undefined ? undefined : BY_CODE[code]) ?? FALLBACK;
 }
