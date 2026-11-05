@@ -1,11 +1,11 @@
+import { RUN_DIR } from "./e2e/run-dir.ts";
 import { availableParallelism } from "node:os";
 import { defineConfig, devices } from "@playwright/test";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { E2E_LAYOUT_PORT, E2E_WEB_PORT } from "./e2e/config.ts";
 
 /** This run's build, apart from any other run's in the same checkout. */
-const WEB_OUT = join(tmpdir(), `doriface-web-e2e-${E2E_WEB_PORT}-dist`);
+const WEB_OUT = join(RUN_DIR, `doriface-web-e2e-${E2E_WEB_PORT}-dist`);
 
 // Playwright stops its web servers and workers (and with them every e2e host and core) on SIGINT, not on SIGTERM, which
 // would leave the layout host, its cores and vite preview running: the runner answers SIGTERM with its own SIGINT.
@@ -25,6 +25,8 @@ export default defineConfig({
   // Each worker fails the run itself when a spec leaves terminals on its core (e2e/terminal-guard.ts); this reports it.
   globalSetup: "./e2e/terminal-leaks.ts",
   globalTeardown: "./e2e/leftover-hosts.ts",
+  // Where this run's hosts and scratch sessions keep their files; the teardown stops any hc process still holding one.
+  metadata: { runDir: RUN_DIR },
   forbidOnly: Boolean(process.env["CI"]),
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: `http://127.0.0.1:${E2E_WEB_PORT}`, trace: "retain-on-failure" },
