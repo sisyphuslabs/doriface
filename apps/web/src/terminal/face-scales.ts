@@ -8,28 +8,37 @@ type GlyphMetrics = Pick<
 /** `text`'s metrics in `family` at `scale` times the terminal's size. */
 export type Measure = (text: string, family: string, scale: number) => GlyphMetrics;
 
+const HANGUL = "\u{AC00}";
+const KANA = "\u{3042}";
 /**
- * The script blocks of wide text, each with a full-width sample glyph. A CJK face draws a block at one advance, so the
+ * Ideographs, sampled from each face a browser can split them across (#252): \u6C34 is in every CJK font, Korean Hanja
+ * fonts included; \u8FD9 is a simplified-only form those lack; \u8FBC is a Japanese-only form. The first is the block's
+ * own sample, as before.
+ */
+const HAN = "\u{6C34}\u{8FD9}\u{8FBC}";
+
+/**
+ * The script blocks of wide text, each with its full-width sample glyphs. A CJK face draws a block at one advance, so a
  * sample's advance stands for every glyph of the block the browser draws from the same face.
  */
-const BLOCKS: readonly (readonly [from: number, to: number, sample: string])[] = [
-  [0x1100, 0x11ff, "\u{AC00}"],
-  [0x3130, 0x318f, "\u{AC00}"],
-  [0xa960, 0xa97f, "\u{AC00}"],
-  [0xac00, 0xd7ff, "\u{AC00}"],
-  [0x3040, 0x30ff, "\u{3042}"],
-  [0x31f0, 0x31ff, "\u{3042}"],
-  [0x2e80, 0x303f, "\u{6C34}"],
-  [0x3100, 0x312f, "\u{6C34}"],
-  [0x3190, 0x31ef, "\u{6C34}"],
-  [0x3200, 0x9fff, "\u{6C34}"],
-  [0xf900, 0xfaff, "\u{6C34}"],
-  [0xfe30, 0xfe4f, "\u{6C34}"],
-  [0xff00, 0xffef, "\u{6C34}"],
-  [0x20000, 0x3ffff, "\u{6C34}"],
+const BLOCKS: readonly (readonly [from: number, to: number, samples: string])[] = [
+  [0x1100, 0x11ff, HANGUL],
+  [0x3130, 0x318f, HANGUL],
+  [0xa960, 0xa97f, HANGUL],
+  [0xac00, 0xd7ff, HANGUL],
+  [0x3040, 0x30ff, KANA],
+  [0x31f0, 0x31ff, KANA],
+  [0x2e80, 0x303f, HAN],
+  [0x3100, 0x312f, HAN],
+  [0x3190, 0x31ef, HAN],
+  [0x3200, 0x9fff, HAN],
+  [0xf900, 0xfaff, HAN],
+  [0xfe30, 0xfe4f, HAN],
+  [0xff00, 0xffef, HAN],
+  [0x20000, 0x3ffff, HAN],
 ];
 
-function blockSample(code: number): string | undefined {
+function blockSamples(code: number): string | undefined {
   return BLOCKS.find(([from, to]) => code >= from && code <= to)?.[2];
 }
 
@@ -41,7 +50,7 @@ const sameGlyph = (a: GlyphMetrics, b: GlyphMetrics): boolean => INK.every((key)
 
 /**
  * The wide-glyph scales of one terminal font at one size. Ghostty sizes each fallback face, not each glyph, so each
- * script block is measured once, from its sample, the first time one of its glyphs is drawn; after that a glyph's scale
+ * script block is measured once, from its samples, the first time one of its glyphs is drawn; after that a glyph's scale
  * is a range lookup with no canvas work.
  */
 export class FaceScales {
@@ -59,22 +68,42 @@ export class FaceScales {
   }
 
   scaleOf(text: string): number {
-    const sample = blockSample(text.codePointAt(0) ?? 0);
-    if (sample === undefined || EMOJI.test(text)) return 1;
-    let scale = this.#scales.get(sample);
+    const samples = blockSamples(text.codePointAt(0) ?? 0);
+    if (samples === undefined || EMOJI.test(text)) return 1;
+    let scale = this.#scales.get(samples);
     if (scale === undefined) {
-      scale = this.#faceScale(sample);
-      this.#scales.set(sample, scale);
+      scale = this.#blockScale(samples);
+      this.#scales.set(samples, scale);
     }
     return scale;
   }
 
-  #faceScale(sample: string): number {
+  /**
+   * Which face draws a glyph can only be told by measuring that glyph, and nothing is measured per glyph. So a block the
+   * browser splits across fallback faces takes the smallest of their scales: no face draws past its two cells, and a
+   * face with a narrower ideograph is drawn a pixel short of them. A block drawn from one face keeps that face's scale.
+   */
+  #blockScale(samples: string): number {
+    const [first, ...others] = [...samples];
+    if (first === undefined) return 1;
+    const own = this.#faceScale(first);
+    // The user's chosen font draws the block (its common sample): it keeps its size, as before.
+    if (own === undefined) return 1;
+    let scale = own;
+    for (const sample of others) {
+      const other = this.#faceScale(sample);
+      if (other !== undefined) scale = Math.min(scale, other);
+    }
+    return scale;
+  }
+
+  /** The scale of the face that draws `sample`, or undefined when the user's chosen font draws it. */
+  #faceScale(sample: string): number | undefined {
     const drawn = this.#measure(sample, this.#family, 1);
     // The user's chosen font drew the sample when it differs from what the default stack falls back to; like Ghostty,
     // only a fallback face is resized.
     if (this.#family !== this.#defaultFamily && !sameGlyph(drawn, this.#measure(sample, this.#defaultFamily, 1)))
-      return 1;
+      return undefined;
     this.#primary ??= primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) });
     return wideGlyphScale(
       (at) => (at === 1 ? drawn.width : this.#measure(sample, this.#family, at).width),
