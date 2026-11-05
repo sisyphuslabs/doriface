@@ -90,12 +90,26 @@ export function useLayout(
   terminals: readonly Terminal[],
   failed: (message: string) => void,
   told: (message: string) => void,
+  /** This screen's tab order and focus could not be saved for the next reload; said once until a save works again. */
+  unsaved: (message: string) => void,
   /** machine.list has answered since the workspace mounted, so every added machine's layout is known. */
   machinesListed = true,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
   const [fresh, setFresh] = useState<string | null>(null);
-  useEffect(() => saveView(core, view), [core, view]);
+  // Read through a ref: the toast it raises re-renders the workspace, which must not count as another write.
+  const tellUnsaved = useRef(unsaved);
+  tellUnsaved.current = unsaved;
+  const refused = useRef(false);
+  useEffect(() => {
+    const reason = saveView(core, view);
+    if (reason === null) {
+      refused.current = false;
+    } else if (!refused.current) {
+      refused.current = true;
+      tellUnsaved.current(reason);
+    }
+  }, [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
   const [loose, setLoose] = useState<readonly string[]>([]);
   const tabs = useMemo(
