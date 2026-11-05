@@ -32,7 +32,10 @@ export interface HcConnectionOptions {
   /** Default 10 000 ms. */
   readonly handshakeTimeoutMs?: number;
   readonly signal?: AbortSignal;
-  /** Applied to calls that pass no `timeoutMs`. Default: none, since `terminal.wait` may block for minutes. */
+  /**
+   * Applied to calls that pass no `timeoutMs`. Default: DEFAULT_CALL_TIMEOUT_MS for calls hc answers at once, and none
+   * for WAITING_METHODS, which wait by design. `Infinity` turns the deadline off.
+   */
   readonly callTimeoutMs?: number;
 }
 
@@ -65,6 +68,27 @@ export interface RawFrames {
 }
 
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000;
+
+/**
+ * How long a call hc answers at once may go unanswered before it fails with HcTimeoutError: well past an End's
+ * hangup-terminate-kill (about a second), short enough that a stalled uplink under live heartbeats is reported.
+ */
+export const DEFAULT_CALL_TIMEOUT_MS = 20_000;
+
+/** Calls that wait by design (for a program, a quiet terminal or a machine's dial), so no default deadline cuts them short. */
+export const WAITING_METHODS: ReadonlySet<HcMethod> = new Set<HcMethod>([
+  "terminal.wait",
+  "terminal.run",
+  "terminal.send",
+  "terminal.keys",
+  "terminal.interrupt",
+  "terminal.put",
+  "machine.exec",
+  "machine.add",
+  "machine.connect",
+  "server.stop",
+  "server.restart",
+]);
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 45_000;
 
 /** One framed herdr-core connection over a ByteLink. */
@@ -164,7 +188,8 @@ export class HcConnection {
       this.#wire.calls.forget(id);
       return Promise.reject(error);
     }
-    const timeoutMs = options.timeoutMs ?? this.#callTimeoutMs;
+    const timeoutMs =
+      options.timeoutMs ?? this.#callTimeoutMs ?? (WAITING_METHODS.has(method) ? undefined : DEFAULT_CALL_TIMEOUT_MS);
     return raceDeadline(
       promise,
       { timeoutMs, signal },

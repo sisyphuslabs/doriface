@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { HcRpcError } from "@doriface/protocol";
-import { HcConnection } from "./connection.ts";
+import { DEFAULT_CALL_TIMEOUT_MS, HcConnection } from "./connection.ts";
 import type { ByteLink } from "./link.ts";
 import { HcConnectionClosedError, HcProtocolError, HcTimeoutError } from "./errors.ts";
 import { FakeCore } from "./testing/fake-core.ts";
@@ -23,6 +23,8 @@ async function opened(core: FakeCore, callTimeoutMs?: number): Promise<HcConnect
 }
 
 const decode = (payload: Uint8Array) => new TextDecoder().decode(payload);
+
+afterEach(() => jest.useRealTimers());
 
 /** Forwards to a real link until `refuseAfter` more writes, then throws like a dead socket. */
 class RefusingLink implements ByteLink {
@@ -127,6 +129,53 @@ describe("HcConnection.call", () => {
     core.pushFrame(0, 0, withId(LIST_EMPTY_REPLY, Number(listRequest.id)));
     expect((await list).hidden_finished).toBe(0);
     expect(connection.closed).toBe(false);
+  });
+
+  test("a call left unanswered fails with HcTimeoutError after the default deadline", async () => {
+    const core = new FakeCore();
+    const connection = await opened(core);
+    jest.useFakeTimers();
+    let settled: unknown = "pending";
+    const status = connection.call("server.status").catch((caught: unknown) => {
+      settled = caught;
+    });
+    await core.waitRequest("server.status");
+    jest.advanceTimersByTime(DEFAULT_CALL_TIMEOUT_MS - 1);
+    await Promise.resolve();
+    expect(settled).toBe("pending");
+    jest.advanceTimersByTime(1);
+    await status;
+    if (!(settled instanceof HcTimeoutError)) throw new Error(`expected HcTimeoutError, got ${String(settled)}`);
+    expect(settled.timeoutMs).toBe(DEFAULT_CALL_TIMEOUT_MS);
+  });
+
+  test("a call that waits by design, or a connection that turns the deadline off, has none", async () => {
+    const core = new FakeCore();
+    const connection = await opened(core);
+    const off = new FakeCore();
+    const unbounded = await opened(off, Number.POSITIVE_INFINITY);
+    jest.useFakeTimers();
+    let waited = false;
+    let listed = false;
+    const wait = connection.call("terminal.wait", { terminal: "t1" }).then((result) => {
+      waited = true;
+      return result;
+    });
+    const list = unbounded.call("terminal.list").then((result) => {
+      listed = true;
+      return result;
+    });
+    const [waitRequest, listRequest] = [
+      await core.waitRequest("terminal.wait"),
+      await off.waitRequest("terminal.list"),
+    ];
+    jest.advanceTimersByTime(DEFAULT_CALL_TIMEOUT_MS * 10);
+    await Promise.resolve();
+    expect([waited, listed]).toEqual([false, false]);
+    core.pushFrame(0, 0, `{"id":${waitRequest.id},"jsonrpc":"2.0","result":{"state":"idle"}}`);
+    off.pushFrame(0, 0, withId(LIST_EMPTY_REPLY, Number(listRequest.id)));
+    await Promise.all([wait, list]);
+    expect([waited, listed]).toEqual([true, true]);
   });
 
   test("rejects with the abort reason, and does not send when already aborted", async () => {
