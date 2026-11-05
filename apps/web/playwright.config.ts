@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_LAYOUT_PORT, E2E_WEB_PORT } from "./e2e/config.ts";
 
@@ -9,8 +10,11 @@ export default defineConfig({
   testDir: "e2e",
   testMatch: "**/*.e2e.ts",
   timeout: 60_000,
-  // Each worker runs its own e2e host and core (e2e/worker-host.ts), so workers share no terminals.
-  workers: process.env["CI"] ? 8 : 4,
+  // Each worker runs its own e2e host and core (e2e/worker-host.ts), so workers share no terminals. Each worker is also a
+  // browser, a host and a core at once: in CI no more workers than the runner has cores, or every spec that measures
+  // layout or waits on focus loses a race now and then (8 workers on a 4-core runner failed a different spec each run,
+  // #342).
+  workers: process.env["CI"] ? availableParallelism() : 4,
   // Each worker fails the run itself when a spec leaves terminals on its core (e2e/terminal-guard.ts); this reports it.
   globalSetup: "./e2e/terminal-leaks.ts",
   globalTeardown: "./e2e/leftover-hosts.ts",
