@@ -56,12 +56,22 @@ export function spaceName(terminal: Terminal): string {
   return terminal.labels["space"] ?? basename(terminal.foreground?.cwd ?? terminal.cwd);
 }
 
+const spaceDir = (terminal: Terminal): string => terminal.foreground?.cwd ?? terminal.cwd;
+
 /**
- * Which space a terminal is in: its machine's id and the space name, so a name used on two machines is two spaces.
- * Selection, list keys and opening a space all compare this id, never the name alone.
+ * Which space a terminal is in: its machine's id and its `space` label, else its whole working directory, so a name used
+ * on two machines, or by two directories with the same last segment, is two spaces (#397). Selection, list keys and
+ * opening a space all compare this id, never the name alone.
  */
 export function spaceId(terminal: Terminal): string {
-  return `${machineId(terminal.address)}/${spaceName(terminal)}`;
+  const label = terminal.labels["space"];
+  return `${machineId(terminal.address)}/${label === undefined ? `dir:${spaceDir(terminal)}` : `space:${label}`}`;
+}
+
+/** The parent directory's name, to tell apart two spaces whose directories end the same way; the whole path at the root. */
+function parentName(path: string): string {
+  const parts = path.split("/").filter((part) => part !== "");
+  return parts.length >= 2 ? (parts.at(-2) ?? path) : path;
 }
 
 /** "<1m", "6m", "2h", "3d" since a moment, for agent rows. */
@@ -122,12 +132,16 @@ export const byName = new Intl.Collator(undefined, { numeric: true });
 
 /** One space per machine and name: this machine's first, then each machine's in name order. */
 export function toSpaces(terminals: readonly Terminal[]): Space[] {
-  const groups = new Map<string, { name: string; machine: string | undefined; statuses: Set<AgentStatus> }>();
+  const groups = new Map<
+    string,
+    { name: string; dir: string | undefined; machine: string | undefined; statuses: Set<AgentStatus> }
+  >();
   for (const terminal of terminals) {
     if (terminal.state !== "live") continue;
     const machine = machineOf(terminal.address);
     const key = spaceId(terminal);
-    const group = groups.get(key) ?? { name: spaceName(terminal), machine, statuses: new Set<AgentStatus>() };
+    const dir = terminal.labels["space"] === undefined ? spaceDir(terminal) : undefined;
+    const group = groups.get(key) ?? { name: spaceName(terminal), dir, machine, statuses: new Set<AgentStatus>() };
     group.statuses.add(agentStatus(terminal));
     groups.set(key, group);
   }
@@ -137,7 +151,11 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
   return ordered.map(([id, group]) => {
     const attention = ATTENTION.find((status) => group.statuses.has(status));
     const tabs = terminals.filter((t) => t.state === "live" && spaceId(t) === id).length;
-    const space: Space = { id, name: group.name, tabs };
+    const twin = ordered.some(
+      ([other, peer]) => other !== id && peer.machine === group.machine && peer.name === group.name,
+    );
+    const name = twin && group.dir !== undefined ? `${group.name} · ${parentName(group.dir)}` : group.name;
+    const space: Space = { id, name, tabs };
     if (group.machine !== undefined) Object.assign(space, { machine: group.machine });
     if (attention !== undefined) Object.assign(space, { attention });
     return space;
