@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHcSession, type HcSession } from "./hc-session.ts";
-import { markedCores, RUN_MARK, stopRunCores } from "./run-cores.ts";
+import { markedCores, RUN_MARK, stopRunProcesses } from "./run-cores.ts";
 
 const encoder = new TextEncoder();
 
@@ -40,7 +40,7 @@ test("a core a run left running is found by its mark and stopped; another run's 
   await Promise.all([startMarked(mine, run), startMarked(other, otherRun)]);
   try {
     expect((await markedCores(run)).length).toBeGreaterThan(0);
-    const stopped = await stopRunCores(run);
+    const stopped = await stopRunProcesses(run);
     expect(stopped.length).toBeGreaterThan(0);
     expect(stopped.every((core) => core.command.includes("serve"))).toBe(true);
     expect(await markedCores(run)).toEqual([]);

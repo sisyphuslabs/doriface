@@ -4,10 +4,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
-import { startHost } from "./host.ts";
+import { type HostOptions, startHost } from "./host.ts";
 import { LOOPBACK_OWNER, SubscriptionStore } from "./push/subscriptions.ts";
 import { parseStartupErrorLine } from "./startup-error.ts";
-import { createHcSession, resolveHcBin } from "./testing/hc-session.ts";
+import { createHcSession } from "./testing/hc-session.ts";
 import { openWsClient } from "./testing/ws-client.ts";
 
 const CLI = join(import.meta.dir, "cli.ts");
@@ -22,18 +22,36 @@ function freePort(): number {
   return port;
 }
 
+/** The core options of a host on a scratch session of its own: no host here runs on the default session. */
+type ScratchCore = Pick<HostOptions, "hc" | "session" | "env">;
+
+/** Runs `use` with a scratch session's core options, and stops that session's core after it. */
+async function inScratch<T>(prefix: string, use: (core: ScratchCore) => Promise<T>): Promise<T> {
+  const session = createHcSession(prefix);
+  try {
+    return await use({ hc: session.hc, session: session.name, env: session.env });
+  } finally {
+    await session.dispose();
+  }
+}
+
 /**
  * Starts a host whose LAN port is taken and returns the main port it had bound. Another process can grab the probed
  * main port first; that attempt fails on the main port instead, so it is retried with a fresh port.
  */
-async function mainPortWhenLanFails(lanPort: number, stateDir: string, attempts = 5): Promise<number> {
+async function mainPortWhenLanFails(
+  lanPort: number,
+  stateDir: string,
+  core: ScratchCore,
+  attempts = 5,
+): Promise<number> {
   if (attempts === 0) throw new Error("the main port was taken on every attempt");
   const main = freePort();
   const error: unknown = await startHost({
     listen: { hostname: "127.0.0.1", port: main },
     lanListen: { hostname: "127.0.0.1", port: lanPort },
     token: generateToken(),
-    hc: resolveHcBin(),
+    ...core,
     stateDir,
     log: () => {},
   }).then(
@@ -44,7 +62,7 @@ async function mainPortWhenLanFails(lanPort: number, stateDir: string, attempts 
     (reason: unknown) => reason,
   );
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes(String(main))) return mainPortWhenLanFails(lanPort, stateDir, attempts - 1);
+  if (message.includes(String(main))) return mainPortWhenLanFails(lanPort, stateDir, core, attempts - 1);
   expect(message).toContain(String(lanPort));
   return main;
 }
@@ -55,7 +73,7 @@ describe("startHost", () => {
     const taken = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
     const lanPort = taken.port ?? 0;
     try {
-      const main = await mainPortWhenLanFails(lanPort, stateDir);
+      const main = await inScratch("dh-start", (core) => mainPortWhenLanFails(lanPort, stateDir, core));
       const again = Bun.serve({ hostname: "127.0.0.1", port: main, fetch: () => new Response() });
       await again.stop(true);
     } finally {
@@ -71,14 +89,16 @@ describe("the control socket", () => {
     mkdirSync(join(stateDir, "host.sock"));
     writeFileSync(join(stateDir, "host.sock", "keep"), "");
     try {
-      const start = startHost({
-        listen: { hostname: "127.0.0.1", port: 0 },
-        token: generateToken(),
-        hc: resolveHcBin(),
-        stateDir,
-        log: () => {},
+      await inScratch("dh-noctl", async (core) => {
+        const start = startHost({
+          listen: { hostname: "127.0.0.1", port: 0 },
+          token: generateToken(),
+          ...core,
+          stateDir,
+          log: () => {},
+        });
+        await expect(start).rejects.toThrow("control socket");
       });
-      await expect(start).rejects.toThrow("control socket");
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
     }
@@ -313,32 +333,39 @@ describe("the write of a host's OS", () => {
 
 describe("a LAN listener", () => {
   test("without a state dir is refused rather than silently not served", async () => {
-    const start = startHost({
-      listen: { hostname: "127.0.0.1", port: 0 },
-      lanListen: { hostname: "127.0.0.1", port: 0 },
-      token: generateToken(),
-      hc: resolveHcBin(),
-      log: () => {},
+    await inScratch("dh-lan", async (core) => {
+      const start = startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        lanListen: { hostname: "127.0.0.1", port: 0 },
+        token: generateToken(),
+        ...core,
+        log: () => {},
+      });
+      await expect(start).rejects.toThrow("needs a state dir");
     });
-    await expect(start).rejects.toThrow("needs a state dir");
   });
 });
 
 describe("a second host", () => {
   test("refuses to start on a state dir a running host serves", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "dh-twice-"));
-    const options = {
-      listen: { hostname: "127.0.0.1", port: 0 },
-      token: generateToken(),
-      hc: resolveHcBin(),
-      stateDir,
-      log: () => {},
-    };
-    const first = await startHost(options);
     try {
-      await expect(startHost(options)).rejects.toThrow("already running");
+      await inScratch("dh-twice", async (core) => {
+        const options = {
+          listen: { hostname: "127.0.0.1", port: 0 },
+          token: generateToken(),
+          ...core,
+          stateDir,
+          log: () => {},
+        };
+        const first = await startHost(options);
+        try {
+          await expect(startHost(options)).rejects.toThrow("already running");
+        } finally {
+          await first.stop();
+        }
+      });
     } finally {
-      await first.stop();
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
