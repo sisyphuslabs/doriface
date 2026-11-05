@@ -47,6 +47,8 @@ export interface MeshOptions {
   readonly names?: readonly string[];
   /** A relay to use as it is (the production one); without it a local relay is started and every host gets a tap. */
   readonly relayUrl?: string;
+  /** Each host's hc core name by host name (default: this machine's hostname). */
+  readonly coreNames?: Readonly<Record<string, string>>;
 }
 
 /** Runs `check` on each wake, one evaluation at a time, re-running once if a wake came in meanwhile. */
@@ -169,7 +171,7 @@ export async function startMesh(options: MeshOptions = {}): Promise<Mesh> {
       const url = tap?.url ?? options.relayUrl;
       if (url === undefined) throw new Error("no relay to dial");
       tap?.onChange(wakeAll);
-      const host = await startMeshHost({ name, relayUrl: url, tap });
+      const host = await startMeshHost({ name, relayUrl: url, tap, coreName: options.coreNames?.[name] });
       host.onActivity(wakeAll);
       hosts.push(host);
     }),
