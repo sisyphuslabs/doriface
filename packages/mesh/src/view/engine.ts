@@ -50,8 +50,14 @@ export class Engine {
   full(): EngineView {
     const S = this.dag.all();
     const { heads, context } = this.#keysOf(S);
-    const decided = this.#shared.decide(heads, context(), () => this.#evaluateClosed(S));
-    return withEff(decided.view, this.#eff(S, decided.statuses));
+    const key = context();
+    const decided = this.#shared.decide(heads, key, () => this.#evaluateClosed(S));
+    const acks = this.#shared.ackStatuses(
+      key,
+      this.dag.index.order,
+      (added) => (ack) => added.every((w) => this.dag.inPast(w, ack)),
+    );
+    return withEff(decided.view, this.#eff(S, decided.statuses, acks));
   }
 
   /** view(past(x)) as the rules read it; undefined for the found record. */
@@ -136,14 +142,25 @@ export class Engine {
     return { view: membership(this.dag, S, statuses), statuses };
   }
 
-  /** The records of S that count, in canonical order; `decided` already holds every non-ack record of S. */
-  #eff(S: RecordSet, decided: ReadonlyMap<string, Status>): ReadonlySet<string> {
+  /**
+   * The records of S that count, in canonical order; `decided` already holds every non-ack record of S. An ack's status
+   * is read from `acks` when a full view of the same context already decided it, and stored there otherwise.
+   */
+  #eff(S: RecordSet, decided: ReadonlyMap<string, Status>, acks?: Map<string, Status>): ReadonlySet<string> {
     const out = new Set<string>();
     for (const id of this.dag.index.order) {
       if (!S.has(id)) continue;
-      if ((decided.get(id) ?? status(this, S, id, decided)) === "eff") out.add(id);
+      if ((decided.get(id) ?? this.#ackStatus(S, id, decided, acks)) === "eff") out.add(id);
     }
     return out;
+  }
+
+  #ackStatus(S: RecordSet, id: string, decided: ReadonlyMap<string, Status>, acks?: Map<string, Status>): Status {
+    const known = acks?.get(id);
+    if (known !== undefined) return known;
+    const judged = status(this, S, id, decided);
+    acks?.set(id, judged);
+    return judged;
   }
 }
 
