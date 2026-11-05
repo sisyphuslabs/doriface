@@ -1,0 +1,154 @@
+import type { HcConnection } from "@doriface/client";
+import { generateX25519 } from "@doriface/crypto";
+import { afterAll, describe, expect, test } from "bun:test";
+import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
+import { socketFrom, testIp } from "./support/probe.ts";
+import { setUpOnce } from "./support/set-up-once.ts";
+
+// #424: the host ends a session's `hc connect` child two ways (it closes the child's stdin and sends SIGTERM), so a
+// child is left behind only when both are skipped.
+
+const END_BOUND_MS = 5_000;
+/** A pid that is not this process's child has no exit event, so its exit is read by scanning again after this. */
+const ROUND_MS = 50;
+const CYCLES = 100;
+/** Past END_BOUND_MS, so a child that outlives its bound fails on that, not on bun's default 5 s test timeout. */
+const TEST_MS = 30_000;
+/** Within the relay's 60 connects a minute from one IP (`CONNECT_LIMIT`), so the cycles are never refused 4429. */
+const CONNECTS_PER_IP = 50;
+
+const phone = generateX25519();
+const sockets = { host: [] as WebSocket[], client: [] as WebSocket[] };
+let relayed: RelayedHost | undefined;
+let clientIp: string | undefined;
+
+function host(): RelayedHost {
+  if (relayed === undefined) throw new Error("setup failed");
+  return relayed;
+}
+
+async function liveConnects(): Promise<Set<number>> {
+  const ps = Bun.spawn(["ps", "-axo", "pid=,args="], { stdout: "pipe", stderr: "inherit" });
+  const [text, code] = await Promise.all([new Response(ps.stdout).text(), ps.exited]);
+  if (code !== 0) throw new Error(`ps exited ${code}`);
+  const session = `connect --session ${host().session.name}`;
+  return new Set(
+    text
+      .split("\n")
+      .filter((line) => line.trimEnd().endsWith(session))
+      .map((line) => Number.parseInt(line.trim(), 10)),
+  );
+}
+
+async function newSince(before: ReadonlySet<number>): Promise<Set<number>> {
+  return new Set([...(await liveConnects())].filter((pid) => !before.has(pid)));
+}
+
+async function allGone(pids: ReadonlySet<number>, after: string): Promise<void> {
+  const deadline = performance.now() + END_BOUND_MS;
+  const round = async (): Promise<void> => {
+    const live = await liveConnects();
+    const left = [...pids].filter((pid) => live.has(pid));
+    if (left.length === 0) return;
+    if (performance.now() > deadline) {
+      throw new Error(`after ${after}, hc connect ${left.join(", ")} still running after ${END_BOUND_MS} ms`);
+    }
+    await Bun.sleep(ROUND_MS);
+    return round();
+  };
+  return round();
+}
+
+async function openSession(): Promise<{ readonly connection: HcConnection; readonly child: Set<number> }> {
+  const before = await liveConnects();
+  const connection = await host().connect(phone);
+  await connection.call("machine.list");
+  const child = await newSince(before);
+  expect(child.size).toBeGreaterThan(0);
+  return { connection, child };
+}
+
+setUpOnce(async () => {
+  relayed = await startRelayedHost("relay-lifetime", {
+    wrapSockets: (base) => ({
+      host: (url) => {
+        const ws = base(url);
+        sockets.host.push(ws);
+        return ws;
+      },
+      client: (url) => {
+        const ws = clientIp === undefined ? base(url) : socketFrom(clientIp)(url);
+        sockets.client.push(ws);
+        return ws;
+      },
+    }),
+  });
+  await relayed.pair(phone, "lifetime");
+  // The first pipe also starts the host's own long-lived children (#306), so no test counts them as a session's.
+  const first = await relayed.connect(phone);
+  await first.call("machine.list");
+  first.close();
+}, 120_000);
+
+afterAll(async () => {
+  await relayed?.stop();
+});
+
+describe("a client session's hc connect child (#424)", () => {
+  test(
+    "ends when the client closes its session",
+    async () => {
+      const { connection, child } = await openSession();
+      connection.close();
+      await allGone(child, "a clean close");
+    },
+    TEST_MS,
+  );
+
+  test(
+    "ends when the client's socket drops with no close handshake",
+    async () => {
+      const { child } = await openSession();
+      const ws = sockets.client.at(-1) as (WebSocket & { terminate?: () => void }) | undefined;
+      if (ws?.terminate === undefined) throw new Error("this runtime's WebSocket has no terminate()");
+      ws.terminate();
+      await allGone(child, "a dropped client socket");
+    },
+    TEST_MS,
+  );
+
+  test(`${CYCLES} sessions opened and closed leave no hc connect child behind`, async () => {
+    const before = await liveConnects();
+    for (let cycle = 0; cycle < CYCLES; cycle += 1) {
+      if (cycle % CONNECTS_PER_IP === 0) clientIp = testIp();
+      // oxlint-disable-next-line no-await-in-loop -- one session at a time, as a phone reconnecting all day does
+      const connection = await host().connect(phone);
+      // oxlint-disable-next-line no-await-in-loop -- the call makes the session's hc connect child run before it closes
+      await connection.call("machine.list");
+      connection.close();
+    }
+    await allGone(await newSince(before), `${CYCLES} sessions`);
+  }, 120_000);
+
+  test(
+    "ends when the host's relay uplink drops",
+    async () => {
+      const { child } = await openSession();
+      const uplink = sockets.host.at(-1);
+      if (uplink === undefined) throw new Error("the host opened no uplink socket");
+      uplink.close(4000, "test: uplink dropped");
+      await allGone(child, "a dropped uplink");
+    },
+    TEST_MS,
+  );
+
+  test(
+    "ends when the device is revoked, which ends its E2EE session",
+    async () => {
+      const { child } = await openSession();
+      await host().revokeAll();
+      await allGone(child, "a revoke");
+    },
+    TEST_MS,
+  );
+});
