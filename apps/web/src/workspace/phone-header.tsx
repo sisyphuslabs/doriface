@@ -1,21 +1,11 @@
-import { AgentRow, IconButton, Sheet, SidebarSection, StatusChip, StatusIndicator, cn } from "@doriface/ui";
+import { IconButton, StatusChip, StatusIndicator, cn } from "@doriface/ui";
 import { ArrowLeftRight, ChevronLeft } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useRef } from "react";
 import { useFittedLines } from "./fit-lines.ts";
-import {
-  agentCounts,
-  agentStatus,
-  machineOf,
-  type Session,
-  spaceName,
-  tabPosition,
-  terminalTitle,
-  titledTabs,
-  toAgent,
-} from "./model.ts";
+import { agentCounts, agentStatus, machineOf, type Session, spaceName, tabPosition, terminalTitle } from "./model.ts";
+import { SpaceSheet } from "./phone-tab-switcher.tsx";
 import { useSpaceSelection } from "./space-selection.ts";
 import { SessionMenu } from "./session-menu.tsx";
-import { useNow } from "./use-now.ts";
 
 export interface PhoneHeaderProps {
   readonly terminal: Session;
@@ -101,62 +91,13 @@ export function PhoneHeader({ terminal, terminals, tabTitle, onBack, onOpen, act
       <span data-header-action className="contents">
         {action}
       </span>
-      <SpaceSwitcher terminals={terminals} active={terminal.address} onOpen={onOpen} />
+      <SpaceSheet
+        terminals={terminals}
+        active={terminal.address}
+        onOpen={onOpen}
+        trigger={<IconButton label="Switch space or tab" icon={<ArrowLeftRight />} size="md" />}
+      />
       <SessionMenu address={terminal.address} title={terminalTitle(terminal)} placement="header" />
     </header>
-  );
-}
-
-/** A bottom sheet of every space with its tabs; picking a tab opens it on the phone. */
-function SpaceSwitcher(props: {
-  readonly terminals: readonly Session[];
-  readonly active: string;
-  readonly onOpen: (address: string) => void;
-}) {
-  const { terminals, active, onOpen } = props;
-  // The layout documents' spaces, as the sidebar lists them (#404).
-  const { spaces } = useSpaceSelection();
-  const [open, setOpen] = useState(false);
-  const now = useNow();
-  const pick = (address: string): void => {
-    setOpen(false);
-    onOpen(address);
-  };
-  return (
-    <Sheet
-      title="Spaces"
-      side="bottom"
-      open={open}
-      onOpenChange={setOpen}
-      trigger={<IconButton label="Switch space or tab" icon={<ArrowLeftRight />} size="md" />}
-    >
-      <div className="flex flex-col gap-4">
-        {spaces.map((space) => (
-          <SidebarSection
-            key={space.id}
-            title={space.machine === undefined ? space.name : `${space.machine} · ${space.name}`}
-            count={space.tabs}
-          >
-            {/*
-              One row per tab, named as the strip names it (its name, else its number), the terminal it opens after it:
-              the open pane when it is this tab's, else the tab's first live pane.
-            */}
-            {titledTabs(space, terminals).flatMap(({ title, panes }) => {
-              const shown = panes.includes(active) ? active : panes[0];
-              return terminals
-                .filter((entry) => entry.address === shown)
-                .map((entry) => (
-                  <AgentRow
-                    key={entry.address}
-                    agent={{ ...toAgent(entry, now), name: title, detail: terminalTitle(entry) }}
-                    selected={entry.address === active}
-                    onSelect={pick}
-                  />
-                ));
-            })}
-          </SidebarSection>
-        ))}
-      </div>
-    </Sheet>
   );
 }
