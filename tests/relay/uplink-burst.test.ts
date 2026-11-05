@@ -133,20 +133,56 @@ describe("an uplink whose window sessions have filled (#42)", () => {
 });
 
 describe("the relay frames' reserve (#42)", () => {
+  test("a client acking a byte at a time cannot fill the reserve: its acks reach the host as one CREDIT a step", async () => {
+    const ip = testIp();
+    const host = await startRawHost(relay.url, ip, { credit: true });
+    const [acker, filler, other] = await inOrder(times(3), (index) => answered(host, ip, index + 1, CREDIT_HOST));
+    if (acker === undefined || filler === undefined || other === undefined) throw new Error("three sessions");
+    host.probe.socket.send(encodeData(acker.id, new Uint8Array(ACK_INTERVAL_BYTES)));
+    await acker.client.next();
+    await fillToTheEdge(host, [filler], CHALLENGE_BYTES + 3 * (OPEN_BYTES + CREDIT_BYTES));
+    // One ack per byte, as many as would overrun the reserve if each became a CREDIT, then one that catches up.
+    const tiny = Math.ceil(CONTROL_RESERVE / CREDIT_BYTES) + 1;
+    for (const total of times(tiny)) acker.client.socket.send(`a:${total + 2}`);
+    acker.client.socket.send(`a:${ACK_INTERVAL_BYTES + 1}`);
+    expect(await host.frame()).toEqual({ type: MuxType.Credit, sessionId: acker.id, bytes: ACK_INTERVAL_BYTES + 1 });
+    host.probe.socket.send(encodeData(other.id, Uint8Array.of(9)));
+    expect(Array.from(await other.client.next())).toEqual([9]);
+    expect(uplinkOpen(host)).toBe(true);
+    // Thousands of acks, one message each: a loaded runner needs more than the default 5 s.
+  }, 30_000);
+
   test("an uplink that acks nothing until even its 64 KiB reserve is used is closed with 4408", async () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip, { credit: true });
     const [acker, filler] = await inOrder(times(2), (index) => answered(host, ip, index + 1, CREDIT_HOST));
     if (acker === undefined || filler === undefined) throw new Error("two sessions");
-    // The host gives the acking client bytes to ack one at a time: each ack becomes a 9-byte CREDIT on the uplink.
-    host.probe.socket.send(encodeData(acker.id, new Uint8Array(ACK_INTERVAL_BYTES)));
-    await acker.client.next();
     await fillToTheEdge(host, [filler], CHALLENGE_BYTES + 2 * (OPEN_BYTES + CREDIT_BYTES));
-    const acks = Math.ceil(CONTROL_RESERVE / CREDIT_BYTES) + 1;
-    for (const total of times(acks)) acker.client.socket.send(`a:${total + 2}`);
+    // The host paces it: one byte to the client, whose ack of everything sent becomes one 9-byte CREDIT, and so on.
+    const credits = Math.ceil(CONTROL_RESERVE / CREDIT_BYTES) + 1;
+    // Once the uplink is closed the client's read fails too (4404): either failure ends the loop.
+    const step = async (sent: number): Promise<boolean> => {
+      if (!uplinkOpen(host)) return false;
+      host.probe.socket.send(encodeData(acker.id, Uint8Array.of(sent % 256)));
+      const read = await acker.client.next().then(
+        () => true,
+        () => false,
+      );
+      if (!read) return false;
+      acker.client.socket.send(`a:${sent + 1}`);
+      return (
+        (await host.frame().then(
+          () => true,
+          () => false,
+        )) && sent < credits
+      );
+    };
+    const run = async (sent: number): Promise<void> => {
+      if (await step(sent)) return run(sent + 1);
+    };
+    await run(1);
     expect((await host.probe.closed).code).toBe(CloseCode.IdleTimeout);
-    // Over seven thousand acks, one message each: a loaded runner needs more than the default 5 s.
-  }, 30_000);
+  }, 120_000);
 });
 
 describe("per-session bounds before the shared window (#42)", () => {
