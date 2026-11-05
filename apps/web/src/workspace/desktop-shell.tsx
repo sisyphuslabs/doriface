@@ -184,7 +184,11 @@ export function DesktopShell(props: DesktopShellProps) {
     // herdr-app's 12 px gap.
     <div className="relative flex h-dvh overflow-hidden bg-background [--titlebar-leading:calc(var(--titlebar-inset-start,0.5rem)+var(--control-sm)+0.75rem)]">
       <SkipLinks onSidebar={focusSidebar} />
-      {/* One sidebar toggle in the same place whether the sidebar is open or not, right after the window buttons (#415). */}
+      {sidebar ? (
+        <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
+      ) : null}
+      {/* One sidebar toggle in the same place whether the sidebar is open or not, right after the window buttons (#415). It
+          comes after the sidebar in the DOM so the skip links stay the first Tab stops and it is the stop just before the tabs. */}
       <div
         data-titlebar
         className="absolute top-0 left-[var(--titlebar-inset-start,0.5rem)] z-10 flex h-11 items-center"
@@ -197,9 +201,6 @@ export function DesktopShell(props: DesktopShellProps) {
           onClick={() => setSidebar((shown) => !shown)}
         />
       </div>
-      {sidebar ? (
-        <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
-      ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <TabBar
           tabs={tabList}
