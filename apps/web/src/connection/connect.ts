@@ -3,6 +3,7 @@ import { base64urlDecode, CloseCode, type SecureLink, secureLink, SecureLinkErro
 import { connectRelayClient } from "@doriface/relay-client";
 import { BROWSER_DEPS, deviceKeyFor, type RelayDeps } from "./relay-deps.ts";
 import type { ConnectionSettings } from "./settings.ts";
+import { loopbackOnly } from "./loopback-address.ts";
 import { openWebSocketLink } from "./ws-link.ts";
 
 const SUBPROTOCOL = "doriface.v1";
@@ -25,7 +26,7 @@ export async function connect(
   const link =
     settings.mode === "relay"
       ? await openRelaySession(settings, deps)
-      : await openWebSocketLink(settings.loopbackUrl, [SUBPROTOCOL, TOKEN_PREFIX + settings.token]);
+      : await openWebSocketLink(loopbackOnly(settings.loopbackUrl, "hc"), [SUBPROTOCOL, TOKEN_PREFIX + settings.token]);
   return HcConnection.open(link, signal === undefined ? {} : { signal });
 }
 
