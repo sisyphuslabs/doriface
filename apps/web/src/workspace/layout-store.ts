@@ -20,6 +20,13 @@ class LayoutStore {
 
 export const layoutStore = new LayoutStore();
 
+/** The sidebar's width and whether it is the icon rail, and a patch setter for both. */
+export function useSidebarSize(): readonly [Pick<Layout, "sidebarWidth" | "rail">, (patch: Partial<Layout>) => void] {
+  const width = useSyncExternalStore(layoutStore.subscribe, () => layoutStore.value.sidebarWidth);
+  const rail = useSyncExternalStore(layoutStore.subscribe, () => layoutStore.value.rail);
+  return [{ sidebarWidth: width, rail }, (patch) => layoutStore.update(patch)];
+}
+
 /** Whether the desktop sidebar is shown, and its setter (a value or an updater, like useState's). */
 export function useSidebarShown(): readonly [boolean, (next: boolean | ((shown: boolean) => boolean)) => void] {
   const shown = useSyncExternalStore(layoutStore.subscribe, () => layoutStore.value.sidebar);

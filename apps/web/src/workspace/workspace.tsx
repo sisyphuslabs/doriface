@@ -15,6 +15,8 @@ import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
 import type { SessionVerb } from "./use-app-actions.ts";
 import { useMachineRuns } from "./use-machine-runs.ts";
+import { PIN_LABEL } from "./sidebar-model.ts";
+import { PinContext, type PinTerminal } from "./use-pin.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
@@ -122,43 +124,57 @@ export function Workspace({ connection }: WorkspaceProps) {
     return true;
   };
   const done = useCallback(() => setAsk(null), []);
+  const pin = useCallback<PinTerminal>(
+    (address, pinned) => {
+      const labels = { [PIN_LABEL]: pinned ? "1" : "" };
+      connection.call("terminal.label", { terminal: address, labels }).catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        toasts.add({ type: "error", title: pinned ? "Could not pin it" : "Could not unpin it", description: reason });
+      });
+    },
+    [connection, toasts],
+  );
 
   const openAddMachine = useCallback(() => setAdding(true), []);
+  const terminalsLoaded = fed.loaded;
+  const machinesListed = listed > 0 || listError !== undefined;
   const machines = useMemo(
-    () => ({ entries, listError, openAddMachine, views, retry, ...runs }),
-    [entries, listError, openAddMachine, views, retry, runs],
+    () => ({ entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, ...runs }),
+    [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, runs],
   );
   return (
     <MachinesContext value={machines}>
-      <SessionContext value={setAsk}>
-        {narrow ? (
-          <PhoneShell
-            connection={connection}
-            terminals={terminals}
-            open={phoneOpen}
-            panes={phonePanes}
-            onOpen={showOnPhone}
-            onBack={() => setPhoneKey(null)}
-            onNew={() => newTerminal()}
-            onPalette={onPalette}
-            onSession={onSession}
-          />
-        ) : (
-          <DesktopShell
-            connection={connection}
-            terminals={terminals}
-            loaded={fed.loaded}
-            layout={layout}
-            onNew={() => newTerminal()}
-            onSplit={split}
-            onCloseTab={closeTab}
-            onClosePane={(address) => setAsk({ kind: "close", address })}
-            onEnd={onEnd}
-            onPalette={onPalette}
-            onSession={onSession}
-          />
-        )}
-      </SessionContext>
+      <PinContext value={pin}>
+        <SessionContext value={setAsk}>
+          {narrow ? (
+            <PhoneShell
+              connection={connection}
+              terminals={terminals}
+              open={phoneOpen}
+              panes={phonePanes}
+              onOpen={showOnPhone}
+              onBack={() => setPhoneKey(null)}
+              onNew={() => newTerminal()}
+              onPalette={onPalette}
+              onSession={onSession}
+            />
+          ) : (
+            <DesktopShell
+              connection={connection}
+              terminals={terminals}
+              loaded={fed.loaded}
+              layout={layout}
+              onNew={() => newTerminal()}
+              onSplit={split}
+              onCloseTab={closeTab}
+              onClosePane={(address) => setAsk({ kind: "close", address })}
+              onEnd={onEnd}
+              onPalette={onPalette}
+              onSession={onSession}
+            />
+          )}
+        </SessionContext>
+      </PinContext>
       <PromptAnswerBanner />
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
       <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={layout.dropPane} />

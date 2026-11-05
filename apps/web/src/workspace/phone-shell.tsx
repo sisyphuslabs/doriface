@@ -2,6 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import { IconButton, ScrollArea, StatusBar, StatusBarItem } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { Monitor, Plus, Search, Settings } from "lucide-react";
+import { useRef } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { NEW_TAB } from "../keys/actions.ts";
 import { AgentLists } from "./agent-lists.tsx";
@@ -30,7 +31,9 @@ export interface PhoneShellProps {
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
 export function PhoneShell(props: PhoneShellProps) {
   const { connection, terminals, open, panes, onOpen, onBack, onNew, onPalette, onSession } = props;
-  usePhoneActions(onNew, onSession);
+  // The open terminal registers its dictation here, so the palette and a bound key reach it from this shell's handler.
+  const dictate = useRef<(() => void) | null>(null);
+  usePhoneActions(onNew, onSession, () => (dictate.current === null ? false : (dictate.current(), true)));
   const machines = useMachinesContext();
   const terminal = terminals.find((entry) => entry.address === open);
   const empty = !terminals.some((entry) => entry.state === "live");
@@ -53,7 +56,7 @@ export function PhoneShell(props: PhoneShellProps) {
           ) : null}
           {empty && onlyThisMachine(machines.entries) ? null : (
             <RovingLists>
-              <AgentLists terminals={terminals} active={null} onOpen={onOpen} agentsFirst />
+              <AgentLists terminals={terminals} active={null} onOpen={onOpen} heading={false} />
             </RovingLists>
           )}
         </ScrollArea>
@@ -78,6 +81,7 @@ export function PhoneShell(props: PhoneShellProps) {
       panes={panes}
       onOpen={onOpen}
       onBack={onBack}
+      dictate={dictate}
     />
   );
 }

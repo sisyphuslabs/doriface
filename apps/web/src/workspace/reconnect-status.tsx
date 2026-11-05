@@ -32,7 +32,8 @@ export function useConnectionNotice(): ConnectionNotice | null {
   const seconds = useSecondsUntil(failed?.retryAt ?? null, Math.ceil((failed?.retryInMs ?? 0) / 1000));
   if (!online && !staysOnThisComputer(connectionStore.settings))
     return { label: "Offline", detail: "Offline. Reconnects when the network is back.", offline: true };
-  if (state.phase === "open" || state.phase === "unconfigured" || state.stale === null) return null;
+  if (state.phase === "open" || state.phase === "unconfigured" || state.phase === "host-failed" || state.stale === null)
+    return null;
   const label = seconds === null ? "Reconnecting…" : `Reconnecting in ${seconds} s`;
   return { label, detail: failed === null ? label : `${label}: ${failed.error.message}`, offline: false };
 }
