@@ -36,11 +36,17 @@ export function hostStartCopy(failure: HostStartFailure): HostStartCopy {
             install: true,
           };
     case "hc-version-failed":
-      return {
-        cause: `${path ?? "hc"} did not answer as herdr-core.`,
-        next: "Install or update herdr-core, or point HC_BIN at the right hc, then retry.",
-        install: true,
-      };
+      return failure.version !== undefined
+        ? {
+            cause: `${path ?? "hc"} is herdr-core ${failure.version}, older than doriface supports.`,
+            next: "Update herdr-core, or point HC_BIN at a newer hc, then retry.",
+            install: true,
+          }
+        : {
+            cause: `${path ?? "hc"} did not answer as herdr-core.`,
+            next: "Install or update herdr-core, or point HC_BIN at the right hc, then retry.",
+            install: true,
+          };
     case "permission-denied":
       return path !== undefined
         ? {
