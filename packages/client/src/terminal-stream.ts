@@ -15,6 +15,8 @@ import type { ChannelHandler } from "./wire.ts";
 export interface StreamWire {
   sendBytes(bytes: Uint8Array): void;
   send(channel: number, kind: number, payload?: Uint8Array): void;
+  /** A channel's CLOSE, which a closed or dead link just skips. */
+  sendClose(channel: number): void;
   unregister(channel: number): void;
 }
 
@@ -131,7 +133,7 @@ export class TerminalStream implements ChannelHandler {
   close(): Promise<StreamClose> {
     if (this.#state === "open") {
       this.#state = "closing";
-      this.#wire.send(this.channel, FrameKind.Close);
+      this.#wire.sendClose(this.channel);
     }
     return this.#closed.promise;
   }

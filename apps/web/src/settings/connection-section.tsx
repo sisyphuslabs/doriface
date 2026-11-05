@@ -1,6 +1,6 @@
 import { Input, SegmentedControl, SettingRow } from "@doriface/ui";
 import { useState } from "react";
-import { type ConnectionMode, type ConnectionSettings, DEFAULT_RELAY_URL, DEV_BUILD } from "../connection/settings.ts";
+import { type ConnectionMode, type ConnectionSettings, DEV_BUILD } from "../connection/settings.ts";
 import { connectionStore } from "../connection/store.ts";
 
 const MODES = [
@@ -8,14 +8,15 @@ const MODES = [
   { value: "loopback", label: "Loopback dev" },
 ] as const;
 
-type TextField = "relayUrl" | "directUrl" | "loopbackUrl" | "token";
+type TextField = "loopbackUrl" | "token";
 
-/** The production relay as people read it: its host name, without the scheme. */
-const RELAY_HOST = new URL(DEFAULT_RELAY_URL).host;
+/** A relay as people read it: its host name, without the scheme. */
+const relayHost = (url: string): string => (URL.canParse(url) ? new URL(url).host : url);
 
 /**
- * Relay (end-to-end encrypted, racing a direct LAN path) or the plaintext loopback dev gateway. A release build always
- * reaches the production relay: it shows that relay without a field to change it, and offers no loopback switch.
+ * Relay (end-to-end encrypted) or the plaintext loopback dev gateway. The relay is shown with no field to change it and
+ * there is no direct address (#458): a release build always reaches the production relay and offers no loopback switch,
+ * and a dev build reads another relay and a direct address only from saved settings (`doriface.connection`).
  */
 export function ConnectionSection() {
   const [draft, setDraft] = useState<ConnectionSettings>(connectionStore.settings);
@@ -49,16 +50,17 @@ export function ConnectionSection() {
     />
   );
 
+  const relay = (
+    <SettingRow
+      title="Relay"
+      description="Works from anywhere and only forwards encrypted traffic."
+      control={<span className="font-mono text-sm text-muted-foreground">{relayHost(draft.relayUrl)}</span>}
+    />
+  );
+
   if (!DEV_BUILD) {
     return draft.mode === "relay" ? (
-      <>
-        <SettingRow
-          title="Relay"
-          description="Works from anywhere and only forwards encrypted traffic."
-          control={<span className="font-mono text-sm text-muted-foreground">{RELAY_HOST}</span>}
-        />
-        {row("directUrl", "Direct address", "The host on your network; preferred when it answers within 300 ms.")}
-      </>
+      relay
     ) : (
       <>
         {row("loopbackUrl", "Gateway", "The /v1/hc address doriface-host prints.")}
@@ -86,10 +88,7 @@ export function ConnectionSection() {
         }
       />
       {draft.mode === "relay" ? (
-        <>
-          {row("relayUrl", "Relay address", "Change it only for a relay you run yourself.")}
-          {row("directUrl", "Direct address", "The host on your network; preferred when it answers within 300 ms.")}
-        </>
+        relay
       ) : (
         <>
           {row("loopbackUrl", "Gateway", "The /v1/hc address doriface-host prints.")}

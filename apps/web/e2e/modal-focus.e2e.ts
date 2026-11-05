@@ -1,4 +1,5 @@
 import type { Page, Route } from "@playwright/test";
+import { setConfirmClose } from "./close-confirm.ts";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { hcOn } from "./machine-switch.ts";
@@ -44,7 +45,7 @@ test("a terminal that becomes ready while Cmd+W's question is open leaves the qu
   page,
 }) => {
   const socket = await routeHcSocket(page);
-  await page.goto("/");
+  await setConfirmClose(page, "always");
   await openNewTerminal(page);
   // After a reload every view attaches again; held, the focused one stays connecting until release.
   const release = socket.hold("terminal.attach");
@@ -81,7 +82,7 @@ test("a terminal that becomes ready while Cmd+W's question is open leaves the qu
 test("a terminal whose renderer starts while Cmd+W's question is open leaves the question open with focus in it", async ({
   page,
 }) => {
-  await page.goto("/");
+  await setConfirmClose(page, "always");
   await openNewTerminal(page);
   const release = await reloadWithRenderersHeld(page);
 
@@ -106,7 +107,7 @@ test("a terminal whose renderer starts while Cmd+W's question is open leaves the
 
 test("the terminal left when Cmd+W's session ends under the question does not take focus from it", async ({ page }) => {
   const socket = await routeHcSocket(page);
-  await page.goto("/");
+  await setConfirmClose(page, "always");
   const remaining = await openOwnTerminal(page);
   const asked = await openOwnTerminal(page);
   await page.locator(`[data-terminal="${asked}"]`).getByRole("textbox").focus();
@@ -137,7 +138,7 @@ test("the terminal left when Cmd+W's session ends under the question does not ta
 });
 
 test("a press on a terminal that ends after Cmd+W's question opened leaves focus in the question", async ({ page }) => {
-  await page.goto("/");
+  await setConfirmClose(page, "always");
   const address = await openOwnTerminal(page);
   const box = await page.locator(`[data-terminal="${address}"]`).boundingBox();
   if (box === null) throw new Error(`${address} has no box`);

@@ -89,6 +89,19 @@ export class Wire {
     }
   }
 
+  /**
+   * Tells the core a channel is done. On a closed wire, or one whose socket went away before it said so, there is no
+   * core to tell and nothing to throw: closing a feed or a stream as a dropped link tears down is never an error (#403).
+   */
+  sendClose(channel: number): void {
+    if (this.#closeState !== undefined) return;
+    try {
+      this.send(channel, FrameKind.Close);
+    } catch (error) {
+      if (!(error instanceof HcConnectionClosedError)) throw error;
+    }
+  }
+
   sendRpc(text: string): void {
     this.send(RPC_CHANNEL, FrameKind.Data, utf8.encode(text));
   }
@@ -162,7 +175,7 @@ export class Wire {
   #orphanReply(response: JsonRpcResponse): void {
     if (response.kind !== "success" || !isJsonObject(response.result)) return;
     const channel = response.result["channel"];
-    if (isStreamChannel(channel) && !this.isClosed) this.send(channel, FrameKind.Close);
+    if (isStreamChannel(channel)) this.sendClose(channel);
   }
 
   #shutdown(error: Error | undefined): void {

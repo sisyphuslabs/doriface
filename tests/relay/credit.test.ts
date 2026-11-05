@@ -4,7 +4,7 @@ import { defer, runDeferred } from "./support/cleanup.ts";
 import { testIp } from "./support/probe.ts";
 import { AsyncQueue } from "./support/queue.ts";
 import { type RawHost, startRawHost } from "./support/raw-host.ts";
-import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
+import { type LocalRelay, startLocalRelay, RELAY_STOP_MS } from "./support/relay-dev.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 
 let relay: LocalRelay;
@@ -13,7 +13,7 @@ setUpOnce(async () => {
   relay = await startLocalRelay();
 }, 120_000);
 
-afterAll(() => relay?.stop());
+afterAll(() => relay?.stop(), RELAY_STOP_MS);
 
 afterEach(runDeferred);
 

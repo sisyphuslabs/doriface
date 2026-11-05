@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import type { Page } from "@playwright/test";
 import { E2E_HOST_ENV } from "./config.ts";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { setConfirmClose } from "./close-confirm.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
@@ -62,7 +63,8 @@ async function sessionMenu(page: Page, item: string): Promise<void> {
 
 test("Cmd+W's question whose session ends under it says the session ended, and only OK closes it", async ({ page }) => {
   const socket = await routeHcSocket(page);
-  await page.goto("/");
+  // A shell at its prompt closes without a question unless confirm-close-surface asks every time.
+  await setConfirmClose(page, "always");
   const remaining = (await (await openNewTerminal(page)).getAttribute("data-terminal")) ?? "";
   const terminal = await openNewTerminal(page);
   const address = (await terminal.getAttribute("data-terminal")) ?? "";
@@ -88,13 +90,11 @@ test("Cmd+W's question whose session ends under it says the session ended, and o
 
   const ended = statement(page);
   await expect(ended).toBeVisible({ timeout: 15_000 });
-  await expect(ended).toHaveAccessibleDescription(
-    "It ended before you answered, so there is nothing to keep running or end.",
-  );
+  await expect(ended).toHaveAccessibleDescription("It ended before you answered, so there is nothing to close.");
   await expect(ended.getByRole("button")).toHaveText(["OK"]);
   await expect(ended.getByRole("button", { name: "OK" })).toBeFocused();
 
-  // OK leaves the keyboard where Keep running does: in the terminal that is left.
+  // OK leaves the keyboard where closing does: in the terminal that is left.
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect.poll(() => focusedAddress(page)).toBe(remaining);
@@ -144,9 +144,9 @@ for (const [item, question] of [
   });
 }
 
-test("ending the session from Cmd+W's question closes it with no notice that the session ended", async ({ page }) => {
+test("closing from Cmd+W's question ends the session with no notice that it ended", async ({ page }) => {
   await recordEndedTitles(page);
-  await page.goto("/");
+  await setConfirmClose(page, "always");
   await openNewTerminal(page);
   const terminal = await openNewTerminal(page);
   const { before } = await terminalCount(page);
@@ -154,7 +154,7 @@ test("ending the session from Cmd+W's question closes it with no notice that the
   await terminal.getByRole("textbox").focus();
   await page.keyboard.press(CLOSE_TAB);
   const ask = page.getByRole("dialog", { name: /^Close .+\?$/ });
-  await ask.getByRole("button", { name: "End session" }).click();
+  await ask.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   // Once the feed has the session gone, nothing it could have said about the ending is still to come.
   await expect(page.getByRole("contentinfo")).toContainText(`${before - 1} terminal`, { timeout: 15_000 });

@@ -22,7 +22,7 @@ import { RetryButton } from "./retry-button.tsx";
 import { SpaceNameInput } from "./space-name-input.tsx";
 import { useSpaceRenaming } from "./space-rename-context.ts";
 import { machineGroups } from "./sidebar-model.ts";
-import { useSpaceColors } from "./sidebar-prefs.ts";
+import { useCollapsed, useSpaceColors } from "./sidebar-prefs.ts";
 import { useMachineReorder } from "./use-machine-reorder.tsx";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -58,6 +58,24 @@ function SpaceActions({ space }: { readonly space: Space }) {
         Rename space…
       </MenuItem>
     </Menu>
+  );
+}
+
+/** herdr-app's row under a machine with no spaces yet: starts the first one there. */
+function NewSpaceThere({ disabled, onClick }: { readonly disabled: boolean; readonly onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex h-(--row) min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground outline-none",
+        "hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:opacity-45 disabled:hover:bg-transparent",
+      )}
+    >
+      <Plus aria-hidden className="size-4 shrink-0" />
+      <span className="truncate">New space there</span>
+    </button>
   );
 }
 
@@ -132,7 +150,10 @@ function SpacesLists({
   // The icon rail has no room for a drag handle or a menu; the full sidebar reorders.
   const list = useRef<HTMLDivElement>(null);
   const { reorderOf, overlay } = useMachineReorder(list, machines.entries, !rail);
+  const [collapsed, toggle] = useCollapsed();
   const local = machines.entries.find((machine) => machine.local);
+  const newSpaceOn = (machine: MachineEntry): void =>
+    machine.local ? machines.start({}) : machines.newTerminalOn(machine.name);
   const newHere =
     grouped !== undefined || local === undefined || rail ? undefined : (
       <IconButton label="New space" icon={<Plus />} className="-mr-1" onClick={() => machines.start({})} />
@@ -147,7 +168,9 @@ function SpacesLists({
       live={machine.live}
       connected={machine.state === "connected"}
       rail={rail}
-      onNewSpace={() => (machine.local ? machines.start({}) : machines.newTerminalOn(machine.name))}
+      collapsed={collapsed.includes(machine.id)}
+      onToggle={() => toggle(machine.id)}
+      onNewSpace={() => newSpaceOn(machine)}
       {...(machine.first === undefined ? {} : { onOpen: () => onOpen(machine.first ?? "") })}
     />
   );
@@ -178,8 +201,15 @@ function SpacesLists({
               reorder={reorderOf(machine, index)}
               header={(button) => header(machine, button)}
             >
-              {rows(own, true)}
-              {machine.local || rail ? null : <MachineNotice name={machine.name} />}
+              {collapsed.includes(machine.id) ? null : (
+                <>
+                  {rows(own, true)}
+                  {own.length > 0 || rail ? null : (
+                    <NewSpaceThere disabled={machine.state !== "connected"} onClick={() => newSpaceOn(machine)} />
+                  )}
+                  {machine.local || rail ? null : <MachineNotice name={machine.name} />}
+                </>
+              )}
             </MachineGroup>
           ))}
         </div>

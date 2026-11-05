@@ -113,7 +113,24 @@ export function Workspace({ connection }: WorkspaceProps) {
     unsaved,
     machineReads > 0,
   );
-  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, layout.dropPane);
+  // A session that ends is dropped from the layout once, by whichever automatic signal comes first: closing it ends and
+  // removes it (#409), so its view's end and the dead-pane check both report it. A refused drop keeps the pane, showing
+  // the ended session, as for a program that exits; a second drop would be refused again, toast again and move the view.
+  const droppedOnce = useRef(new Set<string>());
+  useEffect(() => {
+    // An address listed live again is a new session in it, whose end is dropped again.
+    for (const terminal of terminals) if (terminal.state === "live") droppedOnce.current.delete(terminal.address);
+  }, [terminals]);
+  const { dropPane } = layout;
+  const dropEnded = useCallback(
+    (address: string): void => {
+      if (droppedOnce.current.has(address)) return;
+      droppedOnce.current.add(address);
+      dropPane(address);
+    },
+    [dropPane],
+  );
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, dropEnded);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
@@ -189,7 +206,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   };
   const onEnd = (address: string, end: TerminalEnd): void => {
     // An End of this session drops its pane only once it has removed the terminal (see afterEnd).
-    if (closesTab(end)) afterEnd(address, () => layout.dropPane(address));
+    if (closesTab(end)) afterEnd(address, () => dropEnded(address));
   };
   const closing = layout.tabs.find((tab) => tab.key === closingTab);
   const phoneTab = phoneOpen === null ? null : findTerminal(layout.tabs, phoneOpen);
@@ -277,14 +294,14 @@ export function Workspace({ connection }: WorkspaceProps) {
           terminals={terminals}
           ask={ask}
           onDone={done}
-          onKeep={layout.dropPane}
+          onDrop={layout.dropPane}
         />
         {closing === undefined ? null : (
           <CloseTabDialog
             connection={connection}
             terminals={terminals}
             tab={closing}
-            onKeep={() => layout.closeTab(closing.key)}
+            onClosed={() => layout.closeTab(closing.key)}
             onDone={() => setClosingTab(null)}
           />
         )}
