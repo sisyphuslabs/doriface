@@ -6,18 +6,23 @@ import { routeHcSocket } from "./hc-socket.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, reconnect, switchTo } from "./machine-switch.ts";
 
-// A local shell is the first live terminal, so it is the tab that opens on load. The remote one is adopted into its
-// machine's Home space on load (#404), and every tab's panes stay mounted, so its first attach is held until the
-// machine has dropped: it is still a session that never opened.
+// A local shell is the first live terminal, so it is the tab that opens on load. The page adopts every terminal no tab
+// shows into its machine's layout once that layout loads, and keeps every tab mounted, so a terminal running then is
+// attached in the background (#404): the remote session would only lose its line, never fail to open (#572). So an
+// anchor on the machine shows its layout has loaded and been adopted, and the session to open starts after that: no
+// tab holds it until it is opened, after the drop.
 let local = "";
+let anchor = "";
 let remote = "";
 test.beforeEach(() => {
   local = startShell("host", "home");
-  remote = startShell("machine", "fin");
+  anchor = startShell("machine", "anchor");
+  remote = "";
 });
 test.afterEach(() => {
   reconnect();
-  endAgent("machine", remote);
+  if (remote !== "") endAgent("machine", remote);
+  endAgent("machine", anchor);
   endAgent("host", local);
 });
 
@@ -25,17 +30,16 @@ test("a session on a machine that just dropped shows the didn't-open screen, and
   page,
 }) => {
   const socket = await routeHcSocket(page);
-  const releaseAttach = socket.holdAlso("terminal.attach");
   await page.goto("/");
+  // The anchor's view mounts once the machine's layout has loaded and adopted it; later terminals are not adopted.
+  await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${anchor}"]`)).toContainText("$", { timeout: 20_000 });
+  remote = startShell("machine", "fin");
   await expect(agentRow(page, "fin", true)).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator(`[role="tabpanel"]:not([hidden]) [data-terminal="${MACHINE_NAME}/${remote}"]`)).toHaveCount(
-    0,
-  );
+  await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`)).toHaveCount(0);
   // The page keeps its last machine.list (connected), so the pane tries to attach instead of showing the machine offline.
   const release = socket.hold("machine.list");
   switchTo("drop");
   await expect.poll(() => hcOn("host", ["machine", "ls"]), { timeout: 25_000 }).toContain("unreachable");
-  releaseAttach();
   await agentRow(page, "fin", true).click();
 
   const pane = page.locator('[data-focused="true"]');

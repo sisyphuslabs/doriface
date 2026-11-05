@@ -51,6 +51,7 @@ export function MachineHeader({
   buttonProps,
 }: MachineHeaderProps) {
   const Icon = local ? Monitor : Server;
+  // With no terminal to open only the icon dims: the name and count stay as legible as the state label.
   const quiet = onOpen === undefined && "opacity-45";
   return (
     <div className={cn("group flex h-(--row) min-w-0 items-center rounded-md", selected && "bg-selected", className)}>
@@ -71,13 +72,16 @@ export function MachineHeader({
         <Icon aria-hidden className={cn("size-3.5 shrink-0", quiet)} />
         {rail ? null : (
           <>
-            <span title={name} className={cn("min-w-0 flex-1 truncate", quiet)}>
+            {/* The name keeps the row: it starts at its full width, and the state label gives way first. */}
+            <span title={name} className="min-w-0 grow truncate">
               {name}
             </span>
-            <span className={cn("min-w-0 truncate text-2xs font-normal", alarm && "text-status-blocked-text")}>
+            <span
+              className={cn("min-w-0 shrink-999 truncate text-2xs font-normal", alarm && "text-status-blocked-text")}
+            >
               {state}
             </span>
-            <span data-numeric aria-label={`${live} terminals`} className={cn("w-4 shrink-0 text-right", quiet)}>
+            <span data-numeric aria-label={`${live} terminals`} className="w-4 shrink-0 text-right">
               {live}
             </span>
           </>
@@ -97,7 +101,8 @@ export function MachineHeader({
           aria-hidden
           data-machine-dot={connected ? "online" : "offline"}
           className={cn(
-            "mx-1.5 size-1.5 shrink-0 rounded-full",
+            // On a coarse pointer the dot keeps the buttons on its sides 20 px apart, so their 44 px hit areas do not meet.
+            "mx-1.5 size-1.5 shrink-0 rounded-full coarse:mx-2",
             connected ? "bg-online" : alarm ? "bg-status-blocked" : "bg-status-unknown",
           )}
         />

@@ -46,11 +46,6 @@ export interface HcSocket {
    * `fail`, each is sent as a same-length unknown method instead, so hc answers it with an RPC error.
    */
   readonly hold: (...methods: string[]) => (fail?: boolean) => void;
-  /**
-   * Holds the page's requests for these methods like `hold`, but on its own: other holds, `hold` included, neither
-   * replace it nor are released by it. The returned release sends what it parked, in order.
-   */
-  readonly holdAlso: (...methods: string[]) => () => void;
   /** Every frame the host has delivered to the page, in order, as text. */
   readonly received: () => readonly string[];
   /**
@@ -118,7 +113,6 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   const parked: ((fail: boolean) => void)[] = [];
   const received: string[] = [];
   const hostHolds = new Set<HostHold>();
-  const pageHolds = new Set<{ readonly methods: readonly string[]; readonly parked: (() => void)[] }>();
   await page.routeWebSocket(`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, (socket) => {
     if (down) {
       refused += 1;
@@ -130,11 +124,6 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       const frame = stale && typeof message !== "string" ? Buffer.concat(hcFrames(message).map(staleWrite)) : message;
       const text = typeof frame === "string" ? frame : frame.toString("latin1");
       sent.push(text);
-      const own = [...pageHolds].find((entry) => entry.methods.some((name) => text.includes(`"method":"${name}"`)));
-      if (own !== undefined) {
-        own.parked.push(() => host.send(frame));
-        return;
-      }
       const method = held.find((name) => text.includes(`"method":"${name}"`));
       if (method === undefined) host.send(frame);
       else
@@ -187,14 +176,6 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       };
     },
     staleWrites: (on) => void (stale = on),
-    holdAlso: (...methods) => {
-      const entry = { methods, parked: [] as (() => void)[] };
-      pageHolds.add(entry);
-      return () => {
-        pageHolds.delete(entry);
-        for (const send of entry.parked.splice(0)) send();
-      };
-    },
     hold: (...methods) => {
       held = methods;
       return (fail = false) => {
