@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriface-mark-dark.svg" />
+    <img src="apps/web/brand/doriface-mark-light.svg" alt="doriface" width="128" height="128" />
+  </picture>
+</p>
+
 # doriface
 
 An end-to-end encrypted web, PWA and desktop face for [herdr-core](https://github.com/herdrdev/herdr-core).
