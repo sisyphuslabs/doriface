@@ -23,6 +23,7 @@ import { Ended } from "./ended.tsx";
 import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } from "./terminal-scroll.tsx";
+import { TerminalLinks } from "./terminal-links.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
 
@@ -347,6 +348,7 @@ export function TerminalView(props: TerminalViewProps) {
       {wt === null ? null : (
         <>
           <TerminalScrollbar wt={wt} scroll={scroll} />
+          <TerminalLinks wt={wt} />
           <JumpToBottom
             wt={wt}
             scroll={scroll}
