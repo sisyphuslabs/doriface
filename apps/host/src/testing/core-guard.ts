@@ -2,7 +2,7 @@ import { afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stopLeftoverCores } from "./hc-session.ts";
+import { stopLeftoverCoresNamed } from "./hc-session.ts";
 import { recordLeft, RUN_DIR } from "./run-cores.ts";
 import { socketSafeBase } from "./short-tmp.ts";
 
@@ -19,7 +19,7 @@ if (shortTmp !== undefined) process.env["TMPDIR"] = shortTmp;
 // suite leaves running, for the runner to wait for and stop (see recordLeft).
 afterAll(async () => {
   try {
-    const leftover = await stopLeftoverCores();
+    const leftover = await stopLeftoverCoresNamed();
     if (leftover.length > 0) {
       throw new Error(`herdr-core outlived the test that started it (now stopped): ${leftover.join(", ")}`);
     }

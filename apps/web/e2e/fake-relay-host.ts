@@ -27,24 +27,42 @@ const relay = new FakeRelay();
 const bridge = new RelayClientBridge(relay);
 const hc = createHcSession("web-e2e-fake-relay");
 const env = { ...hc.env, ...shellEnv(stateDir) };
-const host = await startHost({
-  listen: { hostname: "127.0.0.1", port: 0 },
-  token: `fake-relay-host-${crypto.randomUUID()}`,
-  hc: hc.hc,
-  session: hc.name,
-  env,
-  stateDir,
-  relay: { url: relay.url },
-  log: () => {},
-});
-await relay.answers.next();
-// With --machine, the host's core also has an added machine, as a host with more than one computer does.
-const stopMachine = process.argv.includes("--machine")
-  ? await addMachine(hc.hc, env, join(stateDir, "machine"), false, {
+let host: Awaited<ReturnType<typeof startHost>> | undefined;
+let stopMachine: (() => Promise<void>) | undefined;
+async function stopAll(): Promise<void> {
+  await host?.stop();
+  await hc.dispose();
+  // Stop the dialer before its target: otherwise it can restart the second core during this teardown.
+  await stopMachine?.();
+  await bridge.stop();
+  await relay.stop();
+  rmSync(stateDir, { recursive: true, force: true });
+}
+try {
+  host = await startHost({
+    listen: { hostname: "127.0.0.1", port: 0 },
+    token: `fake-relay-host-${crypto.randomUUID()}`,
+    hc: hc.hc,
+    session: hc.name,
+    env,
+    stateDir,
+    relay: { url: relay.url },
+    log: () => {},
+  });
+  await relay.answers.next();
+  // With --machine, the host's core also has an added machine, as a host with more than one computer does.
+  if (process.argv.includes("--machine")) {
+    stopMachine = await addMachine(hc.hc, env, join(stateDir, "machine"), false, {
       ...DEMO_MACHINE,
       dir: join(stateDir, "machine-files"),
-    })
-  : undefined;
+    });
+  }
+} catch (error) {
+  // A start that fails stops what it started, so no core outlives it, and exits with the reason on stderr (#502).
+  console.error(error);
+  await stopAll();
+  process.exit(1);
+}
 
 async function pairingLink(): Promise<string> {
   const args = ["pair", "--no-qr", "--web-origin", webOrigin ?? "", "--relay", relayAddress ?? ""];
@@ -67,12 +85,6 @@ void (async () => {
 try {
   await done.promise;
 } finally {
-  await host.stop();
-  await hc.dispose();
-  // Stop the dialer before its target: otherwise it can restart the second core during this teardown.
-  await stopMachine?.();
-  await bridge.stop();
-  await relay.stop();
-  rmSync(stateDir, { recursive: true, force: true });
+  await stopAll();
 }
 process.exit(0);

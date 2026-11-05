@@ -11,6 +11,8 @@ export interface RendererOptions {
   readonly copyOnSelect: boolean;
   readonly hideMouseWhileTyping: boolean;
   readonly pasteProtection: boolean;
+  /** Copied text loses its line-end spaces and trailing blank rows (Ghostty's clipboard-trim-trailing-spaces). */
+  readonly trimCopy: boolean;
 }
 
 const SHAPES: Readonly<Record<string, readonly [blinking: number, steady: number]>> = {
@@ -32,5 +34,6 @@ export function rendererOptions(config: TerminalConfig): RendererOptions {
     copyOnSelect: single(config, "copy-on-select") !== "false",
     hideMouseWhileTyping: single(config, "mouse-hide-while-typing") === "true",
     pasteProtection: single(config, "clipboard-paste-protection") === "true",
+    trimCopy: single(config, "clipboard-trim-trailing-spaces") !== "false",
   };
 }
