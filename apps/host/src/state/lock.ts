@@ -57,32 +57,47 @@ export type LockStepHook = (step: LockStep, generation: number) => void;
 
 const errorCode = (error: unknown): unknown => (error instanceof Error && "code" in error ? error.code : undefined);
 
+/** How long a delete-pending file is waited for before its EPERM counts as a real one (#464). */
+export const DELETE_PENDING_WAIT_MS = 1000;
+const DELETE_PENDING_POLL_MS = 5;
+
 /**
- * Whether a failed open or stat means the file is gone. On Windows a file another process is deleting stays listed
- * until its last handle closes, and opening it fails with ERROR_ACCESS_DENIED (EPERM): a generation the next holder is
- * sweeping, or one its holder is removing, reads that way for a moment (#464). The lock directory is this user's own,
- * so EPERM there is that state, never a refused permission.
+ * Runs `read`, waiting out a file another process is deleting. On Windows such a file stays listed until its last handle
+ * closes, and opening it fails with ERROR_ACCESS_DENIED (EPERM) meanwhile: a generation the next holder is sweeping, or
+ * one its holder is removing, reads that way for a moment (#464). So on win32 an EPERM is retried until `waitMs` has
+ * passed; one that outlasts it is a real refusal and is thrown, as is any other error, and EPERM elsewhere at once.
  */
-export function fileIsGone(error: unknown, platform: NodeJS.Platform = process.platform): boolean {
-  const code = errorCode(error);
-  return code === "ENOENT" || (platform === "win32" && code === "EPERM");
+export function whileDeletePending<T>(
+  read: () => T,
+  platform: NodeJS.Platform = process.platform,
+  waitMs = DELETE_PENDING_WAIT_MS,
+): T {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      return read();
+    } catch (error) {
+      if (platform !== "win32" || errorCode(error) !== "EPERM" || Date.now() >= deadline) throw error;
+      Bun.sleepSync(DELETE_PENDING_POLL_MS);
+    }
+  }
 }
 
-/** The file's content, or undefined if it is gone (or being deleted) or is a directory. */
+/** The file's content, or undefined if it is gone or is a directory. */
 function readLock(path: string): string | undefined {
   try {
-    return readFileSync(path, "utf8");
+    return whileDeletePending(() => readFileSync(path, "utf8"));
   } catch (error) {
-    if (fileIsGone(error) || errorCode(error) === "EISDIR") return undefined;
+    if (errorCode(error) === "ENOENT" || errorCode(error) === "EISDIR") return undefined;
     throw error;
   }
 }
 
 function emptyLockIsFresh(path: string): boolean {
   try {
-    return Date.now() - statSync(path).mtimeMs < EMPTY_LOCK_STALE_MS;
+    return Date.now() - whileDeletePending(() => statSync(path)).mtimeMs < EMPTY_LOCK_STALE_MS;
   } catch (error) {
-    if (fileIsGone(error)) return true;
+    if (errorCode(error) === "ENOENT") return true;
     throw error;
   }
 }
