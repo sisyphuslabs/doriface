@@ -20,7 +20,6 @@ const options = (platform: MenuOptions["platform"], more: Partial<MenuOptions> =
   openSettings: noop,
   keys: new Map(),
   runAction: noop,
-  zoomWindow: noop,
   ...more,
 });
 
@@ -120,30 +119,30 @@ describe("menus", () => {
     ]);
   });
 
-  test("View's zoom items zoom the window and leave their keys to the page, which zooms the same way", () => {
+  test("View's text-size items run the page's terminal text-size actions and leave their keys to the page", () => {
     for (const platform of ["darwin", "linux", "win32"] as const) {
       const steps: string[] = [];
-      const menu = menuTemplate(options(platform, { zoomWindow: (s) => steps.push(s) }));
+      const menu = menuTemplate(options(platform, { runAction: (action) => steps.push(action) }));
       const view = submenuOf(menu.find((item) => item.label === "View"));
       expect(roles(view)).toEqual([
         "reload",
         "forceReload",
         "toggleDevTools",
         "separator",
-        "Actual Size",
-        "Zoom In",
-        "Zoom Out",
+        "Default Text Size",
+        "Bigger Text",
+        "Smaller Text",
         "separator",
         "togglefullscreen",
       ]);
-      const zoomItems = view.filter((item) => item.id?.startsWith("zoom-"));
+      const zoomItems = view.filter((item) => item.id?.startsWith("font-size-"));
       expect(zoomItems.map((item) => [item.id, item.accelerator, item.registerAccelerator])).toEqual([
-        ["zoom-reset", "CommandOrControl+0", false],
-        ["zoom-in", "CommandOrControl+Plus", false],
-        ["zoom-out", "CommandOrControl+-", false],
+        ["font-size-reset", "CommandOrControl+0", false],
+        ["font-size-increase", "CommandOrControl+Plus", false],
+        ["font-size-decrease", "CommandOrControl+-", false],
       ]);
       for (const item of zoomItems) item.click?.(Object.create(null), undefined, Object.create(null));
-      expect(steps).toEqual(["reset", "in", "out"]);
+      expect(steps).toEqual(["app.zoom_reset", "app.zoom_in", "app.zoom_out"]);
     }
   });
 });

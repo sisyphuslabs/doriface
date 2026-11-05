@@ -79,6 +79,25 @@ function underWindowButtons(page: Page): Promise<string[]> {
   );
 }
 
+/**
+ * herdr-app's gap between the last window button and the first item beside it (its app icon, then the name): 12 pt,
+ * measured from its macOS titlebar (#392).
+ */
+const TITLE_GAP = 12;
+
+/** The left edge of the sidebar's "doriface" title against the right edge of the window buttons, in window points. */
+async function titleClearance(app: ElectronApplication, page: Page): Promise<number> {
+  const title = await page.locator("aside [data-titlebar]").getByText("doriface", { exact: true }).boundingBox();
+  const buttons = await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0]?.getWindowButtonPosition(),
+  );
+  if (title === null || buttons === undefined || buttons === null) throw new Error("no title or no window buttons");
+  const zoom = await app.evaluate(
+    ({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor() ?? 0,
+  );
+  return title.x * zoom - (buttons.x + TRAFFIC_LIGHTS.width);
+}
+
 const insetVariable = (page: Page): Promise<string> =>
   page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--titlebar-inset-start").trim());
 
@@ -127,6 +146,17 @@ test("nothing sits under the window buttons, in every state and size, and full s
     Math.abs(buttonsCentre - headerCentre),
     `buttons centred at ${buttonsCentre}, header at ${headerCentre}`,
   ).toBeLessThanOrEqual(1);
+  expect(await titleClearance(app, page), "the title's gap after the window buttons").toBeGreaterThanOrEqual(TITLE_GAP);
+  // The text-size keys never shrink the chrome under the window buttons (#388).
+  for (const key of ["ControlOrMeta+Minus", "ControlOrMeta+Minus", "ControlOrMeta+Minus", "ControlOrMeta+Equal"]) {
+    // oxlint-disable-next-line no-await-in-loop -- one window: each key is pressed and read before the next
+    await page.keyboard.press(key);
+    // oxlint-disable-next-line no-await-in-loop -- as above
+    expect(await titleClearance(app, page), `after ${key}`).toBeGreaterThanOrEqual(TITLE_GAP);
+    // oxlint-disable-next-line no-await-in-loop -- as above
+    expect(await underWindowButtons(page), `after ${key}`).toEqual([]);
+  }
+  await page.keyboard.press("ControlOrMeta+0");
   await page.getByRole("button", { name: "Hide sidebar" }).click();
   await expect(page.getByRole("complementary", { name: "Workspace" })).toBeHidden();
   await check("workspace with the sidebar hidden");
