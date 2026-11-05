@@ -48,6 +48,8 @@ describe("Allow from the page", () => {
     ["the host answered", { t: "answered", terminal: "t3" }, "answered"],
     ["the prompt had gone", { t: "stale", terminal: "t3" }, "stale"],
     ["the host refused", { t: "error", reason: "x" }, "failed"],
+    ["the answer did not go through", { t: "failed", terminal: "t3", reason: "link dropped" }, "failed"],
+    ["the key press may have landed", { t: "unknown", terminal: "t3" }, "unknown"],
   ] as const)("%s", async (_, reply: PushHostLine, phase) => {
     expect(
       await allowFromPage(

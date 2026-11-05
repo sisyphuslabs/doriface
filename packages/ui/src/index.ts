@@ -2,6 +2,7 @@ export { cn } from "./lib/cn.ts";
 export { AgentRow, type Agent, type AgentRowProps } from "./components/agent-row.tsx";
 export {
   ApprovalBanner,
+  approvalAnnouncement,
   type ApprovalAnswer,
   type ApprovalBannerProps,
   type ApprovalBannerState,

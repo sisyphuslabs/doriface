@@ -202,3 +202,35 @@ test("a watcher whose connection closed watches again on the next ensure", async
     await sweeper.stop();
   }
 }, 30_000);
+
+test("kill ends a watch child that closing its stdin did not, and names its pid; a child already gone is not killed", async () => {
+  const closes = new Set<(error: Error | undefined) => void>();
+  const signals: string[] = [];
+  // A core that never answers the hello and ignores a closed stdin: only a kill ends it.
+  const hung = {
+    pid: 4343,
+    send: () => {},
+    onData: () => () => {},
+    onClose: (listener: (error: Error | undefined) => void) => {
+      closes.add(listener);
+      return () => closes.delete(listener);
+    },
+    close: () => {},
+    kill: (signal: "SIGKILL") => {
+      signals.push(signal);
+      for (const listener of closes) listener(new Error("killed"));
+    },
+  };
+  const sweeper = endSweeper(
+    { hc: "hc" },
+    () => {},
+    () => hung,
+  );
+  void sweeper.ensure();
+  const stopped = sweeper.stop();
+  expect(sweeper.kill()).toEqual([4343]);
+  expect(signals).toEqual(["SIGKILL"]);
+  await stopped;
+  expect(sweeper.kill()).toEqual([]);
+  expect(signals).toEqual(["SIGKILL"]);
+});
