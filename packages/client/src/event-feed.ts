@@ -192,7 +192,7 @@ export class EventFeed implements ChannelHandler {
     this.#closeInfo = info;
     if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#wire.unregister(this.channel);
-    if (sendClose) this.#wire.send(this.channel, FrameKind.Close);
+    if (sendClose) this.#wire.sendClose(this.channel);
     this.#closeListeners.emit(info);
   }
 }
