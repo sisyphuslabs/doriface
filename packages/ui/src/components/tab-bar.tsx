@@ -133,15 +133,6 @@ export function TabBar({
               {...(lifted === tab.id ? { "data-lifted": "" } : {})}
               {...(drawn.before.has(tab.id) ? { "data-arrived": "" } : {})}
               onPointerDown={(event) => onPointerDown(event, tab.id, index)}
-              // A middle-click closes the tab, as in browsers; holding the button down starts no autoscroll.
-              onMouseDown={(event) => {
-                if (event.button === 1) event.preventDefault();
-              }}
-              onAuxClick={(event) => {
-                if (event.button !== 1) return;
-                event.preventDefault();
-                onClose?.(tab.id);
-              }}
               onTouchStart={skipMenuHandler}
               onContextMenu={(event) => {
                 if (!touching()) return;
