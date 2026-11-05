@@ -108,12 +108,14 @@ export function TabBar({
       )}
     >
       {leading}
+      {/* py-1 holds the buttons' 4 px hit area (after:-inset-1) inside the strip: past its edge it was scrollable
+          overflow, and classic scrollbars drew a vertical bar for it (#343). The strip scrolls only sideways. */}
       <div
         ref={list}
         role="tablist"
         aria-label="Tabs"
         onClickCapture={onClickCapture}
-        className="relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+        className="relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
       >
         {drag === null ? null : <DropIndicator drag={drag} />}
         {drag === null ? null : <DropCaret drag={drag} />}
