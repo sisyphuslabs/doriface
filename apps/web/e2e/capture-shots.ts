@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
 import { agentRow, startShell } from "./agents.ts";
+import { SPACE_RENAME_SHOTS } from "./capture-space-rename-shots.ts";
 import { VOICE_SHOTS } from "./capture-voice-shots.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
@@ -230,6 +231,7 @@ export const SHOTS: readonly Shot[] = [
     },
   },
   ...VOICE_SHOTS,
+  ...SPACE_RENAME_SHOTS,
   {
     // A session whose program ended while its machine was offline, so its view first attaches to a finished terminal.
     name: "session-ended",
