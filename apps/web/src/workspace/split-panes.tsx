@@ -42,6 +42,7 @@ export interface SplitPanesProps {
   readonly onEnd: (address: string, end: TerminalEnd) => void;
   readonly onSplit: (axis: Axis, target: PaneTarget) => void;
   readonly onClose: (address: string) => void;
+  readonly onEnded: (address: string, pid: number | null) => void;
   readonly sends: PaneSends;
   /** Docked under the focused pane of the tab in view only. */
   readonly dock: ReactNode;
@@ -80,6 +81,7 @@ export function SplitPanes({
   layout,
   titles,
   onEnd,
+  onEnded,
   sends,
   dock,
   onSplit,
@@ -121,6 +123,7 @@ export function SplitPanes({
                       onEnd={onEnd}
                       onSplit={(axis) => onSplit(axis, { tab: tab.key, pane: pane.id })}
                       onClose={() => (pane.address === null ? undefined : onClose(pane.address))}
+                      onEnded={onEnded}
                       sends={sends}
                       dock={selected && layout.focused?.id === pane.id ? dock : null}
                     />
@@ -145,6 +148,7 @@ interface PaneSlotProps {
   readonly onEnd: (address: string, end: TerminalEnd) => void;
   readonly onSplit: (axis: Axis) => void;
   readonly onClose: () => void;
+  readonly onEnded: (address: string, pid: number | null) => void;
   readonly sends: PaneSends;
   readonly dock: ReactNode;
 }
@@ -157,6 +161,7 @@ function PaneSlot({
   focused,
   onFocus,
   onEnd,
+  onEnded,
   sends,
   dock,
   onSplit,
@@ -173,6 +178,7 @@ function PaneSlot({
         onEnd={onEnd}
         onSplit={onSplit}
         onClose={onClose}
+        onEnded={onEnded}
         onPort={sends.onPort(terminal.address)}
         dock={dock}
       />

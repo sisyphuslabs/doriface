@@ -21,6 +21,8 @@ export interface PaneProps {
   readonly onEnd: (address: string, end: TerminalEnd) => void;
   readonly onSplit: (axis: Axis) => void;
   readonly onClose: () => void;
+  /** The view showed that its program had already ended when it attached: there is no terminal left to type into. */
+  readonly onEnded: (address: string, pid: number | null) => void;
   /** The view's input path, for input from outside the pane (dictation); null once the view unmounts. */
   readonly onPort: (port: TerminalPort | null) => void;
   /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
@@ -72,6 +74,7 @@ export function Pane({
   split,
   onFocus,
   onEnd,
+  onEnded,
   onPort,
   dock,
   onSplit,
@@ -116,6 +119,7 @@ export function Pane({
           focused={focused}
           label={`${title} output`}
           onEnd={onEnd}
+          onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
           onPort={onPort}
         />
       )}
