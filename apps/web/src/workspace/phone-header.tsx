@@ -44,12 +44,18 @@ export function PhoneHeader({ terminal, terminals, onBack, onOpen, action }: Pho
       className="flex min-h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome pt-[env(safe-area-inset-top)] pr-1.5 pl-[var(--titlebar-inset-start,0.375rem)]"
     >
       <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" onClick={onBack} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 title={title} className="min-w-0 truncate text-base leading-tight font-semibold text-foreground">
+      {/* A container: the status chip shows its word only where the title keeps a readable share of the row (#479). */}
+      <div className="@container flex min-w-0 flex-1 flex-col py-1">
+        <div className="flex min-w-0 items-start gap-2">
+          {/* The title names the screen: it takes the row and a second line before it ends in an ellipsis; whole in its tooltip. */}
+          <h1
+            title={title}
+            className="line-clamp-2 min-w-0 flex-1 text-base leading-tight font-semibold wrap-break-word text-foreground"
+          >
             {title}
           </h1>
-          <StatusChip status={agentStatus(terminal)} />
+          <StatusChip status={agentStatus(terminal)} className="hidden @min-[22rem]:inline-flex" />
+          <StatusIndicator status={agentStatus(terminal)} className="mt-1 size-3.5 shrink-0 @min-[22rem]:hidden" />
         </div>
         {/* Under text spacing the counts wrap to a line of their own before the place gives up its last letters. */}
         <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs leading-tight text-muted-foreground">
