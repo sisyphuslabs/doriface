@@ -19,7 +19,7 @@ export const NEW_TAB: ActionDef = app("tab.new", "New tab", "new_tab");
 
 export const ACTIONS: readonly ActionDef[] = [
   NEW_TAB,
-  app("tab.close", "Close tab", "close_surface"),
+  app("tab.close", "Close tab", "close_tab"),
   app("tab.next", "Next tab", "next_tab"),
   app("tab.prev", "Previous tab", "previous_tab"),
   ...Array.from({ length: 9 }, (_, index) =>
@@ -28,10 +28,13 @@ export const ACTIONS: readonly ActionDef[] = [
   app("tab.last", "Go to last tab", "last_tab"),
   app("tab.move:left", "Move tab left", "move_tab:-1"),
   app("tab.move:right", "Move tab right", "move_tab:1"),
-  app("pane.split", "Split right", "new_split:right"),
-  app("pane.close", "Close pane"),
+  app("pane.split:right", "Split right", "new_split:right"),
+  app("pane.split:down", "Split down", "new_split:down"),
+  app("pane.close", "Close pane", "close_surface"),
   app("pane.go:left", "Focus pane left", "goto_split:left"),
   app("pane.go:right", "Focus pane right", "goto_split:right"),
+  app("pane.go:up", "Focus pane up", "goto_split:up"),
+  app("pane.go:down", "Focus pane down", "goto_split:down"),
   app("agent.next", "Next agent"),
   app("agent.prev", "Previous agent"),
   app("layout.toggle:sidebar", "Show or hide the sidebar"),

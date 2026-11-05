@@ -18,7 +18,11 @@ const setup = (start: () => Promise<typeof endpoint> = async () => endpoint) => 
   const zooms: string[] = [];
   let starts = 0;
   let closes = 0;
+  const menus: ReadonlyMap<string, string>[] = [];
   const handlers = ipcHandlers({
+    setMenuKeys: (keys) => {
+      menus.push(keys);
+    },
     takePairingLink,
     origin: APP_ORIGIN,
     startLocalHost: async () => {
@@ -38,7 +42,7 @@ const setup = (start: () => Promise<typeof endpoint> = async () => endpoint) => 
       zooms.push(step);
     },
   });
-  return { handlers, opened, painted, zooms, starts: () => starts, closes: () => closes };
+  return { handlers, opened, painted, zooms, menus, starts: () => starts, closes: () => closes };
 };
 
 afterEach(() => void takePairingLink());
@@ -53,6 +57,7 @@ describe("IPC sender gate", () => {
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
         expect(handlers.zoomWindow(event, "out")).rejects.toThrow("refused IPC"),
       ]),
     );
@@ -61,6 +66,25 @@ describe("IPC sender gate", () => {
     expect(zooms).toEqual([]);
     expect(starts()).toBe(0);
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
+  });
+
+  test("the Shell menu takes only its own actions and short trigger text from the page, entry by entry", async () => {
+    const { handlers, menus } = setup();
+    expect(await handlers.setMenuKeys(app, { "pane.split:right": "super+d", "pane.go:up": "super+alt+up" })).toBe(true);
+    // One entry the menu cannot take is left out; the rest still reach the menu.
+    expect(await handlers.setMenuKeys(app, { "app.quit": "super+q", "tab.new": "super+t" })).toBe(true);
+    expect(await handlers.setMenuKeys(app, { "tab.new": "super+t\nRole: quit", "tab.close": "super+alt+w" })).toBe(
+      true,
+    );
+    expect(await handlers.setMenuKeys(app, ["tab.new"])).toBe(false);
+    expect(menus).toEqual([
+      new Map([
+        ["pane.split:right", "super+d"],
+        ["pane.go:up", "super+alt+up"],
+      ]),
+      new Map([["tab.new", "super+t"]]),
+      new Map([["tab.close", "super+alt+w"]]),
+    ]);
   });
 
   test("the app origin takes a waiting pairing link once", () => {

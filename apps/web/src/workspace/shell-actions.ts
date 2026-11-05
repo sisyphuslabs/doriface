@@ -10,7 +10,10 @@ export interface ShellAction {
 const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
   desktop: [
     "tab.new",
-    "pane.split",
+    "pane.split:right",
+    "pane.split:down",
+    "pane.close",
+    "tab.close",
     "tab.move:left",
     "tab.move:right",
     "session.rename",
@@ -44,7 +47,7 @@ function canMove(id: string, { keys, active }: Strip): boolean {
 
 /** Splitting needs a terminal in view whose layout takes edits; until then it is listed as unavailable, with why. */
 function unavailable(id: string, inView: boolean, readOnly: string | null): string | undefined {
-  if (id !== "pane.split") return undefined;
+  if (!id.startsWith("pane.split:")) return undefined;
   return inView ? (readOnly ?? undefined) : "No terminal to split";
 }
 

@@ -50,7 +50,7 @@ export function useCloseSettings(): () => void {
   }, [close]);
 
   useActionHandler("app", (action) => {
-    if (action !== "app.settings" && action !== "tab.close") return false;
+    if (action !== "app.settings" && action !== "tab.close" && action !== "pane.close") return false;
     if (!layerOpen()) close();
     return true;
   });
