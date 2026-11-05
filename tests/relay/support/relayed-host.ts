@@ -64,6 +64,8 @@ export interface RelayedHostOptions {
   readonly pushTestOrigins?: readonly string[];
   /** Where the scratch dir is made (the system tmp dir by default), so a test can check that its own is removed. */
   readonly scratchRoot?: string;
+  /** Each line the host logs, as it logs it: e.g. "relay: connected ..." once its uplink is answered again. */
+  readonly onLog?: (line: string) => void;
   /** For tests of this helper: told each part as it starts, so a test can check that a failed start stopped them all. */
   readonly started?: (
     part: { readonly relay: LocalRelay } | { readonly session: HcSession } | { readonly host: Host },
@@ -113,6 +115,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
       pushTestOrigins: options.pushTestOrigins,
       log: (line) => {
         logs.push(line);
+        options.onLog?.(line);
         if (line.startsWith("relay: connected")) connected.resolve();
       },
     });
