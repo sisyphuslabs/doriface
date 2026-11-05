@@ -20,8 +20,8 @@ const platformArgs: readonly string[] = process.platform === "linux" ? ["--disab
  * The command-line arguments every e2e launch passes, followed by `extra`: from this checkout they start the app with
  * every window hidden (Electron's -r loads the hook before the app); a packaged executable cannot load the hook.
  */
-export function appArgs(extra: readonly string[] = []): string[] {
-  const args = [...platformArgs, ...extra];
+export function appArgs(extra: readonly string[] = [], { gpu = false } = {}): string[] {
+  const args = [...(gpu ? [] : platformArgs), ...extra];
   return packagedExecutable === undefined ? ["-r", hideWindows, appDir, ...args] : args;
 }
 
@@ -33,7 +33,8 @@ const attachAfterFirstLoad = join(appDir, "e2e", "attach-after-first-load.ts");
  */
 export function launchOptions(
   extra: readonly string[] = [],
+  { gpu = false } = {},
 ): { readonly args: string[] } | { readonly executablePath: string; readonly args: string[] } {
-  const args = appArgs(extra);
+  const args = appArgs(extra, { gpu });
   return packagedExecutable === undefined ? { args } : { executablePath: attachAfterFirstLoad, args };
 }
