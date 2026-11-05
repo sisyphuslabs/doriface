@@ -13,6 +13,7 @@
 
 - One sidebar toggle, placed after the macOS window buttons, and a titlebar laid out like herdr-app's. (#445)
 - Agents sit at the bottom of the sidebar with a split you can drag, and two spaces with the same name show as separate rows. (#421)
+- A machine's header keeps its name ahead of its state, and its buttons have tap areas that don't overlap. (#504)
 - The desktop app waits for your saved tabs before showing "No terminal open", and a terminal that is still opening says so. (#489)
 - Native notifications in the desktop app, using the same triggers and settings as web push. (#412)
 
@@ -55,4 +56,4 @@
 - The app starts and keeps working when the browser refuses storage, as private windows and blocked site data do. (#550, #554)
 - On phones, the app, its header, its status bar and its sheets keep clear of the notch, the rounded corners and the home indicator on every side. (#561, #565)
 - An older browser gets an Update your browser screen instead of a page that does not work. (#563)
-- Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558, #564)
+- Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558, #564, #569)
