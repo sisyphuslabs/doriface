@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decryptPushBody, receiverKeys } from "../../apps/host/src/testing/push-receiver.ts";
 import { capturingSockets } from "./support/capture.ts";
-import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
+import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "./support/relayed-host.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 import { within } from "./support/watch.ts";
 
@@ -45,7 +45,7 @@ afterAll(async () => {
   await relayed?.stop();
   await pushService.stop(true);
   rmSync(scratch, { recursive: true, force: true });
-});
+}, RELAYED_STOP_MS);
 
 /** A push session's lines: each one gets one reply, in order. */
 function lines(link: SecureLink): (line: PushClientLine) => Promise<PushHostLine> {
