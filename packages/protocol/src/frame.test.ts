@@ -48,6 +48,34 @@ describe("frame codec", () => {
     }
   });
 
+  test("decodes frames fed through one reused buffer, a few bytes at a time", () => {
+    const big = new Uint8Array(70_000).map((_, i) => i % 251);
+    const stream = new Uint8Array([
+      ...encodeFrame(0, FrameKind.Data, text('{"jsonrpc":"2.0"}')),
+      ...encodeFrame(5, FrameKind.Data, big),
+      ...encodeCredit(7, 262_144),
+    ]);
+    for (const size of [1, 4, 9, 10, 4096]) {
+      const decoder = new FrameDecoder();
+      const reused = new Uint8Array(size);
+      const frames = [];
+      for (let at = 0; at < stream.byteLength; at += size) {
+        const part = stream.subarray(at, at + size);
+        reused.set(part);
+        frames.push(...decoder.push(reused.subarray(0, part.byteLength)).map((f) => ({ ...f, payload: f.payload.slice() })));
+        reused.fill(0xff);
+      }
+      expect(frames.map((f) => [f.channel, f.kind, f.payload.byteLength])).toEqual([
+        [0, FrameKind.Data, 17],
+        [5, FrameKind.Data, big.byteLength],
+        [7, FrameKind.Credit, 4],
+      ]);
+      expect(nth(frames, 1).payload).toEqual(big);
+      expect(readCredit(nth(frames, 2).payload)).toBe(262_144);
+      expect(decoder.bufferedBytes).toBe(0);
+    }
+  });
+
   test("kind bytes match herdr-core wire.rs", () => {
     expect(Object.values(FrameKind)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     const bytes = encodeFrame(2, FrameKind.AutomaticInput, text("\x1b[1;1R"));
