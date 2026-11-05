@@ -40,3 +40,8 @@ test("a release build ignores a saved custom relay address and uses the producti
 test("a dev build keeps a saved custom relay address", () => {
   expect(loadSettings(saved(CUSTOM), { devBuild: true }).relayUrl).toBe("wss://relay.custom.invalid");
 });
+
+test("with no localStorage at all, as under bun's test runner, the defaults (#490)", () => {
+  expect(Reflect.get(globalThis, "localStorage")).toBeUndefined();
+  expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
+});

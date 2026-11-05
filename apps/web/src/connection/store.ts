@@ -2,6 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
 import { connect, DeviceNotPairedError } from "./connect.ts";
+import { LoopbackAddressError } from "./loopback-address.ts";
 import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSettings } from "./settings.ts";
 
 /**
@@ -113,7 +114,7 @@ export class ConnectionStore {
   }
 
   #retry(error: Error, attempt: number): void {
-    if (error instanceof DeviceNotPairedError) {
+    if (error instanceof DeviceNotPairedError || error instanceof LoopbackAddressError) {
       this.#stale = null;
       this.#set({ phase: "failed", error, retryInMs: null, retryAt: null, stale: null });
       return;

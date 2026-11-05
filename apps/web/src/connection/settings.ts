@@ -43,12 +43,14 @@ function text(value: unknown, fallback: string): string {
 
 /**
  * Reads stored settings; anything malformed falls back field by field to the defaults, and a release build drops a saved
- * custom relay address.
+ * custom relay address. With no localStorage at all (bun's test runner, which loads store.ts and with it this read), the
+ * defaults: reading the global at module load must not depend on which test file installed one first (#490).
  */
 export function loadSettings(
-  storage: Storage = localStorage,
+  storage: Storage | undefined = Reflect.get(globalThis, "localStorage") as Storage | undefined,
   { devBuild = DEV_BUILD }: { readonly devBuild?: boolean } = {},
 ): ConnectionSettings {
+  if (storage === undefined) return DEFAULT_SETTINGS;
   let parsed: unknown;
   try {
     parsed = JSON.parse(storage.getItem(KEY) ?? "null");

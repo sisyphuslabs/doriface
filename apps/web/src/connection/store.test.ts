@@ -1,5 +1,6 @@
 import { afterEach, expect, jest, test } from "bun:test";
 import type { HcConnection } from "@doriface/client";
+import { LoopbackAddressError } from "./loopback-address.ts";
 import { type ConnectionSettings, DEFAULT_RELAY_URL, DEFAULT_SETTINGS } from "./settings.ts";
 
 // store.ts builds the app's store from localStorage as it loads; bun has none, so an empty one stands in for that load only.
@@ -85,4 +86,27 @@ test("in a release build the store connects through the production relay whateve
   expect(tried).toEqual([DEFAULT_RELAY_URL]);
   expect(written.map((value) => JSON.parse(value).relayUrl)).toEqual([DEFAULT_RELAY_URL]);
   expect(store.settings.relayUrl).toBe(DEFAULT_RELAY_URL);
+});
+
+test("a loopback address that is not on this computer is refused once and not retried, its reason shown (#462)", async () => {
+  jest.useFakeTimers();
+  let attempts = 0;
+  const refusal = new LoopbackAddressError("The loopback address must be on this computer.");
+  const store = new ConnectionStore(SETTINGS, () => {
+    attempts += 1;
+    return Promise.reject(refusal);
+  });
+  const failed = new Promise<void>((resolve) => {
+    const off = store.subscribe(() => {
+      if (store.state.phase !== "failed") return;
+      off();
+      resolve();
+    });
+  });
+  store.start();
+  await failed;
+  expect(store.state).toMatchObject({ phase: "failed", error: refusal, retryInMs: null, retryAt: null });
+  jest.advanceTimersByTime(60_000);
+  expect(attempts).toBe(1);
+  store.stop();
 });

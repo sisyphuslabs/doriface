@@ -12,7 +12,7 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { defer, runDeferred } from "./support/cleanup.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { AsyncQueue } from "./support/queue.ts";
-import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
+import { type LocalRelay, RELAY_STOP_MS, startLocalRelay } from "./support/relay-dev.ts";
 import { times } from "./support/sequential.ts";
 import { uniqueSlot } from "./support/slots.ts";
 import { startTestHost } from "./support/test-host.ts";
@@ -27,7 +27,7 @@ setUpOnce(async () => {
   relay = await startLocalRelay();
 }, 120_000);
 
-afterAll(() => relay?.stop());
+afterAll(() => relay?.stop(), RELAY_STOP_MS);
 
 afterEach(runDeferred);
 

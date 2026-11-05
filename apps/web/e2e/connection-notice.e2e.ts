@@ -1,6 +1,7 @@
 import { devices, type Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
-import { LAN_HC_URL, routeHcSocket, routeLanToHost } from "./hc-socket.ts";
+import { routeHcSocket } from "./hc-socket.ts";
+import { type FakeRelayHost, startFakeRelayHost } from "./relay-route.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -19,6 +20,20 @@ const osOnline = (page: Page, online: boolean) =>
     dispatchEvent(new Event(value ? "online" : "offline"));
   }, online);
 
+/**
+ * Pairs the page with a host across the network over the relay (#462: the loopback link only ever reaches this
+ * computer), and keeps those settings across loads: the fixture seeds loopback settings on every load.
+ */
+async function pairAcrossTheNetwork(page: Page, host: FakeRelayHost): Promise<void> {
+  await host.route(page);
+  await page.goto(await host.pairingLink());
+  await page.getByRole("button", { name: "They match" }).click({ timeout: 30_000 });
+  await expect(page.getByRole("status").getByText("Paired")).toBeVisible({ timeout: 30_000 });
+  const paired = await page.evaluate(() => localStorage.getItem("doriface.connection"));
+  if (paired === null) throw new Error("pairing saved no connection");
+  await page.addInitScript((value) => localStorage.setItem("doriface.connection", value), paired);
+}
+
 async function echoes(page: Page, marker: string): Promise<void> {
   const terminal = page.locator("[data-terminal]").filter({ visible: true }).first();
   await terminal.getByRole("textbox").focus();
@@ -29,13 +44,18 @@ async function echoes(page: Page, marker: string): Promise<void> {
 
 test.describe("desktop", () => {
   test.describe("a host across the network", () => {
-    test.use({ loopbackUrl: LAN_HC_URL });
+    let host: FakeRelayHost;
+    test.beforeAll(async () => {
+      test.setTimeout(60_000);
+      host = await startFakeRelayHost();
+    });
+    test.afterAll(async () => host.stop());
 
     test("going offline is said in the status bar at once, and the notice leaves when the network is back", async ({
       page,
       context,
     }) => {
-      await routeLanToHost(page);
+      await pairAcrossTheNetwork(page, host);
       await page.goto("/");
       await openNewTerminal(page);
       await context.setOffline(true);
@@ -130,13 +150,18 @@ test.describe("phone", () => {
   test.use({ ...phone });
 
   test.describe("a host across the network", () => {
-    test.use({ loopbackUrl: LAN_HC_URL });
+    let host: FakeRelayHost;
+    test.beforeAll(async () => {
+      test.setTimeout(60_000);
+      host = await startFakeRelayHost();
+    });
+    test.afterAll(async () => host.stop());
 
     test("the phone terminal screen says it is offline, and clears when the network is back", async ({
       page,
       context,
     }) => {
-      await routeLanToHost(page);
+      await pairAcrossTheNetwork(page, host);
       await openPhoneTerminal(page);
       await context.setOffline(true);
       await expect(notice(page, OFFLINE)).toBeVisible({ timeout: 2_000 });
@@ -150,7 +175,7 @@ test.describe("phone", () => {
         context,
       }) => {
         await page.setViewportSize({ width, height: 800 });
-        await routeLanToHost(page);
+        await pairAcrossTheNetwork(page, host);
         await openPhoneTerminal(page);
         await context.setOffline(true);
         const line = notice(page, OFFLINE);
