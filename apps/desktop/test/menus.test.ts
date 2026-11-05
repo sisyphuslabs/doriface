@@ -85,6 +85,7 @@ describe("menus", () => {
       "Split Down",
       "separator",
       "Select Pane",
+      "Swap Pane",
       "Resize Pane",
       "Equalize Panes",
       "Zoom Pane",

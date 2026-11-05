@@ -160,6 +160,49 @@ export function equalize(root: Node): Node {
   return changed ? { ...root, children: next } : root;
 }
 
+/** `node` sized as `slot` is: the size belongs to the place in the tree, not to the pane that fills it. */
+function inSlotOf(node: Node, slot: Node): Node {
+  const size = slot["size"];
+  return size === undefined ? withoutField(node, "size") : withField(node, "size", size);
+}
+
+/**
+ * The tree with panes `a` and `b` in each other's place, herdr-app's `Node::swap`: each place keeps its size, so the two
+ * trade where they are drawn and nothing else moves. Null when either is not a pane of this tree or they are one pane.
+ */
+export function swapPanes(root: Node, a: string, b: string): Node | null {
+  const [pathA, pathB] = [pathTo(root, a), pathTo(root, b)];
+  if (a === b || pathA === null || pathB === null) return null;
+  const [nodeA, nodeB] = [nodeAt(root, pathA), nodeAt(root, pathB)];
+  if (nodeA === null || nodeB === null || isContainer(nodeA) || isContainer(nodeB)) return null;
+  const once = replaceAt(root, pathA, () => inSlotOf(nodeB, nodeA));
+  return replaceAt(once, pathB, () => inSlotOf(nodeA, nodeB));
+}
+
+/** A side of a pane another is dropped on: the drop puts it there, sharing that pane's place. */
+export type Edge = "left" | "right" | "top" | "bottom";
+
+/**
+ * The tree with pane `source` moved beside pane `target` on `edge` of it, herdr-app's `move_pane` with an edge: the
+ * source leaves (its share to the neighbour it was split from), then splits the target's place along the edge's axis,
+ * before the target for left and top. Both stay the same panes, so their terminals never restart. Null when either is
+ * not a pane of this tree or they are one pane.
+ */
+export function movePane(root: Node, source: string, target: string, edge: Edge, containerId: string): Node | null {
+  if (source === target) return null;
+  const path = pathTo(root, source);
+  const moving = path === null ? null : nodeAt(root, path);
+  const targetPath = pathTo(root, target);
+  const targetNode = targetPath === null ? null : nodeAt(root, targetPath);
+  if (moving === null || isContainer(moving) || targetNode === null || isContainer(targetNode)) return null;
+  const without = removePane(root, source);
+  if (without === null) return null;
+  const axis: Axis = edge === "left" || edge === "right" ? "row" : "column";
+  const split = splitPane(without, target, axis, withoutField(moving, "size"), containerId);
+  if (split === null) return null;
+  return edge === "left" || edge === "top" ? swapPanes(split, source, target) : split;
+}
+
 const halved = (node: Node, share: number): Node =>
   weightOf(node) === null ? node : withField(node, "size", { weight: share / 2 });
 
