@@ -1,9 +1,10 @@
 import type { HcConnection } from "@doriface/client";
 import { NOTICE_EVENTS, type NoticeEvent, type PushPrefs, type Terminal } from "@doriface/protocol";
 import { Button, Notice, SettingRow, Switch } from "@doriface/ui";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useConnection } from "../connection/store.ts";
-import { pushSettings, type PushView, usePushSettings } from "../push/push-settings.ts";
+import { type DesktopNotices, desktopNotices } from "../push/desktop-notices.ts";
+import { pushSettings, type PushView } from "../push/push-settings.ts";
 import { idOfMachine } from "../workspace/model.ts";
 import { useMachines } from "../workspace/use-machines.ts";
 
@@ -25,8 +26,8 @@ const UNSUPPORTED: Readonly<Record<Exclude<PushView["support"], "supported">, { 
     body: "On iPhone and iPad, notifications work in the installed app. In Safari, tap Share, then Add to Home Screen, and turn notifications on from there.",
   },
   "desktop-app": {
-    title: "Not in the desktop app yet",
-    body: "Notifications work in a browser and in the installed web app. The desktop app does not show them yet.",
+    title: "This computer cannot show notifications",
+    body: "doriface found no notification service on this system. On Linux, start your desktop's notification daemon, then come back here.",
   },
   unsupported: {
     title: "This browser cannot show notifications from doriface",
@@ -34,7 +35,17 @@ const UNSUPPORTED: Readonly<Record<Exclude<PushView["support"], "supported">, { 
   },
 };
 
+/** Web push or, in the desktop app, its native notifications: one Settings section drives either. */
+type NoticeSettings = Pick<DesktopNotices, "subscribe" | "view" | "load" | "turnOn" | "turnOff" | "setPrefs" | "test">;
+const settings: NoticeSettings = desktopNotices ?? pushSettings;
+const desktop = desktopNotices !== null;
+
 function statusText(view: PushView): string {
+  if (desktop) {
+    return view.on
+      ? "On. You hear about agents while doriface runs, even with its window in the background. If none appear, allow doriface in your system's notification settings."
+      : "Hear when an agent asks for input or permission, finishes, or stops with an error, while doriface runs.";
+  }
   if (view.on) return "On. You hear about agents even with doriface closed.";
   if (view.permission === "denied") {
     return "Blocked for this site. Allow notifications in this browser's site settings, then come back here.";
@@ -58,7 +69,7 @@ function MachineMutes({
   ];
   const setMuted = (id: string, heard: boolean): void => {
     const muted = heard ? prefs.muted.filter((entry) => entry !== id) : [...prefs.muted, id];
-    void pushSettings.setPrefs({ ...prefs, muted });
+    void settings.setPrefs({ ...prefs, muted });
   };
   return (
     <ul aria-label="Machines" className="flex flex-col">
@@ -89,10 +100,10 @@ function MachineMutes({
 
 /** Settings > Notifications: the permission is asked for only from Turn on. */
 export function NotificationsSection() {
-  const view = usePushSettings();
+  const view = useSyncExternalStore(settings.subscribe, () => settings.view);
   const state = useConnection();
   useEffect(() => {
-    void pushSettings.load();
+    void settings.load();
   }, []);
   if (view.support !== "supported") {
     const reason = UNSUPPORTED[view.support];
@@ -107,7 +118,7 @@ export function NotificationsSection() {
   const blocked = view.permission === "denied" && !view.on;
   const off = !view.on || view.busy;
   const setEvent = (event: NoticeEvent, on: boolean): void =>
-    void pushSettings.setPrefs({ ...view.prefs, events: { ...view.prefs.events, [event]: on } });
+    void settings.setPrefs({ ...view.prefs, events: { ...view.prefs.events, [event]: on } });
   return (
     <div className="flex flex-col gap-6" data-push-state={view.on ? "on" : blocked ? "blocked" : "off"}>
       <div className="flex flex-col">
@@ -116,7 +127,7 @@ export function NotificationsSection() {
           description={statusText(view)}
           control={
             view.on ? (
-              <Button loading={view.busy} disabled={view.busy} onClick={() => void pushSettings.turnOff()}>
+              <Button loading={view.busy} disabled={view.busy} onClick={() => void settings.turnOff()}>
                 Turn off
               </Button>
             ) : (
@@ -124,7 +135,7 @@ export function NotificationsSection() {
                 variant="primary"
                 loading={view.busy}
                 disabled={view.busy || blocked}
-                onClick={() => void pushSettings.turnOn()}
+                onClick={() => void settings.turnOn()}
               >
                 Turn on
               </Button>
@@ -135,7 +146,7 @@ export function NotificationsSection() {
           title="Send a test notification"
           description={view.tested ? "Sent. It should appear in a moment." : "Checks that this device gets them."}
           control={
-            <Button disabled={off} onClick={() => void pushSettings.test()}>
+            <Button disabled={off} onClick={() => void settings.test()}>
               Send test
             </Button>
           }
@@ -177,8 +188,9 @@ export function NotificationsSection() {
         </section>
       ) : null}
       <p className="text-sm text-pretty text-muted-foreground">
-        A notification carries no command or output. When you open one, your host tells this device which session it is
-        about over the encrypted connection.
+        {desktop
+          ? "A notification carries no command or output. Clicking one opens the session it is about."
+          : "A notification carries no command or output. When you open one, your host tells this device which session it is about over the encrypted connection."}
       </p>
     </div>
   );

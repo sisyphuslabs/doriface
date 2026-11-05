@@ -28,12 +28,41 @@ export const Channel = {
   installHc: "doriface:install-hc",
   /** Main to renderer: the phase an Install herdr-core has reached, e.g. `download`. */
   hcInstallPhase: "doriface:hc-install-phase",
+  /** Renderer to main: whether this system can show native notifications. */
+  noticesSupported: "doriface:notices-supported",
+  /** Renderer to main: show one native notification about an agent (a kind and its terminal, never any text). */
+  showNotice: "doriface:show-notice",
+  /** Main to renderer: a notification was clicked; carries its terminal address, or null for a test. */
+  noticeClicked: "doriface:notice-clicked",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
 export const VERSION_ARG = "--doriface-app-version=";
 
 export type DesktopPlatform = "darwin" | "linux" | "win32";
+
+/** What a native notification says happened, as the web app's notices name it; `test` comes from Send test. */
+export const NOTICE_KINDS = ["input", "permission", "done", "error", "test"] as const;
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
+
+/** One native notification: the main process picks its text by `kind`, so the page cannot put words in it. */
+export interface DesktopNotice {
+  readonly kind: NoticeKind;
+  /** The terminal it is about (`t7`, `machine/t7`), opened when it is clicked; null for a test. */
+  readonly terminal: string | null;
+}
+
+const MAX_TERMINAL = 160;
+
+export function isDesktopNotice(value: unknown): value is DesktopNotice {
+  if (typeof value !== "object" || value === null) return false;
+  const kind: unknown = Reflect.get(value, "kind");
+  const terminal: unknown = Reflect.get(value, "terminal");
+  return (
+    NOTICE_KINDS.some((known) => known === kind) &&
+    (terminal === null || (typeof terminal === "string" && terminal !== "" && terminal.length <= MAX_TERMINAL))
+  );
+}
 
 export interface LocalHostEndpoint {
   /** The loopback gateway, e.g. `ws://127.0.0.1:52011/v1/hc`. */
@@ -118,6 +147,12 @@ export interface DorifaceBridge {
   onUpdateReady(listener: (update: UpdateReady) => void): void;
   /** Quits and installs the staged update; resolves false when none is staged. */
   installUpdate(): Promise<boolean>;
+  /** Whether this system shows native notifications at all (a Linux desktop may run no notification service). */
+  noticesSupported(): Promise<boolean>;
+  /** Shows a native notification; resolves false when the notice was refused. */
+  showNotice(notice: DesktopNotice): Promise<boolean>;
+  /** Calls `listener` with the terminal of each clicked notification (null for a test one). */
+  onNoticeClick(listener: (terminal: string | null) => void): void;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {
