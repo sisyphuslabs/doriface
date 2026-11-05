@@ -20,6 +20,14 @@ const CONNECTS_PER_IP = 50;
 const phone = generateX25519();
 const sockets = { host: [] as WebSocket[], client: [] as WebSocket[] };
 let relayed: RelayedHost | undefined;
+const logWaiters: { readonly prefix: string; readonly resolve: () => void }[] = [];
+
+/** Resolves on the host's next log line that starts with `prefix`; call it before the action that logs it. */
+function nextHostLog(prefix: string): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  logWaiters.push({ prefix, resolve });
+  return promise;
+}
 let clientIp: string | undefined;
 
 function host(): RelayedHost {
@@ -70,6 +78,12 @@ async function openSession(): Promise<{ readonly connection: HcConnection; reado
 
 setUpOnce(async () => {
   relayed = await startRelayedHost("relay-lifetime", {
+    onLog: (line) => {
+      for (const waiter of logWaiters.filter((each) => line.startsWith(each.prefix))) {
+        logWaiters.splice(logWaiters.indexOf(waiter), 1);
+        waiter.resolve();
+      }
+    },
     wrapSockets: (base) => ({
       host: (url) => {
         const ws = base(url);
@@ -136,12 +150,16 @@ describe("a client session's hc connect child (#424)", () => {
       const { child } = await openSession();
       const uplink = sockets.host.at(-1);
       if (uplink === undefined) throw new Error("the host opened no uplink socket");
+      const answeredAgain = nextHostLog("relay: connected");
       uplink.close(4000, "test: uplink dropped");
       await allGone(child, "a dropped uplink");
+      // The next test opens a session through the relay, which refuses it while the host is offline (4404).
+      await answeredAgain;
     },
     TEST_MS,
   );
 
+  // Last: a revoked device can open no more sessions.
   test(
     "ends when the device is revoked, which ends its E2EE session",
     async () => {

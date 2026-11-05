@@ -63,6 +63,8 @@ export interface RelayedHostOptions {
   readonly pushTestOrigins?: readonly string[];
   /** Where the scratch dir is made (the system tmp dir by default), so a test can check that its own is removed. */
   readonly scratchRoot?: string;
+  /** Each line the host logs, as it logs it: e.g. "relay: connected ..." once its uplink is answered again. */
+  readonly onLog?: (line: string) => void;
 }
 
 const UPLINK_TIMEOUT_MS = 30_000;
@@ -101,6 +103,7 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
       pushTestOrigins: options.pushTestOrigins,
       log: (line) => {
         logs.push(line);
+        options.onLog?.(line);
         if (line.startsWith("relay: connected")) connected.resolve();
       },
     });
