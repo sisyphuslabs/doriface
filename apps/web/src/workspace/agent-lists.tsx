@@ -1,77 +1,28 @@
 import type { Terminal } from "@doriface/protocol";
-import { AgentRow, SidebarSection, SpaceRow, cn, type Agent } from "@doriface/ui";
-import { useMemo } from "react";
-import { useNow } from "./use-now.ts";
-import { MachineList } from "./machine-list.tsx";
-import { showMachines } from "./machines.ts";
-import { firstInSpace, groupAgents, machineId, spaceId, toSpaces } from "./model.ts";
+import { AgentsGroup } from "./agents-group.tsx";
 import { useMachinesContext } from "./use-machines.ts";
+import { SpacesGroup } from "./spaces-group.tsx";
 
 export interface AgentListsProps {
   readonly terminals: readonly Terminal[];
   readonly active: string | null;
   readonly onOpen: (address: string) => void;
-  /** Phones list agents before spaces. */
-  readonly agentsFirst?: boolean;
+  /** The desktop sidebar dragged narrow: glyphs and avatars only. */
+  readonly rail?: boolean;
+  /** False on the phone, whose screen title already says "Agents". */
+  readonly heading?: boolean;
 }
 
-const SECTIONS = [
-  { key: "blocked", title: "Needs you", tone: "text-status-blocked-text" },
-  { key: "done", title: "Done", tone: "text-status-done-text" },
-  { key: "working", title: "Working", tone: "text-status-working-text" },
-  { key: "idle", title: "Idle", tone: undefined },
-  { key: "offline", title: "Offline", tone: undefined },
-] as const;
-
-/** Spaces and the agent sections, shared by the desktop sidebar and the phone's first screen. */
-export function AgentLists({ terminals, active, onOpen, agentsFirst = false }: AgentListsProps) {
-  const now = useNow();
-  const groups = useMemo(() => groupAgents(terminals, now), [terminals, now]);
-  const spaces = useMemo(() => toSpaces(terminals), [terminals]);
-  const activeTerminal = terminals.find((terminal) => terminal.address === active);
-  const activeSpace = activeTerminal === undefined ? undefined : spaceId(activeTerminal);
-  const machines = useMachinesContext();
-  const activeMachine = active === null ? undefined : machineId(active);
-  const openSpace = (id: string): void => {
-    const address = firstInSpace(terminals, id);
-    if (address !== undefined) onOpen(address);
-  };
-  const rows = (agents: readonly Agent[], compactBlocked: boolean) =>
-    agents.map((agent) => (
-      <AgentRow
-        key={agent.id}
-        agent={agent}
-        selected={agent.id === active}
-        compactBlocked={compactBlocked}
-        onSelect={onOpen}
-      />
-    ));
-
+/** The agents first, then the spaces (under their machines once there are more), on the desktop sidebar and the phone. */
+export function AgentLists({ terminals, active, onOpen, rail = false, heading = true }: AgentListsProps) {
+  // Nothing until the terminal list is in: the agents then draw in their final place, and the spaces (or their loading
+  // row) below them, so nothing already drawn moves.
+  const { terminalsLoaded } = useMachinesContext();
+  if (!terminalsLoaded) return <div aria-busy="true" className="px-2 pb-3" />;
   return (
     <div className="flex flex-col gap-4 px-2 pb-3">
-      {showMachines(machines.entries, machines.listError) ? (
-        <MachineList
-          entries={machines.entries}
-          activeMachine={activeMachine}
-          onOpen={onOpen}
-          onNewOn={machines.newTerminalOn}
-          listError={machines.listError}
-          onAdd={machines.openAddMachine}
-          {...(agentsFirst ? { className: "order-last" } : {})}
-        />
-      ) : null}
-      <SidebarSection title="Spaces" count={spaces.length} className={cn(agentsFirst && "order-last")}>
-        {spaces.map((space) => (
-          <SpaceRow key={space.id} space={space} selected={space.id === activeSpace} onSelect={openSpace} />
-        ))}
-      </SidebarSection>
-      {SECTIONS.map(({ key, title, tone }) =>
-        groups[key].length === 0 ? null : (
-          <SidebarSection key={key} title={title} count={groups[key].length} {...(tone === undefined ? {} : { tone })}>
-            {rows(groups[key], key === "blocked")}
-          </SidebarSection>
-        ),
-      )}
+      <AgentsGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} heading={heading} />
+      <SpacesGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
     </div>
   );
 }

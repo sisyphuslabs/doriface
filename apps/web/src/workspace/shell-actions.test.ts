@@ -45,10 +45,16 @@ const handlers = {
       onToggleSidebar: noop,
       onFocusSidebar: noop,
       onSession: () => true,
+      onDictate: () => true,
     },
     noop,
   ),
-  phone: phoneActions(noop, noop, () => true),
+  phone: phoneActions(
+    noop,
+    noop,
+    () => true,
+    () => true,
+  ),
 } satisfies Record<Shell, (action: string) => boolean>;
 
 describe("every palette row runs something", () => {
@@ -105,6 +111,7 @@ describe("moving a tab", () => {
           onToggleSidebar: noop,
           onFocusSidebar: noop,
           onSession: () => true,
+          onDictate: () => true,
           focusedTab: () => focused,
         },
         noop,
@@ -130,5 +137,55 @@ describe("session actions", () => {
 
   test.each(["desktop", "phone"] as const)("%s: with no session in view they are left out, not disabled", (shell) => {
     expect(sessionRows(shell, false)).toEqual([]);
+  });
+});
+
+describe("dictation (#194)", () => {
+  test.each(["desktop", "phone"] as const)(
+    "%s: Dictate is a palette row with a session in view, and left out without",
+    (shell) => {
+      const dictate = (inView: boolean) => availableActions(shell, inView).filter(({ id }) => id === "voice.dictate");
+      expect(dictate(true)).toEqual([{ id: "voice.dictate" }]);
+      expect(dictate(false)).toEqual([]);
+    },
+  );
+
+  test("the row and a bound key run the shell's dictation, and leave the key alone when it has none", () => {
+    const runs: string[] = [];
+    const desktop = (onDictate: () => boolean) =>
+      desktopActions(
+        {
+          terminals: [],
+          layout,
+          onNew: noop,
+          onSplit: noop,
+          onCloseTab: noop,
+          onClosePane: noop,
+          onToggleSidebar: noop,
+          onFocusSidebar: noop,
+          onSession: () => true,
+          onDictate,
+        },
+        noop,
+      );
+    expect(desktop(() => (runs.push("desktop"), true))("voice.dictate")).toBe(true);
+    expect(desktop(() => false)("voice.dictate")).toBe(false);
+    expect(
+      phoneActions(
+        noop,
+        noop,
+        () => true,
+        () => (runs.push("phone"), true),
+      )("voice.dictate"),
+    ).toBe(true);
+    expect(
+      phoneActions(
+        noop,
+        noop,
+        () => true,
+        () => false,
+      )("voice.dictate"),
+    ).toBe(false);
+    expect(runs).toEqual(["desktop", "phone"]);
   });
 });

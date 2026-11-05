@@ -161,8 +161,5 @@ export const APPROVAL_PROMPT: ApprovalPrompt = {
 /** A Korean and an English sentence, as the dictation acceptance criteria ask. */
 export const VOICE_TRANSCRIPT = "마이그레이션 롤백 스크립트부터 보여줘. Then run the db tests again.";
 
-/** Input level, 0..1, for a still frame of the listening meter. */
-export const VOICE_LEVELS: readonly number[] = Array.from({ length: 48 }, (_unused, index) => {
-  const wave = Math.abs(Math.sin(index * 0.55) * Math.cos(index * 0.17));
-  return index > 40 ? wave * 0.25 : 0.2 + wave * 0.8;
-});
+/** What the recognizer has heard so far, mid-sentence, for a still frame of listening. */
+export const VOICE_HEARD = "마이그레이션 롤백 스크립트부터 보여줘. Then run the";

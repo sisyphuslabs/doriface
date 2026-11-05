@@ -1,6 +1,8 @@
 import type { HcConnection } from "@doriface/client";
 import { cn } from "@doriface/ui";
+import type { ReactNode } from "react";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
+import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
@@ -13,6 +15,12 @@ export interface PaneProps {
   readonly split: boolean;
   readonly onFocus: () => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
+  /** The view showed that its program had already ended when it attached: there is no terminal left to type into. */
+  readonly onEnded: (address: string, pid: number | null) => void;
+  /** The view's input path, for input from outside the pane (dictation); null once the view unmounts. */
+  readonly onPort: (port: TerminalPort | null) => void;
+  /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
+  readonly dock?: ReactNode;
 }
 
 /**
@@ -20,7 +28,7 @@ export interface PaneProps {
  * tab strip carries its session actions. Inside a split each pane gets a slim header naming its terminal, as herdr-app
  * frames panes only once a tab is split, since the tab can name only one of them.
  */
-export function Pane({ connection, terminal, focused, split, onFocus, onEnd }: PaneProps) {
+export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onEnded, onPort, dock }: PaneProps) {
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   return (
@@ -60,8 +68,11 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd }: P
           focused={focused}
           label={`${title} output`}
           onEnd={onEnd}
+          onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
+          onPort={onPort}
         />
       )}
+      {dock}
     </section>
   );
 }

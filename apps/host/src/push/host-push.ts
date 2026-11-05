@@ -11,7 +11,10 @@ export interface HostPush {
   serve(link: PushLink, owner: string): void;
   /** Drops the subscriptions of devices no longer paired (a revoke). */
   prune(): void;
-  stop(): void;
+  /** Settles once the core feed's `hc connect` child, if it started one, has exited. */
+  stop(): Promise<void>;
+  /** Kills the core feed's child if it has not exited, and returns the pids it killed. */
+  kill(): readonly number[];
 }
 
 export interface HostPushOptions {
@@ -63,7 +66,8 @@ export async function startHostPush(options: HostPushOptions): Promise<HostPush>
     serve: (link, owner) => servePushStream(link, owner, service),
     prune,
     stop() {
-      feed?.stop();
+      return feed?.stop() ?? Promise.resolve();
     },
+    kill: () => feed?.kill() ?? [],
   };
 }

@@ -1,4 +1,5 @@
 import { Button, Notice } from "@doriface/ui";
+import { Link } from "@tanstack/react-router";
 import type { HostStartFailure } from "../desktop/bridge.ts";
 import { HERDR_CORE_URL, hostStartCopy } from "../desktop/host-start-copy.ts";
 
@@ -6,10 +7,12 @@ interface HostStartNoticeProps {
   readonly failure: HostStartFailure;
   readonly retrying: boolean;
   readonly onRetry: () => void;
+  /** Offers Settings beside Retry, where another connection can be chosen instead. */
+  readonly settings?: boolean;
 }
 
 /** This computer's host did not start: the plain cause, what to do, Retry, and the host's own output behind Details. */
-export function HostStartNotice({ failure, retrying, onRetry }: HostStartNoticeProps) {
+export function HostStartNotice({ failure, retrying, onRetry, settings = false }: HostStartNoticeProps) {
   const copy = hostStartCopy(failure);
   return (
     <Notice
@@ -17,9 +20,16 @@ export function HostStartNotice({ failure, retrying, onRetry }: HostStartNoticeP
       title="This computer's host did not start"
       className="w-full max-w-md"
       actions={
-        <Button size="sm" loading={retrying} onClick={onRetry}>
-          Retry
-        </Button>
+        <>
+          <Button size="sm" loading={retrying} onClick={onRetry}>
+            Retry
+          </Button>
+          {settings ? (
+            <Button size="sm" variant="secondary" render={<Link to="/settings" />}>
+              Open settings
+            </Button>
+          ) : null}
+        </>
       }
     >
       <p data-host-start-code={failure.code} className="text-foreground">
