@@ -118,8 +118,11 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await switcher.click();
     await expect(sheet).toBeVisible();
     const section = sheet.getByRole("region", { name: space });
-    await expect(agentRow(section, first, false)).toHaveAttribute("aria-current", "true");
-    await agentRow(section, second, false).click();
+    // The rows read the tabs as the strip does: these tabs have no name, so their number (#466 ruling A).
+    const tabRow = (title: string) =>
+      section.getByRole("button").filter({ has: page.locator(`[data-floor="name"][title="${title}"]`) });
+    await expect(tabRow("1")).toHaveAttribute("aria-current", "true");
+    await tabRow("2").click();
     await expect(sheet).toBeHidden();
     await expect(header(page).getByRole("heading", { name: "2", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(header(page).getByText("2/2", { exact: true })).toBeVisible();
