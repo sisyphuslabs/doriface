@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from "react";
+import { TYPE_AHEAD_ATTRIBUTE } from "./use-type-ahead.ts";
 
 const TAB_STOPS = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -45,8 +46,8 @@ function trapTab(overlay: HTMLElement, event: KeyboardEvent): void {
  * Shift+Tab cycle through its own tab stops (moving to the page body fires no focusin, so `keep`
  * alone cannot hold it), and anything that takes focus outside it (a terminal whose renderer focuses
  * itself as it starts) hands it straight back. Once it unmounts, focus left on the page body (it
- * closed under its own input) goes back through restoreTargets. After the New tab row that is first
- * the old terminal; the new one then takes focus itself when it becomes ready.
+ * closed under its own input) goes back through restoreTargets. The New tab row is the exception: the
+ * terminal being started holds the keyboard (use-type-ahead), so focus stays with it, not the old terminal.
  */
 export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: string): void {
   useEffect(() => {
@@ -56,6 +57,8 @@ export function useOverlayFocus(root: RefObject<HTMLElement | null>, selector: s
     target()?.focus();
     const keep = (event: FocusEvent): void => {
       const current = root.current;
+      // A terminal being started (the overlay's own New tab) takes the keyboard; the overlay is closing.
+      if (event.target instanceof Element && event.target.hasAttribute(TYPE_AHEAD_ATTRIBUTE)) return;
       if (current !== null && event.target instanceof Node && !current.contains(event.target)) target()?.focus();
     };
     const trap = (event: KeyboardEvent): void => {
