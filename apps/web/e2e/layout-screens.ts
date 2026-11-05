@@ -125,12 +125,14 @@ export const SCREENS: readonly Screen[] = [
       setCoreDoc(LAYOUT_DOC, layoutDoc(local), undefined, "layout");
       setCoreDoc(LAYOUT_DOC, layoutDoc([layoutTab("tb-remote", "t1")]), LAYOUT_MACHINE, "layout");
       await workspace(page, false);
+      // The strip shows one space's tabs (#404): this machine's, every one of its terminals; the added machine's tab is
+      // in a space of its own.
       const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-      const titles = [...LAYOUT_TERMINALS.map(({ title }) => title), "remote-terraform-plan-runner-001"];
+      const titles = LAYOUT_TERMINALS.map(({ title }) => title);
       await expect(tabs).toHaveCount(titles.length, { timeout: 20_000 });
       const shown = await tabs.allTextContents();
       expect(titles.filter((title) => !shown.some((text) => text.includes(title)))).toEqual([]);
-      await row(page, "remote-terraform-plan-runner-001").click();
+      await tabs.last().click();
       await page.getByRole("button", { name: "Split right" }).click();
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
     },
