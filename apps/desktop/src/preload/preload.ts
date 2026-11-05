@@ -41,9 +41,6 @@ const bridge: DorifaceBridge = {
   async closeWindow() {
     await ipcRenderer.invoke(Channel.closeWindow);
   },
-  async zoomWindow(step) {
-    await ipcRenderer.invoke(Channel.zoomWindow, step);
-  },
   onPairingLink(listener) {
     const take = async (): Promise<void> => {
       const fragment: unknown = await ipcRenderer.invoke(Channel.takePairingLink);

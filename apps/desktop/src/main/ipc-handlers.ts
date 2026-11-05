@@ -6,11 +6,9 @@ import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
 import {
   Channel,
   type HcInstallAnswer,
-  isZoomStep,
   type LocalHostEndpoint,
   type LocalHostStartFailed,
   type UpdateReady,
-  type ZoomStep,
 } from "../shared/bridge.ts";
 import { LocalHostStartError } from "./local-host.ts";
 import { SHELL_MENU_ACTIONS } from "./shell-menu.ts";
@@ -31,7 +29,6 @@ export interface IpcDeps {
   readonly openExternal: (url: string) => Promise<void>;
   readonly setWindowBackground: (color: string) => void;
   readonly closeWindow: () => void;
-  readonly zoomWindow: (step: ZoomStep) => void;
   readonly takePairingLink: () => string | undefined;
   readonly setMenuKeys: (keys: ReadonlyMap<string, string>) => void;
   /** Shows the file dialog for hc and keeps the choice; undefined when it was cancelled. */
@@ -52,8 +49,6 @@ export interface IpcHandlers {
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
   closeWindow(event: IpcSender): Promise<void>;
-  /** Zooms the window one step, as its View menu does; anything but `in`, `out` or `reset` is refused. */
-  zoomWindow(event: IpcSender, candidate: unknown): Promise<boolean>;
   takePairingLink(event: IpcSender): string | null;
   /** Shows the page's shortcuts in the Shell menu; only its own action ids and short trigger text are taken. */
   setMenuKeys(event: IpcSender, candidate: unknown): Promise<boolean>;
@@ -120,12 +115,6 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async closeWindow(event) {
       assertAppFrame(event, deps.origin);
       deps.closeWindow();
-    },
-    async zoomWindow(event, candidate) {
-      assertAppFrame(event, deps.origin);
-      if (!isZoomStep(candidate)) return false;
-      deps.zoomWindow(candidate);
-      return true;
     },
     takePairingLink(event) {
       assertAppFrame(event, deps.origin);

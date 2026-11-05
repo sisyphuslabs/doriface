@@ -105,17 +105,6 @@ export function closeDesktopWindow(scope: object = globalThis): boolean {
   return true;
 }
 
-export type ZoomStep = "in" | "out" | "reset";
-
-/** Asks the desktop shell to zoom its whole window one step; false outside the desktop app. */
-export function zoomDesktopWindow(step: ZoomStep, scope: object = globalThis): boolean {
-  const zoom = bridgeMethod("zoomWindow", scope);
-  if (zoom === null) return false;
-  const zoomed = zoom(step);
-  if (zoomed instanceof Promise) zoomed.catch((error: unknown) => console.error(`zoom window: ${String(error)}`));
-  return true;
-}
-
 /**
  * Opens a link a terminal printed: in the desktop app, in the system browser through the shell (never in the app
  * window); in a browser, in a new tab with no opener. `href` is already one that may open (`openableLink`).

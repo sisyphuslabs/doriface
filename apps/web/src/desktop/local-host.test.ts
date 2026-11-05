@@ -9,7 +9,6 @@ import {
   type HostStartFailure,
   onDesktopNavigate,
   setDesktopBackground,
-  zoomDesktopWindow,
 } from "./bridge.ts";
 import { bootConnection, startFailure, startThisComputer } from "./local-host.ts";
 
@@ -184,15 +183,5 @@ describe("desktop local host", () => {
     expect(closeDesktopWindow({})).toBe(false);
     expect(closeDesktopWindow({ doriface: { version: "0.1.0" } })).toBe(false);
     expect(closes).toBe(1);
-  });
-
-  test("zooming goes to the desktop window when the bridge can zoom it, and says when there is none", () => {
-    const steps: unknown[] = [];
-    const doriface = { zoomWindow: async (step: unknown) => void steps.push(step) };
-    expect(zoomDesktopWindow("out", { doriface })).toBe(true);
-    expect(zoomDesktopWindow("reset", { doriface })).toBe(true);
-    expect(zoomDesktopWindow("in", {})).toBe(false);
-    expect(zoomDesktopWindow("in", { doriface: { version: "0.1.0" } })).toBe(false);
-    expect(steps).toEqual(["out", "reset"]);
   });
 });

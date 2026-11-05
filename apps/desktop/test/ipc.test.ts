@@ -27,7 +27,6 @@ const setup = (
   let installs = 0;
   const opened: string[] = [];
   const painted: string[] = [];
-  const zooms: string[] = [];
   let starts = 0;
   let closes = 0;
   const menus: ReadonlyMap<string, string>[] = [];
@@ -50,9 +49,6 @@ const setup = (
     closeWindow: () => {
       closes += 1;
     },
-    zoomWindow: (step) => {
-      zooms.push(step);
-    },
     chooseHc: async () => {
       chooses += 1;
       return choose();
@@ -71,7 +67,6 @@ const setup = (
     handlers,
     opened,
     painted,
-    zooms,
     menus,
     starts: () => starts,
     closes: () => closes,
@@ -91,7 +86,7 @@ afterEach(() => void takePairingLink());
 
 describe("IPC sender gate", () => {
   test("refuses foreign and detached frames before touching the shell or the host", async () => {
-    const { handlers, opened, zooms, starts, installs } = setup(undefined, undefined, { version: "0.2.0" });
+    const { handlers, opened, starts, installs } = setup(undefined, undefined, { version: "0.2.0" });
     openPairingLink("#p=waiting");
     await Promise.all(
       foreign.flatMap((event) => [
@@ -101,7 +96,6 @@ describe("IPC sender gate", () => {
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
-        expect(handlers.zoomWindow(event, "out")).rejects.toThrow("refused IPC"),
         expect(handlers.chooseHc(event)).rejects.toThrow("refused IPC"),
         expect(handlers.installUpdate(event)).rejects.toThrow("refused IPC"),
       ]),
@@ -110,7 +104,6 @@ describe("IPC sender gate", () => {
     for (const event of foreign) expect(() => handlers.takeUpdate(event)).toThrow("refused IPC");
     expect(installs()).toBe(0);
     expect(opened).toEqual([]);
-    expect(zooms).toEqual([]);
     expect(starts()).toBe(0);
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
   });
@@ -221,15 +214,6 @@ describe("IPC sender gate", () => {
     );
     expect(refused).toEqual([false, false, false, false, false, false]);
     expect(painted).toEqual(["#131518"]);
-  });
-
-  test("the app origin can zoom its window one step in, out or back, and nothing else", async () => {
-    const { handlers, zooms } = setup();
-    const taken = await Promise.all(["in", "out", "reset"].map((step) => handlers.zoomWindow(app, step)));
-    const refused = await Promise.all(["0.5", 0.5, "IN", undefined].map((step) => handlers.zoomWindow(app, step)));
-    expect(taken).toEqual([true, true, true]);
-    expect(refused).toEqual([false, false, false, false]);
-    expect(zooms).toEqual(["in", "out", "reset"]);
   });
 
   test("the app origin can ask its window to close", async () => {
