@@ -3,6 +3,7 @@ import {
   Channel,
   isLocalHostEndpoint,
   isLocalHostStartFailed,
+  isUpdateReady,
   parsePlatform,
   VERSION_ARG,
   type DorifaceBridge,
@@ -62,6 +63,18 @@ const bridge: DorifaceBridge = {
   async chooseHc() {
     const chosen: unknown = await ipcRenderer.invoke(Channel.chooseHc);
     return typeof chosen === "string" ? chosen : null;
+  },
+  onUpdateReady(listener) {
+    const take = async (): Promise<void> => {
+      const staged: unknown = await ipcRenderer.invoke(Channel.takeUpdate);
+      if (isUpdateReady(staged)) listener({ version: staged.version });
+    };
+    ipcRenderer.on(Channel.updateReady, () => void take());
+    void take();
+  },
+  async installUpdate() {
+    const installing: unknown = await ipcRenderer.invoke(Channel.installUpdate);
+    return installing === true;
   },
 };
 

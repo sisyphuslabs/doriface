@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, nativeTheme, screen, session, shell } from "electron";
+import electronUpdater from "electron-updater";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { contextMenuTemplate } from "../config/context-menu.ts";
@@ -18,6 +19,8 @@ import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
 import { windowZoom, type WindowZoom } from "./zoom.ts";
+import { revealWhenReady } from "./window-reveal.ts";
+import { UpdateWatch } from "./updater.ts";
 import type { ZoomStep } from "../shared/bridge.ts";
 
 const platform = parsePlatform(process.platform);
@@ -74,6 +77,9 @@ function navigate(path: string): void {
 
 const openSettings = (): void => navigate("/settings");
 
+/** How often a long-running app looks for a release again after the check at launch. */
+const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000;
+
 let zoom: WindowZoom | undefined;
 const currentZoom = (): WindowZoom => (zoom ??= windowZoom(savedFile("window-zoom.json")));
 
@@ -102,7 +108,13 @@ function createWindow(path: string): BrowserWindow {
   const window = new BrowserWindow(windowOptions(platform, opening, { background, placement }));
   mainWindow = window;
   currentZoom().applyOnEveryLoad(window);
-  window.once("ready-to-show", () => window.show());
+  revealWhenReady({
+    show: () => window.show(),
+    isVisible: () => window.isVisible(),
+    isDestroyed: () => window.isDestroyed(),
+    onReady: (listener) => void window.once("ready-to-show", listener),
+    onClosed: (listener) => void window.once("closed", listener),
+  });
   if (platform === "darwin") applyMacTitlebar(window);
   rememberPlacement(window, placementFile);
   window.webContents.on("context-menu", (_event, params) => {
@@ -139,6 +151,14 @@ function ready(): void {
     log: (line) => console.log(line),
   });
   app.on("will-quit", () => void localHost.stop());
+  // A checkout has no release feed (app-update.yml) to update from; only the packaged app looks for one.
+  const updates = app.isPackaged
+    ? new UpdateWatch(
+        electronUpdater.autoUpdater,
+        () => liveWindow()?.webContents.send(Channel.updateReady),
+        (line) => console.log(line),
+      )
+    : undefined;
   lockPermissions(session.defaultSession, origin);
   if (devUrl === undefined) serveApp(webRoot(), csp);
   else applyDevCsp(session.defaultSession, origin, csp);
@@ -161,7 +181,13 @@ function ready(): void {
       if (chosen !== undefined) saveHc(savedFile("hc.json"), chosen);
       return chosen;
     },
+    takeUpdate: () => updates?.ready ?? null,
+    installUpdate: () => updates?.install() ?? false,
   });
+  if (updates !== undefined) {
+    updates.start();
+    setInterval(() => updates.check(), UPDATE_CHECK_MS);
+  }
   // In a checkout the executable is Electron itself, which must not become the OS handler for doriface: links.
   if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
   routeDeepLinksTo(revealWindow);

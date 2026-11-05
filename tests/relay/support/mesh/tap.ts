@@ -4,6 +4,9 @@ import { CloseFrameReader } from "./close-frames.ts";
 const CRLF = "\r\n";
 /** The relay's client dial: `GET /v1/client/<hostId>?…` (the target host is in the request line). */
 const CLIENT_DIAL = /^GET \/v1\/client\/([a-z2-7]+)[?\s]/;
+/** The host's own uplink: `GET /v1/host/<hostId>?…`. */
+const HOST_UPLINK = /^GET \/v1\/host\/[a-z2-7]+[?\s]/;
+const UPGRADED = "HTTP/1.1 101 ";
 
 /** One host's door to the relay: a TCP forwarder that names the host's source IP and can be cut and healed. */
 export interface Tap {
@@ -22,6 +25,11 @@ export interface Tap {
   dials(): readonly string[];
   /** Every WebSocket close code the relay sent this host, on its uplink and its dials alike, in arrival order. */
   closeCodes(): readonly number[];
+  /**
+   * Every upgraded uplink (`/v1/host/…`) through this tap that has ended, in order: the last close code the relay sent
+   * on it, or null when it ended with no close frame. Either form is one disconnect.
+   */
+  uplinkEnds(): readonly (number | null)[];
   /** Calls `wake` whenever a connection opens or closes, until the returned function is called. */
   onChange(wake: () => void): () => void;
   /** Closes every connection and refuses new ones, as a network partition from this host's side. */
@@ -38,6 +46,9 @@ interface Conn {
   head: string;
   headDone: boolean;
   target: string | undefined;
+  uplink: boolean;
+  /** The relay's bytes up to the end of its status line. */
+  status: string;
   queue: Uint8Array[];
   closes: CloseFrameReader;
 }
@@ -51,6 +62,7 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
   const dialed: string[] = [];
   /** One list for every connection, so a phase can mark it by length and read only what arrived later. */
   const closeCodes: number[] = [];
+  const uplinkEnds: (number | null)[] = [];
   let forwarded = 0;
   let cut = false;
   let blocked = new Set<string>();
@@ -71,8 +83,10 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
           head: "",
           headDone: false,
           target: undefined,
+          uplink: false,
+          status: "",
           queue: [],
-          closes: new CloseFrameReader(closeCodes),
+          closes: new CloseFrameReader(),
         };
         socket.data = conn;
         conns.add(socket);
@@ -83,7 +97,10 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
           socket: {
             data(_up, bytes) {
               forwarded += bytes.length;
+              if (!conn.status.includes(CRLF)) conn.status += Buffer.from(bytes).toString("latin1");
+              const seen = conn.closes.codes.length;
               conn.closes.feed(bytes);
+              closeCodes.push(...conn.closes.codes.slice(seen));
               socket.write(bytes);
             },
             close: () => void socket.end(),
@@ -109,6 +126,7 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
         conn.headDone = true;
         const line = conn.head.slice(0, end + CRLF.length);
         conn.target = CLIENT_DIAL.exec(line)?.[1];
+        conn.uplink = HOST_UPLINK.test(line);
         if (conn.target !== undefined) dialed.push(conn.target);
         if (refused(conn)) return void socket.end();
         forward(conn, Buffer.from(`${line}cf-connecting-ip: ${ip}${CRLF}${conn.head.slice(line.length)}`, "latin1"));
@@ -116,7 +134,9 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
       },
       close(socket) {
         conns.delete(socket);
-        socket.data.up?.end();
+        const conn = socket.data;
+        conn.up?.end();
+        if (conn.uplink && conn.status.startsWith(UPGRADED)) uplinkEnds.push(conn.closes.codes.at(-1) ?? null);
         changed();
       },
       error: (socket) => void socket.end(),
@@ -134,6 +154,7 @@ export function makeTap(upstreamPort: number, ip: string): Tap {
     openTo: (hostId) => [...conns].filter((socket) => socket.data.target === hostId).length,
     dials: () => dialed,
     closeCodes: () => closeCodes,
+    uplinkEnds: () => uplinkEnds,
     onChange(wake) {
       wakes.add(wake);
       return () => wakes.delete(wake);

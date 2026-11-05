@@ -10,14 +10,17 @@ export interface ScrollAreaProps {
   readonly slot?: string;
 }
 
-/** An overlay scrollbar that appears while scrolling; content never loses a gutter to it. */
+/**
+ * An overlay scrollbar that appears while scrolling; content never loses a gutter to it. The viewport scrolls only
+ * vertically, and as `auto` over Base UI's inline `scroll`, which draws classic scrollbars with nothing to scroll (#343).
+ */
 export function ScrollArea({ children, className, viewportClassName, slot }: ScrollAreaProps) {
   return (
     <BaseScrollArea.Root className={cn("relative min-h-0 overflow-hidden", className)}>
       <BaseScrollArea.Viewport
         data-slot={slot}
         className={cn(
-          "size-full overscroll-contain outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          "size-full overflow-x-hidden! overflow-y-auto! overscroll-contain outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
           viewportClassName,
         )}
       >

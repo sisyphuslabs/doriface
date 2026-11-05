@@ -15,13 +15,19 @@ declare const self: ServiceWorkerGlobalScope & {
   readonly __WB_MANIFEST: (string | { readonly url: string; readonly revision: string | null })[];
 };
 
-// What the generated worker did before: precache the build, serve index.html for navigations, take over at once.
+// Precache the build and serve index.html for navigations. A first worker takes over at once; a newer one waits until
+// the page sends SKIP_WAITING (Reload to update in Settings, through vite-plugin-pwa's updateSW).
 // oxlint-disable-next-line no-underscore-dangle -- injectManifest replaces this exact name with the precache list
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html")));
-void self.skipWaiting();
 clientsClaim();
+
+self.addEventListener("message", (event) => {
+  const data: unknown = event.data;
+  if (typeof data === "object" && data !== null && Reflect.get(data, "type") === "SKIP_WAITING")
+    void self.skipWaiting();
+});
 
 /** How long an Allow or Deny waits for the host before it opens the pane instead. */
 const ANSWER_TIMEOUT_MS = 15_000;

@@ -45,7 +45,12 @@ export class MeshRuntime {
         options.onView?.(view, result);
       },
     });
-    this.lines = new LineGrants({ view: () => this.gossip.view, policy: this.policy, dial: options.dialLine });
+    this.lines = new LineGrants({
+      view: () => this.gossip.view,
+      policy: this.policy,
+      dial: options.dialLine,
+      clock,
+    });
     this.reconciler = new Reconciler({
       machines: options.machines,
       program: options.program,
@@ -53,6 +58,7 @@ export class MeshRuntime {
       selfHostId: options.identity.hostId,
       clock,
       log,
+      reserve: (hostId) => this.lines.reserveAdd(hostId),
     });
     this.driver = new MeshDriver({
       reconciler: this.reconciler,

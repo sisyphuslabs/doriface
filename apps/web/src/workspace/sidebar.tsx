@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { PanelLeft, PanelLeftOpen, Plus, Search, Settings } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
+import { usePendingUpdate } from "../update/update-store.ts";
 import { AgentLists } from "./agent-lists.tsx";
 import { DEFAULT_SIDEBAR_WIDTH } from "./layout.ts";
 import { useSidebarSize } from "./layout-store.ts";
@@ -26,6 +27,7 @@ export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: Sideba
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const machines = useMachinesContext();
+  const update = usePendingUpdate();
   const [{ sidebarWidth, rail }, setSize] = useSidebarSize();
   const [dragging, setDragging] = useState(false);
   const aside = useRef<HTMLElement | null>(null);
@@ -101,6 +103,7 @@ export function Sidebar({ terminals, active, onOpen, onHide, onPalette }: Sideba
           rail={rail}
           icon={<Settings aria-hidden />}
           label="Settings"
+          {...(update === null ? {} : { dot: "update ready" })}
           render={<Link to="/settings" />}
         />
       </SidebarFooter>

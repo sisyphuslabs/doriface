@@ -97,6 +97,13 @@ export function launchBackground(saved: unknown, dark: boolean): string {
   return dark ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light;
 }
 
+/**
+ * How long the window waits for its first frame before showing anyway, painted with its background colour (#88). A
+ * GPU process still bringing up the system GL driver (a VM, a remote desktop, software-only Mesa, a cold disk) can hold
+ * that frame for seconds or forever; a fast first frame still shows the window first, so nothing changes there.
+ */
+export const FIRST_SHOW_DEADLINE_MS = 1_000;
+
 export function windowOptions(
   platform: DesktopPlatform,
   webPreferences: WebPreferences,
