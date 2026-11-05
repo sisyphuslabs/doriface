@@ -21,7 +21,9 @@ test.describe("machines added with hc machine add", () => {
     await page.keyboard.type("exit\r");
     await expect(machineRow(page)).toContainText(/connected\s*0/, { timeout: 15_000 });
     await expect(machineRow(page)).toBeDisabled();
-    await expect(machineRow(page).getByText(MACHINE_NAME, { exact: true })).toHaveCSS("opacity", "0.45");
+    // With no terminal to open only the icon dims; the name stays legible (#472, #504).
+    await expect(machineRow(page).locator("svg").first()).toHaveCSS("opacity", "0.45");
+    await expect(machineRow(page).getByText(MACHINE_NAME, { exact: true })).toHaveCSS("opacity", "1");
   });
 
   test("a machine that goes offline with the page open reads offline and offers no new terminal", async ({ page }) => {

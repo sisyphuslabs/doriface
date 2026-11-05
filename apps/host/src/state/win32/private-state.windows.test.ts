@@ -10,12 +10,16 @@ import {
   closeHandle,
   currentUserSid,
   FILE_FLAG_BACKUP_SEMANTICS,
+  FILE_SHARE_READ,
+  GENERIC_READ,
   OPEN_EXISTING,
   openFile,
   READ_CONTROL,
   readSddl,
   resolveSidAlias,
+  Win32Error,
 } from "./native.ts";
+import { CONTENTION_WAIT_MS } from "./nt-open.ts";
 import { parseSddl } from "./sddl.ts";
 
 const ICACLS = join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "icacls.exe");
@@ -119,6 +123,28 @@ describe.skipIf(!WINDOWS)("private state on Windows (#406)", () => {
     writePrivateJson(join(state, "devices.json"), { version: 1, devices: [] });
     expect(classifyCustody(descriptorOf(join(state, "devices.json")), USER).verdict).toBe("private");
     expect(readJson(join(state, "devices.json"))).toEqual({ version: 1, devices: [] });
+  });
+
+  test("W10 a file another handle holds without sharing fails with its true code, 32, after the bounded wait (#464)", () => {
+    const path = join(root(), "held.json");
+    writeFileSync(path, "{}");
+    const holder = openFile(path, { access: GENERIC_READ, share: 0, disposition: OPEN_EXISTING, flags: 0 });
+    try {
+      const started = Date.now();
+      let caught: unknown;
+      try {
+        closeHandle(
+          openFile(path, { access: GENERIC_READ, share: FILE_SHARE_READ, disposition: OPEN_EXISTING, flags: 0 }),
+        );
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(Win32Error);
+      expect((caught as Win32Error).code).toBe(32);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(CONTENTION_WAIT_MS);
+    } finally {
+      closeHandle(holder);
+    }
   });
 });
 

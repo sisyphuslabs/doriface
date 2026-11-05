@@ -9,6 +9,12 @@ export interface HcPipeOptions {
   readonly log: (line: string) => void;
 }
 
+/**
+ * How long a closed pipe's `hc connect` has to hand the core what it was already sent before it is killed: it exits on
+ * its own once stdin ends and it has forwarded the rest (#580); this bounds one that does not.
+ */
+export const DRAIN_GRACE_MS = 2_000;
+
 /** One `hc connect` child as a Link: stdin and stdout carry the core's bytes, stderr goes to the log. */
 export class HcPipe implements Link {
   readonly exited: Promise<number>;
@@ -57,11 +63,17 @@ export class HcPipe implements Link {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    // Ends stdin and lets the child exit by itself: killed at once, a request it had not yet handed the core was lost, as
+    // an End's mark and kill are when the page that asked closes right after (#580). Signals this child only; the core
+    // it attached to lives outside this process tree and keeps running.
+    const grace = setTimeout(() => this.#proc.kill(), DRAIN_GRACE_MS);
+    void this.#proc.exited.then(() => clearTimeout(grace));
     Promise.resolve()
       .then(() => this.#proc.stdin.end())
-      .catch((error: unknown) => this.#log(`hc connect[${this.pid}] stdin: ${String(error)}`));
-    // Signals this child only; the core it attached to lives outside this process tree and keeps running.
-    this.#proc.kill();
+      .catch((error: unknown) => {
+        this.#log(`hc connect[${this.pid}] stdin: ${String(error)}`);
+        this.#proc.kill();
+      });
     for (const handler of this.#closeHandlers.splice(0)) handler();
   }
 
@@ -69,8 +81,9 @@ export class HcPipe implements Link {
     const reader = this.#proc.stdout.getReader();
     const next = async (): Promise<void> => {
       const { done, value } = await reader.read();
-      if (done || this.#closed) return;
-      await handler(value);
+      if (done) return;
+      // Once closed, replies still coming are read and dropped, so the draining child never blocks on a full stdout.
+      if (!this.#closed) await handler(value);
       return next();
     };
     return next();
