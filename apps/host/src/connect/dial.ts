@@ -141,15 +141,16 @@ export function confirmFingerprint(given: string | undefined, hostKey: Uint8Arra
 }
 
 /**
- * Runs the pairing session and saves the host only after it answered `hello`, which it does once it stored this
- * device, so the IK session that follows is admitted.
- */
-/**
  * A pairing link or code for a host this machine already saved must not silently change what it trusts: a different
  * key or relay is named on stderr, and only --replace lets the pairing go on. Checked before dialing, so a refusal
- * spends no single-use link and writes nothing here or on the host.
+ * spends no single-use link and writes nothing here or on the host, and again as the host is saved, in case another
+ * pairing saved this hostId meanwhile.
  */
-function confirmReplacement(saved: KnownHost | undefined, offered: KnownHost, options: DialOptions): void {
+export function confirmReplacement(
+  saved: KnownHost | undefined,
+  offered: KnownHost,
+  options: Pick<DialOptions, "log" | "replace">,
+): void {
   if (saved === undefined) return;
   const changes = [
     ...(bytesEqual(saved.hostKey, offered.hostKey)
@@ -172,6 +173,10 @@ function confirmReplacement(saved: KnownHost | undefined, offered: KnownHost, op
 const bytesEqual = (a: Uint8Array, b: Uint8Array): boolean =>
   a.byteLength === b.byteLength && a.every((byte, index) => byte === b[index]);
 
+/**
+ * Runs the pairing session and saves the host only after it answered `hello`, which it does once it stored this
+ * device, so the IK session that follows is admitted.
+ */
 async function pair(
   known: KnownHosts,
   host: KnownHost,
@@ -179,7 +184,8 @@ async function pair(
   options: DialOptions,
   pairSlot?: string,
 ): Promise<KnownHost> {
-  confirmReplacement(known.get(host.hostId), host, options);
+  const checked = known.get(host.hostId);
+  confirmReplacement(checked, host, options);
   const link = await connectRelayClient({
     relayUrl: host.relayUrl,
     hostId: host.hostId,
@@ -190,7 +196,7 @@ async function pair(
     throw refusal(host.hostId, error);
   });
   (await HcConnection.open(secure)).close();
-  known.add(host);
+  known.replace(host, checked, (saved) => confirmReplacement(saved, host, options));
   options.log(`paired with host ${host.hostId}, fingerprint ${fingerprintOf(host.hostKey)}`);
   options.log(`from now on: doriface-host connect ${host.hostId}`);
   return host;

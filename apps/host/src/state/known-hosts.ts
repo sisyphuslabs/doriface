@@ -40,6 +40,12 @@ function parseDevice(value: unknown): KeyPair {
   return x25519FromSecret(base64urlDecode(stringField(value, "secret", DEVICE_FILE)));
 }
 
+const sameHost = (a: KnownHost, b: KnownHost | undefined): boolean =>
+  b !== undefined &&
+  a.relayUrl === b.relayUrl &&
+  a.hostKey.byteLength === b.hostKey.byteLength &&
+  a.hostKey.every((byte, index) => byte === b.hostKey[index]);
+
 export class KnownHosts {
   readonly #dir: string;
   readonly #path: string;
@@ -62,6 +68,24 @@ export class KnownHosts {
       () => {
         const others = this.#read().filter((known) => known.hostId !== host.hostId);
         this.#write([...others, host]);
+      },
+      this.#lockTimeoutMs,
+    );
+  }
+
+  /**
+   * Saves `host` as a pairing does, comparing and saving under one lock hold: when the record now saved for its hostId
+   * is neither `checked` (what the pairing confirmed before it dialed) nor `host` itself, another pairing saved it in
+   * between, and `confirm` sees it first and throws to refuse the save.
+   */
+  replace(host: KnownHost, checked: KnownHost | undefined, confirm: (saved: KnownHost) => void): void {
+    withStateLock(
+      this.#dir,
+      () => {
+        const hosts = this.#read();
+        const saved = hosts.find((known) => known.hostId === host.hostId);
+        if (saved !== undefined && !sameHost(saved, checked) && !sameHost(saved, host)) confirm(saved);
+        this.#write([...hosts.filter((known) => known.hostId !== host.hostId), host]);
       },
       this.#lockTimeoutMs,
     );
