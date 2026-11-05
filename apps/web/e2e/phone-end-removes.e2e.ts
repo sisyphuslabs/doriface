@@ -89,7 +89,8 @@ test("a session ended on a phone is removed even when the page closes as soon as
   if (address === null) throw new Error("the new terminal has no address");
   const name = `end-on-phone-${address}`;
   hc("label", address, `herdr.name=${name}`);
-  await expect(page.getByRole("tab", { name })).toBeVisible({ timeout: 15_000 });
+  // A tab reads its number, as herdr-app's; the session's name shows on its actions.
+  await expect(page.getByRole("button", { name: `Session actions for ${name}` })).toBeVisible({ timeout: 15_000 });
 
   // The phone: a second page of the same browser, narrow, so it shows the phone navigation.
   const phone = await page.context().newPage();
@@ -103,7 +104,7 @@ test("a session ended on a phone is removed even when the page closes as soon as
   await phone.close();
 
   await expect.poll(() => onCore(address), { timeout: 10_000, message: `${address} still on the core` }).toBe(false);
-  await expect(page.getByRole("tab", { name })).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator(`[role="tabpanel"] [data-terminal="${address}"]`)).toHaveCount(0, { timeout: 10_000 });
   await expect(page.getByText("This terminal didn't open")).toHaveCount(0);
 });
 

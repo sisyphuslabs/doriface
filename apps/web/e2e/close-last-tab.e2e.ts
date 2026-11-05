@@ -9,7 +9,7 @@ test.afterEach(() => {
   for (const address of started.splice(0)) hcOn("host", ["kill", address]);
 });
 
-test("closing the only tab ends its shell and empties the workspace; a terminal outside any tab is not shown alone, and the next load adopts it into Home (#354, #409, #404)", async ({
+test("closing the only tab asks Close space?, ends its shell and empties the workspace; a terminal outside any tab is not shown alone, and the next load adopts it into Home (#354, #409, #404)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -20,8 +20,12 @@ test("closing the only tab ends its shell and empties the workspace; a terminal 
   await expect(tabs).toHaveCount(1);
   const running = (await terminalCount(page)).before;
 
-  // Cmd+W on macOS; the pane close key elsewhere.
+  // Cmd+W on macOS; the pane close key elsewhere. The tab's only pane closes as its tab, and a space's last tab takes the
+  // space with it, so it asks first, as herdr-app's space.close (#466 ruling D).
   await page.keyboard.press("Control+Shift+X");
+  const ask = page.getByRole("dialog", { name: "Close space?" });
+  await expect(ask).toContainText(/\u2014 1 tab, 1 terminal/);
+  await ask.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("contentinfo")).toContainText(`${running - 1} terminal`, { timeout: 15_000 });
   await expect(tabs).toHaveCount(0);
   await expect(page.locator(`[data-terminal="${address}"]`)).toHaveCount(0);
@@ -34,7 +38,8 @@ test("closing the only tab ends its shell and empties the workspace; a terminal 
   await expect(page.getByRole("contentinfo")).toContainText(`${running} terminal`, { timeout: 15_000 });
   await expect(tabs).toHaveCount(0);
 
-  // The next load adopts it as a tab of this machine's Home space, so nothing is hidden (#404); the closed shell is gone.
+  // The next load adopts it as a tab of the space its space label names (startShell labels it api), so nothing is
+  // hidden (#404, dc7760f); the closed shell is gone.
   await page.reload();
   await expect(page.getByRole("contentinfo")).toContainText(`${running} terminal`, { timeout: 20_000 });
   await expect(tabs).toHaveCount(1, { timeout: 15_000 });
@@ -43,6 +48,6 @@ test("closing the only tab ends its shell and empties the workspace; a terminal 
     page
       .getByRole("complementary", { name: "Workspace" })
       .getByRole("region", { name: "Spaces" })
-      .getByRole("button", { name: /^Home\b/ }),
+      .getByRole("button", { name: /^api\b/ }),
   ).toBeVisible();
 });

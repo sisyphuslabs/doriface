@@ -4,6 +4,7 @@ import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
 import { stubSpeech } from "./speech-stub.ts";
+import { tabOf } from "./tab-strip.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
@@ -65,7 +66,7 @@ test("moving focus to another tab ends the dictation, so nothing heard for one p
   await page.getByRole("button", { name: `Dictate into ${NAME}` }).click();
   await page.getByRole("button", { name: "Allow" }).click();
   await expect(page.locator("[data-voice-strip]")).toHaveAttribute("data-voice-strip", "listening");
-  await page.getByRole("tablist", { name: "Tabs" }).getByRole("tab").filter({ hasText: OTHER }).click();
+  await (await tabOf(page, other)).click();
   await expect(page.locator(`[data-focused="true"] [data-terminal="${other}"]`)).toBeVisible();
 
   await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
