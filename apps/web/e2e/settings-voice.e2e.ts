@@ -1,8 +1,11 @@
 // Settings > Voice input says what dictation does and where its mic is, says where the audio goes for each way of
-// recognizing speech, and where the browser cannot listen it says so instead of showing options that do nothing (#391).
+// recognizing speech, and where it cannot listen at all it says so instead of showing options that do nothing (#391).
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { removeSpeech } from "./speech-stub.ts";
+
+/** The desktop shell's `window.doriface`, as the web app finds it in the Electron window. */
+const DESKTOP_BRIDGE = JSON.stringify({ version: "0.1.0", platform: "darwin" });
 
 const openVoiceSection = async (page: Page): Promise<void> => {
   await page.goto("/settings");
@@ -49,6 +52,21 @@ test("where the browser has no speech recognition, the page says so instead of t
   const notice = page.getByRole("status").filter({ hasText: "Dictation isn't available here" });
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("This browser has no speech recognition");
+  await expect(page.getByText("Speech recognition", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Language/ })).toHaveCount(0);
+});
+
+test("in the desktop app, the page says the app cannot dictate and points at the web app", async ({ page }) => {
+  await page.addInitScript((bridge) => {
+    Reflect.set(window, "doriface", JSON.parse(bridge));
+  }, DESKTOP_BRIDGE);
+  await openVoiceSection(page);
+  // The app's Chromium has a recognizer that its speech service refuses, so no option here could work.
+  await expect(intro(page)).toBeVisible();
+  const notice = page.getByRole("status").filter({ hasText: "Dictation isn't available here" });
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("The desktop app can't dictate yet");
+  await expect(notice).toContainText("use doriface in Chrome or Safari");
   await expect(page.getByText("Speech recognition", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Language/ })).toHaveCount(0);
 });

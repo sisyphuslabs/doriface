@@ -1,8 +1,8 @@
 import { Button, Menu, MenuItem, Notice, SegmentedControl, SettingRow } from "@doriface/ui";
 import { Check, ChevronDown } from "lucide-react";
-import { findRecognizer, type Unavailable } from "../voice/recognizer.ts";
 import { type Engine, languageName, VOICE_LANGUAGES } from "../voice/voice-settings.ts";
 import { useVoiceSettings, voiceStore } from "../voice/voice-store.ts";
+import { type VoiceBlocked, voiceBlocked } from "./voice-support.ts";
 
 const ENGINES = [
   { value: "ask", label: "Ask first" },
@@ -16,16 +16,17 @@ const ENGINE_NOTE: Readonly<Record<Engine, string>> = {
   service: "The browser sends the audio to its speech service, which may run outside this device.",
 };
 
-const UNAVAILABLE: Readonly<Record<Unavailable, string>> = {
+const BLOCKED: Readonly<Record<VoiceBlocked, string>> = {
   unsupported:
     "This browser has no speech recognition, so the mic cannot listen. Type instead, or open doriface in Chrome or Safari.",
   insecure: "The browser only listens on a secure (https) page. Open doriface over https to dictate, or type instead.",
+  desktop: "The desktop app can't dictate yet. For dictation, use doriface in Chrome or Safari; here, type instead.",
 };
 
 /** Dictation: where it sends the audio, and the language and way it is recognized; nothing here keeps any audio. */
 export function VoiceSection() {
   const settings = useVoiceSettings();
-  const support = findRecognizer(window);
+  const blocked = voiceBlocked(window);
   const browser = navigator.language;
   const name = (tag: string) => (tag === "" ? `Browser language: ${languageName(browser)}` : languageName(tag));
   const listed = VOICE_LANGUAGES.includes(settings.language) || settings.language === "" ? [] : [settings.language];
@@ -64,11 +65,7 @@ export function VoiceSection() {
         Dictation types what you say into the focused terminal, at the cursor, without pressing Return. Start it with
         the mic above the terminal, beside its title, then speak.
       </p>
-      {support.kind === "unavailable" ? (
-        <Notice tone="info" title="Dictation isn't available here">
-          {UNAVAILABLE[support.why]}
-        </Notice>
-      ) : (
+      {blocked === null ? (
         <div className="flex flex-col">
           <SettingRow
             title="Language"
@@ -88,6 +85,10 @@ export function VoiceSection() {
             }
           />
         </div>
+      ) : (
+        <Notice tone="info" title="Dictation isn't available here">
+          {BLOCKED[blocked]}
+        </Notice>
       )}
     </div>
   );
