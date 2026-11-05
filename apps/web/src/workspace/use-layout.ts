@@ -11,8 +11,6 @@ import {
   tabsOf,
   terminalBlock,
 } from "@doriface/protocol/layout";
-import { paneMove, type Direction } from "../layout/neighbor.ts";
-import { arrange } from "../layout/rects.ts";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import {
   buildTabs,
@@ -26,13 +24,14 @@ import {
   type LayoutTab,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
+import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
 import { orderTabs, type TabMove } from "./tab-order.ts";
 import { useTabClose } from "./use-tab-close.ts";
 import { useTabMoves } from "./use-tab-moves.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
-export interface Layout {
+export interface Layout extends PaneMoves {
   readonly tabs: readonly LayoutTab[];
   readonly active: LayoutTab | null;
   readonly focused: LayoutPane | null;
@@ -46,12 +45,6 @@ export interface Layout {
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
   readonly dropPane: (address: string) => void;
   readonly closeTab: (key: string) => void;
-  /**
-   * Focuses the nearest pane that way in the tab in view. With no pane that way in a split tab it nudges the focused
-   * pane (`bumped`) instead and still takes the key; a lone pane leaves the key to its program (false), as Ghostty does.
-   */
-  readonly go: (direction: Direction) => boolean;
-  readonly bumped: Bump | null;
   /** The pane this screen split off last, which grows in from the pane it came from. */
   readonly fresh: string | null;
   /** Moves a tab so it ends at index `to` of `tabs`; panes and focus stay as they are. */
@@ -70,14 +63,6 @@ export interface PaneTarget {
   readonly pane: string;
 }
 
-export interface Bump {
-  readonly pane: string;
-  readonly direction: Direction;
-  readonly seq: number;
-}
-
-/** Proportions are all moving focus needs, so it measures the tree in a fixed box with the panes' gap. */
-const MEASURE = { x: 0, y: 0, width: 1600, height: 1000 } as const;
 const HISTORY = 32;
 
 const rootOf = (id: string, children: readonly Node[]): Node => ({ children: [...children], id, type: "row" });
@@ -100,7 +85,6 @@ export function useLayout(
   machinesListed = true,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
-  const [bumped, setBumped] = useState<Bump | null>(null);
   const [fresh, setFresh] = useState<string | null>(null);
   useEffect(() => saveView(core, view), [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
@@ -131,11 +115,17 @@ export function useLayout(
       const visited = (history.current.get(key) ?? []).filter((id) => id !== pane);
       history.current.set(key, [...visited, pane].slice(-HISTORY));
     }
-    setView((prev) => ({
-      ...prev,
-      active: key,
-      focused: pane === null ? prev.focused : { ...prev.focused, [key]: pane },
-    }));
+    setView((prev) => {
+      // Focus leaving a zoomed pane shows every pane again, as herdr-app and Ghostty unzoom on a focus move or a split,
+      // so focus never sits on a pane the zoom hides and a close never acts on one out of view.
+      const { [key]: inTab, ...others } = prev.zoomed;
+      return {
+        ...prev,
+        active: key,
+        focused: pane === null ? prev.focused : { ...prev.focused, [key]: pane },
+        zoomed: pane === null || inTab === undefined || inTab === pane ? prev.zoomed : others,
+      };
+    });
   }, []);
 
   /** A tab of this screen's own for a terminal its machine's layout could not take. */
@@ -239,21 +229,28 @@ export function useLayout(
     [active, addTab, focused, keepHere, layoutOf, show, tabs, told],
   );
 
-  const { dropPane, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView);
-
-  const go = useCallback(
-    (direction: Direction): boolean => {
-      if (active === null || focused === null) return false;
-      const { panes } = arrange(active.root, MEASURE, 8, null);
-      const move = paneMove(focused.id, direction, panes, history.current.get(active.key) ?? []);
-      if (move.kind === "pass") return false;
-      if (move.kind === "bump") setBumped((prev) => ({ pane: focused.id, direction, seq: (prev?.seq ?? 0) + 1 }));
-      else show(active.key, move.to);
-      return true;
+  const { dropPane: dropFromTab, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView);
+  const dropPane = useCallback(
+    (address: string): void => {
+      const found = findTerminal(tabs, address);
+      dropFromTab(address);
+      if (found === null || found.tab.transient) return;
+      // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there.
+      const key = found.tab.key;
+      const gone = found.pane.id;
+      const left = (history.current.get(key) ?? []).filter((id) => id !== gone);
+      history.current.set(key, left);
+      const here = new Set(found.tab.panes.map((pane) => pane.id));
+      const before = left.findLast((id) => here.has(id));
+      if (before !== undefined)
+        setView((prev) =>
+          prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev,
+        );
     },
-    [active, focused, show],
+    [dropFromTab, tabs],
   );
 
+  const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
   const { moveTab, lastMove } = useTabMoves(tabs, setView);
@@ -269,9 +266,8 @@ export function useLayout(
     split,
     dropPane,
     closeTab,
-    go,
-    bumped,
     fresh,
+    ...moves,
     moveTab,
     lastMove,
     restored: machinesListed && layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),

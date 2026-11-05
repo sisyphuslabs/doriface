@@ -13,7 +13,18 @@ export {
   withoutField,
 } from "./node.ts";
 export type { Axis, Node } from "./node.ts";
-export { nodeAt, panesOf, pathTo, removePane, replaceAt, splitPane, terminalBlock } from "./tree.ts";
+export {
+  equalize,
+  MIN_SHARE,
+  nodeAt,
+  panesOf,
+  pathTo,
+  removePane,
+  replaceAt,
+  resizeAt,
+  splitPane,
+  terminalBlock,
+} from "./tree.ts";
 export type { PaneRef } from "./tree.ts";
 export { LayoutDoc } from "./sync.ts";
 export type { DocCalls, DocEdit, DocState } from "./sync.ts";
