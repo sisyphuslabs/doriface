@@ -1,5 +1,6 @@
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
+import { readSaved, writeSaved } from "./window-state.ts";
 
 export interface HostCommand {
   readonly file: string;
@@ -50,10 +51,26 @@ export function usualHcDirs(context: HostContext): readonly string[] {
  * Finds herdr-core. Apps launched from a desktop session inherit a minimal PATH, so the usual install
  * directories are searched after it.
  */
-export function findHc(context: HostContext, usual: readonly string[] = usualHcDirs(context)): string | undefined {
+export function findHc(
+  context: HostContext,
+  usual: readonly string[] = usualHcDirs(context),
+  chosen?: string,
+): string | undefined {
   const pinned = context.env["HC_BIN"];
   if (pinned !== undefined && pinned !== "") return pinned;
+  if (chosen !== undefined) return chosen;
   const fromPath = (context.env["PATH"] ?? "").split(delimiter).filter((dir) => dir !== "");
   const name = executable("hc", context.platform);
   return [...fromPath, ...usual].map((dir) => join(dir, name)).find(isExecutable);
+}
+
+/** The hc chosen in the app (Choose hc), kept in `file` across launches; undefined when none was chosen. */
+export function savedHc(file: string, log?: (line: string) => void): string | undefined {
+  const saved = readSaved(file, log);
+  const path: unknown = typeof saved === "object" && saved !== null ? Reflect.get(saved, "path") : undefined;
+  return typeof path === "string" && path !== "" ? path : undefined;
+}
+
+export function saveHc(file: string, path: string): void {
+  writeSaved(file, { path });
 }

@@ -12,7 +12,11 @@ const foreign: readonly IpcSender[] = [
   { senderFrame: null },
 ];
 
-const setup = (start: () => Promise<typeof endpoint> = async () => endpoint) => {
+const setup = (
+  start: () => Promise<typeof endpoint> = async () => endpoint,
+  choose: () => Promise<string | undefined> = async () => undefined,
+) => {
+  let chooses = 0;
   const opened: string[] = [];
   const painted: string[] = [];
   const zooms: string[] = [];
@@ -41,8 +45,21 @@ const setup = (start: () => Promise<typeof endpoint> = async () => endpoint) => 
     zoomWindow: (step) => {
       zooms.push(step);
     },
+    chooseHc: async () => {
+      chooses += 1;
+      return choose();
+    },
   });
-  return { handlers, opened, painted, zooms, menus, starts: () => starts, closes: () => closes };
+  return {
+    handlers,
+    opened,
+    painted,
+    zooms,
+    menus,
+    starts: () => starts,
+    closes: () => closes,
+    chooses: () => chooses,
+  };
 };
 
 afterEach(() => void takePairingLink());
@@ -60,6 +77,7 @@ describe("IPC sender gate", () => {
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
         expect(handlers.zoomWindow(event, "out")).rejects.toThrow("refused IPC"),
+        expect(handlers.chooseHc(event)).rejects.toThrow("refused IPC"),
       ]),
     );
     for (const event of foreign) expect(() => handlers.takePairingLink(event)).toThrow("refused IPC");
@@ -67,6 +85,13 @@ describe("IPC sender gate", () => {
     expect(zooms).toEqual([]);
     expect(starts()).toBe(0);
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
+  });
+
+  test("Choose hc answers the chosen file, or null when the dialog is cancelled", async () => {
+    const picked = setup(undefined, async () => "/opt/herdr/hc");
+    expect(await picked.handlers.chooseHc(app)).toBe("/opt/herdr/hc");
+    expect(await setup().handlers.chooseHc(app)).toBeNull();
+    expect(picked.chooses()).toBe(1);
   });
 
   test("the Shell menu takes only its own actions and short trigger text from the page, entry by entry", async () => {

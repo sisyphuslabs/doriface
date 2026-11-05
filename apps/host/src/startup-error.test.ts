@@ -2,6 +2,8 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hcSpawnError } from "./hc-pipe.ts";
+import { startHost } from "./host.ts";
 import { parseStartupErrorLine, STARTUP_EXIT_CODES, type StartupErrorReport } from "./startup-error.ts";
 import { resolveHcBin } from "./testing/hc-session.ts";
 
@@ -38,6 +40,25 @@ async function serve(args: readonly string[]): Promise<Exit> {
 }
 
 describe("a host that cannot start", () => {
+  test("an hc that could not be spawned for a reason other than missing or forbidden is startup-failed, with the reason", () => {
+    const busy = Object.assign(new Error("spawn ETXTBSY"), { code: "ETXTBSY" });
+    const error = hcSpawnError("/opt/hc", busy);
+    expect([error.code, error.message]).toEqual(["startup-failed", "cannot run /opt/hc: spawn ETXTBSY"]);
+    const full = hcSpawnError("/opt/hc", Object.assign(new Error("spawn EMFILE"), { code: "EMFILE" }));
+    expect(full.code).toBe("startup-failed");
+  });
+
+  test("startHost refuses a non-loopback listen without unsafeListen, before it touches hc", async () => {
+    const started = startHost({
+      listen: { hostname: "0.0.0.0", port: 0 },
+      token: "t",
+      hc: join(scratch(), "no-such-hc"),
+      env: {},
+      log: () => {},
+    });
+    await expect(started).rejects.toThrow("refusing to listen on 0.0.0.0");
+  });
+
   test("with no hc at the given path reports hc-binary-missing with that path, not the usage", async () => {
     const missing = join(scratch(), "no-such-hc");
     const exit = await serve(["--listen", "127.0.0.1:0", "--hc", missing]);

@@ -12,6 +12,8 @@ export interface LocalHostOptions {
    * on its own default (`hc` on PATH).
    */
   readonly hc: () => string | undefined;
+  /** The folders `hc` searches after PATH, named by an `hc-binary-missing` failure. */
+  readonly searched?: () => readonly string[];
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly log: (line: string) => void;
   readonly readyTimeoutMs?: number | undefined;
@@ -96,7 +98,9 @@ export class LocalHost {
         child.kill("SIGTERM");
         const output = tail.text();
         const details = `doriface-host ${reason}${output === "" ? "" : `:\n${output}`}`;
-        reject(new LocalHostStartError({ code, message: `doriface-host ${reason}`, ...tail.report, details }));
+        const report = { code, message: `doriface-host ${reason}`, ...tail.report };
+        const searched = report.code === "hc-binary-missing" ? this.#options.searched?.() : undefined;
+        reject(new LocalHostStartError({ ...report, ...(searched === undefined ? {} : { searched }), details }));
       };
       const timer = setTimeout(
         () =>

@@ -88,7 +88,7 @@ export class HcPipe implements Link {
 }
 
 /** Why `hc` could not be run at all: not there (a path, or a bare name not on PATH), not runnable, or anything else. */
-function hcSpawnError(hc: string, error: unknown): StartupError {
+export function hcSpawnError(hc: string, error: unknown): StartupError {
   const errno = errnoOf(error);
   const reason = error instanceof Error ? error.message : String(error);
   if (errno === "ENOENT" || errno === "ENOTDIR") {
@@ -98,7 +98,8 @@ function hcSpawnError(hc: string, error: unknown): StartupError {
   if (errno === "EACCES" || errno === "EPERM") {
     return new StartupError("permission-denied", `may not run ${hc} (${reason})`, { path: hc }, { cause: error });
   }
-  return new StartupError("hc-version-failed", `cannot run ${hc}: ${reason}`, { path: hc }, { cause: error });
+  // Anything else (EMFILE, ETXTBSY, ...) says nothing about which program hc is, so it is no hc-version-failed.
+  return new StartupError("startup-failed", `cannot run ${hc}: ${reason}`, { path: hc }, { cause: error });
 }
 
 /** Runs `hc --version` and returns the bare version, e.g. "0.1.17". */
