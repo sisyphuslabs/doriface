@@ -130,6 +130,17 @@ const NOT_SENT = "Typed input was not sent because the program restarted";
 test("when the restarted program's view arrives before the old view's reattach, the queued keys still never run", async ({
   page,
 }) => {
+  await page.addInitScript((title) => {
+    const seen = new WeakSet<Element>();
+    Object.assign(window, { notSent: 0 });
+    new MutationObserver(() => {
+      for (const heading of document.querySelectorAll("h2")) {
+        if (heading.textContent !== title || seen.has(heading)) continue;
+        seen.add(heading);
+        Object.assign(window, { notSent: Number(Reflect.get(window, "notSent")) + 1 });
+      }
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  }, NOT_SENT);
   const socket = await routeHcSocket(page);
   await page.goto("/");
   const terminal = await openNewTerminal(page);
@@ -143,7 +154,8 @@ test("when the restarted program's view arrives before the old view's reattach, 
   await socket.drop(true);
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
   const misdelivered = test.info().outputPath("misdelivered.txt");
-  await page.keyboard.type(`echo misdeliv-$((5*5)) > '${misdelivered}'`);
+  // One input event, the way wterm takes a commit: typing it key by key took most of the test's time on a loaded host.
+  await page.keyboard.insertText(`echo misdeliv-$((5*5)) > '${misdelivered}'`);
   await page.keyboard.press("Enter");
   process.kill(shellPid, "SIGKILL");
   // Right after the kill the core still reports the killed pid; the restart is the pid changing, then a new one.
@@ -161,11 +173,13 @@ test("when the restarted program's view arrives before the old view's reattach, 
 
   await expect(restarted).toContainText("$", { timeout: 15_000 });
   await restarted.getByRole("textbox").focus();
-  await page.keyboard.type("echo fence-$((1+2))");
+  await page.keyboard.insertText("echo fence-$((1+2))");
   await page.keyboard.press("Enter");
   await expect(restarted).toContainText("fence-3", { timeout: 15_000 });
   expect(existsSync(misdelivered)).toBe(false);
-  await expect(page.getByText(NOT_SENT)).toHaveCount(1);
+  // Each notice ever shown, counted as it appears: a toast closes itself after a few seconds, which the steps above can
+  // outlast on a loaded host, so the count on screen now says nothing about how many were raised.
+  expect(await page.evaluate(() => Reflect.get(window, "notSent"))).toBe(1);
 });
 
 test("a kept program that ends while its view waits for the restart closes its tab", async ({ page }) => {

@@ -20,7 +20,8 @@ async function sizes(page: Page, terminal: Locator): Promise<{ readonly pty: str
   queries += 1;
   const tag = `pty${queries}`;
   await terminal.getByRole("textbox").focus();
-  await page.keyboard.type(`clear; echo "${tag} $(stty size)"`);
+  // One input event, the way wterm takes a commit: typed key by key, the query alone took seconds on a loaded host.
+  await page.keyboard.insertText(`clear; echo "${tag} $(stty size)"`);
   await page.keyboard.press("Enter");
   const replyText = new RegExp(String.raw`^${tag} \d+ \d+\s*$`);
   const reply = terminal.locator(".term-row:not(.term-scrollback-row)").filter({ hasText: replyText });
@@ -49,9 +50,17 @@ test("a terminal re-attached after the link reconnects has the size of the grid 
 
 test("the pty follows the grid when the window resizes", async ({ page }) => {
   const { terminal } = await openNewTerminalBehindLatency(page, RELAY_LATENCY_MS);
-  const before = await sizes(page, terminal);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  const before = await gridSize(terminal);
   await page.setViewportSize({ width: 900, height: 600 });
-  await expect.poll(async () => (await sizes(page, terminal)).view).not.toBe(before.view);
+  // The resize has settled once the view shows a new grid and the core holds that size. Both are read without typing:
+  // a typed query takes a shell round trip, longer than a poll's whole budget on a loaded host.
+  await expect
+    .poll(async () => {
+      const view = await gridSize(terminal);
+      return view !== before && coreSize(address) === view;
+    })
+    .toBe(true);
   const { pty, view } = await sizes(page, terminal);
   expect(pty).toBe(view);
 });
