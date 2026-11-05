@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Writes the release notes for a version to stdout: the CHANGELOG.md section for that version when there is one,
- * then the downloads in the assets directory and how to open unsigned builds.
+ * then the downloads in the assets directory and which builds are code signed.
  *
  * Usage: bun .github/scripts/release-notes.ts <version> <assets dir>
  */
@@ -53,12 +53,10 @@ function downloads(assets: readonly string[]): string {
   );
 }
 
-const UNSIGNED = `## Unsigned builds
+const SIGNING = `## Code signing
 
-These builds are not code signed yet.
-
-- **macOS:** ad-hoc signed and not notarized, so macOS blocks the first open. After moving doriface to Applications, choose **Open Anyway** in System Settings > Privacy & Security, or run \`xattr -dr com.apple.quarantine /Applications/doriface.app\`.
-- **Windows:** SmartScreen warns about an unknown publisher. Choose **More info**, then **Run anyway**.
+- **macOS:** signed with a Developer ID certificate and notarized by Apple, and the dmg is stapled, so it opens without a Gatekeeper warning.
+- **Windows:** not code signed yet, so SmartScreen warns about an unknown publisher. Choose **More info**, then **Run anyway**.
 - **Linux:** make the AppImage executable (\`chmod +x\`) and run it, or install the deb with \`sudo apt install ./<file>.deb\`.`;
 
 const [version, assetsDir] = Bun.argv.slice(2);
@@ -71,4 +69,4 @@ const assets = readdirSync(assetsDir)
   .filter((name) => name !== "SHA256SUMS.txt")
   .toSorted();
 const changes = changelogSection(version) ?? "No CHANGELOG.md section for this version.";
-console.log([`# doriface v${version}`, changes, `## Downloads\n\n${downloads(assets)}`, UNSIGNED].join("\n\n"));
+console.log([`# doriface v${version}`, changes, `## Downloads\n\n${downloads(assets)}`, SIGNING].join("\n\n"));
