@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   browserStorage,
   guardedLocalStorage,
@@ -13,6 +13,26 @@ const refused = (): never => {
 const refusing: StorageLike = { getItem: refused, setItem: refused, removeItem: refused };
 
 describe("guardedStorage", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, "localStorage");
+    Reflect.deleteProperty(globalThis, "sessionStorage");
+  });
+
+  test("a browser whose storage getter itself throws (Chromium with storage blocked) never throws through the guard (#553)", () => {
+    for (const name of ["localStorage", "sessionStorage"]) {
+      Object.defineProperty(globalThis, name, {
+        configurable: true,
+        get: () => {
+          throw new DOMException("The operation is insecure.", "SecurityError");
+        },
+      });
+    }
+    expect(guardedLocalStorage().getItem("k")).toBeNull();
+    expect(guardedSessionStorage().getItem("k")).toBeNull();
+    expect(() => guardedLocalStorage().setItem("k", "v")).not.toThrow();
+    expect(() => browserStorage("localStorage").setItem("k", "v")).toThrow("The operation is insecure.");
+  });
+
   test("storage that refuses every access reads as empty and ignores writes", () => {
     const storage = guardedStorage(refusing);
     expect(() => storage.setItem("k", "v")).not.toThrow();
