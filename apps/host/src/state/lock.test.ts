@@ -50,6 +50,25 @@ function whenLockMoved(path: string, take: () => void): void {
 
 const run = (...args: string[]) => Bun.spawn([process.execPath, WORKER, ...args], { stdout: "ignore", stderr: "pipe" });
 
+/** A lock directory whose highest generation has this content. */
+function generation(content: string): void {
+  fs.mkdirSync(join(dir, "state.lock"), { mode: 0o700 });
+  writeFileSync(join(dir, "state.lock", "1"), content);
+}
+
+describe("state lock, a dead holder whose pid was reused (#276)", () => {
+  test("a generation naming a live pid that started at another time is a dead holder's: it is taken, not waited for", () => {
+    // The holder died and its pid now belongs to a live process, this one, which did not start when the holder did.
+    generation(`${process.pid} ${crypto.randomUUID()} start-of-a-process-that-is-gone`);
+    expect(withStateLock(dir, () => "taken", 500)).toBe("taken");
+  });
+
+  test("a generation naming a live pid with no start time, as older hosts write it, is still waited for", () => {
+    generation(`${process.pid} ${crypto.randomUUID()}`);
+    expect(() => withStateLock(dir, () => "taken", 50)).toThrow("locked by another process");
+  });
+});
+
 describe("state lock, from a v0.1.0 lock file", () => {
   test("a lock whose holder has not written its pid yet is held, not broken", () => {
     const devices = new DeviceStore(dir, { lockTimeoutMs: 50 });
