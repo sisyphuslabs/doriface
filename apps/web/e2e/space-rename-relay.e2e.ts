@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import { pressNewTab } from "./fixtures.ts";
 import { routeRelaySockets } from "./relay-route.ts";
 
 // Two devices paired with one host through the private relay: a space renamed on one shows on the other at once (#395).
@@ -70,7 +71,7 @@ test("over the relay, a space renamed on one device shows its new name on the ot
   const renamed = `rn395-relay-${test.info().repeatEachIndex}`;
   const one = await pairedDevice(browser);
   const two = await pairedDevice(browser);
-  await one.getByRole("button", { name: "New tab", exact: true }).click({ timeout: 60_000 });
+  await pressNewTab(one.getByRole("button", { name: "New tab", exact: true }), { timeout: 60_000 });
   const row = spaceRows(one).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   const before = (await row.locator('[data-floor="name"]').textContent()) ?? "";

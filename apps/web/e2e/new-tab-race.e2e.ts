@@ -1,7 +1,7 @@
 // New tab focuses the terminal it started even when the feed lists that terminal after another machine.list read has
 // come back: the tab waits for its terminal instead of being dropped as gone. A terminal is already open, as in a
 // workspace in use; with none, the first-live rule would reopen the new one and hide the drop.
-import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { expect, openNewTerminal, terminalCount, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 const idOf = (frame: string): string | undefined => /"id":(\d+)/.exec(frame)?.[1];
@@ -26,11 +26,12 @@ test("a New tab whose terminal the feed lists only after a machine.list read sti
   // The feed (events.subscribe's channel) falls behind the RPC answers, as on a loaded host: its events, heartbeats and
   // resyncs wait, in order, while terminal.run and machine.list answer.
   const release = socket.holdFromHost('"method":"event"', '"method":"heartbeat"', '"method":"missed"');
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click();
+  await pressNewTab(
+    page
+      .getByRole("button", { name: "New tab" })
+      .or(page.getByRole("button", { name: "New terminal" }))
+      .first(),
+  );
   await expect.poll(() => answers("terminal.run"), { timeout: 15_000 }).toBe(started + 1);
   const address = /"address":"([^"]+)"/.exec(answersTo("terminal.run").at(-1) ?? "")?.[1];
   if (address === undefined) throw new Error("terminal.run answered without an address");
@@ -61,11 +62,12 @@ test("a New tab whose terminal the feed lists before terminal.run answers takes 
   const before = await focused.getAttribute("data-terminal");
   const releaseList = socket.hold("machine.list");
   const releaseAnswers = socket.holdFromHost('"result"');
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click();
+  await pressNewTab(
+    page
+      .getByRole("button", { name: "New tab" })
+      .or(page.getByRole("button", { name: "New terminal" }))
+      .first(),
+  );
   await count.grown();
   const releaseFeed = socket.holdFromHost('"method":"event"', '"method":"heartbeat"', '"method":"missed"');
   releaseAnswers();

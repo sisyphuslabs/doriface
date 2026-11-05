@@ -16,6 +16,7 @@ import { DictateButton } from "../voice/dictate-button.tsx";
 import { useDictation } from "../voice/use-dictation.ts";
 import { VoiceDock } from "../voice/voice-dock.tsx";
 import { agentStatus, machineOf, programKind, type Session, spaceName, terminalTitle } from "./model.ts";
+import { NewTabMenu } from "./new-tab-menu.tsx";
 import { NoTerminal } from "./no-terminal.tsx";
 import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
@@ -80,6 +81,9 @@ export interface DesktopShellProps {
   readonly loaded: boolean;
   readonly layout: Layout;
   readonly onNew: () => void;
+  /** Starts an hc template (an agent) as a new tab, from the New tab menu. */
+  readonly onNewAgent: (template: string) => void;
+  readonly onNewSpace: () => void;
   readonly onSplit: (axis: Axis, target?: PaneTarget) => void;
   readonly onCloseTab: (key: string) => void;
   readonly onClosePane: (address: string) => void;
@@ -97,6 +101,8 @@ export function DesktopShell(props: DesktopShellProps) {
     loaded,
     layout,
     onNew,
+    onNewAgent,
+    onNewSpace,
     onSplit,
     onCloseTab,
     onClosePane,
@@ -235,6 +241,15 @@ export function DesktopShell(props: DesktopShellProps) {
           onSelect={layout.selectTab}
           onClose={onCloseTab}
           onNew={onNew}
+          newMenu={
+            <NewTabMenu
+              connection={connection}
+              newTabKeys={newTabKeys}
+              onNew={onNew}
+              onAgent={onNewAgent}
+              onSpace={onNewSpace}
+            />
+          }
           onRename={(key) => setRenaming({ key, busy: false, error: null })}
           onMove={layout.moveTab}
           moveKeys={{

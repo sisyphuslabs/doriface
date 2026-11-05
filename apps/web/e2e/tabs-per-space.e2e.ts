@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { getCoreDoc } from "./core-doc.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, test, pressNewTab } from "./fixtures.ts";
 import { LAYOUT_DOC, seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 
@@ -110,7 +110,7 @@ test('"+" adds a tab right after the selected one, in the selected space only, a
   await page.goto("/");
   await spaceRow(page, "beta").click();
   await expect(tabBar(page)).toHaveCount(2);
-  await page.getByRole("button", { name: "New tab" }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab" }));
   await expect(tabBar(page)).toHaveCount(3, { timeout: 15_000 });
   await expect.poll(savedSpaces, { timeout: 15_000 }).toEqual([
     ["alpha", ["a-one", "a-two"]],
