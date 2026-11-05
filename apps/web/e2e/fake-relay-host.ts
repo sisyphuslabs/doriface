@@ -65,9 +65,10 @@ void (async () => {
 try {
   await done.promise;
 } finally {
-  await stopMachine?.();
   await host.stop();
   await hc.dispose();
+  // Stop the dialer before its target: otherwise it can restart the second core during this teardown.
+  await stopMachine?.();
   await bridge.stop();
   await relay.stop();
   rmSync(stateDir, { recursive: true, force: true });
