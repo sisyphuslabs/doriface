@@ -47,11 +47,14 @@ test.afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("the agents group comes first, and its status groups and counts follow hc's state live", async ({ page }) => {
+test("the agents group sits below the spaces (#383), and its status groups and counts follow hc's state live", async ({
+  page,
+}) => {
   const agent = startFlipping("rc-flip", "working", "done");
   await page.goto("/");
-  const lists = sidebar(page).locator("[data-roving-lists] > div > section");
-  await expect(lists.first()).toHaveAccessibleName("Agents", { timeout: 20_000 });
+  const lists = sidebar(page).locator("[data-sidebar-pane] > * > * > * > section");
+  await expect(lists.first()).toHaveAccessibleName("Spaces", { timeout: 20_000 });
+  await expect(lists.last()).toHaveAccessibleName("Agents");
   const working = group(page, "Working");
   const done = group(page, "Done");
   await expect(rows(working).filter({ hasText: "rc-flip" })).toBeVisible({ timeout: 20_000 });

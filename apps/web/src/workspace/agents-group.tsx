@@ -11,7 +11,7 @@ import {
   SidebarSection,
   type Agent,
 } from "@doriface/ui";
-import { ArrowDownUp, Clock, Ellipsis, Layers, Pencil, Pin, PinOff, Power } from "lucide-react";
+import { Clock, Ellipsis, Layers, Pencil, Pin, PinOff, Power } from "lucide-react";
 import { useMemo } from "react";
 import { useAskSession } from "./session-context.ts";
 import { agentGroups, type AgentSort } from "./sidebar-model.ts";
@@ -31,7 +31,7 @@ export interface AgentsGroupProps {
 function SortMenu() {
   const [sort, setSort] = useAgentSort();
   return (
-    <Menu align="end" trigger={<IconButton label="Sort agents" icon={<ArrowDownUp />} className="-mr-1" />}>
+    <Menu align="end" trigger={<IconButton label="Sort agents" icon={<Clock />} className="-mr-1" />}>
       <MenuRadioGroup
         label="Sort agents"
         value={sort}
