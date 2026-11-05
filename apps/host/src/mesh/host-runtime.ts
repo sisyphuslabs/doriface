@@ -34,11 +34,27 @@ export interface HostRuntime {
   stop(): Promise<void>;
 }
 
-/** `machine.*` on this host's core over one control connection, opened on first use and again after a failure. */
-function lazyMachines(target: HcTarget): { readonly machines: HcMachines; close(): Promise<void> } {
+/** What a call to this host's core gets once the host has stopped: no `hc` is run, so no core is started again. */
+export class HostStoppedError extends Error {
+  constructor() {
+    super("the host has stopped; its core is not called again");
+  }
+}
+
+/**
+ * `machine.*` on this host's core over one control connection, opened on first use and again after a failure, until
+ * `close`. Every `hc` call starts its session's core when none runs, so after `close` a call never opens one: a
+ * reconcile still running when the host stops (a revoke's `machine.rm`) would otherwise start the core again.
+ */
+export function lazyMachines(
+  target: HcTarget,
+  openControl: (target: HcTarget) => Promise<HcControl> = openHcControl,
+): { readonly machines: HcMachines; close(): Promise<void> } {
   let control: Promise<HcControl> | undefined;
+  let closed = false;
   const open = (): Promise<HcControl> => {
-    const opening = (control ??= openHcControl(target));
+    if (closed) return Promise.reject(new HostStoppedError());
+    const opening = (control ??= openControl(target));
     opening.catch(() => {
       if (control === opening) control = undefined;
     });
@@ -63,6 +79,7 @@ function lazyMachines(target: HcTarget): { readonly machines: HcMachines; close(
     connect: (name) => call((m) => m.connect(name)),
   };
   const close = async (): Promise<void> => {
+    closed = true;
     const opened = await control?.catch(() => undefined);
     opened?.close();
   };
