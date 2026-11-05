@@ -11,6 +11,8 @@ export default defineConfig({
   timeout: 60_000,
   // Each worker runs its own e2e host and core (e2e/worker-host.ts), so workers share no terminals.
   workers: process.env["CI"] ? 8 : 4,
+  // Each worker fails the run itself when a spec leaves terminals on its core (e2e/terminal-guard.ts); this reports it.
+  globalSetup: "./e2e/terminal-leaks.ts",
   globalTeardown: "./e2e/leftover-hosts.ts",
   forbidOnly: Boolean(process.env["CI"]),
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
