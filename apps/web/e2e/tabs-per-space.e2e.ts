@@ -5,9 +5,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { getCoreDoc, setCoreDoc } from "./core-doc.ts";
+import { getCoreDoc } from "./core-doc.ts";
 import { expect, test } from "./fixtures.ts";
-import { LAYOUT_DOC, treeNode } from "./layout-doc.ts";
+import { LAYOUT_DOC, seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 
 test.use({ serviceWorkers: "block" });
@@ -29,28 +29,6 @@ function shellIn(cwd: string, name: string): string {
   const address = String((JSON.parse(out) as { address: string }).address);
   started.push(address);
   return address;
-}
-
-interface SeedSpace {
-  readonly id: string;
-  readonly name: string;
-  readonly folder: string;
-  readonly tabs: readonly { readonly id: string; readonly name: string; readonly terminal: string }[];
-}
-
-function seedSpaces(spaces: readonly SeedSpace[]): void {
-  setCoreDoc(LAYOUT_DOC, {
-    spaces: spaces.map((space) => ({
-      folder: space.folder,
-      id: space.id,
-      name: space.name,
-      tabs: space.tabs.map((tab) => ({
-        id: tab.id,
-        name: tab.name,
-        root: { children: [treeNode({ pane: `p-${tab.id}`, terminal: tab.terminal })], id: tab.id, type: "row" },
-      })),
-    })),
-  });
 }
 
 /** Each saved space's name and its tabs' names, in the document's order. */
