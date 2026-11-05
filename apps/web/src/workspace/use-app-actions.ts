@@ -185,6 +185,12 @@ export function desktopActions(
         return true;
       case "pane.go":
         return isDirection(argument) && layout.go(argument);
+      case "pane.resize":
+        return isDirection(argument) && layout.resizeFocused(argument);
+      case "pane.equalize":
+        return layout.equalize();
+      case "pane.zoom":
+        return layout.toggleZoom();
       case "pane.close":
         return focused === null ? false : (onClosePane(focused), true);
       case "agent.next":

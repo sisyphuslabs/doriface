@@ -18,6 +18,17 @@ const ITEMS: readonly (readonly [string, string] | null | readonly [string, read
         ["pane.go:down", "Down"],
       ],
     ],
+    [
+      "Resize Pane",
+      [
+        ["pane.resize:left", "Move Edge Left"],
+        ["pane.resize:right", "Move Edge Right"],
+        ["pane.resize:up", "Move Edge Up"],
+        ["pane.resize:down", "Move Edge Down"],
+      ],
+    ],
+    ["pane.equalize", "Equalize Panes"],
+    ["pane.zoom", "Zoom Pane"],
     null,
     ["pane.close", "Close Pane"],
     ["tab.close", "Close Tab"],

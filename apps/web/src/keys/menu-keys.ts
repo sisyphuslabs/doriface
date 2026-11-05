@@ -13,6 +13,12 @@ export const MENU_ACTIONS: readonly string[] = [
   "pane.go:right",
   "pane.go:up",
   "pane.go:down",
+  "pane.resize:left",
+  "pane.resize:right",
+  "pane.resize:up",
+  "pane.resize:down",
+  "pane.equalize",
+  "pane.zoom",
   "pane.close",
   "tab.close",
 ];
