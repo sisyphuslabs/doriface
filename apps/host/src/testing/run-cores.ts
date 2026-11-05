@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, readlinkSync } from "node:fs";
-import { basename } from "node:path";
+import { readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 
 /** Set in the environment of a test run; every process the run starts inherits it, unless something strips it. */
 export const RUN_MARK = "DORIFACE_TEST_RUN";
@@ -15,7 +15,16 @@ export interface TestRun {
   readonly dir: string;
 }
 
-/** A process of a run: one that carries its mark, whatever its program, or a herdr process holding a file in its dir. */
+/** Set by `bun run test`'s runner to the run's dir, where the suite records what it leaves (see recordLeft). */
+export const RUN_DIR = "DORIFACE_TEST_RUN_DIR";
+
+const LEFT_FILE = "suite-left.json";
+
+/**
+ * A process of a run: one that carries its mark, whatever its program; a herdr process holding a file in its dir; or
+ * one the suite recorded as left when it ended (and its descendants), since macOS hides the environment of Apple
+ * platform binaries (`/bin/sh`, `/bin/sleep`) from `ps -E`, so a shell a test left shows no mark there.
+ */
 export interface RunProcess {
   readonly pid: number;
   readonly command: string;
@@ -137,11 +146,86 @@ async function macRun(run: TestRun): Promise<RunProcess[]> {
   return found;
 }
 
-/** The processes of `run`: those carrying its mark, whatever their program, and herdr processes holding a file in its dir. */
+interface ProcessRow {
+  readonly pid: number;
+  readonly ppid: number;
+  /** When it started, as `ps` prints it: with its pid, it names one process even if the pid is reused later. */
+  readonly started: string;
+  readonly command: string;
+}
+
+/** Every process of the machine with its parent and start time, from `ps` (the same columns on Linux and macOS). */
+async function processTable(): Promise<{ rows: ProcessRow[]; self: number }> {
+  const ps = Bun.spawn(["ps", "-A", "-o", "pid=,ppid=,lstart=,command="], {
+    env: { ...process.env, LC_ALL: "C" },
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const [text, code] = await Promise.all([new Response(ps.stdout).text(), ps.exited]);
+  if (code !== 0) throw new Error(`ps exited ${code}`);
+  const rows = text.split("\n").flatMap((line) => {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\d+\s+\d+:\d+:\d+\s+\d+)\s+(.*)$/.exec(line);
+    if (match === null) return [];
+    const [, pid, ppid, started, command] = match;
+    return [
+      { pid: Number(pid), ppid: Number(ppid), started: (started ?? "").replace(/\s+/g, " "), command: command ?? "" },
+    ];
+  });
+  return { rows, self: ps.pid };
+}
+
+/** The live processes below `roots` in `rows`, the roots excluded. */
+function descendants(roots: ReadonlySet<number>, rows: readonly ProcessRow[]): ProcessRow[] {
+  const found: ProcessRow[] = [];
+  const seen = new Set(roots);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const row of rows) {
+      if (seen.has(row.pid) || !seen.has(row.ppid)) continue;
+      seen.add(row.pid);
+      found.push(row);
+      grew = true;
+    }
+  }
+  return found;
+}
+
+/**
+ * Records in `dir` every live process below `root` (by default this process), each by pid and start time. The preloaded
+ * guard calls it as the suite ends, while a process a test left is still below the suite, whatever its environment.
+ */
+export async function recordLeft(dir: string, root = process.pid): Promise<void> {
+  const { rows, self } = await processTable();
+  const left = descendants(new Set([root]), rows).filter((row) => row.pid !== self);
+  writeFileSync(join(dir, LEFT_FILE), JSON.stringify(left.map(({ pid, started }) => ({ pid, started }))));
+}
+
+/** The processes the suite recorded as left that are still the same processes, and their live descendants. */
+async function leftProcesses(run: TestRun): Promise<RunProcess[]> {
+  let recorded: { pid: number; started: string }[];
+  try {
+    recorded = JSON.parse(readFileSync(join(run.dir, LEFT_FILE), "utf8")) as typeof recorded;
+  } catch (error) {
+    if (hasCode(error, "ENOENT")) return [];
+    throw error;
+  }
+  const { rows } = await processTable();
+  const same = rows.filter((row) => recorded.some((entry) => entry.pid === row.pid && entry.started === row.started));
+  return [...same, ...descendants(new Set(same.map((row) => row.pid)), rows)].map((row) => ({
+    pid: row.pid,
+    command: row.command,
+    herdr: isHerdr(row.command.split(" ")[0] ?? ""),
+    where: "left by the suite when it ended",
+  }));
+}
+
+/** The processes of `run` (see RunProcess). */
 export async function runProcesses(run: TestRun): Promise<RunProcess[]> {
-  if (process.platform === "linux") return linuxRun(run);
-  if (process.platform === "darwin") return macRun(run);
-  throw new Error(`no process scan on ${process.platform}`);
+  if (process.platform !== "linux" && process.platform !== "darwin")
+    throw new Error(`no process scan on ${process.platform}`);
+  const found = process.platform === "linux" ? linuxRun(run) : await macRun(run);
+  const pids = new Set(found.map((one) => one.pid));
+  return [...found, ...(await leftProcesses(run)).filter((one) => !pids.has(one.pid))];
 }
 
 /** The herdr processes of `run`. */

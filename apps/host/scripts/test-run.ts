@@ -8,12 +8,14 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RUN_MARK, stopRunProcesses, type TestRun } from "../src/testing/run-cores.ts";
+import { RUN_DIR, RUN_MARK, stopRunProcesses, type TestRun } from "../src/testing/run-cores.ts";
 
+// Short on macOS, whose $TMPDIR is deep: a scratch socket under it must stay within the 103-byte sun_path limit.
+const base = process.platform === "darwin" ? "/tmp" : tmpdir();
 // Resolved, since lsof reports the paths a process holds resolved (macOS: /var and /tmp are links into /private).
-const run: TestRun = { mark: crypto.randomUUID(), dir: realpathSync(mkdtempSync(join(tmpdir(), "dh-run-"))) };
+const run: TestRun = { mark: crypto.randomUUID(), dir: realpathSync(mkdtempSync(join(base, "dh-run-"))) };
 const suite = Bun.spawn([process.execPath, "test", ...Bun.argv.slice(2)], {
-  env: { ...process.env, [RUN_MARK]: run.mark, TMPDIR: run.dir },
+  env: { ...process.env, [RUN_MARK]: run.mark, [RUN_DIR]: run.dir, TMPDIR: run.dir },
   stdio: ["inherit", "inherit", "inherit"],
 });
 const code = await suite.exited;

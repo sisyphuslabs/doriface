@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveHcBin } from "./hc-session.ts";
-import { RUN_MARK, runCores, runProcesses, stopRunProcesses, type TestRun } from "./run-cores.ts";
+import { recordLeft, RUN_MARK, runCores, runProcesses, stopRunProcesses, type TestRun } from "./run-cores.ts";
 
 const encoder = new TextEncoder();
 
@@ -82,19 +82,51 @@ test("a core a run left without its mark is found by the file it holds in the ru
   }
 }, 60_000);
 
-test("a process carrying a run's mark is found and stopped whatever its program", async () => {
+test("a process carrying a run's mark is found by it and stopped", async () => {
   const run = newRun();
   try {
-    const sleeper = Bun.spawn(["sh", "-c", "exec sleep 60"], {
+    // Bun, not /bin/sleep: macOS hides the environment of Apple platform binaries from ps -E (the next test's case).
+    const marked = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 60_000)"], {
       env: { ...process.env, [RUN_MARK]: run.mark },
       stdio: ["ignore", "ignore", "ignore"],
     });
-    expect((await runProcesses(run)).map((found) => found.pid)).toContain(sleeper.pid);
-    const stopped = await stopRunProcesses(run);
-    expect(stopped.map((found) => found.pid)).toContain(sleeper.pid);
-    await sleeper.exited;
+    expect((await runProcesses(run)).map((found) => found.pid)).toContain(marked.pid);
+    expect((await stopRunProcesses(run)).map((found) => found.pid)).toContain(marked.pid);
+    await marked.exited;
     expect(await runProcesses(run)).toEqual([]);
   } finally {
+    await stopRunProcesses(run);
+    rmSync(run.dir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("processes the suite recorded as left are found and stopped whatever their program, with no mark", async () => {
+  const run = newRun();
+  // Two Apple platform binaries on macOS, whose environment ps -E never shows, below a parent that prints their pids.
+  const parent = Bun.spawn(["/bin/sh", "-c", "/bin/sleep 60 & a=$!; /bin/sleep 60 & echo $a $!; wait"], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  try {
+    const reader = parent.stdout.getReader();
+    const line = new TextDecoder().decode((await reader.read()).value);
+    reader.releaseLock();
+    const sleepers = line
+      .trim()
+      .split(" ")
+      .map(Number)
+      .toSorted((a, b) => a - b);
+    await recordLeft(run.dir, parent.pid);
+    expect((await runProcesses(run)).map((one) => one.pid).toSorted((a, b) => a - b)).toEqual(sleepers);
+    const stopped = await stopRunProcesses(run);
+    expect(stopped.map((one) => one.pid).toSorted((a, b) => a - b)).toEqual(sleepers);
+    expect(sleepers.filter(alive)).toEqual([]);
+    // Its children stopped, the parent's wait returns.
+    await parent.exited;
+    expect(await runProcesses(run)).toEqual([]);
+  } finally {
+    parent.kill();
     await stopRunProcesses(run);
     rmSync(run.dir, { recursive: true, force: true });
   }
