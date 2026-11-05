@@ -1,8 +1,11 @@
 import type { Locator } from "@playwright/test";
 
+/** A sidebar list's rows: its buttons that are not a row's labelled action (Pin, More, New space). */
+export const rows = (scope: Locator): Locator => scope.locator("button:not([aria-label])");
+
 /** How far each row's content runs past the row's right edge, and where its age column ends. */
-export const rowEdges = (rows: Locator) =>
-  rows.evaluateAll((buttons) =>
+export const rowEdges = (list: Locator) =>
+  list.evaluateAll((buttons) =>
     buttons.map((row) => {
       const box = row.getBoundingClientRect();
       const right = Math.max(...[...row.children].map((child) => child.getBoundingClientRect().right));
