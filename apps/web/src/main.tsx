@@ -25,6 +25,7 @@ import { followConnection } from "./push/push-settings.ts";
 import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { reportMenuKeys } from "./keys/menu-keys.ts";
 import { router } from "./router.tsx";
+import { reloadIntoWaitingWorker, resumeUpdate } from "./update/reload-into-waiting.ts";
 import { updateStore } from "./update/update-store.ts";
 import { stepTerminalFont } from "./workspace/use-app-actions.ts";
 
@@ -34,18 +35,21 @@ captureInstallPrompt();
 // so earlier desktop builds' workers and caches are removed instead.
 if (location.protocol === "https:" || location.protocol === "http:") {
   // A new worker waits until Reload to update (the sidebar's Settings dot says one does), so no page is swapped mid-use.
-  const updateSW = registerSW({
+  const updateDeps = {
+    workers: navigator.serviceWorker,
+    reload: () => location.reload(),
+    storage: sessionStorage,
+    after: (ms: number, run: () => void) => void setTimeout(run, ms),
+  };
+  registerSW({
     immediate: true,
     onNeedRefresh: () =>
       updateStore.set({
         apply: "reload",
-        run: () => {
-          // updateSW reloads only when the page had a worker as it registered; on a first visit it had none.
-          navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), { once: true });
-          void updateSW(true);
-        },
+        run: () => void reloadIntoWaitingWorker(updateDeps),
       }),
   });
+  void resumeUpdate(updateDeps);
   // A tapped notification opens the app at /?notice=<id>, or reaches an open window as a message.
   captureNotice();
   listenForNotices(() => void router.navigate({ to: "/" }));
