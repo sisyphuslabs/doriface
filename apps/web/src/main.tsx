@@ -25,6 +25,7 @@ import { followConnection } from "./push/push-settings.ts";
 import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { reportMenuKeys } from "./keys/menu-keys.ts";
 import { router } from "./router.tsx";
+import { guardedSessionStorage } from "./storage/guarded.ts";
 import { reloadIntoWaitingWorker, resumeUpdate } from "./update/reload-into-waiting.ts";
 import { updateStore } from "./update/update-store.ts";
 import { stepTerminalFont } from "./workspace/use-app-actions.ts";
@@ -38,7 +39,7 @@ if (location.protocol === "https:" || location.protocol === "http:") {
   const updateDeps = {
     workers: navigator.serviceWorker,
     reload: () => location.reload(),
-    storage: sessionStorage,
+    storage: guardedSessionStorage(),
     after: (ms: number, run: () => void) => void setTimeout(run, ms),
   };
   registerSW({
