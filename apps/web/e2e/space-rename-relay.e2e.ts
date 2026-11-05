@@ -43,7 +43,7 @@ const sidebar = (page: Page) => page.getByRole("complementary", { name: "Workspa
 const spaceRows = (page: Page) =>
   sidebar(page).getByRole("region", { name: "Spaces on this machine" }).getByRole("button");
 const spaceRow = (page: Page, name: string) =>
-  sidebar(page).getByRole("button", { name: new RegExp(`^${name}( \\d+ tabs?)?$`) });
+  sidebar(page).getByRole("button", { name: new RegExp(`^${name}(?: |$)`) });
 
 /** A device of its own (its own storage and key), paired with the relayed host by its link, in the workspace. */
 async function pairedDevice(browser: Browser): Promise<Page> {

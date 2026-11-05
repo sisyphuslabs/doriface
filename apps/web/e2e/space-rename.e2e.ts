@@ -10,9 +10,9 @@ import { hcOn } from "./machine-switch.ts";
 test.use({ serviceWorkers: "block" });
 
 const sidebar = (page: Page) => page.getByRole("complementary", { name: "Workspace" });
-// The tab count leaves the row's name while the pointer is on it: the row's actions cover it.
+// The row's name is the space's name, then its git facts and tab count when shown (the actions cover the count on hover).
 const spaceRow = (page: Page, name: string) =>
-  sidebar(page).getByRole("button", { name: new RegExp(`^${name}( \\d+ tabs?)?$`) });
+  sidebar(page).getByRole("button", { name: new RegExp(`^${name}(?: |$)`) });
 
 const started: string[] = [];
 
