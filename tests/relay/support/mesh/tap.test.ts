@@ -54,6 +54,19 @@ async function dial(tap: Tap, path: string): Promise<{ until(count: number): Pro
   };
 }
 
+/** Resolves once `tap` has recorded `count` uplink ends, woken by the tap's own change signal. */
+function uplinkEnded(tap: Tap, count: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  const check = (): void => {
+    if (tap.uplinkEnds().length < count) return;
+    stop();
+    resolve();
+  };
+  const stop = tap.onChange(check);
+  check();
+  return promise;
+}
+
 let cleanup: (() => void)[] = [];
 afterEach(() => {
   for (const each of cleanup.splice(0)) each();
@@ -79,4 +92,34 @@ test("close codes are kept in arrival order, so a mark by count never drops a la
     () => session.end(),
   );
   expect([mark, tap.closeCodes().slice(mark)]).toEqual([1, [4429]]);
+});
+
+test("an upgraded uplink's end is one disconnect, with the relay's close code or null for a bare end; nothing else counts", async () => {
+  const relay = upstream();
+  const tap = makeTap(relay.port, "203.0.113.7");
+  cleanup = [() => tap.stop(), () => relay.stop()];
+  const framed = await dial(tap, "/v1/host/aaaa");
+  const framedEnd = await relay.accepted("/v1/host/aaaa");
+  framedEnd.write(Buffer.concat([Buffer.from(HEAD, "latin1"), closeFrame(1012)]));
+  await framed.until(HEAD.length + 4);
+  framedEnd.end();
+  await uplinkEnded(tap, 1);
+  const session = await dial(tap, "/v1/client/bbbb");
+  const sessionEnd = await relay.accepted("/v1/client/bbbb");
+  sessionEnd.write(HEAD);
+  await session.until(HEAD.length);
+  sessionEnd.end();
+  const refused = await dial(tap, "/v1/host/cccc");
+  const refusedEnd = await relay.accepted("/v1/host/cccc");
+  const notUpgraded = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
+  refusedEnd.write(notUpgraded);
+  await refused.until(notUpgraded.length);
+  refusedEnd.end();
+  const bare = await dial(tap, "/v1/host/dddd");
+  const bareEnd = await relay.accepted("/v1/host/dddd");
+  bareEnd.write(HEAD);
+  await bare.until(HEAD.length);
+  bareEnd.end();
+  await uplinkEnded(tap, 2);
+  expect(tap.uplinkEnds()).toEqual([1012, null]);
 });

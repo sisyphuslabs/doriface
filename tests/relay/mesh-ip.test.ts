@@ -55,6 +55,18 @@ function expectNoRateLimit(hosts: Mesh, from: Mark): void {
   expect(closesSince(hosts, from).filter((code) => code === RATE_LIMITED)).toEqual([]);
 }
 
+const uplinkEndsOf = (hosts: Mesh, name: string): readonly (number | null)[] =>
+  hosts.host(name).tap?.uplinkEnds() ?? [];
+
+/**
+ * Each named host's uplink ended exactly once since `from` (its uplink end counts per name): the restart's own
+ * disconnect, by close frame or bare end alike. None kept a stale uplink through the restart, none reconnected twice.
+ */
+function expectOneDisconnectEach(hosts: Mesh, names: readonly string[], from: readonly number[]): void {
+  const ends = names.map((name, index) => [name, uplinkEndsOf(hosts, name).slice(from[index] ?? 0)] as const);
+  expect(ends.map(([name, since]) => [name, since.length])).toEqual(names.map((name) => [name, 1]));
+}
+
 /** Every named host's live dial budget is unhalved (`budget.halvedUntil` null): the full 12 dials per 60 s (8.2). */
 async function expectFullBudgets(hosts: Mesh, names: readonly string[]): Promise<void> {
   const halved = await Promise.all(names.map(async (name) => [name, (await statusOf(hosts.host(name))).halvedUntil]));
@@ -137,12 +149,14 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
       const relay = hosts.relay;
       if (relay === undefined) throw new Error("E-IP needs the local relay");
       const from = markOf(hosts);
+      const uplinksFrom = REMAINING.map((name) => uplinkEndsOf(hosts, name).length);
       const stopped = performance.now();
       await relay.restart();
       console.log(
         `E-IP restart: the relay answered ${Math.round(performance.now() - stopped)} ms after its stop began`,
       );
       await timeRecovery("E-IP restart", () => untilConnected(hosts, REMAINING, RECOVER_MS, from));
+      expectOneDisconnectEach(hosts, REMAINING, uplinksFrom);
       expectNoRateLimit(hosts, from);
       await expectFullBudgets(hosts, REMAINING);
     },
