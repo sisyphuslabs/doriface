@@ -14,7 +14,7 @@ export default defineConfig({
       strategies: "injectManifest",
       srcDir: "src",
       filename: "sw.ts",
-      includeAssets: ["icon.svg", "apple-touch-icon.png"],
+      includeAssets: ["icon.svg", "favicon.svg", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png"],
       manifest: {
         name: "doriface",
         short_name: "doriface",
