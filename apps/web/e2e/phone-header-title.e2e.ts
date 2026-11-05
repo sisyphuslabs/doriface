@@ -33,15 +33,15 @@ function startNamed(name: string, title: string): string {
   return String(Reflect.get(JSON.parse(out) as object, "address"));
 }
 
-/** How many characters of the heading are laid out wholly inside its box, less one where an ellipsis covers the last. */
+/** How many characters of the title the heading shows, laid out wholly inside its box (an ellipsis is not one). */
 const shownCharacters = (page: Page) =>
   page
     .getByRole("banner")
     .getByRole("heading", { level: 1 })
     .evaluate((heading) => {
       const box = heading.getBoundingClientRect();
-      const text = heading.firstChild;
-      if (text === null || text.nodeType !== Node.TEXT_NODE) return 0;
+      const text = heading.querySelector("[data-title-lines]")?.firstChild;
+      if (text === null || text === undefined || text.nodeType !== Node.TEXT_NODE) return 0;
       const characters = [...new Intl.Segmenter().segment(text.textContent ?? "")];
       const range = document.createRange();
       let inside = 0;
@@ -50,11 +50,10 @@ const shownCharacters = (page: Page) =>
         range.setEnd(text, index + segment.length);
         const rect = range.getBoundingClientRect();
         const within = rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5;
-        if (within && rect.top >= box.top - 0.5 && rect.bottom <= box.bottom + 0.5 && segment.trim() !== "")
-          inside += 1;
+        const shown = segment.trim() !== "" && segment !== "\u2026";
+        if (within && rect.top >= box.top - 0.5 && rect.bottom <= box.bottom + 0.5 && shown) inside += 1;
       }
-      const cut = heading.scrollWidth > heading.clientWidth + 1 || heading.scrollHeight > heading.clientHeight + 1;
-      return cut ? inside - 1 : inside;
+      return inside;
     });
 
 for (const [script, title] of Object.entries(TITLES)) {
@@ -66,8 +65,8 @@ for (const [script, title] of Object.entries(TITLES)) {
       await page.goto("/");
       await page.getByRole("region", { name: "Agents" }).getByRole("button").filter({ hasText: title }).click();
       const bar = page.getByRole("banner");
-      const heading = bar.getByRole("heading", { level: 1 });
-      await expect(heading).toHaveText(title, { timeout: 15_000 });
+      const heading = bar.getByRole("heading", { level: 1, name: title });
+      await expect(heading).toBeVisible({ timeout: 15_000 });
       await expect(heading).toHaveAttribute("title", title);
       await expect(bar.getByText("Needs you")).toBeAttached();
 
