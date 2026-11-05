@@ -1,10 +1,10 @@
 import { CloseCode, generateX25519, prologueFor, rawStaticKey, SessionKind } from "@doriface/crypto";
-import { type AttackerState, decryptsUnder, sameSlotDecoys, v12Psk } from "@doriface/crypto/testing";
+import { type AttackerState, decryptsUnder, offlineOracle, sameSlotDecoys, v12Psk } from "@doriface/crypto/testing";
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { codeOf, pairingHost, runSession } from "../testing/pairing-harness.ts";
 
-/** The S1 search runs 1026 handshakes; a loaded host can take longer than bun's 5 s default. */
+/** Each case starts a real pairing session on the host; a heavily loaded machine can stretch that past bun's 5 s default. */
 setDefaultTimeout(30_000);
 
 const host = pairingHost();
@@ -32,9 +32,16 @@ describe("the C1 offline attack against a real host", () => {
       ephemeralSecret,
       prologue: prologueFor(host.deps.identity.hostId, SessionKind.PairCode, flight1.subarray(1, 49)),
     };
-    const candidates = [host.offer.code, wrongGuess, ...sameSlotDecoys(host.offer.code, 1024)];
-    const tried = await Promise.all(candidates.map((c) => decryptsUnder(state, v12Psk(c), answer.subarray(32))));
-    expect(tried.filter(Boolean)).toHaveLength(0);
+    // The S1 search as the crypto suite runs it (#427): the psk-independent Diffie-Hellmans once, then only the symmetric
+    // steps per candidate. A full handshake replay per candidate redoes four X25519s each, ~15x the CPU, all on one
+    // thread, so under load the case waited out its timeout in the run queue. The two candidates that matter are
+    // replayed in full too, so this oracle answers for this host's real handshake.
+    const decrypts = await offlineOracle(state, answer.subarray(32));
+    const replayed = [host.offer.code, wrongGuess];
+    const full = await Promise.all(replayed.map((c) => decryptsUnder(state, v12Psk(c), answer.subarray(32))));
+    expect(replayed.map((c) => decrypts(v12Psk(c)))).toEqual(full);
+    const candidates = [...replayed, ...sameSlotDecoys(host.offer.code, 1024)];
+    expect(candidates.filter((c) => decrypts(v12Psk(c)))).toEqual([]);
     expect(host.pairing.read()?.codeAttempts).toBe(1);
   });
 

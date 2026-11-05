@@ -1,5 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import type { Agent, AgentStatus, Space } from "@doriface/ui";
+import { type GitFactsOf, shownGit } from "./git-facts.ts";
 import { TITLE_LABEL } from "./session-actions.ts";
 
 const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
@@ -131,17 +132,25 @@ const remoteRank = (machine: string | undefined): number => (machine === undefin
 export const byName = new Intl.Collator(undefined, { numeric: true });
 
 /** One space per machine and name: this machine's first, then each machine's in name order. */
-export function toSpaces(terminals: readonly Terminal[]): Space[] {
+export function toSpaces(terminals: readonly Terminal[], gitOf?: GitFactsOf): Space[] {
   const groups = new Map<
     string,
-    { name: string; dir: string | undefined; machine: string | undefined; statuses: Set<AgentStatus> }
+    { name: string; machine: string | undefined; dir: string; labeled: boolean; statuses: Set<AgentStatus> }
   >();
   for (const terminal of terminals) {
     if (terminal.state !== "live") continue;
     const machine = machineOf(terminal.address);
     const key = spaceId(terminal);
-    const dir = terminal.labels["space"] === undefined ? spaceDir(terminal) : undefined;
-    const group = groups.get(key) ?? { name: spaceName(terminal), dir, machine, statuses: new Set<AgentStatus>() };
+    // A space's directory is its first tab's, the one its name comes from when no label names it.
+    const dir = spaceDir(terminal);
+    const labeled = terminal.labels["space"] !== undefined;
+    const group = groups.get(key) ?? {
+      name: spaceName(terminal),
+      machine,
+      dir,
+      labeled,
+      statuses: new Set<AgentStatus>(),
+    };
     group.statuses.add(agentStatus(terminal));
     groups.set(key, group);
   }
@@ -154,10 +163,12 @@ export function toSpaces(terminals: readonly Terminal[]): Space[] {
     const twin = ordered.some(
       ([other, peer]) => other !== id && peer.machine === group.machine && peer.name === group.name,
     );
-    const name = twin && group.dir !== undefined ? `${group.name} · ${parentName(group.dir)}` : group.name;
+    const name = twin && !group.labeled ? `${group.name} · ${parentName(group.dir)}` : group.name;
     const space: Space = { id, name, tabs };
     if (group.machine !== undefined) Object.assign(space, { machine: group.machine });
     if (attention !== undefined) Object.assign(space, { attention });
+    const git = shownGit(gitOf?.(group.machine, group.dir));
+    if (git !== undefined) Object.assign(space, { git });
     return space;
   });
 }

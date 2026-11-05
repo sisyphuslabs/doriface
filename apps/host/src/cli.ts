@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+import { PRIVATE_STATE_REFUSED_EXIT_CODE } from "./state/private-state-refused.ts";
+import { PrivateStateRefused } from "./state/private-state-refused.ts";
+import { homedir } from "node:os";
+import { delimiter, dirname } from "node:path";
 import { parseArgs } from "node:util";
 import { DEFAULT_RELAY_URL } from "@doriface/crypto";
 import { assertValidToken, generateToken } from "./auth.ts";
@@ -8,6 +12,7 @@ import { FINGERPRINT_USAGE, fingerprintCommand } from "./commands/fingerprint.ts
 import { MESH_JOIN_USAGE, meshJoinCommand } from "./commands/mesh-join.ts";
 import { MESH_USAGE, meshCommand } from "./commands/mesh.ts";
 import { PAIR_USAGE, pairCommand } from "./commands/pair.ts";
+import { HcInstallError, installHc } from "./hc-install.ts";
 import { HOST_VERSION, startHost } from "./host.ts";
 import { assertListenAllowed, parseListen } from "./listen.ts";
 import { asStartupError, STARTUP_EXIT_CODES, StartupError, startupErrorLine } from "./startup-error.ts";
@@ -23,6 +28,7 @@ const USAGE = `usage: doriface-host [options]
 
   --listen <host:port>  where to listen (default 127.0.0.1:7766; loopback only)
   --hc <path>           the herdr-core binary (default hc)
+  --install-hc          install (or update) herdr-core into ~/.local/bin from its checksummed release, then exit
   --session <name>      the hc session to reach (hc connect --session)
   --token <token>       the client token (default $DORIFACE_HOST_TOKEN, else 32 random bytes)
   --print-token         print the token on stdout once listening
@@ -82,6 +88,26 @@ function pushOrigin(value: string): string {
   return new URL(value).origin;
 }
 
+async function installHerdrCore(): Promise<void> {
+  const env = process.env;
+  const installing = installHc({ home: homedir(), env, onPhase: (phase) => log(`installing herdr-core: ${phase}`) });
+  // A failed install is no refused command line: its cause, never the usage.
+  const installed = await installing.catch((error: unknown) => {
+    if (!(error instanceof HcInstallError)) throw error;
+    process.stderr.write(`doriface-host --install-hc: ${error.message}\n`);
+    return undefined;
+  });
+  if (installed === undefined) {
+    process.exitCode = 1;
+    return;
+  }
+  out(`herdr-core ${installed.version} ${installed.action} at ${installed.path}\n`);
+  const dir = dirname(installed.path);
+  if (!(env["PATH"] ?? "").split(delimiter).includes(dir)) {
+    out(`Add ${dir} to your PATH, or pass --hc ${installed.path}.\n`);
+  }
+}
+
 async function serve(args: readonly string[]): Promise<void> {
   const { values } = parseArgs({
     args: [...args],
@@ -99,6 +125,7 @@ async function serve(args: readonly string[]): Promise<void> {
       relay: { type: "string", default: DEFAULT_RELAY_URL },
       "no-relay": { type: "boolean", default: false },
       "push-test-origin": { type: "string", multiple: true },
+      "install-hc": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -106,6 +133,7 @@ async function serve(args: readonly string[]): Promise<void> {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
+  if (values["install-hc"]) return installHerdrCore();
   if (!URL.canParse(values.relay)) throw new Error(`--relay wants a URL, got ${JSON.stringify(values.relay)}`);
   const given = values.token ?? process.env["DORIFACE_HOST_TOKEN"] ?? "";
   const token = given === "" ? generateToken() : assertValidToken(given);
@@ -153,8 +181,17 @@ async function serve(args: readonly string[]): Promise<void> {
 
 main(Bun.argv.slice(2)).catch((error: unknown) => {
   if (error instanceof StartupError) {
-    process.stderr.write(`doriface-host: ${error.message}\n${startupErrorLine(error)}\n`);
+    const hint =
+      error.code === "hc-binary-missing" || error.code === "hc-version-failed"
+        ? "doriface-host: `doriface-host --install-hc` installs herdr-core from its checksummed release\n"
+        : "";
+    process.stderr.write(`doriface-host: ${error.message}\n${hint}${startupErrorLine(error)}\n`);
     process.exit(STARTUP_EXIT_CODES[error.code]);
+  }
+  if (error instanceof PrivateStateRefused) {
+    // The command line was fine; the state it names is not private. The fix is in the message, not the usage.
+    process.stderr.write(`doriface-host: ${error.message}\n`);
+    process.exit(PRIVATE_STATE_REFUSED_EXIT_CODE);
   }
   const usages: Readonly<Record<string, string>> = {
     pair: PAIR_USAGE,

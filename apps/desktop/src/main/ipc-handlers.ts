@@ -2,13 +2,27 @@ import { allowedExternal } from "../config/external.ts";
 import { terminalLinkTarget } from "../config/terminal-link.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
-import type { LocalHostEndpoint, LocalHostStartFailed, UpdateReady } from "../shared/bridge.ts";
+import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
+import {
+  Channel,
+  type DesktopNotice,
+  type HcInstallAnswer,
+  isDesktopNotice,
+  type LocalHostEndpoint,
+  type LocalHostStartFailed,
+  type UpdateReady,
+} from "../shared/bridge.ts";
 import { LocalHostStartError } from "./local-host.ts";
 import { SHELL_MENU_ACTIONS } from "./shell-menu.ts";
 
 /** The part of an IPC event the gate reads; `senderFrame` is null once the frame is gone. */
 export interface IpcSender {
   readonly senderFrame: { readonly url: string } | null;
+}
+
+/** A sender the main process can answer on its own channel as well, as Install herdr-core's progress does. */
+export interface IpcReplySender extends IpcSender {
+  readonly sender: { send(channel: string, ...args: unknown[]): void };
 }
 
 export interface IpcDeps {
@@ -24,6 +38,10 @@ export interface IpcDeps {
   readonly takeUpdate: () => UpdateReady | null;
   /** Quits and installs the staged update; false when none is staged. */
   readonly installUpdate: () => boolean;
+  /** Installs herdr-core for this user and keeps it as the hc later starts use; throws HcInstallError with why not. */
+  readonly installHc: (onPhase: (phase: string) => void) => Promise<HcInstalled>;
+  readonly noticesSupported: () => boolean;
+  readonly showNotice: (notice: DesktopNotice) => void;
 }
 
 export interface IpcHandlers {
@@ -44,6 +62,11 @@ export interface IpcHandlers {
   takeUpdate(event: IpcSender): UpdateReady | null;
   /** Restart to update: false when no update is staged. */
   installUpdate(event: IpcSender): Promise<boolean>;
+  /** Install herdr-core: each phase is sent to the page as it starts; a failure is answered as a value. */
+  installHc(event: IpcReplySender): Promise<HcInstallAnswer>;
+  noticesSupported(event: IpcSender): Promise<boolean>;
+  /** Shows a native notification; only a known kind and a terminal address are taken, never text. */
+  showNotice(event: IpcSender, candidate: unknown): Promise<boolean>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -122,6 +145,26 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async installUpdate(event) {
       assertAppFrame(event, deps.origin);
       return deps.installUpdate();
+    },
+    async installHc(event) {
+      assertAppFrame(event, deps.origin);
+      try {
+        const installed = await deps.installHc((phase) => event.sender.send(Channel.hcInstallPhase, phase));
+        return { installed: { version: installed.version, path: installed.path } };
+      } catch (error) {
+        if (error instanceof HcInstallError) return { failed: { phase: error.phase, message: error.message } };
+        throw error;
+      }
+    },
+    async noticesSupported(event) {
+      assertAppFrame(event, deps.origin);
+      return deps.noticesSupported();
+    },
+    async showNotice(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (!isDesktopNotice(candidate)) return false;
+      deps.showNotice({ kind: candidate.kind, terminal: candidate.terminal });
+      return true;
     },
   };
 }

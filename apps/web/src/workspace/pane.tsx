@@ -3,7 +3,7 @@ import { cn, IconButton } from "@doriface/ui";
 import { Columns2, Maximize2, Minimize2, Rows2, X } from "lucide-react";
 import type { Axis } from "@doriface/protocol/layout";
 import { useActionKeys } from "../keys/use-action-keys.ts";
-import type { ReactNode } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
@@ -32,6 +32,8 @@ export interface PaneProps {
   readonly onPort: (port: TerminalPort | null) => void;
   /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
   readonly dock?: ReactNode;
+  /** Starts dragging this pane by its header to another place in the tab; absent where the pane cannot move. */
+  readonly onGrab?: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
 }
 
 /** herdr-app's pane header buttons, each with its shortcut in the tooltip. */
@@ -102,6 +104,7 @@ export function Pane(props: PaneProps) {
     onSplit,
     onZoom,
     onClose,
+    onGrab,
   } = props;
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
@@ -118,9 +121,12 @@ export function Pane(props: PaneProps) {
     >
       {split ? (
         <header
+          onPointerDown={onGrab}
+          data-pane-grab={onGrab === undefined ? undefined : ""}
           className={cn(
             "flex h-7 shrink-0 items-center gap-1 border-b border-border pr-0.5 pl-2.5 text-xs transition-colors duration-(--duration-micro)",
             focused ? "bg-raised text-foreground" : "text-muted-foreground",
+            onGrab !== undefined && "cursor-grab select-none",
           )}
         >
           <h2 title={title} className="min-w-0 truncate">

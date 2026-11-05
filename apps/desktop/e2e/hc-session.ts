@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /** A scratch hc session (own core, state and socket) so the launch test never touches a real one. */
-export function scratchHcSession(): { readonly env: Record<string, string>; dispose(): Promise<void> } {
-  const hc = process.env["HC_BIN"];
+export function scratchHcSession(hc = process.env["HC_BIN"]): {
+  readonly env: Record<string, string>;
+  dispose(): Promise<void>;
+} {
   if (hc === undefined || hc === "") throw new Error("the launch test needs HC_BIN pointing at hc 0.1.17");
   const dir = mkdtempSync(join(tmpdir(), "dd-e2e-"));
   const name = `doriface-desktop-e2e-${process.pid}`;

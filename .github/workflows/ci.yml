@@ -226,6 +226,44 @@ jobs:
           DEBUG: pw:browser
         run: xvfb-run --auto-servernum bun run test:e2e
 
+  windows-private-state:
+    # Host key custody on Windows (#406): ACLs, not POSIX mode bits. Both supported Windows architectures run the
+    # real-ACL suite and the compiled host, so bun:ffi is proven in the packaged binary too.
+    name: Windows private state (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, target: win-x64 }
+          - { arch: arm64, runner: windows-11-arm, target: win-arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Real-ACL suite (every case must run; a skip fails the job)
+        shell: bash
+        run: |
+          bun test apps/host/src/state/win32 2>&1 | tee win32.log
+          grep -E '^ +0 fail' win32.log
+          ! grep -E '^ +[1-9][0-9]* skip' win32.log
+          grep -E '^\(pass\) .*W[0-9]+ ' win32.log
+      - name: The state units on Windows
+        run: bun test apps/host/src/state/host-keys.test.ts apps/host/src/state/known-hosts.test.ts
+      - name: Compiled host keeps its keys across two starts
+        shell: bash
+        run: |
+          bun run --cwd apps/desktop build:host ${{ matrix.target }}
+          host="apps/desktop/dist/host/${{ matrix.target }}/doriface-host.exe"
+          state="$USERPROFILE/.doriface-406-state"  # under the profile: $RUNNER_TEMP sits on runner paths other accounts may re-permission, which the namespace rule refuses
+          first=$("$host" fingerprint --state-dir "$state")
+          second=$("$host" fingerprint --state-dir "$state")
+          echo "$first"
+          test -n "$first" && test "$first" = "$second"
+
   ghostty-wasm:
     name: Ghostty wasm provenance
     runs-on: ubuntu-latest

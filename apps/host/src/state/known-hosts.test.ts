@@ -1,8 +1,9 @@
 import { base64urlEncode, generateHostIdentity, generateX25519 } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EXPOSED_REFUSAL, exposeToOthers, isOwnerOnly } from "../testing/private-file.ts";
 import { KnownHosts, loadDeviceKey } from "./known-hosts.ts";
 
 let dir: string;
@@ -14,14 +15,14 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 describe("this machine's device key", () => {
   test("is generated once, kept owner-only, and loads the same afterwards", () => {
     const first = loadDeviceKey(dir);
-    expect(statSync(join(dir, "device-key.json")).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnly(join(dir, "device-key.json"))).toBe(true);
     expect(loadDeviceKey(dir)).toEqual(first);
   });
 
   test("a key file others can read is refused, not used", () => {
     loadDeviceKey(dir);
-    chmodSync(join(dir, "device-key.json"), 0o644);
-    expect(() => loadDeviceKey(dir)).toThrow("readable by other users");
+    exposeToOthers(join(dir, "device-key.json"), "644");
+    expect(() => loadDeviceKey(dir)).toThrow(EXPOSED_REFUSAL);
   });
 });
 
@@ -33,7 +34,7 @@ describe("KnownHosts", () => {
     const reloaded = new KnownHosts(dir);
     expect(reloaded.get(host.hostId)).toEqual(host);
     expect(reloaded.get("b".repeat(26))).toBeUndefined();
-    expect(statSync(join(dir, "known-hosts.json")).mode & 0o777).toBe(0o600);
+    expect(isOwnerOnly(join(dir, "known-hosts.json"))).toBe(true);
   });
 
   test("pairing the same host again replaces its record", () => {

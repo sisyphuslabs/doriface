@@ -27,7 +27,7 @@ export interface HcSession {
   readonly env: Readonly<Record<string, string | undefined>>;
   /** Spawns `hc connect --session <name>` directly, with its stdout fed to `reader`. */
   connect(): DirectConnection;
-  /** Stops this session's core and deletes its state; `stopLeftoverCores` removes the rest of its dir. */
+  /** Stops this session's core and removes its dir; `stopLeftoverCores` still checks it for a core started again. */
   dispose(): Promise<void>;
 }
 
@@ -36,32 +36,6 @@ export interface DirectConnection {
   readonly exited: Promise<number>;
   write(bytes: Uint8Array): Promise<void>;
   end(): void;
-}
-
-function connectTo(hc: string, name: string, env: HcSession["env"]): DirectConnection {
-  const proc = Bun.spawn([hc, "connect", "--session", name], {
-    env,
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "inherit",
-  });
-  const reader = new ByteReader();
-  const pump = async (source: ReadableStream<Uint8Array>): Promise<void> => {
-    for await (const chunk of source) reader.push(chunk);
-    reader.end();
-  };
-  void pump(proc.stdout);
-  return {
-    reader,
-    exited: proc.exited,
-    async write(bytes) {
-      proc.stdin.write(bytes);
-      await proc.stdin.flush();
-    },
-    end() {
-      void proc.stdin.end();
-    },
-  };
 }
 
 async function stopCore(session: HcSession): Promise<void> {
@@ -138,11 +112,36 @@ export function createHcSession(prefix: string): HcSession {
     hc,
     name,
     env,
-    connect: () => connectTo(hc, name, env),
+    connect: () => {
+      const proc = Bun.spawn([hc, "connect", "--session", name], {
+        env,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "inherit",
+      });
+      const reader = new ByteReader();
+      const pump = async (source: ReadableStream<Uint8Array>): Promise<void> => {
+        for await (const chunk of source) reader.push(chunk);
+        reader.end();
+      };
+      void pump(proc.stdout);
+      return {
+        reader,
+        exited: proc.exited,
+        async write(bytes) {
+          proc.stdin.write(bytes);
+          await proc.stdin.flush();
+        },
+        end() {
+          void proc.stdin.end();
+        },
+      };
+    },
     dispose: async () => {
       await stopCore(session);
-      // `dir` stays until `stopLeftoverCores`: a core started again after this one keeps its socket there.
-      for (const part of ["state", "run"]) rmSync(join(dir, part), { recursive: true, force: true });
+      // A core started again after this one (a dialer reconnecting) makes the dir anew; the session stays registered,
+      // so `stopLeftoverCores` still finds that core, stops it and removes the dir again.
+      rmSync(dir, { recursive: true, force: true });
     },
   };
   scratches.add({ session, dir, socket });

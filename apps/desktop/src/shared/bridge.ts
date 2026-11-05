@@ -24,12 +24,45 @@ export const Channel = {
   takeUpdate: "doriface:take-update",
   /** Renderer to main: quit and install the staged update (Restart to update). */
   installUpdate: "doriface:install-update",
+  /** Renderer to main: download, verify and install herdr-core for this user (Install herdr-core). */
+  installHc: "doriface:install-hc",
+  /** Main to renderer: the phase an Install herdr-core has reached, e.g. `download`. */
+  hcInstallPhase: "doriface:hc-install-phase",
+  /** Renderer to main: whether this system can show native notifications. */
+  noticesSupported: "doriface:notices-supported",
+  /** Renderer to main: show one native notification about an agent (a kind and its terminal, never any text). */
+  showNotice: "doriface:show-notice",
+  /** Main to renderer: a notification was clicked; carries its terminal address, or null for a test. */
+  noticeClicked: "doriface:notice-clicked",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
 export const VERSION_ARG = "--doriface-app-version=";
 
 export type DesktopPlatform = "darwin" | "linux" | "win32";
+
+/** What a native notification says happened, as the web app's notices name it; `test` comes from Send test. */
+export const NOTICE_KINDS = ["input", "permission", "done", "error", "test"] as const;
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
+
+/** One native notification: the main process picks its text by `kind`, so the page cannot put words in it. */
+export interface DesktopNotice {
+  readonly kind: NoticeKind;
+  /** The terminal it is about (`t7`, `machine/t7`), opened when it is clicked; null for a test. */
+  readonly terminal: string | null;
+}
+
+const MAX_TERMINAL = 160;
+
+export function isDesktopNotice(value: unknown): value is DesktopNotice {
+  if (typeof value !== "object" || value === null) return false;
+  const kind: unknown = Reflect.get(value, "kind");
+  const terminal: unknown = Reflect.get(value, "terminal");
+  return (
+    NOTICE_KINDS.some((known) => known === kind) &&
+    (terminal === null || (typeof terminal === "string" && terminal !== "" && terminal.length <= MAX_TERMINAL))
+  );
+}
 
 export interface LocalHostEndpoint {
   /** The loopback gateway, e.g. `ws://127.0.0.1:52011/v1/hc`. */
@@ -48,6 +81,8 @@ export interface LocalHostFailure {
   readonly message: string;
   readonly path?: string;
   readonly address?: string;
+  /** For `hc-version-failed`: the version of an hc older than doriface-host supports. */
+  readonly version?: string;
   /** For `hc-binary-missing`: the folders searched for hc after PATH, on this platform. */
   readonly searched?: readonly string[];
   /** The host's own output, for a Details disclosure; never its usage text. */
@@ -61,6 +96,21 @@ export interface UpdateReady {
 
 export const isUpdateReady = (value: unknown): value is UpdateReady =>
   typeof value === "object" && value !== null && typeof Reflect.get(value, "version") === "string";
+
+/** What Install herdr-core answers: the installed version and binary, or why it failed (as a value, like a start). */
+export type HcInstallAnswer =
+  | { readonly installed: { readonly version: string; readonly path: string } }
+  | { readonly failed: { readonly phase: string; readonly message: string } };
+
+const strings = (part: unknown, keys: readonly string[]): boolean =>
+  typeof part === "object" && part !== null && keys.every((key) => typeof Reflect.get(part, key) === "string");
+
+export function isHcInstallAnswer(value: unknown): value is HcInstallAnswer {
+  if (typeof value !== "object" || value === null) return false;
+  const installed: unknown = Reflect.get(value, "installed");
+  const failed: unknown = Reflect.get(value, "failed");
+  return strings(installed, ["version", "path"]) || strings(failed, ["phase", "message"]);
+}
 
 /** A failed start crosses IPC as a value: Electron hands the renderer only the message of a thrown error. */
 export interface LocalHostStartFailed {
@@ -91,10 +141,18 @@ export interface DorifaceBridge {
   setMenuKeys(keys: Readonly<Record<string, string>>): Promise<boolean>;
   /** Asks for herdr-core's hc in a file dialog and keeps it; resolves with its path, or null when cancelled. */
   chooseHc(): Promise<string | null>;
+  /** Downloads, verifies and installs herdr-core for this user, calling `onPhase` as it goes; later starts use it. */
+  installHc(onPhase: (phase: string) => void): Promise<HcInstallAnswer>;
   /** Calls `listener` once an update is staged, at once when one already is. */
   onUpdateReady(listener: (update: UpdateReady) => void): void;
   /** Quits and installs the staged update; resolves false when none is staged. */
   installUpdate(): Promise<boolean>;
+  /** Whether this system shows native notifications at all (a Linux desktop may run no notification service). */
+  noticesSupported(): Promise<boolean>;
+  /** Shows a native notification; resolves false when the notice was refused. */
+  showNotice(notice: DesktopNotice): Promise<boolean>;
+  /** Calls `listener` with the terminal of each clicked notification (null for a test one). */
+  onNoticeClick(listener: (terminal: string | null) => void): void;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {
@@ -117,7 +175,8 @@ export function isLocalHostStartFailed(value: unknown): value is LocalHostStartF
     typeof Reflect.get(failure, "message") === "string" &&
     typeof Reflect.get(failure, "details") === "string" &&
     optionalString(failure, "path") &&
-    optionalString(failure, "address")
+    optionalString(failure, "address") &&
+    optionalString(failure, "version")
   );
 }
 

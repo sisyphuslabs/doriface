@@ -1,10 +1,11 @@
-// A stand-in relay for pairing captures: it never leaves the browser, so no capture touches a real relay.
+// A stand-in relay for pairing captures: it never leaves the browser, so no capture touches a real relay. It answers at
+// the production relay's address because a release build dials no other relay (#389).
 import { pairSlotStatement } from "@doriface/relay-client/wire";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import type { Page } from "@playwright/test";
 import { hostIdOf } from "../src/pair/fragment.ts";
 
-export const FAKE_RELAY = "wss://relay.invalid";
+export const FAKE_RELAY = "wss://relay-doriface.omo.dev";
 const b64url = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64url");
 const signSecret = new Uint8Array(32).map((_, index) => (index * 37 + 11) % 256);
 const signPub = ed25519.getPublicKey(signSecret);
@@ -37,10 +38,10 @@ function signedAnswer(url: string): Record<string, unknown> {
 
 /** Answers the code lookup with the fake host, and closes the pairing session with `closeCode` once it speaks. */
 export async function fakeRelay(page: Page, closeCode: number): Promise<void> {
-  await page.route("https://relay.invalid/v1/pair/*", (route) =>
+  await page.route("https://relay-doriface.omo.dev/v1/pair/*", (route) =>
     route.fulfill({ json: signedAnswer(route.request().url()) }),
   );
-  await page.routeWebSocket(/^wss:\/\/relay\.invalid\//, (ws) => {
+  await page.routeWebSocket(/^wss:\/\/relay-doriface\.omo\.dev\//, (ws) => {
     ws.onMessage(() => ws.close({ code: closeCode, reason: "refused" }));
   });
 }

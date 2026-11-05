@@ -97,22 +97,33 @@ Two shapes considered for the host (INFERRED): (A) pass-through, chosen; (B) hos
 
 ## 5. Latency (measured) and techniques
 
-Measured on 2026-11-03 with `apps/host/scripts/latency-bench.ts` (`relay --relay <url> --code <typed code>` for the relayed rows, `direct` for the last row): 200 sequential `terminal.list` round trips through the client SDK after 10 warm-up calls, each a full request and reply. Client and host ran on one machine (a home connection, on a host whose load average stayed above its core count), so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink (INFERRED from the topology in section 6).
+Every row is `apps/host/scripts/latency-bench.ts`, and every row's numbers come from one host, so rows are compared only within a table. Method, for every mode: 10 warm-up calls, timed and left out of the stats, then 200 sequential measured calls, each a full request and reply; nearest-rank percentiles (the value at rank ⌈p/100 · n⌉), which the bench refuses to report from fewer than 100 samples. `relay` and `direct` time `terminal.list` through the client SDK; `healthz` times HTTPS `GET /healthz` on one kept-alive connection (the warm-up absorbs the TLS handshake). Each run prints one JSON line naming its mode, target and host.
+
+Measured on 2026-11-05 on `agents-seoul-1` (Linux 6.8 x64, AMD EPYC 7763, 40 cores, a datacenter connection in Seoul; load average 155-166 during the runs, about four times its core count). Client and host ran on that one machine, so the production path crosses the Cloudflare edge twice: client to the Durable Object, and the Durable Object to the host's uplink (INFERRED from the topology in section 6). `direct` runs on a scratch hc core the bench starts and stops itself.
+
+| Path (command)                                                                                                           | p50     | p95     | p99     | min      |
+| ------------------------------------------------------------------------------------------------------------------------ | ------- | ------- | ------- | -------- |
+| client SDK → Noise IK → `relay-doriface.omo.dev` → doriface-host → hc, run 1 (`relay --relay <url> --code <typed code>`) | 87.8 ms | 118 ms  | 313 ms  | 73.4 ms  |
+| the same, run 2                                                                                                          | 83.3 ms | 115 ms  | 142 ms  | 73.1 ms  |
+| HTTPS `GET /healthz` to the same edge, the Worker alone (`healthz --relay <url>`)                                        | 46.9 ms | 93.1 ms | 113 ms  | 37.4 ms  |
+| client SDK → `hc connect` over stdio, no host, relay or encryption (`direct`)                                            | 6.42 ms | 28.9 ms | 43.4 ms | 0.163 ms |
+
+Measured on 2026-11-03 on another machine (a home connection, load average above its core count), with an earlier version of the bench that used the same method (10 warm-up calls, 200 sequential `terminal.list` calls through the client SDK), except that it took each percentile one rank high: p50, p95 and p99 are the 101st, 191st and 199th of 200 sorted samples, not the 100th, 190th and 198th. That run's `/healthz` row is not kept: its method and warm-up count were not recorded.
 
 | Path                                                                         | p50      | p95      | p99      | min      |
 | ---------------------------------------------------------------------------- | -------- | -------- | -------- | -------- |
 | client SDK → Noise IK → `relay-doriface.omo.dev` → doriface-host → hc, run 1 | 181 ms   | 329 ms   | 513 ms   | 136 ms   |
 | the same, run 2                                                              | 158 ms   | 327 ms   | 522 ms   | 145 ms   |
-| HTTPS `GET /healthz` to the same edge (the Worker alone, 50 calls)           | 76 ms    | 139 ms   | -        | 69 ms    |
 | client SDK → Noise IK → local relay (`wrangler dev`) → doriface-host → hc    | 0.67 ms  | 2.67 ms  | 4.88 ms  | 0.38 ms  |
 | client SDK → `hc connect` over stdio (no host, no relay, no encryption)      | 0.064 ms | 0.133 ms | 0.177 ms | 0.040 ms |
 
-p99 here is nearest-rank over 200 samples, so it is the second-largest sample: a weak statistic, reported for its order of magnitude.
+p99 over 200 samples is the third-largest sample (the second-largest in the 2026-11-03 table): a weak statistic, reported for its order of magnitude.
 
 What the numbers say:
 
-- Over the production relay, the network dominates. One edge round trip from this connection measured about 76 ms at p50; the relayed path being two of them, about 152 ms, is consistent with the measured 158-181 ms p50 (INFERRED). The p95 and p99 tails, 0.3 s and 0.5 s, are likely the edge's own spread, though the edge row has no p99 to show it (INFERRED).
-- At p50 the software adds well under a millisecond; its tails are larger, about 2.5 ms at p95 and 4.7 ms at p99 over the direct row, on a host loaded above its core count. On loopback the whole relayed stack (Noise IK, the relay's Durable Object under workerd, the host's uplink and `hc connect`) costs 0.6 ms per round trip at p50 over talking to `hc connect` directly, so about 0.3 ms per direction (INFERRED: the round-trip difference split evenly between the two directions). That misses the section 1 target of ~0.2 ms per direction by about 0.1 ms; the target stays as it was.
+- Over the production relay, the network dominates. From `agents-seoul-1` one edge round trip measured 47 ms at p50; the relayed path being two of them, about 94 ms, is consistent with the measured 83-88 ms p50 (INFERRED). The relayed p95 (115-118 ms) sits close to two edge legs as well; the run 1 p99 of 313 ms against run 2's 142 ms is the edge's or the loaded host's spread, not something the table can separate (INFERRED).
+- At p50 the software adds well under a millisecond. On the 2026-11-03 machine the whole relayed stack over loopback (Noise IK, the relay's Durable Object under workerd, the host's uplink and `hc connect`) cost 0.6 ms per round trip at p50 over talking to `hc connect` directly, so about 0.3 ms per direction (INFERRED: the round-trip difference split evenly between the two directions); its tails were larger, about 2.5 ms at p95 and 4.7 ms at p99. That misses the section 1 target of ~0.2 ms per direction by about 0.1 ms; the target stays as it was. The local relay row was not re-measured on 2026-11-05 (that needs the private relay checkout).
+- The `direct` row is about 100 times slower on `agents-seoul-1` than on the 2026-11-03 machine. The two are different hosts, and `agents-seoul-1` ran at about four times its core count, so this measures scheduling delay on that host, not a change in hc or the SDK (INFERRED).
 - A host and a client far apart pay their own two edge legs (INFERRED). The direct LAN path (section 4) skips the relay entirely and was not measured here.
 
 Seal cost per message, for scale: 1,742 ns per 64 B and 336 MiB/s on M4 for noble ChaCha20-Poly1305 (`https://raw.githubusercontent.com/paulmillr/noble-ciphers/main/README.md`, SOURCE).

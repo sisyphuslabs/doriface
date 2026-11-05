@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   Channel,
+  isHcInstallAnswer,
   isLocalHostEndpoint,
   isLocalHostStartFailed,
   isUpdateReady,
@@ -61,6 +62,19 @@ const bridge: DorifaceBridge = {
     const chosen: unknown = await ipcRenderer.invoke(Channel.chooseHc);
     return typeof chosen === "string" ? chosen : null;
   },
+  async installHc(onPhase) {
+    const phase = (_event: unknown, name: unknown): void => {
+      if (typeof name === "string") onPhase(name);
+    };
+    ipcRenderer.on(Channel.hcInstallPhase, phase);
+    try {
+      const answer: unknown = await ipcRenderer.invoke(Channel.installHc);
+      if (!isHcInstallAnswer(answer)) throw new Error("the main process returned no install answer");
+      return answer;
+    } finally {
+      ipcRenderer.removeListener(Channel.hcInstallPhase, phase);
+    }
+  },
   onUpdateReady(listener) {
     const take = async (): Promise<void> => {
       const staged: unknown = await ipcRenderer.invoke(Channel.takeUpdate);
@@ -72,6 +86,19 @@ const bridge: DorifaceBridge = {
   async installUpdate() {
     const installing: unknown = await ipcRenderer.invoke(Channel.installUpdate);
     return installing === true;
+  },
+  async noticesSupported() {
+    const supported: unknown = await ipcRenderer.invoke(Channel.noticesSupported);
+    return supported === true;
+  },
+  async showNotice(notice) {
+    const shown: unknown = await ipcRenderer.invoke(Channel.showNotice, notice);
+    return shown === true;
+  },
+  onNoticeClick(listener) {
+    ipcRenderer.on(Channel.noticeClicked, (_event, terminal: unknown) => {
+      if (terminal === null || typeof terminal === "string") listener(terminal);
+    });
   },
 };
 

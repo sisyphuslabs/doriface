@@ -48,6 +48,8 @@ const layout: Layout = {
   resizeFocused: () => false,
   equalize: () => true,
   toggleZoom: () => true,
+  move: () => Promise.resolve(false),
+  swap: () => true,
   moveTab: noop,
   restored: true,
   lastMove: null,

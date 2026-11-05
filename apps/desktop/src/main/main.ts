@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, nativeTheme, screen, session, shell } from "electron";
+import { installHc } from "@doriface/host/hc-install";
 import electronUpdater from "electron-updater";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ import { findHc, hostCommand, type HostContext, saveHc, savedHc, usualHcDirs } f
 import { registerIpc } from "./ipc.ts";
 import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
+import { noticesSupported, showNotice } from "./notice.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
@@ -63,14 +65,18 @@ function showWindow(path = "/"): BrowserWindow {
   return window;
 }
 
+/** Brings the one window forward (making it at `/` when there is none) and hands its page `value` once loaded. */
+function sendToPage(channel: string, value: string | null): void {
+  const window = showWindow();
+  const contents = window.webContents;
+  if (contents.isLoading()) contents.once("did-finish-load", () => contents.send(channel, value));
+  else contents.send(channel, value);
+}
+
 /** Shows an app path in the one window: an in-app navigation once its page has loaded, the first page otherwise. */
 function navigate(path: string): void {
-  const existing = liveWindow();
-  if (existing === undefined) return void showWindow(path);
-  showWindow();
-  const contents = existing.webContents;
-  if (contents.isLoading()) contents.once("did-finish-load", () => contents.send(Channel.navigate, path));
-  else contents.send(Channel.navigate, path);
+  if (liveWindow() === undefined) return void showWindow(path);
+  sendToPage(Channel.navigate, path);
 }
 
 const openSettings = (): void => navigate("/settings");
@@ -170,6 +176,15 @@ function ready(): void {
     },
     takeUpdate: () => updates?.ready ?? null,
     installUpdate: () => updates?.install() ?? false,
+    // Kept as the chosen hc, so a Retry starts the one just installed even where another hc comes first on PATH.
+    installHc: async (onPhase) => {
+      const installed = await installHc({ home: context.home, env: process.env, onPhase });
+      saveHc(savedFile("hc.json"), installed.path);
+      return installed;
+    },
+    noticesSupported,
+    // A click brings the window back (or makes it, on macOS with none left) and opens the pane in it.
+    showNotice: (notice) => showNotice(notice, (terminal) => sendToPage(Channel.noticeClicked, terminal)),
   });
   if (updates !== undefined) {
     updates.start();

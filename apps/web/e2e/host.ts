@@ -1,9 +1,18 @@
 // Starts doriface-host in loopback dev mode on a scratch hc session; stops the core and deletes its state on exit.
 // `bun e2e/host.ts layout` starts the layout spec's host instead: long names, titles and paths on another port.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { recordLeft, stopRunProcesses } from "@doriface/host/testing/run-cores";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_ENV, E2E_LAYOUT_PORT, E2E_PUSH_ORIGIN, E2E_TOKEN } from "./config.ts";
+import {
+  E2E_HOST_ENV,
+  E2E_HOST_PORT,
+  E2E_LAYOUT_ENV,
+  E2E_LAYOUT_LEFT,
+  E2E_LAYOUT_PORT,
+  E2E_PUSH_ORIGIN,
+  E2E_TOKEN,
+} from "./config.ts";
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
@@ -15,7 +24,8 @@ const port = layout ? E2E_LAYOUT_PORT : E2E_HOST_PORT;
 
 const hc = process.env["HC_BIN"] || Bun.which("hc");
 if (hc === null || hc === undefined || hc === "") throw new Error("set HC_BIN to an hc 0.1.17 binary");
-const dir = mkdtempSync(join(tmpdir(), "dw-"));
+// Resolved, since a process is seen holding resolved paths (macOS: /var and /tmp are links into /private).
+const dir = realpathSync(mkdtempSync(join(tmpdir(), "dw-")));
 const session = `web-e2e-${layout ? "layout-" : ""}${crypto.randomUUID().slice(0, 8)}`;
 const own = {
   HC_SESSION: session,
@@ -43,6 +53,7 @@ writeFileSync(
 // The pid lets the run's leftover check stop a host that outlived its worker. The main host's file is saved again with
 // `ready` once setup has finished: a worker waits for that, so the core it first sees already holds every seed (#226).
 const savedEnv = layout ? E2E_LAYOUT_ENV : E2E_HOST_ENV;
+if (layout) rmSync(E2E_LAYOUT_LEFT, { force: true });
 const saved = { hc, env: own, pid: process.pid };
 writeSavedEnv(savedEnv, saved);
 const host = Bun.spawn(
@@ -74,6 +85,18 @@ async function stopCore(): Promise<void> {
   await control.exited;
 }
 
+/**
+ * The layout host is a Playwright webServer, which Playwright stops after the run's teardown, so no hook sees it stop.
+ * Once it has stopped its cores, it stops whatever it left with the host tests' guard (#232): processes still running
+ * below it, and any hc process holding a file under its dir. It saves them, by pid and arguments only, for the
+ * teardown (leftover-hosts.ts), which stops this host first and fails the run on any (#251).
+ */
+async function stopLeftovers(): Promise<void> {
+  await recordLeft(dir);
+  const left = await stopRunProcesses({ mark: crypto.randomUUID(), dir });
+  writeFileSync(E2E_LAYOUT_LEFT, JSON.stringify(left.map(({ pid, command }) => ({ pid, command }))));
+}
+
 let stopping = false;
 let stopMachine: (() => Promise<void>) | undefined;
 async function shutdown(): Promise<void> {
@@ -83,6 +106,7 @@ async function shutdown(): Promise<void> {
   await host.exited;
   await stopCore();
   await stopMachine?.();
+  if (layout) await stopLeftovers();
   rmSync(savedEnv, { force: true });
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);
@@ -94,6 +118,7 @@ try {
     const seeds = LAYOUT_TERMINALS.map((terminal) => terminal.seed);
     await runSeeds(hc, env, join(dir, "work", LAYOUT_DIR), seeds);
     stopMachine = await addMachine(hc, env, join(dir, "machine"), true, LAYOUT_MACHINE_SPEC);
+    writeSavedEnv(E2E_LAYOUT_ENV, { ...saved, ready: true });
   } else {
     const capture = process.env["CAPTURE"] === "1";
     if (capture) await seed(hc, env, join(dir, "work"));
