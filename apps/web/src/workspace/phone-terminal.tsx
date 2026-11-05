@@ -81,7 +81,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
 
   return (
     // isolate: the keys float above the terminal (z-10) but stay under a dialog and its backdrop, which portal to the body.
-    <div className="relative isolate flex h-dvh min-h-0 flex-col bg-card">
+    <div className="relative isolate flex h-dvh min-h-0 flex-col bg-card pr-(--safe-right) pl-(--safe-left)">
       <PhoneHeader
         terminal={terminal}
         terminals={terminals}

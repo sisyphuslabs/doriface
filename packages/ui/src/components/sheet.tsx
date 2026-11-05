@@ -6,9 +6,9 @@ import { backdropClass, modalLayer, wrapAnywhere } from "./overlay.ts";
 
 const SIDE = {
   right:
-    "inset-y-0 right-0 w-[min(24rem,100%)] border-l data-starting-style:translate-x-full data-ending-style:translate-x-full",
+    "inset-y-0 right-0 w-[min(24rem,100%)] border-l pt-(--safe-top) pr-(--safe-right) pb-(--safe-bottom) data-starting-style:translate-x-full data-ending-style:translate-x-full",
   bottom:
-    "inset-x-0 bottom-0 max-h-[85dvh] rounded-t-xl border-t pb-[env(safe-area-inset-bottom)] data-starting-style:translate-y-full data-ending-style:translate-y-full",
+    "inset-x-0 bottom-0 max-h-[85dvh] rounded-t-xl border-t pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) data-starting-style:translate-y-full data-ending-style:translate-y-full",
 } as const;
 
 /** The title and a visible Done that closes the sheet; it is not dragged, so it draws no grabber. */

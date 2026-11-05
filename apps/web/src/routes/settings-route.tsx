@@ -53,7 +53,7 @@ export function SettingsRoute() {
     />
   );
   return (
-    <div className="flex h-dvh min-h-0 flex-col bg-background md:flex-row">
+    <div className="flex h-dvh min-h-0 flex-col bg-background pt-(--safe-top) pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) md:flex-row">
       <Tabs value={section} onValueChange={(value: SectionId) => setSection(value)} className="md:hidden">
         <div data-titlebar className="flex items-center gap-1 pt-3 pr-2 pb-1 pl-[var(--titlebar-inset-start,0.5rem)]">
           {back}
