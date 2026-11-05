@@ -41,6 +41,42 @@ export const cardScenarios: readonly Scenario[] = [
     expectNoise: { C: "C-key" },
   },
   {
+    id: "A9b",
+    title: "an admit of a new key carrying a current member's Noise key (a twin) is not type-valid (#90)",
+    records: [found("F", "A"), admit("aB", "A", "B", ["F"]), admit("aT", "A", "T", ["aB"], "B-key")],
+    expectMembers: ["A", "B"],
+    expectRevoked: [],
+    expectNoise: { B: "B-key" },
+  },
+  {
+    id: "A9c",
+    title: "a rekey onto another current member's Noise key is not type-valid (#90)",
+    records: [
+      found("F", "A"),
+      admit("aB", "A", "B", ["F"]),
+      admit("aC", "A", "C", ["aB"]),
+      rekey("rB", "B", ["aC"], "C-key"),
+    ],
+    expectMembers: ["A", "B", "C"],
+    expectRevoked: [],
+    expectNoise: { B: "B-key", C: "C-key" },
+  },
+  {
+    id: "A9d",
+    title:
+      "twins written in concurrent branches both pass type_ok; after B's revoke the view lists T with B's key, which hosts refuse (#90)",
+    records: [
+      found("F", "A"),
+      admit("aX", "A", "X", ["F"]),
+      admit("aB", "A", "B", ["aX"]),
+      admit("aT", "X", "T", ["aX"], "B-key"),
+      revoke("vB", "A", ["B"], ["aB", "aT"]),
+    ],
+    expectMembers: ["A", "X", "T"],
+    expectRevoked: ["B"],
+    expectNoise: { T: "B-key" },
+  },
+  {
     id: "A11",
     title: "a forged card re-binding an ex-member's identity to an attacker key is refused",
     records: [
