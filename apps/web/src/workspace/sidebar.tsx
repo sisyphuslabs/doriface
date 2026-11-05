@@ -1,11 +1,11 @@
 import type { Terminal } from "@doriface/protocol";
-import { IconButton, ScrollArea, SidebarFooter, SidebarFooterItem, cn } from "@doriface/ui";
+import { IconButton, SidebarFooter, SidebarFooterItem, cn } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { PanelLeftOpen, Plus, Search, Settings } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { usePendingUpdate } from "../update/update-store.ts";
-import { AgentLists } from "./agent-lists.tsx";
+import { SidebarLists } from "./agent-lists.tsx";
 import { DEFAULT_SIDEBAR_WIDTH } from "./layout.ts";
 import { useSidebarSize } from "./layout-store.ts";
 import { RovingLists } from "./roving-lists.tsx";
@@ -76,11 +76,9 @@ export function Sidebar({ terminals, active, onOpen, onPalette }: SidebarProps) 
           </>
         )}
       </div>
-      <ScrollArea slot="agents-list" className="flex-1">
-        <RovingLists>
-          <AgentLists terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
-        </RovingLists>
-      </ScrollArea>
+      <RovingLists className="flex min-h-0 flex-1 flex-col">
+        <SidebarLists terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
+      </RovingLists>
       <SidebarFooter rail={rail}>
         {rail ? (
           <SidebarFooterItem
@@ -92,16 +90,16 @@ export function Sidebar({ terminals, active, onOpen, onPalette }: SidebarProps) 
         ) : null}
         <SidebarFooterItem
           rail={rail}
-          icon={<Plus aria-hidden />}
-          label="Add machine"
-          onClick={machines.openAddMachine}
-        />
-        <SidebarFooterItem
-          rail={rail}
           icon={<Settings aria-hidden />}
           label="Settings"
           {...(update === null ? {} : { dot: "update ready" })}
           render={<Link to="/settings" />}
+        />
+        <SidebarFooterItem
+          rail={rail}
+          icon={<Plus aria-hidden />}
+          label="Add machine"
+          onClick={machines.openAddMachine}
         />
       </SidebarFooter>
       <SidebarEdge width={sidebarWidth} rail={rail} railWidth={railPx} onChange={setSize} onDragging={setDragging} />
