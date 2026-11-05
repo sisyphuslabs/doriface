@@ -37,6 +37,11 @@ test("the first live terminal shown alone is kept when a new tab opens, on this 
   expect(keepTransient(loose, "build-box/t1", true)).toBeNull();
 });
 
+test("a live terminal is shown alone only while the core has no layout; a layout whose tabs were all closed shows none (#354)", () => {
+  expect(buildTabs([here], [live]).map((tab) => tab.transient)).toEqual([true]);
+  expect(buildTabs([{ ...here, doc: { spaces: [] } }], [live])).toEqual([]);
+});
+
 test("closing the tab in view shows the last of the others, so the keyboard lands in a terminal that is left", () => {
   const [alone] = buildTabs([here], [live]);
   if (alone === undefined) throw new Error("no tab for the live terminal");
