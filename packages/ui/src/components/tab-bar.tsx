@@ -1,8 +1,8 @@
-import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, X } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
-import { ContextMenu, MenuItem, skipMenuHandler } from "./menu.tsx";
+import { ContextMenu, Menu, MenuItem, skipMenuHandler } from "./menu.tsx";
 import { StatusIndicator, type AgentStatus } from "./status.tsx";
 import { useTabDrag } from "./tab-drag.ts";
 import { DropCaret, DropIndicator, placement } from "./tab-drop.tsx";
@@ -12,17 +12,8 @@ export interface WorkspaceTab {
   readonly title: string;
   readonly icon?: ReactNode;
   readonly status?: AgentStatus;
-  /** The machine it runs on, for a tab that is not on this one: shown after the title and in its tooltip. */
-  readonly machine?: string;
-  /** The "Go to tab N" chord that selects this tab by position, as written on this platform: shown in the tooltip. */
-  readonly shortcut?: string;
   /** The id of the tab panel it shows (WAI-ARIA tabs: `aria-controls`). */
   readonly controls?: string;
-}
-
-function tooltipOf(tab: WorkspaceTab): string {
-  const named = tab.machine === undefined ? tab.title : `${tab.title} on ${tab.machine}`;
-  return tab.shortcut === undefined ? named : `${named} (${tab.shortcut})`;
 }
 
 /** A tab that moved, by any path (drag, its menu, a key); counted so moving it to the same place again is news. */
@@ -37,6 +28,10 @@ export interface TabBarProps {
   readonly onSelect?: (id: string) => void;
   readonly onClose?: (id: string) => void;
   readonly onNew?: () => void;
+  /** herdr-app's new menu: given, the strip's New tab button opens it (#466 item 7); else the button is `onNew`. */
+  readonly newMenu?: ReactNode;
+  /** Asks for a tab's name: a double-click on it, as herdr-app's strip, and Rename tab in its menu. */
+  readonly onRename?: (id: string) => void;
   /** Moves a tab so it ends at index `to` of `tabs`; without it tabs neither drag nor offer Move in their menu. */
   readonly onMove?: (id: string, to: number) => void;
   /** The New tab shortcut as key chips, from the app's live binding; none when it is unbound. */
@@ -51,13 +46,18 @@ export interface TabBarProps {
   readonly className?: string;
 }
 
-/** herdr-app's tab strip: raised pill for the active tab, status glyph instead of colour bars; tabs reorder by drag. */
+/**
+ * herdr-app's tab strip: raised pill for the active tab, which alone shows its close button; status glyph instead of
+ * colour bars, no tooltip; tabs reorder by drag, the wheel steps through them, and a tab's menu renames, adds or closes.
+ */
 export function TabBar({
   tabs,
   activeId,
   onSelect,
   onClose,
   onNew,
+  newMenu,
+  onRename,
   onMove,
   newTabKeys,
   moveKeys,
@@ -68,6 +68,10 @@ export function TabBar({
 }: TabBarProps) {
   const list = useRef<HTMLDivElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
+  // Whether the New tab menu closed on one of its items, rather than Escape or a click away, and what that item gave the
+  // keyboard to (a terminal being started takes it at once, type-ahead).
+  const chose = useRef(false);
+  const handedTo = useRef<HTMLElement | null>(null);
   // The tabs the strip drew before its last change of tabs: they carry data-arrived, so the DOM move a reorder makes
   // does not replay their arrival; a tab new to the list draws once without it and arrives.
   const ids = tabs.map((tab) => tab.id);
@@ -84,6 +88,14 @@ export function TabBar({
       item?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
     },
   });
+
+  // With more tabs than fit, the selected one (a new tab lands after it) scrolls into view; New tab no longer scrolls
+  // with the tabs to carry them along. Again when its title changes: a new tab's label settles after it arrives.
+  const activeTitle = tabs.find((tab) => tab.id === activeId)?.title;
+  useEffect(() => {
+    // The whole tab, with its close button, not only its label button.
+    buttons.current.get(activeId)?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId, key, activeTitle]);
 
   // Said once per move, as the strip stood then: a later title change or a tab opening or closing does not say it again.
   // The count's parity changes the text each time, so a second move to the same place is still read out.
@@ -103,7 +115,7 @@ export function TabBar({
     <div
       data-titlebar
       className={cn(
-        "flex h-(--tabbar-height) shrink-0 items-center gap-1 border-b border-border bg-chrome px-2.5",
+        "flex h-(--tabbar-height) shrink-0 items-center gap-[3px] border-b border-border bg-chrome px-2.5",
         className,
       )}
     >
@@ -115,7 +127,17 @@ export function TabBar({
         role="tablist"
         aria-label="Tabs"
         onClickCapture={onClickCapture}
-        className="relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
+        // As herdr-app's strip: a vertical wheel step selects the previous or next tab, wrapping at the ends as tab.next
+        // and tab.prev do (#466 item 8); sideways scrolls the strip.
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) < 1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+          const at = tabs.findIndex((tab) => tab.id === activeId);
+          if (at === -1) return;
+          const next = tabs[(at + (event.deltaY > 0 ? 1 : -1) + tabs.length) % tabs.length];
+          if (next !== undefined && next.id !== activeId) onSelect?.(next.id);
+        }}
+        // herdr-app's #tab-scroll: tabs alone scroll, with a scrollbar once they overflow, and gap(3) between them.
+        className="relative flex min-w-0 flex-1 items-center gap-[3px] overflow-x-auto overflow-y-hidden py-1"
       >
         {drag === null ? null : <DropIndicator drag={drag} />}
         {drag === null ? null : <DropCaret drag={drag} />}
@@ -138,10 +160,10 @@ export function TabBar({
               }}
               style={place.offset === 0 ? undefined : { translate: `${place.offset}px 0` }}
               className={cn(
-                "group relative motion-arrive flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pr-1 pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
+                "group relative motion-arrive flex h-[29px] shrink-0 items-center gap-[7px] rounded-[7px] border pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
                 active
-                  ? "border-border bg-raised text-foreground"
-                  : "border-transparent text-muted-foreground hover:bg-hover",
+                  ? "border-border bg-raised pr-1 text-foreground"
+                  : "border-transparent pr-2.5 text-muted-foreground hover:bg-hover",
                 lifted === tab.id && "border-border bg-raised shadow-overlay hover:bg-raised",
                 place.className,
               )}
@@ -155,31 +177,26 @@ export function TabBar({
                 role="tab"
                 aria-selected={active}
                 aria-controls={tab.controls}
-                title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
-                className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+                onDoubleClick={() => onRename?.(tab.id)}
+                className="flex min-w-0 items-center gap-[7px] rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
-                <span title={tooltipOf(tab)} className="truncate">
-                  {tab.title}
-                </span>
-                {tab.machine === undefined ? null : (
-                  <span title={tab.machine} className="max-w-24 shrink-0 truncate text-2xs text-muted-foreground">
-                    {tab.machine}
-                  </span>
+                <span className="max-w-[170px] truncate">{tab.title}</span>
+                {/* herdr-app draws nothing for an idle tab: a spinner while working, a dot when blocked or done. */}
+                {tab.status === undefined || tab.status === "idle" || tab.status === "unknown" ? null : (
+                  <StatusIndicator status={tab.status} className="size-3" />
                 )}
-                {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
               </button>
-              <IconButton
-                label={`Close ${tab.title}`}
-                icon={<X />}
-                data-tab-close
-                onClick={() => onClose?.(tab.id)}
-                className={cn(
-                  "size-5 [&_svg]:size-3",
-                  !active && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
-                )}
-              />
+              {active ? (
+                <IconButton
+                  label={`Close ${tab.title}`}
+                  icon={<X />}
+                  data-tab-close
+                  onClick={() => onClose?.(tab.id)}
+                  className="size-5 [&_svg]:size-3"
+                />
+              ) : null}
             </div>
           );
           if (onMove === undefined) return item;
@@ -211,16 +228,68 @@ export function TabBar({
               >
                 Move tab right
               </MenuItem>
+              {onRename === undefined ? null : (
+                <MenuItem icon={<Pencil />} onClick={() => onRename(tab.id)}>
+                  Rename tab…
+                </MenuItem>
+              )}
+              {onNew === undefined ? null : (
+                <MenuItem icon={<Plus />} onClick={onNew}>
+                  New tab
+                </MenuItem>
+              )}
+              {onClose === undefined ? null : (
+                <MenuItem icon={<X />} onClick={() => onClose(tab.id)}>
+                  Close tab
+                </MenuItem>
+              )}
             </ContextMenu>
           );
         })}
+      </div>
+      {/* Outside the scrolling tabs, as herdr-app's tab-new beside #tab-scroll: 22 tabs never push it away (item 5). */}
+      {newMenu === undefined ? (
         <IconButton
           label="New tab"
           {...(newTabKeys === undefined ? {} : { keys: newTabKeys })}
           icon={<Plus />}
           onClick={onNew}
         />
-      </div>
+      ) : (
+        <Menu
+          trigger={
+            <IconButton label="New tab" {...(newTabKeys === undefined ? {} : { keys: newTabKeys })} icon={<Plus />} />
+          }
+          className="w-[250px]"
+          onOpenChange={(open) => {
+            if (!open) return;
+            chose.current = false;
+            handedTo.current = null;
+          }}
+          // A choice starts a tab that takes the keyboard at once, so the page stays live (not modal) and, as the menu
+          // closes, focus goes where the choice put it rather than back to +, where the next keys typed would press it.
+          modal={false}
+          finalFocus={() => (chose.current ? (handedTo.current ?? false) : true)}
+        >
+          <div
+            className="contents"
+            onClickCapture={(event) => {
+              chose.current = true;
+              const popup = event.currentTarget;
+              const record = (focus: FocusEvent): void => {
+                if (focus.target instanceof HTMLElement && !popup.contains(focus.target))
+                  handedTo.current = focus.target;
+              };
+              document.addEventListener("focusin", record, true);
+              // Removed once the whole click has been dispatched (microtasks would run between its listeners, before the
+              // item's own handler focuses anything).
+              setTimeout(() => document.removeEventListener("focusin", record, true), 0);
+            }}
+          >
+            {newMenu}
+          </div>
+        </Menu>
+      )}
       <span role="status" aria-live="polite" className="sr-only">
         {said.text}
       </span>

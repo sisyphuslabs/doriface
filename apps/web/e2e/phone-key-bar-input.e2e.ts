@@ -15,7 +15,8 @@ test("ctrl latches for one key: ctrl then c interrupts a running command", async
   const terminal = await openPhoneTerminal(page);
   // bash (macOS /bin/sh) can continue a semicolon list after SIGINT; && depends on sleep succeeding on every shell.
   await page.keyboard.type("sleep 30 && echo slept-$((1+1))\r");
-  await expect(page.locator("header h1")).toHaveText("sleep");
+  // The header names the tab (#466); the session's actions name the program in the foreground.
+  await expect(page.getByRole("button", { name: "Session actions for sleep" })).toBeVisible();
   const ctrl = key(page, "Control");
   await ctrl.click();
   await expect(ctrl).toHaveAttribute("aria-pressed", "true");
@@ -140,7 +141,10 @@ test("Switch session lists the terminals and opens the one picked", async ({ pag
 
   await key(page, "Switch session").click();
   await page.getByRole("menuitem", { name: new RegExp(`keys-one-${firstAddress}`) }).click();
-  await expect(page.locator("header h1")).toHaveText(`keys-one-${firstAddress}`, { timeout: 15_000 });
+  // The header reads the tab (#466 ruling A); the session actions name the session shown.
+  await expect(
+    page.getByRole("banner").getByRole("button", { name: `Session actions for keys-one-${firstAddress}` }),
+  ).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("[data-terminal]")).toHaveAttribute("data-terminal", firstAddress);
   await expect(keysBar(page)).toBeVisible();
 });

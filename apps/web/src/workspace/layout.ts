@@ -1,3 +1,4 @@
+import { guardedLocalStorage } from "../storage/guarded.ts";
 /** Workspace layout choices that outlive a reload, kept beside the other local settings (doriface.appearance). */
 export interface Layout {
   readonly sidebar: boolean;
@@ -52,7 +53,7 @@ export function clampShare(share: number, total: number): number {
 const isShare = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0 && value < 1;
 
-export function loadLayout(storage: Pick<Storage, "getItem"> = localStorage): Layout {
+export function loadLayout(storage: Pick<Storage, "getItem"> = guardedLocalStorage()): Layout {
   let parsed: unknown;
   try {
     parsed = JSON.parse(storage.getItem(LAYOUT_KEY) ?? "null");

@@ -30,6 +30,8 @@ doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON
 
 This table describes `dev`. The latest release is [v0.1.1](https://github.com/sisyphuslabs/doriface/releases/tag/v0.1.1).
 
+Browsers: Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older browser gets an "Update your browser" screen naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
+
 ## How it fits together
 
 ```

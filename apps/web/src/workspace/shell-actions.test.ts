@@ -22,6 +22,7 @@ const tab: LayoutTab = {
   key: "tb1",
   id: "tb1",
   space: "spc1",
+  spaceKey: "space:spc1",
   machine: null,
   name: "",
   root: { children: [{ content: { terminal: "t1" }, id: "p1", type: "block" }], id: "tb1", type: "row" },
@@ -31,6 +32,8 @@ const tab: LayoutTab = {
 };
 const layout: Layout = {
   tabs: [tab],
+  shown: [tab],
+  selectSpace: noop,
   active: tab,
   focused: pane,
   zoomed: null,
@@ -51,6 +54,7 @@ const layout: Layout = {
   move: () => Promise.resolve(false),
   swap: () => true,
   moveTab: noop,
+  renameTab: () => Promise.resolve(),
   restored: true,
   lastMove: null,
 };
@@ -63,6 +67,7 @@ const handlers = {
       onSplit: noop,
       onCloseTab: noop,
       onClosePane: noop,
+      onRenameTab: noop,
       onToggleSidebar: noop,
       onFocusSidebar: noop,
       onSession: () => true,
@@ -99,6 +104,7 @@ const stripTab = (key: string): LayoutTab => ({
   key,
   id: key,
   space: "s",
+  spaceKey: "space:s",
   machine: null,
   name: "",
   root: { children: [], id: key, type: "row" },
@@ -129,6 +135,7 @@ describe("moving a tab", () => {
           onSplit: noop,
           onCloseTab: noop,
           onClosePane: noop,
+          onRenameTab: noop,
           onToggleSidebar: noop,
           onFocusSidebar: noop,
           onSession: () => true,
@@ -170,6 +177,13 @@ describe("space rename (#395)", () => {
       expect(rename(false)).toEqual([]);
     },
   );
+
+  test("a layout that takes no edits lists Rename space as unavailable, with why (#404)", () => {
+    const listed = availableActions("desktop", true, "the machine is not connected").find(
+      ({ id }) => id === "space.rename",
+    );
+    expect(listed).toEqual({ id: "space.rename", unavailable: "the machine is not connected" });
+  });
 });
 
 describe("dictation (#194)", () => {
@@ -193,6 +207,7 @@ describe("dictation (#194)", () => {
           onSplit: noop,
           onCloseTab: noop,
           onClosePane: noop,
+          onRenameTab: noop,
           onToggleSidebar: noop,
           onFocusSidebar: noop,
           onSession: () => true,

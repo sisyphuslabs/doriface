@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { HcRpcError, type Terminal, type TerminalLabelParams } from "@doriface/protocol";
-import { spaceId, toSpaces } from "./model.ts";
-import { renameSpace, spaceNameProblem } from "./space-rename.ts";
+import { HcRpcError, type JsonObject, type Terminal, type TerminalLabelParams } from "@doriface/protocol";
+import type { DocEdit } from "@doriface/protocol/layout";
+import { layoutSpaces, type ListedSpace } from "./model.ts";
+import { renameRefusal, renameSpace, spaceNameProblem } from "./space-rename.ts";
+import type { MachineLayout } from "./use-layout-docs.ts";
 
 const terminal = (fields: Partial<Terminal>): Terminal => ({
   address: "t1",
@@ -16,82 +18,156 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
   ...fields,
 });
 
-const API_ONE = terminal({ address: "t1", labels: { space: "api" } });
-const API_TWO = terminal({ address: "t2", cwd: "/work/elsewhere", labels: { space: "api" } });
-const API_ENDED = terminal({ address: "t3", labels: { space: "api" }, state: "finished" });
-const WEB = terminal({ address: "t4", cwd: "/home/me/web" });
-const REMOTE_WEB = terminal({ address: "box/t1", cwd: "/srv/web" });
-const DOCS = terminal({ address: "t5", labels: { space: "docs" } });
-const ALL = [API_ONE, API_TWO, API_ENDED, WEB, REMOTE_WEB, DOCS];
-const API = spaceId(API_ONE);
+const tab = (id: string, address: string): JsonObject => ({
+  id,
+  name: "",
+  root: { children: [{ content: { terminal: address }, id: `p-${id}`, type: "block" }], id, type: "row" },
+});
+const space = (id: string, name: string, folder: string, tabs: readonly JsonObject[]): JsonObject => ({
+  folder,
+  id,
+  name,
+  tabs: [...tabs],
+});
 
-/** hc's terminal.label, applied to `terminals` as hc would, refusing the addresses in `refuse` with that kind. */
-function hcLabels(terminals: readonly Terminal[], refuse: Readonly<Record<string, string>> = {}) {
-  let state = [...terminals];
+const HERE: JsonObject = {
+  spaces: [
+    space("spc-api", "api", "", [tab("a1", "t1"), tab("a2", "t2"), tab("a3", "t3")]),
+    space("spc-web", "", "/home/me/web", [tab("w1", "t4")]),
+    space("spc-docs", "docs", "", [tab("d1", "t5")]),
+    space("spc-empty", "", "/srv/idle", [tab("e1", "t9")]),
+  ],
+};
+const THERE: JsonObject = { spaces: [space("spc-site", "", "/srv/web", [tab("s1", "t1")])] };
+const TERMINALS = [
+  terminal({ address: "t1" }),
+  terminal({ address: "t2", cwd: "/work/elsewhere" }),
+  terminal({ address: "t3", state: "finished" }),
+  terminal({ address: "t4", cwd: "/home/me/web" }),
+  terminal({ address: "box/t1", cwd: "/srv/web" }),
+  terminal({ address: "t5" }),
+];
+
+/** A machine's layout that applies edits as LayoutDoc does: an edit returning null writes nothing. */
+function machineLayout(machine: string | null, doc: JsonObject, readOnly: string | null = null) {
+  const state = { doc, writes: 0 };
+  const layout: MachineLayout = {
+    machine,
+    machineId: machine === null ? null : `id-${machine}`,
+    doc,
+    loaded: true,
+    readOnly,
+    edit: (change: DocEdit) => {
+      const next = change(state.doc);
+      if (next === null) return Promise.resolve(false);
+      state.doc = next;
+      state.writes += 1;
+      return Promise.resolve(true);
+    },
+  };
+  return { layout, state };
+}
+
+/** hc's terminal.label, recorded, refusing the addresses in `refuse` with that kind. */
+function hcLabels(refuse: Readonly<Record<string, string>> = {}) {
+  const labelled: Record<string, Record<string, string>> = {};
   const label = (params: TerminalLabelParams): Promise<unknown> => {
     const kind = refuse[params.terminal];
     if (kind !== undefined) return Promise.reject(new HcRpcError({ code: -32000, message: kind, data: { kind } }));
-    state = state.map((each) =>
-      each.address === params.terminal ? { ...each, labels: { ...each.labels, ...params.labels } } : each,
-    );
+    labelled[params.terminal] = { ...labelled[params.terminal], ...params.labels };
     return Promise.resolve({});
   };
-  return { label, read: () => state };
+  return { label, labelled };
+}
+
+function setup(readOnly: string | null = null) {
+  const here = machineLayout(null, HERE, readOnly);
+  const there = machineLayout("box", THERE);
+  const layouts = [here.layout, there.layout];
+  const spaces = layoutSpaces(layouts, TERMINALS);
+  const id = (name: string, machine?: string): string => {
+    const found = spaces.find((each: ListedSpace) => each.name === name && each.machine === machine);
+    if (found === undefined) throw new Error(`no space ${name}`);
+    return found.id;
+  };
+  return { here, there, layouts, spaces, id };
 }
 
 describe("space names", () => {
   test.each([[""], ["   "], ["\t\n"]])("a blank name (%j) is refused", (name) => {
-    expect(spaceNameProblem(ALL, API, name)).toBe("A space needs a name.");
+    const { spaces, id } = setup();
+    expect(spaceNameProblem(spaces, id("api"), name)).toBe("A space needs a name.");
   });
 
-  test("another labelled space's name on the same machine is refused; the same name on another machine is not", () => {
-    expect(spaceNameProblem(ALL, API, " docs ")).toBe("Another space on this machine is already called docs.");
-    expect(spaceNameProblem(ALL, spaceId(REMOTE_WEB), "api")).toBeNull();
+  test("a name another space of the same machine is shown under is refused; on another machine it is not", () => {
+    const { spaces, id } = setup();
+    expect(spaceNameProblem(spaces, id("api"), " docs ")).toBe("Another space on this machine is already called docs.");
+    expect(spaceNameProblem(spaces, id("api"), "web")).toBe("Another space on this machine is already called web.");
+    expect(spaceNameProblem(spaces, id("web", "box"), "api")).toBeNull();
   });
 
-  test("a folder space whose directory ends the same way is no clash: it stays its own row (#397)", () => {
-    expect(spaceNameProblem(ALL, API, "web")).toBeNull();
+  test("the space's own name and a fresh name are accepted, as is a space with no running terminal", () => {
+    const { spaces, id } = setup();
+    expect(spaceNameProblem(spaces, id("api"), "api")).toBeNull();
+    expect(spaceNameProblem(spaces, id("api"), "backend")).toBeNull();
+    expect(spaceNameProblem(spaces, id("idle"), "backend")).toBeNull();
   });
 
-  test("the space's own name and a fresh name are accepted", () => {
-    expect(spaceNameProblem(ALL, API, "api")).toBeNull();
-    expect(spaceNameProblem(ALL, API, "backend")).toBeNull();
-  });
-
-  test("a space with no running terminal left cannot be renamed", () => {
-    expect(spaceNameProblem([API_ENDED, WEB], API, "backend")).toBe(
-      "This space has no running terminal left to rename.",
-    );
+  test("a layout that takes no edits refuses with its reason", () => {
+    const { layouts, id } = setup("the machine is not connected");
+    expect(renameRefusal(layouts, id("api"))).toBe("The layout cannot take changes now: the machine is not connected");
+    expect(renameRefusal(layouts, id("web", "box"))).toBeNull();
   });
 });
 
 describe("renaming a space", () => {
-  test("every running terminal of the space is relabelled in hc, so every client lists the space under its new name", async () => {
-    const hc = hcLabels(ALL);
-    const renamed = await renameSpace(hc, ALL, API, "  backend ");
-    expect(renamed).toBe("local/space:backend");
-    expect(toSpaces(hc.read()).map((space) => [space.id, space.name, space.tabs])).toEqual([
-      ["local/space:backend", "backend", 2],
-      ["local/dir:/home/me/web", "web", 1],
-      ["local/space:docs", "docs", 1],
-      ["machine:box/dir:/srv/web", "web", 1],
+  test("the space's name is set in its own machine's layout document, keeping its id, and every client lists it", async () => {
+    const { here, there, layouts, spaces, id } = setup();
+    const api = id("api");
+    await renameSpace(hcLabels(), layouts, spaces, TERMINALS, api, "  backend ");
+    expect(here.state.writes).toBe(1);
+    expect(there.state.writes).toBe(0);
+    const listed = layoutSpaces([{ ...here.layout, doc: here.state.doc }, there.layout], TERMINALS);
+    expect(listed.map((each) => [each.id, each.name])).toEqual([
+      [api, "backend"],
+      [id("web"), "web"],
+      [id("docs"), "docs"],
+      [id("idle"), "idle"],
+      [id("web", "box"), "web"],
     ]);
-    expect(hc.read().find((each) => each.address === "t3")?.labels).toEqual({ space: "api" });
   });
 
-  test("a space named after its folder gets the label too, on its own machine only", async () => {
-    const hc = hcLabels(ALL);
-    expect(await renameSpace(hc, ALL, spaceId(REMOTE_WEB), "site")).toBe("machine:box/space:site");
-    expect(hc.read().find((each) => each.address === "box/t1")?.labels).toEqual({ space: "site" });
-    expect(hc.read().find((each) => each.address === "t4")?.labels).toEqual({});
+  test("a space named after its folder is renamed on its own machine only", async () => {
+    const { here, there, layouts, spaces, id } = setup();
+    await renameSpace(hcLabels(), layouts, spaces, TERMINALS, id("web", "box"), "site");
+    expect(here.state.writes).toBe(0);
+    expect(layoutSpaces([{ ...there.layout, doc: there.state.doc }], TERMINALS)[0]?.name).toBe("site");
   });
 
-  test("a terminal removed meanwhile is no failure; any other refusal fails the rename after the rest are written", async () => {
-    await expect(renameSpace(hcLabels(ALL, { t2: "not_found" }), ALL, API, "backend")).resolves.toBe(
-      "local/space:backend",
+  test("its running terminals get the space label in hc, so one that leaves every tab is adopted back", async () => {
+    const { layouts, spaces, id } = setup();
+    const hc = hcLabels();
+    await renameSpace(hc, layouts, spaces, TERMINALS, id("api"), "backend");
+    expect(hc.labelled).toEqual({ t1: { space: "backend" }, t2: { space: "backend" } });
+  });
+
+  test("a read-only layout writes nothing and says why", async () => {
+    const { here, layouts, spaces, id } = setup("the layout is loading");
+    const hc = hcLabels();
+    await expect(renameSpace(hc, layouts, spaces, TERMINALS, id("api"), "backend")).rejects.toThrow(
+      "The layout cannot take changes now: the layout is loading",
     );
-    const hc = hcLabels(ALL, { t2: "unreachable" });
-    await expect(renameSpace(hc, ALL, API, "backend")).rejects.toThrow("unreachable");
-    expect(hc.read().find((each) => each.address === "t1")?.labels).toEqual({ space: "backend" });
+    expect(here.state.writes).toBe(0);
+    expect(hc.labelled).toEqual({});
+  });
+
+  test("a terminal removed meanwhile is no failure; any other refused label fails the rename after the rest", async () => {
+    const { layouts, spaces, id } = setup();
+    await expect(
+      renameSpace(hcLabels({ t2: "not_found" }), layouts, spaces, TERMINALS, id("api"), "backend"),
+    ).resolves.toBeUndefined();
+    const hc = hcLabels({ t2: "unreachable" });
+    await expect(renameSpace(hc, layouts, spaces, TERMINALS, id("api"), "backend")).rejects.toThrow("unreachable");
+    expect(hc.labelled).toEqual({ t1: { space: "backend" } });
   });
 });

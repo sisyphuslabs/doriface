@@ -1,3 +1,4 @@
+import { MachinesListError } from "../workspace/machines-list-error.tsx";
 import type { HcConnection } from "@doriface/client";
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { Button, Notice, SettingRow, cn } from "@doriface/ui";
@@ -84,11 +85,7 @@ function MachineRows({ connection }: { readonly connection: HcConnection }) {
           <AddedMachine key={view.id} view={view} now={now} onRetry={() => retry(view.name)} />
         ))}
       </ul>
-      {listError === undefined ? null : (
-        <Notice tone="error" title="Could not list the machines">
-          {listError}
-        </Notice>
-      )}
+      {listError === undefined ? null : <MachinesListError cause={listError} />}
       <div>
         <Button onClick={() => setAdding(true)}>
           <Plus aria-hidden />

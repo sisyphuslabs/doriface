@@ -1,13 +1,17 @@
-import type { Terminal } from "@doriface/protocol";
+import type { JsonObject, Terminal } from "@doriface/protocol";
+import { docSpaces, panesOf, tabsOf } from "@doriface/protocol/layout";
 import { describe, expect, test } from "bun:test";
 import {
+  adoptLoose,
   afterClosing,
   buildTabs,
+  HOME_SPACE,
   keepMounts,
   keepTransient,
   layoutIds,
   looseKey,
   newMounts,
+  pick,
   TRANSIENT,
   type LayoutTab,
 } from "./layout-model.ts";
@@ -75,13 +79,25 @@ test("closing the tab in view shows the last of the others, so the keyboard land
   ];
   expect(afterClosing(tabs, "closed")).toBe("remaining");
   expect(afterClosing(tabs, "remaining")).toBe("closed");
+  expect(afterClosing(tabs, "inherited")).toBe("remaining");
   expect(afterClosing([alone], alone.key)).toBeNull();
+});
+
+test("closing a space's last tab shows the space that takes its place, else the last, on the tab it showed last", () => {
+  const [alone] = buildTabs([here], [live]);
+  if (alone === undefined) throw new Error("no tab for the live terminal");
+  const tab = (key: string, spaceKey: string): LayoutTab => ({ ...alone, key, spaceKey });
+  const tabs = [tab("a1", "a"), tab("b1", "b"), tab("c1", "c"), tab("c2", "c")];
+  expect(afterClosing(tabs, "b1", { c: "c2" })).toBe("c2");
+  expect(afterClosing(tabs, "b1")).toBe("c1");
+  expect(afterClosing(tabs.slice(0, 2), "b1")).toBe("a1");
 });
 
 const alone = (address: string): LayoutTab => ({
   key: TRANSIENT,
   id: TRANSIENT,
   space: "",
+  spaceKey: "space:",
   machine: null,
   name: "",
   root: { children: [], id: "", type: "row" },
@@ -124,6 +140,18 @@ describe("keepMounts: a document tab that takes over a terminal shown alone keep
     expect(tab?.mount).toBeUndefined();
   });
 
+  test("a loose tab adopted into its machine's layout keeps the selection in the tab that took its view (#495)", () => {
+    const ids = layoutIds([here]);
+    const key = looseKey("box/t2", ids);
+    const mounts = newMounts();
+    keepMounts([docTab("core/tb0", "p0", "t1"), { ...shownAlone("box/t2"), key, id: key }], mounts);
+    const tabs = keepMounts([docTab("core/tb0", "p0", "t1"), docTab("box/tb1", "p1", "box/t2")], mounts);
+    const view = { active: key, focused: { [key]: TRANSIENT }, zoomed: {}, spaces: {} };
+    expect(pick(tabs, view).active?.key).toBe("box/tb1");
+    expect(pick(tabs, view).focused?.address).toBe("box/t2");
+    expect(pick(tabs, { ...view, active: "gone" }).active?.key).toBe("core/tb0");
+  });
+
   test("two document tabs never share the lone tab's mount", () => {
     const mounts = newMounts();
     keepMounts([shownAlone("box/t2")], mounts);
@@ -131,5 +159,97 @@ describe("keepMounts: a document tab that takes over a terminal shown alone keep
     keepMounts([shownAlone("box/t9")], mounts);
     const tabs = keepMounts([docTab("core/tb1", "p1", "box/t2"), docTab("core/tb9", "p9", "box/t9")], mounts);
     expect(tabs.map((tab) => tab.mount ?? tab.key)).toEqual([TRANSIENT, "core/tb9"]);
+  });
+});
+
+const loose = (address: string, cwd: string, fields: Partial<Terminal> = {}): Terminal =>
+  ({
+    address,
+    argv: ["sh"],
+    cols: 80,
+    rows: 24,
+    created_ms: 0,
+    cwd,
+    labels: {},
+    screen: "exact",
+    state: "live",
+    ...fields,
+  }) as Terminal;
+const ids = (): ((prefix: "tb" | "p" | "spc") => string) => {
+  let n = 0;
+  return (prefix) => `${prefix}${(n += 1)}`;
+};
+const saved: JsonObject = {
+  spaces: [
+    {
+      id: "spc-w",
+      name: "",
+      folder: "/w",
+      tabs: [
+        {
+          id: "tb-x",
+          name: "",
+          root: { children: [{ content: { terminal: "t1" }, id: "p-x", type: "block" }], id: "tb-x", type: "row" },
+        },
+      ],
+    },
+    { id: "spc-api", name: "", folder: "/w/api", tabs: [] },
+  ],
+};
+const where = (doc: JsonObject | null) =>
+  doc === null ? null : tabsOf(doc).map((tab) => [tab.space, panesOf(tab.root).map((pane) => pane.terminal)]);
+
+describe("adoptLoose (#404)", () => {
+  test("a terminal no tab shows goes to the deepest space whose folder holds it, else to one Home space", () => {
+    const adopted = adoptLoose(
+      saved,
+      [loose("t1", "/w"), loose("t2", "/w/api/src"), loose("t3", "/w/web"), loose("t4", "/tmp"), loose("t5", "/srv")],
+      ids(),
+    );
+    expect(where(adopted)).toEqual([
+      ["spc-w", ["t1"]],
+      ["spc-w", ["t3"]],
+      ["spc-api", ["t2"]],
+      ["spc7", ["t4"]],
+      ["spc7", ["t5"]],
+    ]);
+    expect(adopted === null ? null : docSpaces(adopted).at(-1)?.name).toBe(HOME_SPACE);
+  });
+
+  test("nothing to adopt writes nothing: shown, finished and started-by-another terminals stay as they are", () => {
+    expect(
+      adoptLoose(saved, [
+        loose("t1", "/w"),
+        loose("t6", "/w", { state: "finished" }),
+        loose("t7", "/w", { parent: "t1" }),
+      ]),
+    ).toBeNull();
+  });
+
+  test("a terminal labelled with a space goes to the space of that name, made when there is none (#395)", () => {
+    const adopted = adoptLoose(
+      saved,
+      [
+        loose("t2", "/w/api", { labels: { space: "api-x" } }),
+        loose("t3", "/tmp", { labels: { space: "api-x" } }),
+        loose("t4", "/tmp"),
+      ],
+      ids(),
+    );
+    expect(adopted === null ? null : docSpaces(adopted).map((space) => [space.name, space.tabs.length])).toEqual([
+      ["", 1],
+      ["", 0],
+      ["api-x", 2],
+      [HOME_SPACE, 1],
+    ]);
+  });
+
+  test("adopting again adopts nothing more, and an existing Home is reused", () => {
+    const once = adoptLoose(null, [loose("t1", "/a")], ids());
+    expect(once === null ? null : adoptLoose(once, [loose("t1", "/a")])).toBeNull();
+    const twice = once === null ? null : adoptLoose(once, [loose("t1", "/a"), loose("t2", "/b")], ids());
+    expect(twice === null ? null : docSpaces(twice).map((space) => [space.name, space.tabs.length])).toEqual([
+      [HOME_SPACE, 2],
+    ]);
   });
 });

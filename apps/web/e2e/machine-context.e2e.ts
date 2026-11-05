@@ -14,37 +14,37 @@ test.describe("two terminals named alike on two machines", () => {
     for (const { core, address } of started.splice(0)) endAgent(core, address);
   });
 
-  test("tabs and the status bar say which machine each one is on", async ({ page }) => {
+  test("each machine's terminal is a tab of that machine's space, and the status bar says which machine is in view", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await agentRow(page, "review", false).click();
-    await agentRow(page, "review", true).click();
-    const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: /review/ });
-    await expect(tabs).toHaveCount(2, { timeout: 15_000 });
-    const remote = tabs.filter({ hasText: MACHINE_NAME });
-    await expect(remote).toHaveCount(1);
-    // Each tooltip ends in the chord that selects that tab by position, e.g. "review on build-box (Ctrl+2)".
-    const all = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-    const chord = await page.evaluate(() => (navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+"));
-    const positionOf = async (tab: typeof remote) =>
-      (await all.evaluateAll((els) => els.map((el) => el.getAttribute("title")))).indexOf(
-        await tab.getAttribute("title"),
-      ) + 1;
-    const local = tabs.filter({ hasNotText: MACHINE_NAME });
-    await expect(remote).toHaveAttribute("title", `review on ${MACHINE_NAME} (${chord}${await positionOf(remote)})`);
-    await expect(local).toHaveAttribute("title", `review (${chord}${await positionOf(local)})`);
-
+    const bar = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
     const status = page.getByRole("contentinfo");
+
+    // The tab bar shows the selected space's tabs, and a space is one machine's: a tab no longer names its machine (#404).
+    // An unnamed tab reads its number; the terminal's name is on its session actions (#466 ruling A).
+    const actions = page.getByRole("button", { name: "Session actions for review" });
+    await agentRow(page, "review", true).click();
+    await expect(bar).toHaveCount(1, { timeout: 15_000 });
+    await expect(bar).toHaveText(["1"]);
+    await expect(actions).toBeVisible();
     await expect(status).toContainText(MACHINE_NAME);
-    await tabs.filter({ hasNotText: MACHINE_NAME }).click();
+
+    await agentRow(page, "review", false).click();
+    await expect(bar).toHaveCount(1);
+    await expect(bar).toHaveText(["1"]);
+    await expect(actions).toBeVisible();
     await expect(status).toContainText(HOST_NAME);
     await expect(status).not.toContainText(MACHINE_NAME);
   });
 
-  test("the phone's terminal header names the machine and the space", async ({ page }) => {
+  test("the phone's terminal header names the machine and the space its tab is in", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await agentRow(page, "review", true).click();
     const header = page.locator("header").filter({ has: page.getByRole("button", { name: "Back to agents" }) });
+    // Loaded with no tab of its own, the terminal was adopted into the space its `space` label names (#404): startAgent's
+    // "api", on its own machine.
     await expect(header).toContainText(`${MACHINE_NAME} · api`, { timeout: 15_000 });
   });
 });

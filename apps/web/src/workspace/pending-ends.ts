@@ -1,4 +1,5 @@
 import type { Terminal } from "@doriface/protocol";
+import { guardedLocalStorage, type StorageLike } from "../storage/guarded.ts";
 
 /**
  * An End the user confirmed that this browser has not seen through yet. The address alone is not the terminal: an added
@@ -36,7 +37,7 @@ const isPendingEnd = (value: unknown): value is PendingEnd =>
   (Reflect.get(value, "pid") === null || typeof Reflect.get(value, "pid") === "number");
 
 /** Reads `core`'s pending Ends from `storage`; a store that cannot be read or written keeps nothing (a private window). */
-export function pendingEnds(core: string, storage: Storage | undefined = globalThis.localStorage): PendingEnds {
+export function pendingEnds(core: string, storage: StorageLike | undefined = guardedLocalStorage()): PendingEnds {
   const read = (): PendingEnd[] => {
     try {
       const parsed: unknown = JSON.parse(storage?.getItem(keyOf(core)) ?? "[]");

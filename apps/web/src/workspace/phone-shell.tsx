@@ -22,6 +22,8 @@ export interface PhoneShellProps {
   readonly open: string | null;
   /** The terminals of the tab that shows the open one, in its panes' order; one when that tab is not split. */
   readonly panes: readonly string[];
+  /** The open terminal's tab as the strip reads it (its name, else its number); null when it is in no tab. */
+  readonly tabTitle: string | null;
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   readonly onNew: () => void;
@@ -31,7 +33,7 @@ export interface PhoneShellProps {
 
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
 export function PhoneShell(props: PhoneShellProps) {
-  const { connection, terminals, open, panes, onOpen, onBack, onNew, onPalette, onSession } = props;
+  const { connection, terminals, open, panes, tabTitle, onOpen, onBack, onNew, onPalette, onSession } = props;
   // The open terminal registers its dictation here, so the palette and a bound key reach it from this shell's handler.
   const dictate = useRef<(() => void) | null>(null);
   usePhoneActions(onNew, onSession, () => (dictate.current === null ? false : (dictate.current(), true)));
@@ -42,10 +44,10 @@ export function PhoneShell(props: PhoneShellProps) {
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
     return (
-      <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar">
+      <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar pr-(--safe-right) pl-(--safe-left)">
         <header
           data-titlebar
-          className="flex h-12 shrink-0 items-center gap-1 pt-[env(safe-area-inset-top)] pr-4 pl-[var(--titlebar-inset-start,1rem)]"
+          className="flex h-[calc(3rem+var(--safe-top))] shrink-0 items-center gap-1 pt-(--safe-top) pr-4 pl-[var(--titlebar-inset-start,1rem)]"
         >
           <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
           <IconButton label="Command palette" icon={<Search />} size="md" onClick={onPalette} />
@@ -81,6 +83,7 @@ export function PhoneShell(props: PhoneShellProps) {
           )}
         </ScrollArea>
         <StatusBar
+          className="h-[calc(var(--statusbar-height)+var(--safe-bottom))] pb-(--safe-bottom)"
           start={
             <>
               <StatusBarItem icon={<Monitor aria-hidden />}>{`${connection.hello.core.name} · ${route}`}</StatusBarItem>
@@ -99,6 +102,7 @@ export function PhoneShell(props: PhoneShellProps) {
       terminal={terminal}
       terminals={terminals}
       panes={panes}
+      tabTitle={tabTitle}
       onOpen={onOpen}
       onBack={onBack}
       dictate={dictate}

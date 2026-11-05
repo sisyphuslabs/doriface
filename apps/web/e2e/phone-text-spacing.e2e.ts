@@ -39,12 +39,12 @@ async function openPhoneTerminal(page: Page): Promise<void> {
   });
 }
 
-/** Fills the header's action slot with one more 44 px header button, as the mic (#227) does: a copy of the switch. */
+/** Fills the header's action slot with one more 44 px header button, as the mic (#227) does: a copy of the back button. */
 async function giveAction(page: Page): Promise<void> {
   await header(page)
     .locator("[data-header-action]")
     .evaluate((slot, name) => {
-      const model = slot.closest("header")?.querySelector('button[aria-label="Switch space or tab"]');
+      const model = slot.closest("header")?.querySelector('button[aria-label="Back to agents"]');
       const action = model?.cloneNode(true);
       if (!(action instanceof HTMLElement)) throw new Error("no header button to copy");
       action.setAttribute("aria-label", name);
@@ -78,13 +78,9 @@ async function expectHeaderHolds(page: Page, width: number, withAction: boolean)
   });
   expect(spills).toEqual([]);
 
-  // Every text row, the tab position and the counts end inside the header and the screen; the last two are never cut.
-  const parts = [
-    bar.getByRole("heading", { level: 1 }),
-    bar.locator("p"),
-    bar.locator("[data-tab-position]"),
-    bar.locator("[data-agent-counts]"),
-  ];
+  // Every text row and the counts end inside the header and the screen; the counts are never cut. (The tab's place, n/m,
+  // is the bottom tabs bar's since #466.)
+  const parts = [bar.getByRole("heading", { level: 1 }), bar.locator("p"), bar.locator("[data-agent-counts]")];
   const placed = await Promise.all(parts.map(laidOutBox));
   for (const part of placed) {
     expect(part.y + part.height).toBeLessThanOrEqual(bottom + 0.5);
@@ -93,7 +89,7 @@ async function expectHeaderHolds(page: Page, width: number, withAction: boolean)
   const cut = await Promise.all(
     parts.slice(2).map((part) => part.evaluate((el) => el.scrollWidth > el.clientWidth + 1)),
   );
-  expect(cut).toEqual([false, false]);
+  expect(cut).toEqual([false]);
 
   // The terminal begins below the header, never under it. It can hold its prompt text before it lays out its first
   // row, so each box is read once laid out.
@@ -103,7 +99,7 @@ async function expectHeaderHolds(page: Page, width: number, withAction: boolean)
   expect(firstRow.y).toBeGreaterThanOrEqual(bottom - 0.5);
 
   // Every button stays a full touch target inside the header and the screen.
-  const names = [/^Back to agents$/, /^Switch space or tab$/, /^Session actions for /];
+  const names = [/^Back to agents$/, /^Session actions for /];
   if (withAction) names.push(new RegExp(`^${ACTION}$`));
   const targets = await Promise.all(names.map((name) => laidOutBox(bar.getByRole("button", { name }))));
   for (const target of targets) {

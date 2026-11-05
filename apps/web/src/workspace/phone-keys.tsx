@@ -57,7 +57,7 @@ export function PhoneKeys(props: PhoneKeysProps) {
           onKeys?.(true);
           port.current?.focus();
         }}
-        className="absolute right-4 bottom-[max(1rem,calc(var(--safe-bottom)+0.5rem))] z-10"
+        className="absolute right-[max(1rem,calc(var(--safe-right)+0.5rem))] bottom-[max(1rem,calc(var(--safe-bottom)+0.5rem))] z-10"
       />
     );
   }

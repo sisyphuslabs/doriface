@@ -26,6 +26,7 @@ export const ACTIONS: readonly ActionDef[] = [
     app(`tab.select:${index + 1}`, `Go to tab ${index + 1}`, `goto_tab:${index + 1}`),
   ),
   app("tab.last", "Go to last tab", "last_tab"),
+  app("tab.rename", "Rename tab…"),
   app("tab.move:left", "Move tab left", "move_tab:-1"),
   app("tab.move:right", "Move tab right", "move_tab:1"),
   app("pane.split:right", "Split right", "new_split:right"),

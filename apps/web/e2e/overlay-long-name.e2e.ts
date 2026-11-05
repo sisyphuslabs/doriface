@@ -84,8 +84,9 @@ for (const width of [320, 390] as const) {
         await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
         await agentRow(page, LONG, false).click({ timeout: 20_000 });
         const header = page.getByRole("banner");
-        await expect(header.getByRole("heading", { name: LONG })).toBeVisible({ timeout: 15_000 });
+        // The heading reads the tab (its number, #466 ruling A); the session actions carry the name.
         const actions = header.getByRole("button", { name: `Session actions for ${LONG}` });
+        await expect(actions).toBeVisible({ timeout: 15_000 });
 
         await actions.hover();
         await expectInside(tooltip(page, `Session actions for ${LONG}`), "the session actions tooltip");
@@ -131,7 +132,9 @@ for (const colorScheme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
       await agentRow(page, LONG, false).click({ timeout: 20_000 });
       const header = page.getByRole("banner");
-      await expect(header.getByRole("heading", { name: LONG })).toBeVisible({ timeout: 15_000 });
+      await expect(header.getByRole("button", { name: `Session actions for ${LONG}` })).toBeVisible({
+        timeout: 15_000,
+      });
       const keyboard = page.getByRole("button", { name: "Show keyboard" });
       await expect(keyboard).toBeVisible({ timeout: 15_000 });
       const button = await keyboard.boundingBox();
@@ -180,21 +183,29 @@ for (const colorScheme of ["light", "dark"] as const) {
   test.describe(`on a 1440 px desktop, ${colorScheme}`, () => {
     test.use({ viewport: { width: 1440, height: 900 }, colorScheme, serviceWorkers: "block" });
 
-    test("the close tooltip and the Close dialog keep a 200-character name inside", async ({ page }) => {
-      await setConfirmClose(page, "always");
-      await agentRow(page, LONG, false).click({ timeout: 20_000 });
-      const tab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: new RegExp(LONG) });
-      await expect(tab).toBeVisible({ timeout: 15_000 });
-      await tab.click();
-      const close = page.getByRole("button", { name: `Close ${LONG}` });
-      await close.hover();
-      await expectInside(tooltip(page, `Close ${LONG}`), "the close tooltip");
-
-      await close.click();
-      const ask = page.getByRole("dialog", { name: `Close ${LONG}?` });
-      await expectInside(ask, "the Close dialog");
-      await ask.getByRole("button", { name: "Cancel" }).click();
-      await expect(ask).toBeHidden();
+    // A tab reads its number, as herdr-app's, so its close button's tooltip names no session; the Close dialog does.
+    test("the Close dialog keeps a 200-character name inside", async ({ page }) => {
+      // A second shell in the same space, so closing the long-named tab is not the space's last (that asks Close space?).
+      const partner = startShell("host", "overlay-partner");
+      try {
+        await setConfirmClose(page, "always");
+        await agentRow(page, LONG, false).click({ timeout: 20_000 });
+        await expect(page.locator(`[data-focused="true"] [data-terminal="${address}"]`)).toBeVisible({
+          timeout: 15_000,
+        });
+        await expect(page.getByRole("tablist", { name: "Tabs" }).getByRole("tab")).toHaveCount(2, { timeout: 15_000 });
+        await page
+          .getByRole("tab", { selected: true })
+          .locator("xpath=..")
+          .getByRole("button", { name: /^Close / })
+          .click();
+        const ask = page.getByRole("dialog", { name: `Close ${LONG}?` });
+        await expectInside(ask, "the Close dialog");
+        await ask.getByRole("button", { name: "Cancel" }).click();
+        await expect(ask).toBeHidden();
+      } finally {
+        endAgent("host", partner);
+      }
     });
   });
 }
