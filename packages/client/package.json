@@ -8,7 +8,8 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./process-link": "./src/process-link.ts"
   },
   "dependencies": {
     "@doriface/protocol": "workspace:*"
