@@ -1,6 +1,6 @@
 import type { Subprocess } from "bun";
-import { LinkClosedError, type ByteLink } from "../link.ts";
-import { Listeners, type Unsubscribe } from "../listeners.ts";
+import { LinkClosedError, type ByteLink } from "./link.ts";
+import { Listeners, type Unsubscribe } from "./listeners.ts";
 
 /** A ByteLink over a child's stdio, e.g. `hc connect`, which pumps raw bytes to the core socket. */
 export class ProcessLink implements ByteLink {

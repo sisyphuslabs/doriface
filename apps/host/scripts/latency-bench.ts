@@ -6,7 +6,7 @@ import { type ByteLink, HcConnection } from "@doriface/client";
 import { generateX25519, rawStaticKey, secureLink } from "@doriface/crypto";
 import { connectRelayClient, lookupPairSlot, pairSlotOf } from "@doriface/relay-client";
 import { parseArgs } from "node:util";
-import { ProcessLink } from "../../../packages/client/src/testing/process-link.ts";
+import { ProcessLink } from "@doriface/client/process-link";
 import { summarize } from "./percentiles.ts";
 
 const { values, positionals } = parseArgs({
