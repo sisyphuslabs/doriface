@@ -2,7 +2,8 @@
 //   bun apps/host/scripts/latency-bench.ts relay --relay <url> --code <code shown by doriface-host pair>
 //   bun apps/host/scripts/latency-bench.ts healthz --relay <url>
 //   bun apps/host/scripts/latency-bench.ts direct [--hc <path>]
-// relay and direct time `terminal.list` calls through the client SDK; healthz times HTTPS `GET /healthz` on one
+// relay and direct time `terminal.list` calls through the client SDK; direct starts a scratch hc core of its own (its
+// own session, socket and state under $TMPDIR) and stops it on exit, error, SIGINT or SIGTERM; healthz times HTTPS `GET /healthz` on one
 // kept-alive connection. Every mode makes --warmup calls first (default 10) and leaves them out of the stats, then
 // --calls measured calls (default 200, at least 100). The line names the mode, the target and the machine it ran on,
 // so two lines are compared only when their host matches.
@@ -11,9 +12,12 @@ import { type ByteLink, HcConnection } from "@doriface/client";
 import { ProcessLink } from "@doriface/client/process-link";
 import { generateX25519, rawStaticKey, relayWebSocketUrl, secureLink } from "@doriface/crypto";
 import { connectRelayClient, lookupPairSlot, pairSlotOf } from "@doriface/relay-client";
-import { arch, cpus, hostname, loadavg, platform, release } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { arch, cpus, hostname, loadavg, platform, release, tmpdir } from "node:os";
+import { join } from "node:path";
 import { type BenchArgs, parseBenchArgs, USAGE, UsageError } from "./bench-args.ts";
 import { type Counts, measure, summarize } from "./bench-stats.ts";
+import { withOwned } from "./owned.ts";
 
 const CALL_TIMEOUT_MS = 15_000;
 
@@ -71,6 +75,37 @@ async function timeHealthz(url: string, counts: Counts): Promise<number[]> {
   return [...samples];
 }
 
+interface ScratchCore {
+  /** A link through `hc connect`, which starts the core on first use. */
+  readonly link: () => ByteLink;
+  /** Stops the core (if it started) with `hc server stop` and deletes its dir. */
+  readonly stop: () => Promise<void>;
+}
+
+/** An hc session of the bench's own, isolated from the user's cores: hc starts a default core for any call without one. */
+function scratchCore(hc: string): ScratchCore {
+  const dir = mkdtempSync(join(tmpdir(), "lb-"));
+  mkdirSync(join(dir, "run"), { mode: 0o700 });
+  const env = {
+    PATH: process.env["PATH"] ?? "/usr/bin:/bin",
+    HOME: dir,
+    HC_SESSION: `latency-bench-${crypto.randomUUID().slice(0, 8)}`,
+    HC_SOCKET: join(dir, "s.sock"),
+    XDG_RUNTIME_DIR: join(dir, "run"),
+    XDG_STATE_HOME: join(dir, "state"),
+    XDG_CONFIG_HOME: join(dir, "config"),
+  };
+  return {
+    link: () => new ProcessLink(Bun.spawn([hc, "connect"], { env, stdin: "pipe", stdout: "pipe", stderr: "pipe" })),
+    async stop() {
+      const stopper = Bun.spawn([hc, "server", "stop"], { env, stdout: "ignore", stderr: "pipe" });
+      const [code, stderr] = await Promise.all([stopper.exited, new Response(stopper.stderr).text()]);
+      rmSync(dir, { recursive: true, force: true });
+      if (code !== 0) throw new Error(`hc server stop exited ${code}: ${stderr.trim()}`);
+    },
+  };
+}
+
 /** The machine a line was measured on: lines from different hosts are not an A/B comparison. */
 function machine(): Record<string, unknown> {
   const cores = cpus();
@@ -92,9 +127,9 @@ async function bench(args: BenchArgs): Promise<{ readonly target: string; readon
     const url = healthzUrl(args.relay);
     return { target: url, samples: await timeHealthz(url, args) };
   }
-  const link = new ProcessLink(Bun.spawn([args.hc, "connect"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" }));
-  const { hc, samples } = await timeCalls(link, args);
-  return { target: `${args.hc} connect (hc ${hc})`, samples };
+  const core = scratchCore(args.hc);
+  const { hc, samples } = await withOwned(core.stop, () => timeCalls(core.link(), args));
+  return { target: `${args.hc} connect, a scratch core (hc ${hc})`, samples };
 }
 
 let args: BenchArgs;
