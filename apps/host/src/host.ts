@@ -3,6 +3,7 @@ import { controlIsLive } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
+import { HC_VERSION_FLOOR, meetsHcFloor } from "./hc-install.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { openControl } from "./host-control.ts";
 import { e2eeDeps } from "./host-e2ee.ts";
@@ -30,6 +31,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
     throw new StartupError("already-running", message, { path: options.stateDir });
   }
   const hcVersion = await readHcVersion(options.hc);
+  if (!meetsHcFloor(hcVersion)) {
+    const message = `${options.hc} is herdr-core ${hcVersion}; doriface-host needs ${HC_VERSION_FLOOR} or newer`;
+    throw new StartupError("hc-version-failed", message, { path: options.hc, version: hcVersion });
+  }
   // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
   const parts: StartedPart[] = [];
   try {

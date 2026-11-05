@@ -7,6 +7,8 @@ import { machineRow } from "./machine-switch.ts";
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 test.beforeEach(() => setCoreDoc("doriface", null));
+// The order is the core's, shared by every spec on this worker: leave none behind for the next one.
+test.afterEach(() => setCoreDoc("doriface", null));
 
 const rows = (page: Page) => page.locator("[data-machine-row]");
 const list = (page: Page) => page.getByRole("heading", { name: "Spaces" }).locator("xpath=ancestor::section");

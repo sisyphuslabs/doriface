@@ -9,6 +9,7 @@ import { AgentLists } from "./agent-lists.tsx";
 import { onlyThisMachine } from "./machines.ts";
 import type { Session } from "./model.ts";
 import { ReconnectStatus } from "./reconnect-status.tsx";
+import { usePendingUpdate } from "../update/update-store.ts";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { PhoneTerminal } from "./phone-terminal.tsx";
 import { RovingLists } from "./roving-lists.tsx";
@@ -35,6 +36,7 @@ export function PhoneShell(props: PhoneShellProps) {
   const dictate = useRef<(() => void) | null>(null);
   usePhoneActions(onNew, onSession, () => (dictate.current === null ? false : (dictate.current(), true)));
   const machines = useMachinesContext();
+  const update = usePendingUpdate();
   const terminal = terminals.find((entry) => entry.address === open);
   const empty = !terminals.some((entry) => entry.state === "live");
   if (terminal === undefined) {
@@ -48,7 +50,24 @@ export function PhoneShell(props: PhoneShellProps) {
           <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
           <IconButton label="Command palette" icon={<Search />} size="md" onClick={onPalette} />
           <IconButton label={NEW_TAB.label} icon={<Plus />} size="md" onClick={onNew} />
-          <IconButton label="Settings" icon={<Settings />} size="md" render={<Link to="/settings" />} />
+          <IconButton
+            label={update === null ? "Settings" : "Settings, update ready"}
+            icon={
+              <>
+                <Settings />
+                {update === null ? null : (
+                  <span
+                    aria-hidden
+                    data-slot="settings-dot"
+                    className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand"
+                  />
+                )}
+              </>
+            }
+            size="md"
+            className="relative"
+            render={<Link to="/settings" />}
+          />
         </header>
         <ScrollArea slot="agents-list" className="flex-1">
           {empty ? (

@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ByteReader } from "../../apps/host/src/testing/byte-reader.ts";
 import { HELLO } from "../../apps/host/src/testing/hc-session.ts";
-import { firstDifference, type RecordingLink, tapFor } from "./support/byte-tap.ts";
+import { firstDifference, type RecordingLink, replyDifference, type Tap, tapFor } from "./support/byte-tap.ts";
 import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
 import { type EventWatch, watchEvents, watchScreen, within } from "./support/watch.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
@@ -225,13 +225,32 @@ describe("every hc method family, client SDK -> Noise IK -> relay -> doriface-ho
     feed.close();
     // hc reads its input in order, so once it answered this call it has read every byte sent before it.
     await hc.call("terminal.list");
-    const { sent, received } = recorded;
-    const tap = tapFor(relayed.taps(), sent);
-    expect(tap).toBeDefined();
-    expect(firstDifference(sent, tap?.read ?? new Uint8Array(0))).toBeUndefined();
-    expect(
-      firstDifference(received, (tap?.wrote ?? new Uint8Array(0)).subarray(0, received.byteLength)),
-    ).toBeUndefined();
-    expect(received.byteLength).toBeGreaterThan(10_000);
+    const link = recorded;
+    const tap = tapFor(relayed.taps(), link.sent);
+    if (tap === undefined) throw new Error("no tap holds this session's bytes");
+    // The whole reply stream, not a prefix of it: once the client holds at least every byte hc has written, both sides
+    // are read at that same moment and compared in full. A host that dropped bytes hc wrote never lets the client catch
+    // up, so this waits out instead of passing.
+    const snapshot = (): { readonly tap: Tap; readonly received: Uint8Array } | undefined => {
+      const now = relayed?.taps().find((each) => each.pid === tap.pid);
+      const received = link.received;
+      return now !== undefined && received.byteLength >= now.wrote.byteLength ? { tap: now, received } : undefined;
+    };
+    const caughtUp = await within(
+      new Promise<{ readonly tap: Tap; readonly received: Uint8Array }>((resolve) => {
+        const ready = snapshot();
+        if (ready !== undefined) return resolve(ready);
+        const off = link.onData(() => {
+          const next = snapshot();
+          if (next === undefined) return;
+          off();
+          resolve(next);
+        });
+      }),
+      "every byte hc wrote reaching the client",
+    );
+    expect(firstDifference(link.sent, caughtUp.tap.read)).toBeUndefined();
+    expect(replyDifference(caughtUp.tap, caughtUp.received)).toBeUndefined();
+    expect(caughtUp.received.byteLength).toBeGreaterThan(10_000);
   }, 30_000);
 });
