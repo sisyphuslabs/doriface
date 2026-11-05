@@ -46,6 +46,8 @@ describe("an ack a claim held back survives a restart (section 10.1, #156)", () 
     expect(h.ownNs()).toEqual([]);
 
     h.restart();
+    // As the runtime does at every start: the member that has signed nothing owes its admission ack, which covers d.
+    h.gossip.ackAdmission();
     await h.at(2_000 + 29_000);
     expect(h.ownNs()).toEqual([]);
     await h.at(2_000 + 31_000);
