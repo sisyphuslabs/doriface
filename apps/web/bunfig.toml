@@ -1,0 +1,4 @@
+[test]
+# Fails the run when a scratch herdr core a test started is still serving once every file has run, and removes what it
+# leaves (#153): bun reads only the bunfig.toml where it starts, so a run started here would otherwise skip the guard.
+preload = ["../host/src/testing/core-guard.ts"]
