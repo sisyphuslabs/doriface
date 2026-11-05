@@ -1,22 +1,30 @@
-import { type Dispatch, type SetStateAction, useCallback, useRef, useState } from "react";
-import type { View } from "../layout/view.ts";
+import { moveTab as moveDocTab } from "@doriface/protocol/layout";
+import { useCallback, useRef, useState } from "react";
+import type { LayoutTab } from "./layout-model.ts";
 import { moveTabTo, type TabMove } from "./tab-order.ts";
+import type { DropTarget } from "./use-drop-pane.ts";
 
-/** Moving a tab in the strip: the order is this screen's own (`View.order`), and only a move that changes it is said. */
+/**
+ * Moving a tab in the strip: the strip shows one space's tabs in their document's order, so a move edits that document
+ * and every device sees it (#404). Only a move that changes the order is said.
+ */
 export function useTabMoves(
-  tabs: readonly { readonly key: string }[],
-  setView: Dispatch<SetStateAction<View>>,
+  tabs: readonly LayoutTab[],
+  layoutOf: (machine: string | null) => DropTarget | undefined,
 ): { readonly moveTab: (key: string, to: number) => void; readonly lastMove: TabMove | null } {
   const [lastMove, setLastMove] = useState<TabMove | null>(null);
   const shown = useRef(tabs);
   shown.current = tabs;
   const moveTab = useCallback(
     (key: string, to: number): void => {
-      const keys = shown.current.map((tab) => tab.key);
+      const tab = shown.current.find((each) => each.key === key);
+      const layout = tab === undefined || tab.transient ? undefined : layoutOf(tab.machine);
+      if (tab === undefined || layout === undefined || layout.readOnly !== null) return;
+      const keys = shown.current.map((each) => each.key);
       setLastMove((said) => moveTabTo(keys, said, key, to).said);
-      setView((prev) => ({ ...prev, order: moveTabTo(keys, null, key, to).order }));
+      void layout.edit((doc) => (doc === null ? null : moveDocTab(doc, tab.id, to)));
     },
-    [setView],
+    [layoutOf],
   );
   return { moveTab, lastMove };
 }

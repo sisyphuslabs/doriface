@@ -45,13 +45,12 @@ function tabEntry(tab: LayoutTab, byAddress: ReadonlyMap<string, Session>, focus
   const named = shown.find((entry) => entry.pane === focused) ?? shown[0];
   const statuses = new Set(shown.map((entry) => agentStatus(entry.terminal)));
   const status = URGENCY.find((each) => statuses.has(each));
-  const machine = tab.machine ?? undefined;
+  // No machine tag: the bar shows one space's tabs, and a space is one machine's (#404).
   return {
     id: tab.key,
     title: tab.name !== "" ? tab.name : named === undefined ? "Terminal" : terminalTitle(named.terminal),
     controls: panelId(tab.key),
     ...(status === undefined ? {} : { status }),
-    ...(machine === undefined ? {} : { machine }),
   };
 }
 
@@ -136,9 +135,9 @@ export function DesktopShell(props: DesktopShellProps) {
     focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
-  const tabList: WorkspaceTab[] = layout.tabs.map((tab, position) => {
+  const tabList: WorkspaceTab[] = layout.shown.map((tab, position) => {
     const entry = tabEntry(tab, byAddress, tab.key === layout.active?.key ? (layout.focused?.id ?? null) : null);
-    // tab.select:N selects layout.tabs[N - 1], so the hint is read by the same position.
+    // tab.select:N selects layout.shown[N - 1], so the hint is read by the same position.
     const shortcut = tabKeys[position];
     return shortcut === undefined ? entry : { ...entry, shortcut };
   });

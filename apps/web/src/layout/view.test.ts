@@ -8,34 +8,33 @@ const holding = (raw: string | null): Pick<Storage, "getItem"> => ({
 const loaded = (value: unknown): View => loadView("c", holding(JSON.stringify(value)));
 
 describe("loadView", () => {
-  test("reads the active tab, the focused and zoomed panes, and the order as saved", () => {
-    const view: View = { active: "t2", focused: { t1: "p1", t2: "p4" }, zoomed: { t2: "p4" }, order: ["t2", "m/t1"] };
+  test("reads the active tab, the focused and zoomed panes, and each space's tab as saved", () => {
+    const view: View = {
+      active: "t2",
+      focused: { t1: "p1", t2: "p4" },
+      zoomed: { t2: "p4" },
+      spaces: { "space:s1": "t2", "space:m/s2": "m/t1" },
+    };
     const saved = new Map<string, string>();
     expect(saveView("c", view, { setItem: (key, value) => saved.set(key, value) })).toBeNull();
     expect(loadView("c", { getItem: (key) => saved.get(key) ?? null })).toEqual(view);
   });
 
-  test("keeps each tab key of the order once, in its first place", () => {
-    expect(loaded({ order: ["b", "a", "b", "c", "a"] }).order).toEqual(["b", "a", "c"]);
-  });
-
-  test("an order that is not a list of tab keys is no order, and the rest of the view still reads", () => {
-    for (const order of [["a", 3], ["a", null], [["a"]], "a", { 0: "a" }, 7]) {
-      expect(loaded({ active: "a", focused: { a: "p1" }, order })).toEqual({
-        active: "a",
-        focused: { a: "p1" },
-        zoomed: {},
-        order: [],
-      });
-    }
+  test("an older screen's strip order is not read: the tabs' order is the documents' own (#404)", () => {
+    expect(loaded({ active: "a", focused: { a: "p1" }, order: ["b", "a"] })).toEqual({
+      active: "a",
+      focused: { a: "p1" },
+      zoomed: {},
+      spaces: {},
+    });
   });
 
   test("fields of the wrong kind read as unset, one by one", () => {
-    expect(loaded({ active: 4, focused: { a: 1, b: "p2" }, zoomed: ["p1"], order: ["a"] })).toEqual({
+    expect(loaded({ active: 4, focused: { a: 1, b: "p2" }, zoomed: ["p1"], spaces: { s: "a", t: 2 } })).toEqual({
       active: null,
       focused: { b: "p2" },
       zoomed: {},
-      order: ["a"],
+      spaces: { s: "a" },
     });
   });
 
@@ -54,6 +53,6 @@ describe("saveView", () => {
         throw new DOMException("the quota has been exceeded", "QuotaExceededError");
       },
     };
-    expect(saveView("c", { ...NO_VIEW, order: ["a"] }, full)).toBe("the quota has been exceeded");
+    expect(saveView("c", { ...NO_VIEW, active: "a" }, full)).toBe("the quota has been exceeded");
   });
 });

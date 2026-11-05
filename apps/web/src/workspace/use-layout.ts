@@ -8,7 +8,6 @@ import {
   freshId,
   type Node,
   splitPane,
-  tabsOf,
   terminalBlock,
 } from "@doriface/protocol/layout";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
@@ -19,6 +18,7 @@ import {
   localOf,
   looseKey,
   pick,
+  spaceTabs,
   TRANSIENT,
   type LayoutPane,
   type LayoutTab,
@@ -28,21 +28,29 @@ import {
 import { machineOf } from "./model.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
-import { orderTabs, type TabMove } from "./tab-order.ts";
+import type { TabMove } from "./tab-order.ts";
 import type { Leaving } from "./use-drop-pane.ts";
 import { useTabClose } from "./use-tab-close.ts";
 import { useTabMoves } from "./use-tab-moves.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
 export interface Layout extends PaneMoves {
+  /** Every tab of every machine's document, and this screen's own. */
   readonly tabs: readonly LayoutTab[];
+  /** The tab bar's tabs: the selected space's (the space of the tab in view), in their document's order (#404). */
+  readonly shown: readonly LayoutTab[];
+  /** Shows the space `key` (`spaceKey`) on the tab it showed last, else its first tab. */
+  readonly selectSpace: (key: string) => void;
   readonly active: LayoutTab | null;
   readonly focused: LayoutPane | null;
   readonly zoomed: string | null;
   readonly selectTab: (key: string) => void;
   readonly focusPane: (tab: string, pane: string) => void;
-  /** Focuses the pane that shows the terminal, or opens it in a new tab. */
-  readonly openTerminal: (address: string) => void;
+  /**
+   * Focuses the pane that shows the terminal, or opens it in a new tab: in the selected space, after its tab in view,
+   * when the terminal is on that space's machine; else, or with `newSpace`, as the first tab of a new space.
+   */
+  readonly openTerminal: (address: string, newSpace?: boolean) => void;
   /** Puts a terminal started for a pane (the focused one unless `target` names another) beside it, and focuses it. */
   readonly split: (axis: Axis, address: string, target?: PaneTarget, pane?: string) => void;
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
@@ -55,7 +63,7 @@ export interface Layout extends PaneMoves {
    * starts. A pane only another device's layout edit brought or moved here is not one (#332).
    */
   readonly claimed: string | null;
-  /** Moves a tab so it ends at index `to` of `tabs`; panes and focus stay as they are. */
+  /** Moves a tab so it ends at index `to` of `shown`, in its space's document; panes and focus stay as they are. */
   readonly moveTab: (key: string, to: number) => void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
   readonly lastMove: TabMove | null;
@@ -113,7 +121,7 @@ export function useLayout(
   terminals: readonly Terminal[],
   failed: (message: string) => void,
   told: (message: string) => void,
-  /** This screen's tab order and focus could not be saved for the next reload; said once until a save works again. */
+  /** This screen's selected tabs and focus could not be saved for the next reload; said once until a save works again. */
   unsaved: (message: string) => void,
   /** machine.list has answered since the workspace mounted, so every added machine's layout is known. */
   machinesListed = true,
@@ -138,10 +146,17 @@ export function useLayout(
   const [loose, setLoose] = useState<readonly string[]>([]);
   const mounts = useRef(newMounts());
   const tabs = useMemo(
-    () => keepMounts(orderTabs(buildTabs(layouts, terminals, loose), view.order), mounts.current),
-    [layouts, terminals, loose, view.order],
+    () => keepMounts(buildTabs(layouts, terminals, loose), mounts.current),
+    [layouts, terminals, loose],
   );
   const { active, focused, zoomed } = pick(tabs, view);
+  const shown = useMemo(() => spaceTabs(tabs, active), [tabs, active]);
+  // Each space remembers the tab it showed, so picking the space again brings that tab back (herdr-app's `Space.active`).
+  const remembered = active === null ? undefined : view.spaces[active.spaceKey];
+  useEffect(() => {
+    if (active === null || remembered === active.key) return;
+    setView((prev) => ({ ...prev, spaces: { ...prev.spaces, [active.spaceKey]: active.key } }));
+  }, [active, remembered]);
   const focusedIn = view.focused;
   const layoutOf = useCallback(
     (machine: string | null) => {
@@ -196,15 +211,14 @@ export function useLayout(
         return setLoose((prev) => (prev.includes(address) ? prev : [...prev, address]));
       }
       const kept = written(tab);
-      void own.edit((doc) =>
-        addDocTab(doc, { id: spaceOf(doc) ?? freshId("spc"), folder: "" }, { id: kept.id, name: "", root: kept.root }),
-      );
+      const space = { id: freshId("spc"), folder: "" };
+      void own.edit((doc) => addDocTab(doc, space, { id: kept.id, name: "", root: kept.root }));
     },
     [layoutOf],
   );
 
   const addTab = useCallback(
-    (address: string): void => {
+    (address: string, newSpace = false): void => {
       const machine = machineOf(address) ?? null;
       const layout = layoutOf(machine);
       const writable = layout !== undefined && layout.readOnly === null;
@@ -215,11 +229,13 @@ export function useLayout(
       const pane = freshId("p");
       const tab: JsonObject = { id, name: "", root: rootOf(id, [terminalBlock(pane, localOf(address))]) };
       const kept = fate === "with-new" && active !== null ? written(active) : null;
-      const near = active !== null && !active.transient && active.machine === machine ? active.space : null;
+      // herdr-app's add_tab: right after the selected tab of the selected space; a terminal of another machine, or one
+      // asked for as a new space, starts a space of its own, never the first space of the document.
+      const near = !newSpace && active !== null && !active.transient && active.machine === machine ? active : null;
+      const space = { id: near?.space ?? freshId("spc"), folder: "" };
       void layout.edit((doc) => {
-        const space = { id: near ?? spaceOf(doc) ?? freshId("spc"), folder: "" };
         const first = kept === null ? doc : addDocTab(doc, space, { id: kept.id, name: "", root: kept.root });
-        return addDocTab(first, space, tab);
+        return addDocTab(first, space, tab, kept?.id ?? near?.id);
       });
       show(tabKey(layout.machineId, id), pane);
     },
@@ -227,12 +243,20 @@ export function useLayout(
   );
 
   const openTerminal = useCallback(
-    (address: string): void => {
+    (address: string, newSpace = false): void => {
       const found = findTerminal(tabs, address);
-      if (found === null) addTab(address);
+      if (found === null) addTab(address, newSpace);
       else show(found.tab.key, found.pane.id);
     },
     [addTab, show, tabs],
+  );
+  const selectSpace = useCallback(
+    (key: string): void => {
+      const inSpace = tabs.filter((tab) => tab.spaceKey === key);
+      const target = inSpace.find((tab) => tab.key === view.spaces[key]) ?? inSpace[0];
+      if (target !== undefined) show(target.key, null);
+    },
+    [show, tabs, view.spaces],
   );
 
   const split = useCallback(
@@ -249,8 +273,8 @@ export function useLayout(
         const copy = written(tab);
         const root = splitPane(copy.root, copy.pane, axis, block, freshId("s"));
         if (root === null) return undefined;
-        const space = (doc: JsonObject | null) => ({ id: spaceOf(doc) ?? freshId("spc"), folder: "" });
-        void layout.edit((doc) => addDocTab(doc, space(doc), { id: copy.id, name: "", root }));
+        const space = { id: freshId("spc"), folder: "" };
+        void layout.edit((doc) => addDocTab(doc, space, { id: copy.id, name: "", root }));
         setFresh(pane);
         return show(tabKey(layout.machineId, copy.id), pane);
       }
@@ -311,10 +335,12 @@ export function useLayout(
   const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
-  const { moveTab, lastMove } = useTabMoves(tabs, setView);
+  const { moveTab, lastMove } = useTabMoves(shown, layoutOf);
 
   return {
     tabs,
+    shown,
+    selectSpace,
     active,
     focused,
     zoomed,
@@ -331,8 +357,4 @@ export function useLayout(
     lastMove,
     restored: machinesListed && layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
   };
-}
-
-function spaceOf(doc: JsonObject | null): string | null {
-  return doc === null ? null : (tabsOf(doc)[0]?.space ?? null);
 }

@@ -1,7 +1,8 @@
+import type { JsonObject } from "@doriface/protocol";
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import { machineEntries, machineKey, onlyThisMachine, orderMachines } from "./machines.ts";
-import { machineId, toSpaces } from "./model.ts";
+import { machineId, layoutSpaces, type SpacesSource } from "./model.ts";
 
 const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => ({
   address,
@@ -95,14 +96,45 @@ describe("selection with an added machine named like this one", () => {
   });
 });
 
-describe("toSpaces grouped by machine", () => {
-  test("this machine's spaces come first, then each machine's, in name order", () => {
-    const spaces = toSpaces([
-      terminal("zeta/t1", { cwd: "/w/api" }),
-      terminal("t1", { cwd: "/w/web" }),
-      terminal("boxb/t1", { cwd: "/w/infra" }),
-      terminal("t2", { cwd: "/w/api" }),
-    ]);
+/** A layout document of one tab per space, each tab one terminal pane (a local address). */
+const docOf = (spaces: readonly { id: string; folder: string; terminal: string }[]): JsonObject => ({
+  spaces: spaces.map((space) => ({
+    id: space.id,
+    name: "",
+    folder: space.folder,
+    tabs: [
+      {
+        id: `${space.id}-t`,
+        name: "",
+        root: {
+          id: `${space.id}-t`,
+          type: "row",
+          children: [{ id: `${space.id}-p`, type: "block", content: { terminal: space.terminal } }],
+        },
+      },
+    ],
+  })),
+});
+
+const source = (machine: string | null, spaces: Parameters<typeof docOf>[0]): SpacesSource => ({
+  machine,
+  machineId: machine,
+  doc: docOf(spaces),
+});
+
+describe("layout spaces grouped by machine (#404)", () => {
+  test("this machine's spaces come first, in their document's order, then each machine's, in name order", () => {
+    const spaces = layoutSpaces(
+      [
+        source("zeta", [{ id: "z", folder: "/w/api", terminal: "t1" }]),
+        source(null, [
+          { id: "w", folder: "/w/web", terminal: "t1" },
+          { id: "a", folder: "/w/api", terminal: "t2" },
+        ]),
+        source("boxb", [{ id: "i", folder: "/w/infra", terminal: "t1" }]),
+      ],
+      [],
+    );
     expect(spaces.map((space) => [space.machine ?? "", space.name])).toEqual([
       ["", "web"],
       ["", "api"],
@@ -112,7 +144,13 @@ describe("toSpaces grouped by machine", () => {
   });
 
   test("machines with numbered names group in the same order as the Machines list, box9 before box10", () => {
-    const spaces = toSpaces([terminal("box10/t1", { cwd: "/w/a" }), terminal("box9/t1", { cwd: "/w/b" })]);
+    const spaces = layoutSpaces(
+      [
+        source("box10", [{ id: "a", folder: "/w/a", terminal: "t1" }]),
+        source("box9", [{ id: "b", folder: "/w/b", terminal: "t1" }]),
+      ],
+      [],
+    );
     const listed = orderMachines([view("box10", "connected"), view("box9", "connected")]);
     expect(spaces.map((space) => space.machine)).toEqual(listed.map((machine) => machine.name));
   });

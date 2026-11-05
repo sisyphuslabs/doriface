@@ -9,7 +9,7 @@ test.afterEach(() => {
   for (const address of started.splice(0)) hcOn("host", ["kill", address]);
 });
 
-test("closing the only tab ends its shell and empties the workspace; a terminal outside any tab waits in the sidebar, also after a reload (#354, #409)", async ({
+test("closing the only tab ends its shell and empties the workspace; a terminal outside any tab is not shown alone, and the next load adopts it into Home (#354, #409, #404)", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -27,13 +27,22 @@ test("closing the only tab ends its shell and empties the workspace; a terminal 
   await expect(page.locator(`[data-terminal="${address}"]`)).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // A terminal started outside the app (or kept running by an older build) is in no tab: the emptied layout leaves it
-  // in the sidebar rather than showing it alone.
-  started.push(startShell("host", "outside-any-tab"));
+  // A terminal started outside the app (or kept running by an older build) is in no tab: the emptied layout does not
+  // show it alone (#354).
+  const outside = startShell("host", "outside-any-tab");
+  started.push(outside);
   await expect(page.getByRole("contentinfo")).toContainText(`${running} terminal`, { timeout: 15_000 });
   await expect(tabs).toHaveCount(0);
 
+  // The next load adopts it as a tab of this machine's Home space, so nothing is hidden (#404); the closed shell is gone.
   await page.reload();
   await expect(page.getByRole("contentinfo")).toContainText(`${running} terminal`, { timeout: 20_000 });
-  await expect(tabs).toHaveCount(0);
+  await expect(tabs).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator(`[data-terminal="${outside}"]`)).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page
+      .getByRole("complementary", { name: "Workspace" })
+      .getByRole("region", { name: "Spaces" })
+      .getByRole("button", { name: /^Home\b/ }),
+  ).toBeVisible();
 });

@@ -86,21 +86,63 @@ export function editTab(doc: JsonObject, tabId: string, edit: (root: Node) => No
   return edited === null ? null : { ...doc, spaces };
 }
 
-/** The document with a tab added at the end of a space, or of a new space when `space` names none in it. */
-export function addTab(doc: JsonObject | null, space: NewSpace, tab: JsonObject): JsonObject {
+/**
+ * The document with a tab added to a space, or as the first tab of a new space when `space` names none in it. The tab
+ * goes right after the tab `after` names, as herdr-app's `add_tab` puts it after the space's selected one, else last.
+ */
+export function addTab(doc: JsonObject | null, space: NewSpace, tab: JsonObject, after?: string): JsonObject {
   const spaces = doc === null ? [] : spacesOf(doc);
   const at = spaces.findIndex((each) => text(each["id"]) === space.id);
   const existing = spaces[at];
-  const next =
-    existing === undefined
-      ? [...spaces, { folder: space.folder, id: space.id, name: "", tabs: [tab] }]
-      : spaces.with(at, { ...existing, tabs: [...tabsIn(existing), tab] });
-  return { ...doc, spaces: next };
+  if (existing === undefined) {
+    return { ...doc, spaces: [...spaces, { folder: space.folder, id: space.id, name: space.name ?? "", tabs: [tab] }] };
+  }
+  const tabs = tabsIn(existing);
+  const before = after === undefined ? -1 : tabs.findIndex((each) => text(each["id"]) === after);
+  const placed = before === -1 ? [...tabs, tab] : tabs.toSpliced(before + 1, 0, tab);
+  return { ...doc, spaces: spaces.with(at, { ...existing, tabs: placed }) };
 }
 
 export interface NewSpace {
   readonly id: string;
   readonly folder: string;
+  /** A new space's name; empty names it after where its first terminal is. */
+  readonly name?: string;
+}
+
+/** A space as the sidebar lists it: its name and folder as saved, and its tabs' ids in their order. */
+export interface DocSpace {
+  readonly id: string;
+  readonly name: string;
+  readonly folder: string;
+  readonly tabs: readonly string[];
+}
+
+export function docSpaces(doc: JsonObject): readonly DocSpace[] {
+  return spacesOf(doc).map((space) => ({
+    id: text(space["id"]),
+    name: text(space["name"]),
+    folder: text(space["folder"]),
+    tabs: tabsIn(space).map((tab) => text(tab["id"])),
+  }));
+}
+
+/**
+ * The document with a tab moved to index `to` among its own space's tabs (clamped), the others keeping their order; null
+ * when the tab is gone or already there, so nothing is written.
+ */
+export function moveTab(doc: JsonObject, tabId: string, to: number): JsonObject | null {
+  const spaces = spacesOf(doc);
+  const at = spaces.findIndex((space) => tabsIn(space).some((tab) => text(tab["id"]) === tabId));
+  const space = spaces[at];
+  if (space === undefined) return null;
+  const tabs = tabsIn(space);
+  const from = tabs.findIndex((tab) => text(tab["id"]) === tabId);
+  const target = Math.max(0, Math.min(tabs.length - 1, to));
+  const moving = tabs[from];
+  if (moving === undefined || target === from) return null;
+  const placed = tabs.toSpliced(from, 1).toSpliced(target, 0, moving);
+  return { ...doc, spaces: spaces.with(at, { ...space, tabs: placed }) };
 }
 
 /** The document without a tab; a space left with no tab goes too, as herdr-app's `remove_tab` does. */

@@ -1,5 +1,5 @@
-export { addTab, editTab, LAYOUT_DOC, readDocument, removeTab, tabsOf } from "./document.ts";
-export type { DocTab, NewSpace, ReadDocument } from "./document.ts";
+export { addTab, docSpaces, editTab, LAYOUT_DOC, moveTab, readDocument, removeTab, tabsOf } from "./document.ts";
+export type { DocSpace, DocTab, NewSpace, ReadDocument } from "./document.ts";
 export {
   childrenOf,
   freshId,
