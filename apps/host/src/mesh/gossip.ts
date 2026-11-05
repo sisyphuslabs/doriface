@@ -114,8 +114,14 @@ export class Gossip implements SyncHost {
       const admitted = ackAdmission(this.#claims.signing(options));
       if (admitted !== undefined) this.#changed(admitted, true);
     };
-    this.#claims = new Claims(options.clock, own, (peer) => this.#known.nameOf(peer), options.log, ack, admit, () =>
-      owesAck(options),
+    this.#claims = new Claims(
+      options.clock,
+      own,
+      (peer) => this.#known.nameOf(peer),
+      options.log,
+      ack,
+      admit,
+      () => owesAck(options),
     );
     this.#claims.recheckAckOnce();
     this.#view = this.#stored.view();
