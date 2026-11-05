@@ -16,7 +16,10 @@ export function ScrollArea({ children, className, viewportClassName, slot }: Scr
     <BaseScrollArea.Root className={cn("relative min-h-0 overflow-hidden", className)}>
       <BaseScrollArea.Viewport
         data-slot={slot}
-        className={cn("size-full overscroll-contain outline-none", viewportClassName)}
+        className={cn(
+          "size-full overscroll-contain outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          viewportClassName,
+        )}
       >
         {children}
       </BaseScrollArea.Viewport>
