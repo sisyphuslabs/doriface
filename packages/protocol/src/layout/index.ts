@@ -7,6 +7,7 @@ export {
   readDocument,
   removeTab,
   renameSpace,
+  renameTab,
   tabsOf,
 } from "./document.ts";
 export type { DocSpace, DocTab, NewSpace, ReadDocument } from "./document.ts";

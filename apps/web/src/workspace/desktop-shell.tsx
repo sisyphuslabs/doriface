@@ -21,6 +21,7 @@ import { NoTerminal } from "./no-terminal.tsx";
 import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
 import { panelId, SplitPanes } from "./split-panes.tsx";
+import { RenameDialog } from "./rename-dialog.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
@@ -116,6 +117,17 @@ export function DesktopShell(props: DesktopShellProps) {
   }, []);
   const showsEnded = (terminal: { readonly address: string; readonly pid?: number | null }): boolean =>
     endedViews.has(viewKey(terminal.address, terminal.pid ?? null));
+  // The tab whose Rename question is open, and how its write went.
+  const [renaming, setRenaming] = useState<{ key: string; busy: boolean; error: string | null } | null>(null);
+  const { renameTab } = layout;
+  const submitRename = (key: string, name: string): void => {
+    setRenaming({ key, busy: true, error: null });
+    renameTab(key, name.trim()).then(
+      () => setRenaming(null),
+      (cause: unknown) =>
+        setRenaming({ key, busy: false, error: cause instanceof Error ? cause.message : String(cause) }),
+    );
+  };
   useAppActions({
     terminals,
     layout,
@@ -142,6 +154,8 @@ export function DesktopShell(props: DesktopShellProps) {
     const shortcut = tabKeys[position];
     return shortcut === undefined ? entry : { ...entry, shortcut };
   });
+  const renamed = renaming === null ? undefined : layout.tabs.find((tab) => tab.key === renaming.key);
+  const renamedTitle = tabList.find((tab) => tab.id === renaming?.key)?.title ?? renamed?.name ?? "Tab";
   const focusedMachine =
     (focusedAddress === null ? undefined : machineOf(focusedAddress)) ?? connection.hello.core.name;
   const focusedTerminal = focusedAddress === null ? undefined : byAddress.get(focusedAddress);
@@ -212,6 +226,7 @@ export function DesktopShell(props: DesktopShellProps) {
           onSelect={layout.selectTab}
           onClose={onCloseTab}
           onNew={onNew}
+          onRename={(key) => setRenaming({ key, busy: false, error: null })}
           onMove={layout.moveTab}
           moveKeys={{
             ...(moveLeftKeys === undefined ? {} : { left: moveLeftKeys }),
@@ -238,6 +253,18 @@ export function DesktopShell(props: DesktopShellProps) {
             </>
           }
         />
+        {renaming === null || renamed === undefined ? null : (
+          <RenameDialog
+            key={renaming.key}
+            title={renamedTitle}
+            value={renamed.name}
+            busy={renaming.busy}
+            error={renaming.error}
+            description="Every device shows the new name. Leave it empty to name the tab after its program again."
+            onRename={(name) => submitRename(renaming.key, name)}
+            onCancel={() => setRenaming(null)}
+          />
+        )}
         {layout.tabs.length > 0 ? null : nothingOpen ? (
           <NoTerminal onNew={onNew} />
         ) : (
