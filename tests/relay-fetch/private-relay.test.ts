@@ -18,7 +18,8 @@ import { isolatedGitEnv } from "./git-env.ts";
 // for the private relay, so no credentials and no network are involved.
 const SCRIPT = join(import.meta.dir, "..", "relay", "private-relay.ts");
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "relay-fetch-")));
-const SECRET_NAMES = ["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"];
+/** What counts as a credential for the install's probe: any `*TOKEN*` variable, and git config from the environment. */
+const CREDENTIAL = /TOKEN|^GIT_CONFIG_/;
 // Each row spawns bun, git and an install; on a loaded host one took 4.9 s, so the 5 s default passes by luck. Removing
 // every row's checkout afterwards gets the same budget.
 const ROW_TIMEOUT_MS = 60_000;
@@ -48,8 +49,12 @@ beforeAll(async () => {
   mkdirSync(standIn);
   await git(standIn, "init", "--quiet");
   writeFileSync(join(standIn, "relay.txt"), "the private relay\n");
-  // Its install records how many credential variables a lifecycle script could read.
-  const probe = `require("fs").writeFileSync("install-saw.txt", String(Object.keys(process.env).filter((k) => ${JSON.stringify(SECRET_NAMES)}.includes(k) || k.startsWith("GIT_CONFIG_")).length))`;
+  // Its install records the names of the credential variables a lifecycle script could read, and the repository its
+  // git would act on.
+  const probe = [
+    `require("fs").writeFileSync("install-saw.json", JSON.stringify(Object.keys(process.env).filter((k) => ${CREDENTIAL.toString()}.test(k)).sort()))`,
+    `require("fs").writeFileSync("install-git.txt", require("child_process").execSync("git rev-parse --absolute-git-dir").toString().trim())`,
+  ].join("; ");
   writeFileSync(
     join(standIn, "package.json"),
     JSON.stringify({ name: "relay-stand-in", private: true, scripts: { postinstall: `bun -e '${probe}'` } }),
@@ -169,23 +174,53 @@ test(
 );
 
 test(
-  "a fresh fetch checks out the pin, and the relay's install sees none of the fetch credentials",
+  "a fresh fetch checks out the pin",
   async () => {
     const parent = await publicCheckout("fresh");
     const before = await snapshot(parent);
+
+    expect(await fetchFrom(parent)).toBe(0);
+
+    expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
+    expect(await snapshot(parent)).toBe(before);
+  },
+  ROW_TIMEOUT_MS,
+);
+
+test(
+  "the relay's install sees none of the credentials the fetch had",
+  async () => {
+    const parent = await publicCheckout("credentials");
+    // The ones CI and a developer's shell carry, and others no list in the script names.
     const credentials = {
       RELAY_READ_TOKEN: "synthetic-not-a-token",
       GH_TOKEN: "synthetic-not-a-token",
       GITHUB_TOKEN: "synthetic-not-a-token",
+      NPM_TOKEN: "synthetic-not-a-token",
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: "synthetic-not-a-token",
       GIT_CONFIG_COUNT: "1",
       GIT_CONFIG_KEY_0: "core.quotePath",
       GIT_CONFIG_VALUE_0: "false",
     };
+    expect(Object.keys(credentials).every((name) => CREDENTIAL.test(name))).toBe(true);
 
     expect(await fetchFrom(parent, credentials)).toBe(0);
 
-    expect(await git(relay(parent), "rev-parse", "HEAD")).toBe(standInRev);
-    expect(readFileSync(join(relay(parent), "install-saw.txt"), "utf8")).toBe("0");
+    expect(JSON.parse(readFileSync(join(relay(parent), "install-saw.json"), "utf8"))).toEqual([]);
+  },
+  ROW_TIMEOUT_MS,
+);
+
+test(
+  "the relay's install runs its git in .relay, whatever repository the caller's environment names",
+  async () => {
+    const parent = await publicCheckout("install-git");
+    const before = await snapshot(parent);
+
+    const caller = { GIT_DIR: join(parent, ".git"), GIT_INDEX_FILE: join(parent, ".git", "index") };
+    expect(await fetchFrom(parent, caller)).toBe(0);
+
+    expect(readFileSync(join(relay(parent), "install-git.txt"), "utf8")).toBe(join(relay(parent), ".git"));
     expect(await snapshot(parent)).toBe(before);
   },
   ROW_TIMEOUT_MS,
