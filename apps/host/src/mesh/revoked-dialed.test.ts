@@ -10,6 +10,13 @@ import { MeshNet } from "./testing/mesh-net.ts";
 const LINGER_MS = 60_000;
 const KEEP_ALIVE_MS = 10_000;
 
+/**
+ * The revoke crosses two real hosts' stores, and every write there re-evaluates the 13-member view with real signature
+ * checks (the production cost #86 tracks): the test takes 0.26-0.37 s alone on a fast workstation. Pinned to 2 cores beside 16 busy loops
+ * (host load 108-125) it took p50 6.2 s and max 17.3 s over 20 runs; 60 s is over 3 times that max.
+ */
+const REVOKE_ACROSS_THIRTEEN_MS = 60_000;
+
 describe("a sync session this host dialed to a member that is then revoked (section 6.2)", () => {
   test.each([
     ["open at the revoke", false],
@@ -94,16 +101,20 @@ describe("a sync session this host dialed to a member past the 12-member cap (se
     expect(s.ours.closeCode).toBe(CloseCode.UnknownDevice);
   });
 
-  test("stays open once a revoke brings that member back under the cap", async () => {
-    const s = pastTheCap();
-    await s.keepBusy(KEEP_ALIVE_MS);
-    s.at0.gossip.append({ type: "revoke", signPubs: [s.other.signPub], reason: "revoke" });
-    await s.clock.until(
-      () => s.at1.gossip.view.members.some((member) => member.signPub === s.capped.signPub),
-      30_000,
-      10,
-    );
-    await s.keepBusy(2 * LINGER_MS);
-    expect(s.closed()).toBeUndefined();
-  });
+  test(
+    "stays open once a revoke brings that member back under the cap",
+    async () => {
+      const s = pastTheCap();
+      await s.keepBusy(KEEP_ALIVE_MS);
+      s.at0.gossip.append({ type: "revoke", signPubs: [s.other.signPub], reason: "revoke" });
+      await s.clock.until(
+        () => s.at1.gossip.view.members.some((member) => member.signPub === s.capped.signPub),
+        30_000,
+        10,
+      );
+      await s.keepBusy(2 * LINGER_MS);
+      expect(s.closed()).toBeUndefined();
+    },
+    REVOKE_ACROSS_THIRTEEN_MS,
+  );
 });

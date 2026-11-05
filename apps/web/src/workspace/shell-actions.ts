@@ -15,15 +15,17 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
     "tab.move:right",
     "session.rename",
     "session.end",
+    "voice.dictate",
     "layout.toggle:sidebar",
     "app.zoom_in",
     "app.zoom_out",
     "app.settings",
   ],
-  phone: ["tab.new", "session.rename", "session.end", "app.zoom_in", "app.zoom_out", "app.settings"],
+  phone: ["tab.new", "session.rename", "session.end", "voice.dictate", "app.zoom_in", "app.zoom_out", "app.settings"],
 };
 
-const SESSION_ACTIONS = new Set(["session.rename", "session.end"]);
+/** Actions on the session in view: rename, end, and dictating into it. */
+const SESSION_ACTIONS = new Set(["session.rename", "session.end", "voice.dictate"]);
 
 /** The strip's tab keys in order, and the selected tab's: what moving a tab is measured against. */
 export interface Strip {

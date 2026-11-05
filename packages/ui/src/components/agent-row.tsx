@@ -2,7 +2,7 @@ import { Pin } from "lucide-react";
 import { useRef, type ComponentProps, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
 import { useRowFloors } from "./row-floors.ts";
-import { StatusChip, StatusIndicator, type AgentStatus } from "./status.tsx";
+import { STATUS_LABEL, StatusChip, StatusIndicator, type AgentStatus } from "./status.tsx";
 
 export interface Agent {
   readonly id: string;
@@ -24,6 +24,8 @@ export interface AgentRowProps extends Omit<ComponentProps<"button">, "onSelect"
   /** Use the "!" mark instead of the "Needs you" chip when a section header already says it. */
   readonly compactBlocked?: boolean;
   readonly onSelect?: (id: string) => void;
+  /** The sidebar is an icon rail: the status glyph alone, the name and state as its label and tooltip. */
+  readonly rail?: boolean;
   readonly className?: string;
 }
 
@@ -38,6 +40,7 @@ export function AgentRow({
   selected = false,
   compactBlocked = false,
   onSelect,
+  rail = false,
   className,
   ref,
   ...props
@@ -46,6 +49,28 @@ export function AgentRow({
   const row = useRef<HTMLButtonElement | null>(null);
   // The age is in the key too: a wider age (59m after <1m) leaves less room for the parts.
   useRowFloors(row, [agent.name, agent.detail, agent.machine, agent.age].join("\u0000"));
+  if (rail) {
+    const label = `${agent.name}, ${STATUS_LABEL[agent.status]}`;
+    return (
+      <button
+        {...props}
+        ref={ref}
+        type="button"
+        aria-label={label}
+        title={label}
+        aria-current={selected ? "true" : undefined}
+        onClick={() => onSelect?.(agent.id)}
+        className={cn(
+          "flex h-(--row) w-full items-center justify-center rounded-md outline-none",
+          "hover:bg-hover focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
+          selected && "bg-selected",
+          className,
+        )}
+      >
+        <StatusIndicator status={agent.status} decorative />
+      </button>
+    );
+  }
   return (
     <button
       {...props}
@@ -99,15 +124,18 @@ export function AgentRow({
         <span
           title={agent.machine}
           data-floor="machine"
+          data-row-meta
           className="min-w-0 max-w-[35%] shrink-2 truncate text-2xs text-muted-foreground"
         >
           {agent.machine}
         </span>
       )}
       {agent.status === "blocked" && !compactBlocked ? <StatusChip status="blocked" glyph={false} /> : null}
-      {agent.pinned === true ? <Pin aria-label="Pinned" className="size-3 shrink-0 text-muted-foreground" /> : null}
+      {agent.pinned === true ? (
+        <Pin role="img" aria-label="Pinned" data-row-meta className="size-3 shrink-0 text-muted-foreground" />
+      ) : null}
       {agent.age === undefined ? null : (
-        <time data-numeric className="min-w-7 shrink-0 text-right text-xs text-muted-foreground">
+        <time data-numeric data-row-meta className="min-w-7 shrink-0 text-right text-xs text-muted-foreground">
           {agent.age}
         </time>
       )}
