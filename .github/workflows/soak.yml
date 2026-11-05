@@ -1,10 +1,10 @@
 name: Relay soak
 
-# #403: a Windows and a macOS client, each Chromium running the web app, paired with one host on a macOS runner through
-# the production relay, soaking at the same time, plus a second Windows client with Chromium's native window occlusion
-# off: keystroke echo latency, output bursts, relay socket closes, reconnects, page errors, page visibility and frames
-# drawn. Run by hand (Actions > Relay soak > Run workflow), or push a soak/* branch to run it for 30 minutes on that
-# branch's code; the table lands in the run summary.
+# #403: a Windows and a macOS client, each Chromium running the web app, each paired with its own host on one macOS
+# runner through the production relay, soaking at the same time: keystroke echo latency, output bursts, relay socket
+# closes, reconnects, page errors, page visibility and frames drawn, and every 5 minutes a dropped link followed by a
+# visit to Settings and back (the reporter's case). Run by hand (Actions > Relay soak > Run workflow), or push a soak/*
+# branch to run it for 30 minutes on that branch's code; the table lands in the run summary.
 #
 # The runners meet only through this run's artifacts, which anyone can download on a public repository: each client
 # publishes a public key, and the host answers with its single-use pairing link sealed to that key (apps/web/soak/seal.ts).
@@ -23,12 +23,14 @@ permissions:
   actions: read
 
 concurrency:
-  group: relay-soak
+  group: relay-soak-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   RELAY_URL: https://relay-doriface.omo.dev
   SOAK_MINUTES: ${{ inputs.minutes || '30' }}
+  # Minutes between forced link drops with a Settings round-trip.
+  SOAK_DROP_EVERY_MIN: "5"
   WEB_ORIGIN: http://127.0.0.1:4173
 
 jobs:
@@ -62,21 +64,27 @@ jobs:
           ln -s herdr-core "$RUNNER_TEMP/hc/hc"
           echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/hc/hc" --version
-      - name: Start the host on the production relay
+      # One host per client, each with its own hc session: clients sharing one would type into each other's terminals.
+      - name: Start a host per client on the production relay
         run: |
-          echo "HOST_STATE=$RUNNER_TEMP/host-state" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/host-state"
-          SHELL=/bin/bash nohup bun apps/host/src/cli.ts --hc "$HC_BIN" --relay "$RELAY_URL" \
-            --state-dir "$RUNNER_TEMP/host-state" > "$RUNNER_TEMP/host.log" 2>&1 &
-          for _ in $(seq 1 60); do
-            grep -q "relay: connected" "$RUNNER_TEMP/host.log" && break
-            sleep 1
+          port=7766
+          for client in windows macos; do
+            mkdir -p "$RUNNER_TEMP/host-$client"
+            SHELL=/bin/bash nohup bun apps/host/src/cli.ts --hc "$HC_BIN" --relay "$RELAY_URL" --session "soak-$client" \
+              --listen "127.0.0.1:$port" --state-dir "$RUNNER_TEMP/host-$client" > "$RUNNER_TEMP/host-$client.log" 2>&1 &
+            port=$((port + 1))
           done
-          cat "$RUNNER_TEMP/host.log"
-          grep -q "relay: connected" "$RUNNER_TEMP/host.log"
+          for client in windows macos; do
+            for _ in $(seq 1 60); do
+              grep -q "relay: connected" "$RUNNER_TEMP/host-$client.log" && break
+              sleep 1
+            done
+            cat "$RUNNER_TEMP/host-$client.log"
+            grep -q "relay: connected" "$RUNNER_TEMP/host-$client.log"
+          done
       - name: Pair the Windows client
         if: always()
-        run: bash apps/web/soak/host-pair.sh windows 0
+        run: bash apps/web/soak/host-pair.sh windows
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -85,32 +93,27 @@ jobs:
           retention-days: 1
       - name: Pair the macOS client
         if: always()
-        run: bash apps/web/soak/host-pair.sh macos 1
+        run: bash apps/web/soak/host-pair.sh macos
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: soak-link-macos
           path: ${{ runner.temp }}/soak-link-macos.json
           retention-days: 1
-      - name: Pair the second Windows (occlusion off) client
-        if: always()
-        run: bash apps/web/soak/host-pair.sh windows-occlusion-off 2
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: soak-link-windows-occlusion-off
-          path: ${{ runner.temp }}/soak-link-windows-occlusion-off.json
-          retention-days: 1
-      - name: Keep the host up until every client is done
+      - name: Keep the hosts up until every client is done
         if: always()
         run: |
-          for client in windows macos windows-occlusion-off; do
+          for client in windows macos; do
             bun apps/web/soak/artifact.ts "soak-done-$client" "$RUNNER_TEMP/done" 6000 &
           done
           wait
-      - name: Host log
+      - name: Host logs
         if: always()
-        run: cat "$RUNNER_TEMP/host.log"
+        run: |
+          for client in windows macos; do
+            echo "== host for the $client client"
+            cat "$RUNNER_TEMP/host-$client.log"
+          done
 
   client:
     name: Client (${{ matrix.label }})
@@ -120,11 +123,6 @@ jobs:
         include:
           - { name: windows, runner: windows-latest, label: Windows x64 Chromium }
           - { name: macos, runner: macos-15, label: macOS arm64 Chromium }
-          # The same Windows client with Chromium's native window occlusion off: a hidden window draws no frames (#403).
-          - name: windows-occlusion-off
-            runner: windows-latest
-            label: Windows x64 Chromium, occlusion off
-            args: --disable-features=CalculateNativeWinOcclusion
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 130
     defaults:
@@ -163,7 +161,6 @@ jobs:
         working-directory: apps/web
         env:
           SOAK_CLIENT: ${{ matrix.label }}
-          SOAK_CHROMIUM_ARGS: ${{ matrix.args }}
           SOAK_PREBUILT: ${{ runner.temp }}/web-dist
           SOAK_OUTPUT_DIR: ${{ runner.temp }}/playwright
         run: |

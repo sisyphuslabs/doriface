@@ -16,6 +16,9 @@ test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 const ECHO_TIMEOUT_MS = 10_000;
 const BURST_TIMEOUT_MS = 60_000;
 const BURST_EVERY = 20;
+/** Every this many minutes, the reporter's case: the link drops and Settings is visited and left at once. */
+const DROP_EVERY_MS = Number(process.env["SOAK_DROP_EVERY_MIN"] ?? 5) * 60_000;
+const DROP_CODE = 4000;
 /** A person's pause between words: the soak is about a session over time, not throughput. */
 const PACE_MS = 500;
 
@@ -54,10 +57,13 @@ function trackSockets(): void {
   // oxlint-disable-next-line unicorn/consistent-function-scoping -- addInitScript sends this function alone into the page
   const kindOf = (url: string): string =>
     new URL(url, location.href).pathname.replace(/\/v1\/(client|host)\/[^/]+/, "/v1/$1/:hostId");
+  const open = new Set<WebSocket>();
   class Tracked extends Native {
     constructor(url: string | URL, protocols?: string | string[]) {
       super(url, protocols);
       const kind = kindOf(String(url));
+      this.addEventListener("open", () => open.add(this));
+      this.addEventListener("close", () => open.delete(this));
       this.addEventListener("open", () => events.push({ kind, type: "open", at: performance.now() }));
       this.addEventListener("close", (event) =>
         events.push({
@@ -72,6 +78,13 @@ function trackSockets(): void {
     }
   }
   window.WebSocket = Tracked;
+  // The soak's forced link drop: the page's open relay sockets close as a dropped link would (#403).
+  Object.defineProperty(window, "__soakDrop", {
+    value: () => {
+      // 4000 is DROP_CODE: addInitScript sends this function alone, without the module around it.
+      for (const socket of open) socket.close(4000, "soak drop");
+    },
+  });
 }
 
 /**
@@ -209,6 +222,29 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
   let lost = 0;
   let burstsLost = 0;
   let eraseFailures = 0;
+  let nextDropAt = Date.now() + DROP_EVERY_MS;
+  /** Per forced drop: whether the list came back empty or a pane said it waits, and how long until an echo again. */
+  const drops: { atS: number; listEmpty: boolean; waiting: boolean; recoverMs: number | null }[] = [];
+  const dropAndVisitSettings = async (i: number): Promise<void> => {
+    const atS = Math.round(((await page.evaluate(() => performance.now())) - startedAt) / 1000);
+    const left = Date.now();
+    await page.evaluate(() => (Reflect.get(window, "__soakDrop") as () => void)());
+    await page.getByRole("link", { name: "Settings" }).first().click();
+    await page.getByRole("navigation", { name: "Settings" }).waitFor();
+    await page.getByRole("button", { name: "Close settings" }).first().click();
+    const sidebar = page.getByRole("complementary", { name: "Workspace" });
+    await sidebar.waitFor();
+    const listEmpty = (await sidebar.locator('[aria-busy="true"]').count()) > 0;
+    const waiting = (await page.getByText("Waiting for this terminal to start").count()) > 0;
+    await page.locator("[data-terminal]").last().getByRole("textbox").focus();
+    const token = `zr${i.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    await arm(page, token);
+    await page.keyboard.type(token);
+    const echoed = await settle(page, 60_000);
+    drops.push({ atS, listEmpty, waiting, recoverMs: echoed === undefined ? null : Date.now() - left });
+    await Array.from(token).reduce((typed) => typed.then(() => page.keyboard.press("Backspace")), Promise.resolve());
+    if (echoed === undefined) await note(`no echo within 60 s of the drop at ${atS} s`);
+  };
   /** What the screen showed at the first few lost echoes and failed erases, to tell the shell from the client. */
   const diagnostics: { readonly atS: number; readonly what: string; readonly rows: string[] }[] = [];
   const note = async (what: string): Promise<void> => {
@@ -219,6 +255,10 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
 
   const sample = async (i: number): Promise<void> => {
     if (Date.now() > deadline) return;
+    if (Date.now() > nextDropAt) {
+      nextDropAt = Date.now() + DROP_EVERY_MS;
+      await dropAndVisitSettings(i);
+    }
     const token = `zq${i.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     await arm(page, token);
     await page.keyboard.type(token);
@@ -260,7 +300,7 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
   const sockets = await page.evaluate(() => Reflect.get(window, "__soakSockets") as SocketEvent[]);
   const during = sockets.filter((event) => event.at >= startedAt);
   const closes = during
-    .filter((event) => event.type === "close")
+    .filter((event) => event.type === "close" && event.code !== DROP_CODE)
     .map(({ kind, code, reason, clean, at }) => ({
       kind,
       code,
@@ -276,6 +316,7 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
     minutes: MINUTES,
     echo: { ...summary(echoes), lost },
     eraseFailures,
+    drops,
     diagnostics,
     bursts: { ...summary(bursts), lost: burstsLost, lines: 3000 },
     sockets: {
@@ -285,7 +326,6 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
     visibility: (
       await page.evaluate(() => Reflect.get(window, "__soakVisibility") as { at: number; state: string }[])
     ).map(({ at, state }) => ({ state, atS: Math.round((at - startedAt) / 1000) })),
-    launchArgs: process.env["SOAK_CHROMIUM_ARGS"] ?? "",
     reconnects: opens.filter((event) => event.kind.startsWith("/v1/client/")).length,
     pageErrors,
     consoleErrors: { count: consoleErrors.length, first: consoleErrors.slice(0, 20) },

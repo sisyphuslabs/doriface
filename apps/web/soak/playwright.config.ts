@@ -26,8 +26,6 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "off",
     screenshot: "only-on-failure",
-    // SOAK_CHROMIUM_ARGS: extra Chromium switches, to compare a client with and without one.
-    launchOptions: { args: (process.env["SOAK_CHROMIUM_ARGS"] ?? "").split(" ").filter(Boolean) },
   },
   webServer: {
     command: PREBUILT === undefined ? `bunx --bun vite build --outDir ${OUT} --emptyOutDir && ${PREVIEW}` : PREVIEW,

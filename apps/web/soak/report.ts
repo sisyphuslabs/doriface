@@ -21,6 +21,11 @@ interface Result {
   readonly minutes: number;
   readonly echo: Stats;
   readonly eraseFailures: number;
+  readonly drops?: readonly {
+    readonly listEmpty: boolean;
+    readonly waiting: boolean;
+    readonly recoverMs: number | null;
+  }[];
   readonly bursts: Stats & { readonly lines: number };
   readonly sockets: {
     readonly closes: readonly { readonly kind: string; readonly code?: number; readonly atS: number }[];
@@ -55,6 +60,14 @@ const rows: [string, (result: Result) => string][] = [
   ["Bursts lost (> 60 s)", (r) => String(r.bursts.lost)],
   ["Relay socket closes", closes],
   ["Reconnects", (r) => String(r.reconnects)],
+  ["Forced drops + Settings round-trips", (r) => String(r.drops?.length ?? 0)],
+  ["... list empty after coming back", (r) => String(r.drops?.filter((d) => d.listEmpty).length ?? 0)],
+  ["... a pane waiting for its terminal", (r) => String(r.drops?.filter((d) => d.waiting).length ?? 0)],
+  [
+    "... drop to echo again, each",
+    (r) =>
+      r.drops?.map((d) => (d.recoverMs === null ? "none" : `${(d.recoverMs / 1000).toFixed(1)} s`)).join(", ") ?? "-",
+  ],
   ["Page errors", (r) => String(r.pageErrors.length)],
   ["Console errors", (r) => String(r.consoleErrors.count)],
 ];
