@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "icons": "bun scripts/icons.ts",
     "test:e2e": "playwright test",
     "test:e2e:two-runs": "bun scripts/e2e-two-runs.ts"
   },
