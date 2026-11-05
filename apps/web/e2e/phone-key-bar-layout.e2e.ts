@@ -2,8 +2,10 @@ import { KEYBOARD_REQUEST_MS } from "../src/terminal/keyboard-inset.ts";
 import { expect, test } from "./fixtures.ts";
 import { key, keysBar, openPhoneTerminal } from "./phone-key-bar.ts";
 
-// The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
-test.use({ serviceWorkers: "block" });
+// A touch phone whose browser resizes the page for its soft keyboard. A mouse-only window of this width opens the keys
+// bar by hand instead (phone-keys-mouse.e2e.ts, #287). The service worker reloads the page once it takes control; only
+// pwa.e2e.ts tests it.
+test.use({ serviceWorkers: "block", hasTouch: true, isMobile: true });
 
 // A browser that resizes the page for the soft keyboard instead of overlaying it (#244). A phone in landscape stays
 // under the phone layout's 768 px.
