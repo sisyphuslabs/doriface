@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { addMachine, DEMO_MACHINE } from "./machine.ts";
+import { shellEnv } from "./shell-env.ts";
 
 const [webOrigin, relayAddress] = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 if (webOrigin === undefined || !/^https?:\/\//.test(webOrigin) || relayAddress === undefined) {
@@ -25,12 +26,13 @@ const stateDir = mkdtempSync(join(tmpdir(), "dw-fake-relay-"));
 const relay = new FakeRelay();
 const bridge = new RelayClientBridge(relay);
 const hc = createHcSession("web-e2e-fake-relay");
+const env = { ...hc.env, ...shellEnv(stateDir) };
 const host = await startHost({
   listen: { hostname: "127.0.0.1", port: 0 },
   token: `fake-relay-host-${crypto.randomUUID()}`,
   hc: hc.hc,
   session: hc.name,
-  env: hc.env,
+  env,
   stateDir,
   relay: { url: relay.url },
   log: () => {},
@@ -38,7 +40,7 @@ const host = await startHost({
 await relay.answers.next();
 // With --machine, the host's core also has an added machine, as a host with more than one computer does.
 const stopMachine = process.argv.includes("--machine")
-  ? await addMachine(hc.hc, hc.env, join(stateDir, "machine"), false, {
+  ? await addMachine(hc.hc, env, join(stateDir, "machine"), false, {
       ...DEMO_MACHINE,
       dir: join(stateDir, "machine-files"),
     })
@@ -65,9 +67,10 @@ void (async () => {
 try {
   await done.promise;
 } finally {
-  await stopMachine?.();
   await host.stop();
   await hc.dispose();
+  // Stop the dialer before its target: otherwise it can restart the second core during this teardown.
+  await stopMachine?.();
   await bridge.stop();
   await relay.stop();
   rmSync(stateDir, { recursive: true, force: true });
