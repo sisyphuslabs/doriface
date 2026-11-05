@@ -159,3 +159,43 @@ test("iTerm2 inline images and sixel are not drawn, and leave the screen's text 
   expect(text).not.toMatch(/1337|File=|#0;2|~~~|iVBOR/);
   await expect(images(terminal)).toHaveCount(0);
 });
+
+test("closing a terminal frees its engine", async ({ page }) => {
+  // Every Ghostty engine is its own WebAssembly instance; count the deinit each one's dispose() calls.
+  await page.addInitScript(() => {
+    const instantiate = WebAssembly.instantiate.bind(WebAssembly);
+    Reflect.set(window, "engineDeinits", 0);
+    Reflect.set(WebAssembly, "instantiate", async (...args: Parameters<typeof WebAssembly.instantiate>) => {
+      const made: unknown = await instantiate(...args);
+      if (!(made instanceof WebAssembly.Instance)) return made;
+      // The exports object is frozen, so the engine gets a copy whose deinit is counted.
+      const deinit = made.exports["deinit"];
+      if (typeof deinit !== "function") return made;
+      const exports = {
+        ...made.exports,
+        deinit: (...call: unknown[]) => {
+          Reflect.set(window, "engineDeinits", Number(Reflect.get(window, "engineDeinits")) + 1);
+          return Reflect.apply(deinit, made.exports, call);
+        },
+      };
+      return { exports };
+    });
+  });
+  await page.goto("/");
+  await openNewTerminal(page);
+  await openNewTerminal(page);
+  const deinits = () => page.evaluate(() => Number(Reflect.get(window, "engineDeinits")));
+  const before = await deinits();
+  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+  const open = await tabs.count();
+  // The other tab stays, so the closed one's view goes away rather than being shown again.
+  await page
+    .getByRole("tablist", { name: "Tabs" })
+    .getByRole("button", { name: /^Close / })
+    .first()
+    .click();
+  // Closing the tab of a running shell asks first; Keep running closes the tab and leaves the session on the core.
+  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
+  await expect(tabs).toHaveCount(open - 1, { timeout: 20_000 });
+  await expect.poll(deinits, { timeout: 15_000 }).toBeGreaterThan(before);
+});
