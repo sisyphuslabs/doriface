@@ -61,8 +61,8 @@ export function applyModifiers(data: string, latched: ReadonlySet<string>, host:
 }
 
 /**
- * Whether a core runs on a mac, read from its name (the hostname by default: "Alexs-MacBook-Pro", "studio-mini",
- * "buildMac"), as hc reports no OS. A name that does not say mac reads as other.
+ * Whether a core runs on a mac, guessed from its name (the hostname by default: "Alexs-MacBook-Pro", "studio-mini",
+ * "buildMac") for a host too old to report its OS (see `platformOf`). A name that does not say mac reads as other.
  */
 export function hostPlatform(coreName: string): HostPlatform {
   const words = coreName
