@@ -300,6 +300,14 @@ Web push notices (v1.7). The relay is not on the push path and does not change: 
 - An `answer` goes through the rule the in-app permission banner uses (#192, `answerApproval`): one claim per prompt in the terminal's approval document across every client, then a fresh read of the live terminal (`promptStillThere`: the same `blocked`/`permission` record, `status_ms`, turn and dialog as when the notice was made), and only then the agent's own key from its dialog (Claude Code `1` or Esc, Codex `y` or Esc). Otherwise the reply is `stale` and nothing is sent. A notification's Allow is never sent by the service worker: it opens the app on the pane, and the page sends the answer once it is visible; Deny may be sent by the worker.
 - A device whose push stream is open and reports `focus` on a terminal gets no push about that terminal.
 
+## Host info
+
+- Each doriface-host writes the herdr document `doriface-host` on its own core at start: `{"v":1,"os":"darwin"|"linux"|"win32"}`, its `process.platform`. A host on any other OS writes none. It reads the document first and writes only when the OS differs, at the version it read; on `conflict` it reads and writes once more.
+- A client reads it with hc's own `doc.get`: `{name:"doriface-host"}` for a terminal on the core it is connected to, `{name:"doriface-host", on:<machine>}` for one on a machine that core added (a mesh member or any machine running doriface-host). hc's frames pass through unchanged; nothing is added to them.
+- A reader takes `v:1` and `os`, and ignores members it does not know, so a later host may add some. No document, another `v`, an unknown `os`, or a failed read (an offline machine) means the host did not say: the phone key bar then guesses from the core's or machine's name, as before.
+- The phone key bar shows Command only on a `darwin` host's terminal, and its paste chord is cmd+v there and ctrl+shift+v elsewhere.
+- The document is advisory and never used for security. hc's `doc.set` takes `on`, so a core that added machine X, or any client of X's core, can overwrite X's `doriface-host` document until X's host restarts and writes it again. The effect is limited to X's key bar: whether it shows Command and which paste chord it sends.
+
 ## Close codes
 
 - 4400: crypto failure, including an unknown session kind, a malformed first message, an invalid CPace share, or a key confirmation that does not decrypt; an unknown or misplaced `stream`, early bytes on a mesh session, a malformed or oversize mesh stream line, a sync peer that sends no `records` or `done` line for 30 s after a `hello`, a mesh name that breaks the mesh-name rule, or an hc line before the framed `hello` that breaks the rule under Session kinds
@@ -316,6 +324,7 @@ Web push notices (v1.7). The relay is not on the push path and does not change: 
 
 ## Change log
 
+- v1.8: the `doriface-host` document ("Host info"), the host's OS on its own core; no relay or wire change.
 - v1.7.1 (no wire change): the host enforces the session caps itself (32 active, 8 pending), refusing an OPEN past 8 pending or a first DATA past 32 active with CLOSE 4429.
 - v1.7: the push stream (`stream:"push"`, `/v1/push` on loopback) and web push notices sent by the host; no relay change.
 - v1.6: relay passes. A host whose uplink passed its challenge gets a relay-made pass (PASS frame, type 7, on an uplink dialed with `?pass=1`), and every later upgrade carries a fresh signed proof (`?proof=`) that skips the per-source upgrade limit and is charged to a per-key limit instead, so any number of hosts behind one address keep their full dial budget. Close code 4412 refuses a bad proof. Pending eviction groups proven sessions by host key. Old hosts and old relays ignore all of it.
