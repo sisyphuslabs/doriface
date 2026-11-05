@@ -6,8 +6,9 @@ import { routeHcSocket } from "./hc-socket.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, reconnect, switchTo } from "./machine-switch.ts";
 
-// A local shell is the first live terminal, so it is the tab that opens on load; the remote one attaches only when
-// it is opened after the drop.
+// A local shell is the first live terminal, so it is the tab that opens on load. The remote one is adopted into its
+// machine's Home space on load (#404), and every tab's panes stay mounted, so its first attach is held until the
+// machine has dropped: it is still a session that never opened.
 let local = "";
 let remote = "";
 test.beforeEach(() => {
@@ -24,6 +25,7 @@ test("a session on a machine that just dropped shows the didn't-open screen, and
   page,
 }) => {
   const socket = await routeHcSocket(page);
+  const releaseAttach = socket.holdAlso("terminal.attach");
   await page.goto("/");
   await expect(agentRow(page, "fin", true)).toBeVisible({ timeout: 20_000 });
   await expect(page.locator(`[role="tabpanel"]:not([hidden]) [data-terminal="${MACHINE_NAME}/${remote}"]`)).toHaveCount(
@@ -33,6 +35,7 @@ test("a session on a machine that just dropped shows the didn't-open screen, and
   const release = socket.hold("machine.list");
   switchTo("drop");
   await expect.poll(() => hcOn("host", ["machine", "ls"]), { timeout: 25_000 }).toContain("unreachable");
+  releaseAttach();
   await agentRow(page, "fin", true).click();
 
   const pane = page.locator('[data-focused="true"]');
