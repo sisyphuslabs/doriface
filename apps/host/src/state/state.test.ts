@@ -1,9 +1,10 @@
 import { base64urlDecode, fingerprintOf, generateX25519, type SecureLink, SessionKind } from "@doriface/crypto";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LiveSessions } from "../e2ee/sessions.ts";
+import { legacyStateLock } from "../testing/lock-steps.ts";
 import { deviceIdOf, DeviceStore } from "./devices.ts";
 
 let dir: string;
@@ -77,7 +78,7 @@ describe("state lock", () => {
   test("a writer holding the lock makes an add or a revoke wait and then give up", () => {
     const devices = new DeviceStore(dir, { lockTimeoutMs: 50 });
     devices.add(generateX25519().publicKey, "phone");
-    writeFileSync(join(dir, "state.lock"), String(process.ppid));
+    legacyStateLock(dir, String(process.ppid));
     expect(() => devices.revoke(devices.list()[0]?.clientStaticPub ?? "")).toThrow("locked");
     expect(() => devices.add(generateX25519().publicKey, "laptop")).toThrow("locked");
     expect(devices.list()).toHaveLength(1);
@@ -86,9 +87,9 @@ describe("state lock", () => {
   test("a lock left by a dead process is broken", () => {
     const devices = new DeviceStore(dir, { lockTimeoutMs: 50 });
     devices.add(generateX25519().publicKey, "phone");
-    writeFileSync(join(dir, "state.lock"), String(deadPid()));
+    legacyStateLock(dir, String(deadPid()));
     expect(devices.revoke(devices.list()[0]?.clientStaticPub ?? "")).toHaveLength(1);
-    expect(existsSync(join(dir, "state.lock"))).toBe(false);
+    expect(statSync(join(dir, "state.lock")).isDirectory()).toBe(true);
   });
 });
 
