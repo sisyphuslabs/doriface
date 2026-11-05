@@ -20,15 +20,14 @@ test.describe("renaming a machine with its terminals open", () => {
     endAgent("host", local);
   });
 
-  test("keeps its open tab beside this machine's, now at the new address, and the terminal still answers", async ({
-    page,
-  }) => {
+  test("keeps its open tab, now at the new address, and the terminal still answers", async ({ page }) => {
     await page.goto("/");
     await agentRow(page, "home", false).click();
     await agentRow(page, "e2e", true).click();
     const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
     await expect(tabs.filter({ hasText: "e2e" })).toHaveAttribute("aria-selected", "true", { timeout: 20_000 });
-    await expect(tabs.filter({ hasText: "home" })).toHaveCount(1);
+    // This machine's tab is in a space of its own machine, so the strip shows only the added machine's (#404).
+    await expect(tabs.filter({ hasText: "home" })).toHaveCount(0);
     await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`)).toBeVisible({ timeout: 15_000 });
     const open = await tabs.count();
 

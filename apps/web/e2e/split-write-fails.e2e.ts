@@ -44,12 +44,21 @@ test("a split whose write another device beats on every retry keeps its new term
   release();
 
   await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  // The new terminal is kept in a tab of this screen's own, a space of no document, so the strip shows it alone (#404).
   const strip = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-  await expect(strip).toHaveCount(2);
+  await expect(strip).toHaveCount(1);
   const shown = page.locator("[data-terminal]:visible");
   await expect(shown).toHaveCount(1);
   const made = (await shown.getAttribute("data-terminal")) ?? "";
   shells.push(made);
   expect(made).not.toBe(one);
   await expect(shown).toContainText("$", { timeout: 15_000 });
+  // The saved tab is still there, in its space.
+  await page
+    .getByRole("complementary", { name: "Workspace" })
+    .getByRole("region", { name: "Spaces" })
+    .getByRole("button", { name: /^tmp\b/ })
+    .click();
+  await expect(strip).toHaveCount(1);
+  await expect(paneOf(page, one)).toBeVisible();
 });

@@ -1,6 +1,7 @@
 import { devices, type Locator, type Page } from "@playwright/test";
 import { agentRow, endAgent } from "./agents.ts";
 import { expect, laidOutBox, test } from "./fixtures.ts";
+import { seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
@@ -61,7 +62,18 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
   const first = `hdr-a-${run}`;
   const second = `hdr-b-${run}`;
   const started = [startShellIn(space, first), startShellIn(space, second)];
+  // The space as the layout saves it (#404): one tab per shell, in this order.
+  const saveSpace = (): void =>
+    seedSpaces([
+      {
+        id: "spc-hdr",
+        name: space,
+        folder: "",
+        tabs: started.map((terminal, index) => ({ id: `tb-hdr-${index}`, name: "", terminal })),
+      },
+    ]);
   try {
+    saveSpace();
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
     await agentRow(page, first, false).click();
@@ -111,8 +123,9 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await expect(header(page).getByRole("heading", { name: second })).toBeVisible({ timeout: 15_000 });
     await expect(header(page).getByText("2/2", { exact: true })).toBeVisible();
 
-    // A new tab in the same space is counted at once.
+    // A new tab in the same space, saved by another device, is counted at once.
     started.push(startShellIn(space, `hdr-c-${run}`));
+    saveSpace();
     await expect(header(page).getByText("2/3", { exact: true })).toBeVisible({ timeout: 15_000 });
   } finally {
     for (const address of started) endAgent("host", address);
