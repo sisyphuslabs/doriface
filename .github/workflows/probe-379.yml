@@ -1,0 +1,63 @@
+name: Probe 379
+
+on:
+  pull_request:
+
+jobs:
+  probe:
+    name: probe ${{ matrix.kind }} ${{ matrix.n }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [eip]
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        include:
+          - { kind: measure, n: 0 }
+          - { kind: mutant, n: 21 }
+          - { kind: mutant, n: 22 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: Install herdr-core
+        env:
+          HC_URL: https://releases.herdr.dev/core/0.1.17/herdr-core-linux-x86_64.tar.gz
+          HC_SHA256: 82ec44043f6894bfdb716b979b87cda43fd7fa46b0104e7b7bd93e64d1a9b877
+        run: |
+          mkdir -p "$RUNNER_TEMP/hc"
+          curl -fsSL "$HC_URL" -o "$RUNNER_TEMP/hc.tar.gz"
+          echo "$HC_SHA256  $RUNNER_TEMP/hc.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/hc.tar.gz" -C "$RUNNER_TEMP/hc" herdr-core
+          ln -s herdr-core "$RUNNER_TEMP/hc/hc"
+          echo "$RUNNER_TEMP/hc" >> "$GITHUB_PATH"
+          echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
+      - run: bun install --frozen-lockfile
+      - name: Fetch the private relay
+        env:
+          RELAY_READ_TOKEN: ${{ secrets.DORIFACE_RELAY_READ_TOKEN }}
+          RELAY_REPO: ${{ secrets.RELAY_REPO }}
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: credential.https://github.com.helper
+          GIT_CONFIG_VALUE_0: '!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "$RELAY_READ_TOKEN"; }; f'
+        run: bun run relay:fetch
+      - name: Run
+        env:
+          DORIFACE_MESH_E2E: require
+          KIND: ${{ matrix.kind }}
+        run: |
+          case "$KIND" in
+            measure) bun test --path-ignore-patterns '.relay/**' ./tests/relay/zz-restart-probe.test.ts ;;
+            eip) bun test --path-ignore-patterns '.relay/**' ./tests/relay/mesh-ip.test.ts ;;
+            mutant) git apply .github/probe-379/mutant.patch && bun test --path-ignore-patterns '.relay/**' ./tests/relay/mesh-ip.test.ts ;;
+          esac

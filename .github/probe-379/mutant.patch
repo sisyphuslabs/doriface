@@ -1,0 +1,32 @@
+diff --git a/packages/relay-client/src/uplink.ts b/packages/relay-client/src/uplink.ts
+index b4c461b..4736a75 100644
+--- a/packages/relay-client/src/uplink.ts
++++ b/packages/relay-client/src/uplink.ts
+@@ -192,6 +192,8 @@ export class Uplink {
+     this.#finish(CloseCode.Normal);
+   }
+ 
++  #mutantRedial = false;
++
+   #connect(): void {
+     this.#timer = undefined;
+     this.#answeredAt = undefined;
+@@ -231,6 +233,10 @@ export class Uplink {
+     this.#answeredAt = Date.now();
+     this.#toldUnsigned = false;
+     this.#options.onState?.({ state: "answered" });
++    if (this.#mutantRedial) {
++      this.#mutantRedial = false;
++      ws.close(4000, "mutant: reconnect twice");
++    }
+   }
+ 
+   /** Handles one relay frame; every frame is acked on arrival, and each session bounds its own backlog. */
+@@ -297,6 +303,7 @@ export class Uplink {
+     this.#socket = undefined;
+     this.#pairSlots.failAll(`the uplink closed with ${code} before the relay answered`);
+     if (FINAL_CODES.has(code)) return this.#finish(code);
++    if (code !== 4000) this.#mutantRedial = true;
+     const stable = this.#answeredAt !== undefined && Date.now() - this.#answeredAt >= STABLE_MS;
+     if (stable) this.#attempt = 0;
+     const retryInMs = this.#passes?.reconnectDelay(code) ?? backoffDelay(this.#attempt, this.#options.random);
