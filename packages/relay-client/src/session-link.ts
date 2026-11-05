@@ -23,6 +23,8 @@ export interface SessionTransport {
   /** False when the uplink socket can no longer carry the frame. */
   sendFrame(frame: Uint8Array<ArrayBuffer>): boolean;
   release(sessionId: number): void;
+  /** Whether this pending session may become active: false once the host's active-session cap is full. */
+  answer(sessionId: number): boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export class SessionLink implements ByteLink {
   #backlog = 0;
   #creditFlows = false;
   #uncredited = 0;
+  #answered = false;
 
   constructor(sessionId: number, pairSlot: string | undefined, transport: SessionTransport) {
     this.sessionId = sessionId;
@@ -52,11 +55,24 @@ export class SessionLink implements ByteLink {
     );
   }
 
+  /** True once the host has sent DATA on this session: it is active, not pending (contract "Session admission"). */
+  get answered(): boolean {
+    return this.#answered;
+  }
+
   send(bytes: Uint8Array): Promise<void> {
     if (this.#closed.fired) return Promise.reject(new LinkClosedError(`session ${this.sessionId} is closed`));
     if (bytes.byteLength > MAX_SESSION_SEND_BYTES) {
       const cap = `the relay's ${MAX_SESSION_SEND_BYTES}-byte message cap`;
       return Promise.reject(new RangeError(`${bytes.byteLength} bytes exceed ${cap}`));
+    }
+    if (!this.#answered) {
+      if (!this.#transport.answer(this.sessionId)) {
+        const refused = new RelayCloseError(CloseCode.RateLimited, "the host's active session cap is full");
+        this.#end(refused, true, CloseCode.RateLimited);
+        return Promise.reject(refused);
+      }
+      this.#answered = true;
     }
     const { promise, resolve, reject } = Promise.withResolvers<void>();
     const go = (): void => {
