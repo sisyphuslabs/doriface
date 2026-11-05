@@ -5,6 +5,7 @@ export * from "./jsonrpc.ts";
 export * from "./lines.ts";
 export * from "./events.ts";
 export { END_LABEL } from "./end-label.ts";
+export * from "./git-facts.ts";
 export * from "./host-info.ts";
 export * from "./mesh-status.ts";
 export * from "./push.ts";

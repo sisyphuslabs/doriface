@@ -6,6 +6,7 @@ import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { openControl } from "./host-control.ts";
 import { e2eeDeps } from "./host-e2ee.ts";
+import { type GitFactsPublisher, publishGitFacts } from "./git-facts.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { retireLock } from "./host-lock.ts";
 import { type Host, HOST_VERSION, type HostOptions } from "./host-types.ts";
@@ -99,6 +100,7 @@ async function serve(
   // session's core when none runs, and a host that no one uses must not start one (#306).
   const core = { hc: options.hc, session: options.session, env: options.env };
   let info: HostInfoPublisher | undefined;
+  let git: GitFactsPublisher | undefined;
   started(
     "host info",
     () => info?.stop(),
@@ -115,10 +117,16 @@ async function serve(
     openPipe: () => {
       void ends.ensure();
       info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
+      git ??= publishGitFacts(core, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
   started("gateway", () => gateway.closeAll());
+  started(
+    "git facts",
+    () => git?.stop(),
+    () => (git?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
+  );
   if (uplink !== undefined) started("relay uplink", () => uplink.stop());
   await uplink?.start({
     onSession: (session) => {
