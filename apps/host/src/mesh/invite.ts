@@ -125,15 +125,19 @@ const KEY_HELD = "this Noise key is another mesh member's";
 
 /**
  * Section 4.4 step 3 against the stored set: true for a member presenting the Noise key the mesh holds for it (the
- * welcome only). Refuses a member with another Noise key or past the cap, and a new signing key presenting a member's
- * Noise key: that twin would keep the key authorized, and the member's sessions open, after the member is revoked.
+ * welcome only). Refuses a member with another Noise key or past the cap, and a new signing key presenting a Noise key
+ * that another signing key's card names (#90): a twin of a current member would make the admit void (type_ok) and
+ * every later record of this host with it, and a twin of a revoked, over-cap or superseded key authorizes nobody.
  */
 function isRejoin(index: AuthorizeIndex | undefined, card: CardBody): boolean {
   const holder = index?.member(card.noisePub);
   if (holder?.signPub === card.signPub) return true;
   if (holder !== undefined) throw new JoinRefused(KEY_HELD);
-  if (index?.isMember(card.signPub) !== true) return false;
-  throw new JoinRefused(index.deviceRefusal(card.noisePub) === "over-cap mesh member" ? OVER_CAP : ANOTHER_KEY);
+  if (index?.isMember(card.signPub) === true) {
+    throw new JoinRefused(index.deviceRefusal(card.noisePub) === "over-cap mesh member" ? OVER_CAP : ANOTHER_KEY);
+  }
+  if (index?.namedByAnother(card.noisePub, card.signPub) === true) throw new JoinRefused(KEY_HELD);
+  return false;
 }
 
 /**

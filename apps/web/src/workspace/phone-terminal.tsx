@@ -13,7 +13,13 @@ import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
 import { PaneSwitcher } from "./phone-pane-switcher.tsx";
-import { KEYS_BAR_HEIGHT, keysBottom, PhoneKeys } from "./phone-keys.tsx";
+import {
+  DIRECTION_PAD_CLEARANCE,
+  KEYBOARD_BUTTON_CLEARANCE,
+  KEYS_BAR_HEIGHT,
+  keysBottom,
+  PhoneKeys,
+} from "./phone-keys.tsx";
 import { ConnectionLine } from "./reconnect-status.tsx";
 import { afterEnd } from "./session-actions.ts";
 import { useStickyKeys } from "./use-sticky-keys.ts";
@@ -39,6 +45,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   const [scope, setScope] = useState<HTMLDivElement | null>(null);
   const keyboard = useSoftKeyboard(scope);
   const [menu, setMenu] = useState(false);
+  const [pad, setPad] = useState(false);
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
   const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
   // The view that showed its program had already ended; the keys have nothing to send to under it.
@@ -65,9 +72,13 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
   const keysOpen = !ended && !dictating && (keyboard.up || menu);
+  // The terminal's jump button stays clear of what floats over its bottom right: the keyboard button, or the arrow pad.
+  const keysControls =
+    offline || ended || dictating ? null : !keysOpen ? KEYBOARD_BUTTON_CLEARANCE : pad ? DIRECTION_PAD_CLEARANCE : null;
 
   return (
-    <div className="relative flex h-dvh min-h-0 flex-col bg-card">
+    // isolate: the keys float above the terminal (z-10) but stay under a dialog and its backdrop, which portal to the body.
+    <div className="relative isolate flex h-dvh min-h-0 flex-col bg-card">
       <PhoneHeader
         terminal={terminal}
         terminals={terminals}
@@ -100,6 +111,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
             onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
             // The header already has Back to agents; this one closes the ended session.
             closeLabel="Close"
+            {...(keysControls === null ? {} : { jumpClearance: keysControls })}
             onEnded={() => setEndedView(viewKey)}
           />
         )}
@@ -129,6 +141,8 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
           current={terminal.address}
           onOpen={onOpen}
           onMenu={setMenu}
+          pad={pad}
+          onPad={setPad}
         />
       )}
     </div>
