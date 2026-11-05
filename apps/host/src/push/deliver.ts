@@ -35,6 +35,15 @@ const TIMEOUT_MS = 10_000;
 
 export type PushFetch = (url: string, init: RequestInit) => Promise<Response>;
 
+/**
+ * The push service closed the connection before any answer: a pooled keep-alive connection it had dropped as idle while
+ * the host reused it. The request never reached it, so it is sent again once, on a new connection.
+ */
+function connectionReset(error: unknown): boolean {
+  const code = error instanceof Error && "code" in error ? error.code : undefined;
+  return code === "ECONNRESET" || code === "ConnectionClosed" || code === "EPIPE";
+}
+
 /** Encrypts the notice for one subscription and posts it to the subscription's push service. */
 export async function deliverPush(
   subscription: PushSubscriptionKeys,
@@ -45,19 +54,28 @@ export async function deliverPush(
   const plaintext = new TextEncoder().encode(JSON.stringify(notice));
   if (plaintext.byteLength >= NOTICE_RECORD_BYTES) throw new Error("a notice longer than its padded record");
   const body = await encryptPushPayload(plaintext, subscription, { padTo: NOTICE_RECORD_BYTES });
-  const response = await post(subscription.endpoint, {
-    method: "POST",
-    headers: {
-      authorization: await vapidAuthorization(subscription.endpoint, vapid),
-      "content-encoding": "aes128gcm",
-      "content-type": "application/octet-stream",
-      ttl: String(TTL_SECONDS),
-      urgency: "high",
-    },
-    body: new Uint8Array(body),
-    redirect: "error",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  const send = async (fresh: boolean): Promise<Response> =>
+    post(subscription.endpoint, {
+      method: "POST",
+      headers: {
+        authorization: await vapidAuthorization(subscription.endpoint, vapid),
+        "content-encoding": "aes128gcm",
+        "content-type": "application/octet-stream",
+        ttl: String(TTL_SECONDS),
+        urgency: "high",
+      },
+      body: new Uint8Array(body),
+      redirect: "error",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      ...(fresh ? { keepalive: false } : {}),
+    });
+  let response: Response;
+  try {
+    response = await send(false);
+  } catch (error) {
+    if (!connectionReset(error)) throw error;
+    response = await send(true);
+  }
   await response.body?.cancel();
   if (response.status === 404 || response.status === 410) return "gone";
   return response.ok ? "sent" : "failed";
