@@ -59,7 +59,13 @@ export interface SeedSpace {
   readonly name: string;
   readonly folder: string;
   /** One tab per terminal: on this core its address, on an added machine (`on`) its local one there (`tN`). */
-  readonly tabs: readonly { readonly id: string; readonly name: string; readonly terminal: string }[];
+  readonly tabs: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly terminal: string;
+    /** More terminals split beside the first, in one row. */
+    readonly beside?: readonly string[];
+  }[];
 }
 
 /** Saves these spaces, each tab one pane, as the core's layout or (`on`) as its added machine's (#404). */
@@ -74,7 +80,13 @@ export function seedSpaces(spaces: readonly SeedSpace[], on?: string): void {
         tabs: space.tabs.map((tab) => ({
           id: tab.id,
           name: tab.name,
-          root: { children: [treeNode({ pane: `p-${tab.id}`, terminal: tab.terminal })], id: tab.id, type: "row" },
+          root: {
+            children: [tab.terminal, ...(tab.beside ?? [])].map((terminal, at) =>
+              treeNode({ pane: at === 0 ? `p-${tab.id}` : `p-${tab.id}-${at}`, terminal }),
+            ),
+            id: tab.id,
+            type: "row",
+          },
         })),
       })),
     },

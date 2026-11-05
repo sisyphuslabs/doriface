@@ -505,4 +505,47 @@ test.describe("10: on a phone at 390", () => {
     await expect(header.getByRole("heading", { name: "parity-b2" })).toBeVisible({ timeout: 15_000 });
     await expect(header.getByText("2/2", { exact: true })).toBeVisible();
   });
+
+  test("a split tab is one tab: the header counts 2/3 for 3 tabs and the sheet lists each tab once", async ({
+    page,
+  }) => {
+    const folder = mkdtempSync(join(tmpdir(), "tabs-parity-split-"));
+    const [one, two, twoBeside, three] = [
+      shellIn(folder, "split-w1"),
+      shellIn(folder, "split-w2"),
+      shellIn(folder, "split-w2b"),
+      shellIn(folder, "split-w3"),
+    ];
+    seedSpaces([
+      {
+        id: "spc-web",
+        name: "web",
+        folder,
+        tabs: [
+          { id: "tb-w1", name: "", terminal: one },
+          { id: "tb-w2", name: "", terminal: two, beside: [twoBeside] },
+          { id: "tb-w3", name: "", terminal: three },
+        ],
+      },
+    ]);
+    await page.goto("/");
+    await agentRow(page, "split-w2", false).click();
+    const header = page.getByRole("banner");
+    await expect(header.getByRole("heading", { name: "split-w2" })).toBeVisible({ timeout: 15_000 });
+    await expect(header.getByText("2/3", { exact: true })).toBeVisible();
+    await expect(header.getByText("Tab 2 of 3")).toHaveCount(1);
+    const panes = page.getByRole("navigation", { name: "Panes in this tab" });
+    await panes.getByRole("button", { name: "Next pane" }).click();
+    await expect(header.getByRole("heading", { name: "split-w2b" })).toBeVisible({ timeout: 15_000 });
+    await expect(header.getByText("2/3", { exact: true })).toBeVisible();
+
+    await header.getByRole("button", { name: "Switch space or tab" }).click();
+    const web = page.getByRole("dialog", { name: "Spaces" }).getByRole("region", { name: "web" });
+    // One row per tab; the split tab shows the pane in view.
+    await expect(agentRow(web, "split-w1", false)).toHaveCount(1);
+    await expect(agentRow(web, "split-w2b", false)).toHaveCount(1);
+    await expect(agentRow(web, "split-w3", false)).toHaveCount(1);
+    await expect(agentRow(web, "split-w2", false)).toHaveCount(0);
+    await expect(web.getByRole("button")).toHaveCount(3);
+  });
 });
