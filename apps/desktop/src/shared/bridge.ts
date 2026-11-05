@@ -19,6 +19,12 @@ export const Channel = {
   setMenuKeys: "doriface:set-menu-keys",
   /** Renderer to main: pick herdr-core's hc in a file dialog and keep it for every later start. */
   chooseHc: "doriface:choose-hc",
+  /** Main to renderer: an update is downloaded and staged; it carries no data. */
+  updateReady: "doriface:update-ready",
+  /** Renderer to main: the staged update, or null. */
+  takeUpdate: "doriface:take-update",
+  /** Renderer to main: quit and install the staged update (Restart to update). */
+  installUpdate: "doriface:install-update",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -54,6 +60,14 @@ export interface LocalHostFailure {
   readonly details: string;
 }
 
+/** A release the updater downloaded and staged: Restart to update installs it. */
+export interface UpdateReady {
+  readonly version: string;
+}
+
+export const isUpdateReady = (value: unknown): value is UpdateReady =>
+  typeof value === "object" && value !== null && typeof Reflect.get(value, "version") === "string";
+
 /** A failed start crosses IPC as a value: Electron hands the renderer only the message of a thrown error. */
 export interface LocalHostStartFailed {
   readonly failure: LocalHostFailure;
@@ -85,6 +99,10 @@ export interface DorifaceBridge {
   setMenuKeys(keys: Readonly<Record<string, string>>): Promise<boolean>;
   /** Asks for herdr-core's hc in a file dialog and keeps it; resolves with its path, or null when cancelled. */
   chooseHc(): Promise<string | null>;
+  /** Calls `listener` once an update is staged, at once when one already is. */
+  onUpdateReady(listener: (update: UpdateReady) => void): void;
+  /** Quits and installs the staged update; resolves false when none is staged. */
+  installUpdate(): Promise<boolean>;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {
