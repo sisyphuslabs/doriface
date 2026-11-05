@@ -18,19 +18,22 @@ test.describe("two terminals named alike on two machines", () => {
     page,
   }) => {
     await page.goto("/");
-    const chord = await page.evaluate(() => (navigator.platform.startsWith("Mac") ? "⌘" : "Ctrl+"));
     const bar = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
     const status = page.getByRole("contentinfo");
 
     // The tab bar shows the selected space's tabs, and a space is one machine's: a tab no longer names its machine (#404).
+    // An unnamed tab reads its number; the terminal's name is on its session actions (#466 ruling A).
+    const actions = page.getByRole("button", { name: "Session actions for review" });
     await agentRow(page, "review", true).click();
     await expect(bar).toHaveCount(1, { timeout: 15_000 });
-    await expect(bar.first()).toHaveAttribute("title", `review (${chord}1)`);
+    await expect(bar).toHaveText(["1"]);
+    await expect(actions).toBeVisible();
     await expect(status).toContainText(MACHINE_NAME);
 
     await agentRow(page, "review", false).click();
     await expect(bar).toHaveCount(1);
-    await expect(bar.first()).toHaveAttribute("title", `review (${chord}1)`);
+    await expect(bar).toHaveText(["1"]);
+    await expect(actions).toBeVisible();
     await expect(status).toContainText(HOST_NAME);
     await expect(status).not.toContainText(MACHINE_NAME);
   });
@@ -40,7 +43,8 @@ test.describe("two terminals named alike on two machines", () => {
     await page.goto("/");
     await agentRow(page, "review", true).click();
     const header = page.locator("header").filter({ has: page.getByRole("button", { name: "Back to agents" }) });
-    // Loaded with no tab of its own, the terminal was adopted into its machine's Home space (#404).
-    await expect(header).toContainText(`${MACHINE_NAME} · Home`, { timeout: 15_000 });
+    // Loaded with no tab of its own, the terminal was adopted into the space its `space` label names (#404): startAgent's
+    // "api", on its own machine.
+    await expect(header).toContainText(`${MACHINE_NAME} · api`, { timeout: 15_000 });
   });
 });
