@@ -1,6 +1,7 @@
 import { base64urlDecode, base64urlEncode, generateX25519, type KeyPair, x25519FromSecret } from "@doriface/crypto";
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { PrivateStateRefused } from "./private-state-refused.ts";
 import { createPrivateJson, ensureStateDir, isRecord, readJson, stringField, writePrivateJson } from "./files.ts";
 import { DEFAULT_LOCK_TIMEOUT_MS, withStateLock } from "./lock.ts";
 
@@ -22,9 +23,10 @@ export function loadDeviceKey(stateDir: string): KeyPair {
   const path = join(ensureStateDir(stateDir), DEVICE_FILE);
   const existing = readJson(path);
   if (existing !== undefined) {
-    const mode = statSync(path).mode & 0o777;
+    // POSIX mode bits only: on Windows readJson has already checked the file's ACL on the handle it read (#406).
+    const mode = process.platform === "win32" ? 0 : statSync(path).mode & 0o777;
     if ((mode & 0o077) !== 0) {
-      throw new Error(
+      throw new PrivateStateRefused(
         `${path} is readable by other users (mode ${mode.toString(8)}): chmod 600 it, or delete it and pair again`,
       );
     }
