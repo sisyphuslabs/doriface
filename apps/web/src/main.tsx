@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { appearanceStore, startAppearance } from "./appearance/appearance.ts";
+import { checkBaseline } from "./baseline.ts";
 import { connectionStore } from "./connection/store.ts";
 import {
   closeDesktopWindow,
@@ -30,6 +31,8 @@ import { reloadIntoWaitingWorker, resumeUpdate } from "./update/reload-into-wait
 import { updateStore } from "./update/update-store.ts";
 import { stepTerminalFont } from "./workspace/use-app-actions.ts";
 
+// First: a browser below the baseline is told to update before the app starts or connects (#556).
+checkBaseline();
 startAppearance();
 captureInstallPrompt();
 // The desktop shell serves the app from its own app: scheme; an offline cache there only reloads the window,
