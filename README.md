@@ -87,6 +87,19 @@ bun run --cwd packages/ui showcase    # every component and screen mockup
 
 `bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`. `bun run relay:test` runs `tests/relay` against the private relay at the commit `relay-pin.json` names: it clones it into `.relay` when `RELAY_REPO` names the relay's repository and your git credentials can read it, and otherwise says so and stops. `bun run check` does not need it. `bun run relay:dev` serves that relay locally.
 
+## Releases
+
+[Releases](https://github.com/sisyphuslabs/doriface/releases) carry the desktop app for macOS (Apple silicon and Intel: dmg and zip), Windows (x64 and arm64: installer exe) and Linux (x64 and arm64: AppImage and deb), the web client and PWA as a zip of static files, and `SHA256SUMS.txt`.
+
+The builds are not code signed yet. The macOS app is ad-hoc signed and not notarized, so macOS blocks the first open: choose **Open Anyway** in System Settings > Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/doriface.app`. On Windows, SmartScreen warns about an unknown publisher: choose **More info**, then **Run anyway**. The release workflow lists the secrets that turn signing on.
+
+The [release workflow](.github/workflows/release.yml) builds every file on GitHub-hosted runners. The version comes from `apps/desktop/package.json`:
+
+1. Set `version` there and merge it.
+2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the uploaded Linux AppImage and macOS app, then publishes the release. Notes come from the `## X.Y.Z` section of `CHANGELOG.md` when there is one.
+
+A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with a version such as `X.Y.Z-rc.1`: it builds the same files into a draft release and leaves it a draft.
+
 ## Design
 
 The design system lives in [DESIGN.md](DESIGN.md): herdr-compatible themes, tokens, the component set in `packages/ui`, the accessibility rules every theme is tested against, and a brief for every screen. Screen mockups are in [docs/design/mockups](docs/design/mockups), and captures of the real app in [docs/design/app](docs/design/app).
