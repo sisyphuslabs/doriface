@@ -2,7 +2,7 @@ import { removeTab } from "@doriface/protocol/layout";
 import { type Dispatch, type SetStateAction, useCallback } from "react";
 import type { View } from "../layout/view.ts";
 import { afterClosing, findTerminal, type LayoutTab } from "./layout-model.ts";
-import { type DropTarget, useDropPane } from "./use-drop-pane.ts";
+import { type DropTarget, type Leaving, useDropPane } from "./use-drop-pane.ts";
 
 export interface TabClose {
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
@@ -20,6 +20,8 @@ export function useTabClose(
   layoutOf: (machine: string | null) => DropTarget | undefined,
   setLoose: Dispatch<SetStateAction<readonly string[]>>,
   setView: Dispatch<SetStateAction<View>>,
+  /** Moves focus off a pane as its drop goes out, and returns how to undo that when the write fails. */
+  leavePane: (leaving: Leaving) => () => void,
 ): TabClose {
   const leave = useCallback(
     (key: string): void => {
@@ -28,7 +30,7 @@ export function useTabClose(
     [active, setView, tabs],
   );
 
-  const dropFromDoc = useDropPane(tabs, layoutOf, setLoose);
+  const dropFromDoc = useDropPane(tabs, layoutOf, setLoose, leavePane);
   const dropPane = useCallback(
     (address: string): void => {
       const found = findTerminal(tabs, address);
