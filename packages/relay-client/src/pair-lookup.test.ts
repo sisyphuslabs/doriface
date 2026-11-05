@@ -88,3 +88,35 @@ describe("lookupPairSlot: the signed form's optional fields (#22)", () => {
     }
   });
 });
+
+
+/** A host's real signing key and Noise key, and an attacker's Noise key: what a lying relay can mix (#22). */
+async function hostAndAttacker(): Promise<{
+  hostId: string;
+  signPub: Uint8Array;
+  noise: Uint8Array;
+  attacker: Uint8Array;
+}> {
+  const keys = (await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"])) as CryptoKeyPair;
+  const signPub = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
+  return {
+    hostId: await hostIdOf(signPub),
+    signPub,
+    noise: crypto.getRandomValues(new Uint8Array(32)),
+    attacker: crypto.getRandomValues(new Uint8Array(32)),
+  };
+}
+
+describe("lookupPairSlot: a relay that swaps in another Noise static key (#22)", () => {
+  test("an answer with the host's real hostId and signPub but an attacker's noiseStaticPub is refused", async () => {
+    const host = await hostAndAttacker();
+    const lying = {
+      hostId: host.hostId,
+      signPub: toBase64Url(host.signPub),
+      noiseStaticPub: toBase64Url(host.attacker),
+    };
+    const { fetch } = recordingFetch(() => Response.json(lying));
+    const lookup = lookupPairSlot({ relayUrl: "https://relay.example", code: "AB3K9XQZ", fetch });
+    await expect(lookup).rejects.toBeInstanceOf(PairLookupError);
+  });
+});
