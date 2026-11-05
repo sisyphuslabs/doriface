@@ -6,11 +6,13 @@ import { machineRow } from "./machine-switch.ts";
 import { domOrder, selectedIndex, tabs } from "./tab-strip.ts";
 
 const ORDER_DOC = "doriface";
+// Each machine heads its own spaces: its header row is the handle, and the whole group (header and spaces) moves.
 const rows = (page: Page) => page.locator("[data-machine-row]");
 const rowOf = (page: Page, name: string) =>
   page.locator("[data-machine-row]", { has: page.getByRole("button", { name: new RegExp(`^${name}\\b`) }) });
+const groupOf = (page: Page, name: string) => page.locator("[data-drag-id]", { has: rowOf(page, name) });
 const status = (page: Page) =>
-  page.getByRole("heading", { name: "Machines" }).locator("xpath=ancestor::section").getByRole("status");
+  page.getByRole("heading", { name: "Spaces" }).locator("xpath=ancestor::section").getByRole("status");
 
 const order = (page: Page) =>
   rows(page).evaluateAll((els) => els.map((el) => el.querySelector("span[title]")?.getAttribute("title")));
@@ -24,6 +26,13 @@ async function openWorkspace(page: Page): Promise<string> {
   return local;
 }
 
+/** How far up `name`'s group must go for its centre to pass `above`'s: a group lands past a neighbour once it does. */
+async function pastCentre(page: Page, name: string, above: string): Promise<number> {
+  const [moving, other] = [await groupOf(page, name).boundingBox(), await groupOf(page, above).boundingBox()];
+  if (moving === null || other === null) throw new Error(`no box for ${name} or ${above}`);
+  return other.y + other.height / 2 - (moving.y + moving.height / 2) - 8;
+}
+
 /** Presses a row and moves it by `dy` in small steps, as a hand would; `drop` lets go. */
 async function dragRow(page: Page, name: string, dy: number, drop = true): Promise<void> {
   const box = await rowOf(page, name).boundingBox();
@@ -33,7 +42,7 @@ async function dragRow(page: Page, name: string, dy: number, drop = true): Promi
   await page.mouse.move(x, y);
   await page.mouse.down();
   await page.mouse.move(x, y + Math.sign(dy) * 6, { steps: 2 });
-  await expect(rowOf(page, name)).toHaveAttribute("data-dragging", "");
+  await expect(groupOf(page, name)).toHaveAttribute("data-dragging", "");
   await page.mouse.move(x, y + dy, { steps: 8 });
   if (drop) await page.mouse.up();
 }
@@ -46,12 +55,10 @@ test.describe("machine order", () => {
     page,
   }) => {
     const local = await openWorkspace(page);
-    // A row lands past a neighbour once its centre crosses the neighbour's: a row and a half up clears it.
-    const height = (await rowOf(page, MACHINE_NAME).boundingBox())?.height ?? 28;
-    await dragRow(page, MACHINE_NAME, -height * 1.5);
+    await dragRow(page, MACHINE_NAME, await pastCentre(page, MACHINE_NAME, local));
     await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
     await expect(status(page)).toHaveText(new RegExp(`^Moved ${MACHINE_NAME} to position 1 of 2`));
-    await expect(rows(page).locator("[data-dragging]")).toHaveCount(0);
+    await expect(page.locator("[data-drag-id][data-dragging]")).toHaveCount(0);
     await expect.poll(() => getCoreDoc(ORDER_DOC)).toMatchObject({ machine_order: expect.any(Array) });
     await page.reload();
     await expect(machineRow(page)).toContainText("connected", { timeout: 30_000 });
@@ -64,8 +71,7 @@ test.describe("machine order", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const local = await openWorkspace(page);
     const before = await rowOf(page, local).boundingBox();
-    const height = before?.height ?? 28;
-    await dragRow(page, MACHINE_NAME, -height * 1.5, false);
+    await dragRow(page, MACHINE_NAME, await pastCentre(page, MACHINE_NAME, local), false);
     const caret = page.locator("[data-row-drop-caret]");
     await expect(caret).toBeVisible();
     expect(await rowOf(page, local).boundingBox()).toEqual(before);
@@ -88,7 +94,7 @@ test.describe("machine order", () => {
     await dragRow(page, MACHINE_NAME, -40, false);
     await page.keyboard.press("Escape");
     await page.mouse.up();
-    await expect(rows(page).locator("[data-dragging]")).toHaveCount(0);
+    await expect(page.locator("[data-drag-id][data-dragging]")).toHaveCount(0);
     await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
     expect(getCoreDoc(ORDER_DOC)).toBeNull();
   });
@@ -156,7 +162,7 @@ test.describe("machine order", () => {
     if (typeof written !== "object" || written === null || !("machine_order" in written)) throw new Error("no order");
     const ids = written.machine_order;
     if (!Array.isArray(ids)) throw new Error("not a list");
-    const elsewhere = page.getByRole("button", { name: "Add a machine" });
+    const elsewhere = page.getByRole("button", { name: "Add machine" });
     await elsewhere.focus();
     await expect(elsewhere).toBeFocused();
     setCoreDoc(ORDER_DOC, { machine_order: ids.toReversed(), kept: { by: "another client" } });

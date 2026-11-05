@@ -16,6 +16,8 @@ function describe(state: ConnectionState): string {
       return "Connecting";
     case "failed":
       return state.error.message;
+    case "host-failed":
+      return state.failure.message;
     case "unconfigured":
       return "Not paired yet";
   }

@@ -20,13 +20,6 @@ const LABELS: Readonly<Record<string, string>> = { needs_login: "needs login", u
 
 export const stateLabel = (state: string): string => LABELS[state] ?? state;
 
-/**
- * The section shows whenever there is a machine to list, this one included, so a person with one machine still
- * sees where added machines go and how to add one; and when listing failed, so they can see why.
- */
-export const showMachines = (entries: readonly MachineEntry[], listError: string | undefined): boolean =>
-  entries.length > 0 || listError !== undefined;
-
 /** Only this machine is listed: the section ends in an Add a machine row instead of a header action. */
 export const onlyThisMachine = (entries: readonly MachineEntry[]): boolean => entries.every((machine) => machine.local);
 
