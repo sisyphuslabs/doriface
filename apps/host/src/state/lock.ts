@@ -65,6 +65,44 @@ function emptyLockIsFresh(path: string): boolean {
   }
 }
 
+let bootId: string | undefined;
+
+/**
+ * When the process with this pid started, in a form a later process given the same pid does not share, or undefined
+ * where it cannot be read: on Linux the boot id with `/proc/<pid>/stat` field 22 (start time in ticks since boot), on
+ * macOS `ps -o lstart=` (wall-clock start). Other platforms (Windows) have none, and their holders are still known by
+ * pid alone (#276).
+ */
+export function processStart(pid: number): string | undefined {
+  try {
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      // Fields after the command name (which may hold spaces) start at field 3, so field 22 is the 20th of them.
+      const ticks = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+      bootId ??= readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+      return ticks === undefined || ticks === "" ? undefined : `linux:${bootId}:${ticks}`;
+    }
+    if (process.platform === "darwin") {
+      const ps = Bun.spawnSync(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" });
+      const start = ps.stdout.toString().trim().split(/\s+/).join("-");
+      return ps.exitCode === 0 && start !== "" ? `darwin:${start}` : undefined;
+    }
+  } catch (error) {
+    if (errorCode(error) === "ENOENT" || errorCode(error) === "ESRCH") return undefined;
+    throw error;
+  }
+  return undefined;
+}
+
+let ownStart: string | undefined | null = null;
+
+/** What a holder writes: `<pid> <token>`, and its start time where one can be read (#276). */
+function holderContent(): string {
+  ownStart ??= processStart(process.pid);
+  const token = `${process.pid} ${crypto.randomUUID()}`;
+  return ownStart === undefined ? token : `${token} ${ownStart}`;
+}
+
 /** Whether `pid` may still be running. Anything that is not a valid pid counts as running. */
 function pidIsLive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return true;
@@ -76,10 +114,19 @@ function pidIsLive(pid: number): boolean {
   }
 }
 
-/** Whether the lock with this content may still be held. Anything that does not name a dead pid counts as held. */
+/**
+ * Whether the lock with this content may still be held. Anything that does not name a dead pid counts as held. A pid
+ * that is running but started at another time than the holder wrote is a dead holder's, reused by another process
+ * (#276); a holder that wrote no start time (an older host, or a platform without one) is known by its pid alone.
+ */
 function isHeld(path: string, content: string): boolean {
   if (content.trim() === "") return emptyLockIsFresh(path);
-  return pidIsLive(Number(content.split(" ")[0]));
+  const [pidText, , start] = content.trim().split(" ");
+  const pid = Number(pidText);
+  if (!pidIsLive(pid)) return false;
+  if (start === undefined) return true;
+  const current = processStart(pid);
+  return current === undefined || current === start;
 }
 
 /** Writes `content` to a new temp file beside `path`, named with this pid so a sweep keeps it while this process lives. */
@@ -124,7 +171,7 @@ function tryAcquire(path: string, content: string): boolean {
  */
 function breakStaleLock(path: string, observed: string): boolean {
   const guard = `${path}.break`;
-  const token = `${process.pid} ${crypto.randomUUID()}`;
+  const token = holderContent();
   if (!tryAcquire(guard, token)) {
     const breaker = readLock(guard);
     if (breaker !== undefined && !isHeld(guard, breaker) && readLock(guard) === breaker) rmSync(guard, { force: true });
@@ -215,7 +262,8 @@ function attempt(dir: string, content: string, step: LockStepHook): number | "wa
  * up to `timeoutMs`.
  *
  * The lock is the directory `state.lock`, whose entries are numbered generations, each published whole with `link`
- * (so exactly one process wins each number) and never rewritten: `<pid> <token>` for a holder, `free` after a release.
+ * (so exactly one process wins each number) and never rewritten: `<pid> <token> <start>` for a holder (the start time
+ * tells a reused pid from the holder's, #276; it is left out where none can be read), `free` after a release.
  * The highest generation is the lock's state. A process takes the lock by publishing the next number over a highest
  * one that is free or names a dead pid, then checking that nothing newer exists; if something does, it was late (the
  * number it won had been taken, released and removed), so it removes its own and tries again. Nothing is ever deleted
@@ -236,7 +284,7 @@ export function withStateLock<T>(
   io: ReleaseIo = DEFAULT_RELEASE_IO,
 ): T {
   const dir = join(stateDir, "state.lock");
-  const content = `${process.pid} ${crypto.randomUUID()}`;
+  const content = holderContent();
   const deadline = Date.now() + timeoutMs;
   let free: string | undefined;
   try {
