@@ -154,7 +154,7 @@ describe("#275: the claim's own guards, and the limit that needs hc", () => {
     const first = answerApproval(core, mark, "allow", phone, 1, { clock: ownClock() });
     await core.stalled.promise;
     const theirs = (await readApprovalRecord(core, mark))?.attempt;
-    expect(theirs).toBeDefined();
+    if (theirs === undefined) throw new Error("the first answer's claim carries no attempt id");
     const second = await answerApproval(core, mark, "allow", laptop, 2, { clock: ownClock(), retake: theirs });
     release.resolve();
     await first;
