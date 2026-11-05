@@ -59,15 +59,15 @@ async function measure(terminal: Locator): Promise<Measure> {
   };
 }
 
-/** The thumb the bar should draw for the view as it is, as herdr-app sizes it: within one cell of the drawn one. */
+/** The thumb the bar should draw for the view as it is, as herdr-app sizes it: within a pixel of the drawn one. */
 function expectThumbMatches(m: Measure): void {
   const total = m.scrollback + m.rows;
   const length = Math.max((m.track.height * m.rows) / total, m.rowHeight);
   const offset = m.max - m.scrollTop < 5 ? m.scrollback : m.scrollTop / m.rowHeight;
   const top = m.track.top + (offset / m.scrollback) * (m.track.height - length);
   expect(m.track.height).toBeCloseTo(m.rows * m.rowHeight, 0);
-  expect(Math.abs(m.thumb.height - length)).toBeLessThanOrEqual(m.rowHeight);
-  expect(Math.abs(m.thumb.top - top)).toBeLessThanOrEqual(m.rowHeight);
+  expect(Math.abs(m.thumb.height - length)).toBeLessThanOrEqual(1);
+  expect(Math.abs(m.thumb.top - top)).toBeLessThanOrEqual(1);
 }
 
 /** The scrollTop a thumb top (relative to the track) lands on, row by row, as the drag should put it. */
@@ -100,6 +100,49 @@ const scrollTo = (terminal: Locator, top: number) =>
   terminal.evaluate((element, to) => {
     element.scrollTop = to;
   }, top);
+
+/**
+ * herdr-app's `scrollbar_lane`: from where the grid's text ends to the pane's right edge, or the last 8 px when the text
+ * runs closer. Returns how far the drawn lane's left edge is from that, and how wide the room past the text is.
+ */
+async function laneOffset(terminal: Locator, cols: number): Promise<{ readonly off: number; readonly room: number }> {
+  return terminal.evaluate((element, columns) => {
+    const style = getComputedStyle(element);
+    const pane = element.getBoundingClientRect();
+    const cell = parseFloat(element instanceof HTMLElement ? element.style.getPropertyValue("--term-cell-width") : "");
+    const textEnd = pane.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft) + columns * cell;
+    const left = Math.max(Math.min(textEnd, pane.right - 8), pane.left);
+    const lane = element.parentElement?.querySelector("[data-terminal-scrollbar]")?.getBoundingClientRect();
+    return { off: lane === undefined ? Number.NaN : Math.abs(lane.left - left), room: pane.right - textEnd };
+  }, cols);
+}
+
+test("the bar's lane runs from the end of the text to the edge, as herdr-app's does, at every width across a cell", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  await fill(page, terminal);
+  await expect(bar(terminal)).toBeVisible();
+  // Widths a cell apart cover every way the columns can fall short of the pane; some leave more than 8 px past the text.
+  const widths = Array.from({ length: 12 }, (_unused, index) => 1440 + index);
+  const widest = await widths.reduce<Promise<number>>(async (previous, width) => {
+    const room = await previous;
+    await page.setViewportSize({ width, height: 900 });
+    await expect
+      .poll(async () => {
+        const grid = await gridSize(terminal);
+        if (grid !== coreSize(address)) return Number.NaN;
+        return (await laneOffset(terminal, Number(grid.split(" ")[1]))).off;
+      })
+      .toBeLessThanOrEqual(1);
+    const cols = Number((await gridSize(terminal)).split(" ")[1]);
+    return Math.max(room, (await laneOffset(terminal, cols)).room);
+  }, Promise.resolve(0));
+  expect(widest).toBeGreaterThan(9);
+});
 
 test("at 1440 the scrollbar overlays the padding without reflow, matches the view, and drags and jumps exactly", async ({
   page,
