@@ -11,8 +11,6 @@ import {
   tabsOf,
   terminalBlock,
 } from "@doriface/protocol/layout";
-import { nearest, type Direction } from "../layout/neighbor.ts";
-import { arrange } from "../layout/rects.ts";
 import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
 import {
   buildTabs,
@@ -26,12 +24,15 @@ import {
   type LayoutTab,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
+import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
 import { splitLanding } from "./split-landing.ts";
-import { moveTabTo, orderTabs, type TabMove } from "./tab-order.ts";
+import { orderTabs, type TabMove } from "./tab-order.ts";
+import type { Leaving } from "./use-drop-pane.ts";
 import { useTabClose } from "./use-tab-close.ts";
+import { useTabMoves } from "./use-tab-moves.ts";
 import { LAYOUT_LOADING, type MachineLayout } from "./use-layout-docs.ts";
 
-export interface Layout {
+export interface Layout extends PaneMoves {
   readonly tabs: readonly LayoutTab[];
   readonly active: LayoutTab | null;
   readonly focused: LayoutPane | null;
@@ -40,13 +41,13 @@ export interface Layout {
   readonly focusPane: (tab: string, pane: string) => void;
   /** Focuses the pane that shows the terminal, or opens it in a new tab. */
   readonly openTerminal: (address: string) => void;
-  /** Puts a terminal started for the focused pane beside it, and focuses it. */
-  readonly split: (axis: Axis, address: string) => void;
+  /** Puts a terminal started for a pane (the focused one unless `target` names another) beside it, and focuses it. */
+  readonly split: (axis: Axis, address: string, target?: PaneTarget, pane?: string) => void;
   /** Takes the terminal's pane out of its tab, and the tab when it was the last pane; the terminal is untouched. */
   readonly dropPane: (address: string) => void;
   readonly closeTab: (key: string) => void;
-  /** Focuses the nearest pane that way in the tab in view; false when none lies that way, so the key stays the program's. */
-  readonly go: (direction: Direction) => boolean;
+  /** The pane this screen split off last, which grows in from the pane it came from. */
+  readonly fresh: string | null;
   /** Moves a tab so it ends at index `to` of `tabs`; panes and focus stay as they are. */
   readonly moveTab: (key: string, to: number) => void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
@@ -58,8 +59,20 @@ export interface Layout {
   readonly restored: boolean;
 }
 
-/** Proportions are all moving focus needs, so it measures the tree in a fixed box. */
-const MEASURE = { x: 0, y: 0, width: 1600, height: 1000 } as const;
+export interface PaneTarget {
+  readonly tab: string;
+  readonly pane: string;
+}
+
+const HISTORY = 32;
+
+/** `now` with `gone` back where it was in `had`: before the first pane that came after it there and is still in `now`. */
+function putBack(now: readonly string[], had: readonly string[], gone: string): string[] {
+  if (now.includes(gone)) return [...now];
+  const after = new Set(had.slice(had.indexOf(gone) + 1));
+  const at = now.findIndex((id) => after.has(id));
+  return (at === -1 ? [...now, gone] : now.toSpliced(at, 0, gone)).slice(-HISTORY);
+}
 
 const rootOf = (id: string, children: readonly Node[]): Node => ({ children: [...children], id, type: "row" });
 
@@ -81,6 +94,7 @@ export function useLayout(
   machinesListed = true,
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
+  const [fresh, setFresh] = useState<string | null>(null);
   useEffect(() => saveView(core, view), [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
   const [loose, setLoose] = useState<readonly string[]>([]);
@@ -89,6 +103,7 @@ export function useLayout(
     [layouts, terminals, loose, view.order],
   );
   const { active, focused, zoomed } = pick(tabs, view);
+  const focusedIn = view.focused;
   const layoutOf = useCallback(
     (machine: string | null) => {
       const layout = layouts.find((each) => each.machine === machine);
@@ -103,12 +118,24 @@ export function useLayout(
     [failed, layouts],
   );
 
+  // Panes focused per tab, oldest first, as herdr-app's `before`: moving focus prefers the pane left last.
+  const history = useRef(new Map<string, string[]>());
   const show = useCallback((key: string, pane: string | null): void => {
-    setView((prev) => ({
-      ...prev,
-      active: key,
-      focused: pane === null ? prev.focused : { ...prev.focused, [key]: pane },
-    }));
+    if (pane !== null) {
+      const visited = (history.current.get(key) ?? []).filter((id) => id !== pane);
+      history.current.set(key, [...visited, pane].slice(-HISTORY));
+    }
+    setView((prev) => {
+      // Focus leaving a zoomed pane shows every pane again, as herdr-app and Ghostty unzoom on a focus move or a split,
+      // so focus never sits on a pane the zoom hides and a close never acts on one out of view.
+      const { [key]: inTab, ...others } = prev.zoomed;
+      return {
+        ...prev,
+        active: key,
+        focused: pane === null ? prev.focused : { ...prev.focused, [key]: pane },
+        zoomed: pane === null || inTab === undefined || inTab === pane ? prev.zoomed : others,
+      };
+    });
   }, []);
 
   /** A tab of this screen's own for a terminal its machine's layout could not take. */
@@ -169,20 +196,23 @@ export function useLayout(
   );
 
   const split = useCallback(
-    (axis: Axis, address: string): void => {
-      if (active === null || focused === null) return addTab(address);
-      const layout = layoutOf(active.machine);
+    (axis: Axis, address: string, target?: PaneTarget, made: string = freshId("p")): void => {
+      const tab = target === undefined ? active : (tabs.find((each) => each.key === target.tab) ?? null);
+      // A named pane may not be on screen yet (a split still being written); the document edit finds it.
+      const from = target === undefined ? focused : { id: target.pane };
+      if (tab === null || from === null) return addTab(address);
+      const layout = layoutOf(tab.machine);
       if (layout === undefined || layout.readOnly !== null) return undefined;
-      const pane = freshId("p");
+      const pane = made;
       const block = terminalBlock(pane, localOf(address));
-      if (active.transient) {
-        const tab = written(active);
-        const root = splitPane(tab.root, tab.pane, axis, block, freshId("s"));
+      if (tab.transient) {
+        const copy = written(tab);
+        const root = splitPane(copy.root, copy.pane, axis, block, freshId("s"));
         if (root === null) return undefined;
-        void layout.edit((doc) =>
-          addDocTab(doc, { id: spaceOf(doc) ?? freshId("spc"), folder: "" }, { id: tab.id, name: "", root }),
-        );
-        return show(tabKey(layout.machineId, tab.id), pane);
+        const space = (doc: JsonObject | null) => ({ id: spaceOf(doc) ?? freshId("spc"), folder: "" });
+        void layout.edit((doc) => addDocTab(doc, space(doc), { id: copy.id, name: "", root }));
+        setFresh(pane);
+        return show(tabKey(layout.machineId, copy.id), pane);
       }
       const container = freshId("s");
       // Whether the edit last found the pane gone; a write that failed instead was already reported by `edit`.
@@ -190,9 +220,7 @@ export function useLayout(
       void layout
         .edit((doc) => {
           const next =
-            doc === null
-              ? null
-              : editTab(doc, active.id, (root) => splitPane(root, focused.id, axis, block, container));
+            doc === null ? null : editTab(doc, tab.id, (root) => splitPane(root, from.id, axis, block, container));
           gone = next === null;
           return next;
         })
@@ -205,35 +233,45 @@ export function useLayout(
           if (landing === "here") keepHere(address);
           return placed;
         });
-      return show(active.key, pane);
+      setFresh(pane);
+      return show(tab.key, pane);
     },
-    [active, addTab, focused, keepHere, layoutOf, show, told],
+    [active, addTab, focused, keepHere, layoutOf, show, tabs, told],
   );
 
-  const { dropPane, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView);
+  // As herdr-app's remove_pane: focus goes back to the pane focused before the closed one that is still there. A write
+  // that fails puts the pane back: in its old place in the focus history, and focus with it only when this took focus
+  // off it and nothing has moved focus since.
+  const leavePane = useCallback(
+    (leaving: Leaving): (() => void) => {
+      const key = leaving.tab.key;
+      const gone = leaving.pane.id;
+      const had = history.current.get(key) ?? [];
+      const left = had.filter((id) => id !== gone);
+      history.current.set(key, left);
+      const here = new Set(leaving.tab.panes.map((pane) => pane.id));
+      const before = left.findLast((id) => here.has(id));
+      const moved = before !== undefined && focusedIn[key] === gone;
+      if (moved)
+        setView((prev) =>
+          prev.focused[key] === gone ? { ...prev, focused: { ...prev.focused, [key]: before } } : prev,
+        );
+      return () => {
+        if (had.includes(gone)) history.current.set(key, putBack(history.current.get(key) ?? [], had, gone));
+        if (moved)
+          setView((prev) =>
+            prev.focused[key] === before ? { ...prev, focused: { ...prev.focused, [key]: gone } } : prev,
+          );
+      };
+    },
+    [focusedIn],
+  );
+  const { dropPane, closeTab } = useTabClose(tabs, active, layoutOf, setLoose, setView, leavePane);
 
+  const moves = usePaneMoves({ active, focused, layoutOf, show, setView, history: history.current });
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
-  const go = useCallback(
-    (direction: Direction): boolean => {
-      if (active === null || focused === null || active.panes.length < 2) return false;
-      const to = nearest(focused.id, direction, arrange(active.root, MEASURE, 8, null).panes);
-      if (to === null) return false;
-      show(active.key, to);
-      return true;
-    },
-    [active, focused, show],
-  );
-
-  const [lastMove, setLastMove] = useState<TabMove | null>(null);
-  const shown = useRef(tabs);
-  shown.current = tabs;
-  const moveTab = useCallback((key: string, to: number): void => {
-    const keys = shown.current.map((tab) => tab.key);
-    // Only a move that changes the order is said: `moveTabTo` hands back the same `said` for one that does not.
-    setLastMove((said) => moveTabTo(keys, said, key, to).said);
-    setView((prev) => ({ ...prev, order: moveTabTo(keys, null, key, to).order }));
-  }, []);
+  const { moveTab, lastMove } = useTabMoves(tabs, setView);
 
   return {
     tabs,
@@ -246,7 +284,8 @@ export function useLayout(
     split,
     dropPane,
     closeTab,
-    go,
+    fresh,
+    ...moves,
     moveTab,
     lastMove,
     restored: machinesListed && layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),

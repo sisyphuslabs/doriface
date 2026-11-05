@@ -2,7 +2,7 @@
 // one pressed the agent's key twice (or held a dead claim for a whole clock skew) there. They use only names that
 // existed at 06191803, so they run against it; a client's own clock is passed as a plain object.
 import { describe, expect, test } from "bun:test";
-import { answerApproval, CLAIM_TTL_MS } from "./approval-answer.ts";
+import { answerApproval, CLAIM_TTL_MS, readApprovalRecord } from "./approval-answer.ts";
 import { markApproval } from "./approval-prompt.ts";
 import { MemoryApprovalCore } from "./testing/approval-core.ts";
 import { CLAUDE_PROMPT_SCREEN } from "./testing/approval-screens.ts";
@@ -68,7 +68,7 @@ describe("one key press per prompt, whatever the clocks, links and ids", () => {
     expect(core.pressed).toHaveLength(1);
   });
 
-  test("P3: a winner whose key press stalls is not overtaken by a second device's press", async () => {
+  test("P3: a winner whose key press stalls is not overtaken by a device that has watched its claim for less than CLAIM_TTL_MS", async () => {
     const { core, mark } = asking((terminal) => new StalledKeysCore(terminal, CLAUDE_PROMPT_SCREEN));
     core.stall = Promise.withResolvers<void>();
     const release = core.stall;
@@ -144,4 +144,57 @@ describe("the claimer's own fence", () => {
     });
     expect(core.pressed).toEqual([]);
   });
+});
+
+describe("#275: the claim's own guards, and the limit that needs hc", () => {
+  test("a retake naming another client's attempt does not take over that client's live claim", async () => {
+    const { core, mark } = asking((terminal) => new StalledKeysCore(terminal, CLAUDE_PROMPT_SCREEN));
+    core.stall = Promise.withResolvers<void>();
+    const release = core.stall;
+    const first = answerApproval(core, mark, "allow", phone, 1, { clock: ownClock() });
+    await core.stalled.promise;
+    const theirs = (await readApprovalRecord(core, mark))?.attempt;
+    if (theirs === undefined) throw new Error("the first answer's claim carries no attempt id");
+    const second = await answerApproval(core, mark, "allow", laptop, 2, { clock: ownClock(), retake: theirs });
+    release.resolve();
+    await first;
+    expect(second.kind).toBe("lost");
+    expect(core.pressed).toHaveLength(1);
+  });
+
+  test("a claimer whose monotonic clock paused (a suspended page) presses nothing once its own wall clock says the claim lapsed", async () => {
+    const clock = ownClock();
+    const wall = { at: 1_000 };
+    // The monotonic clock never moves; the screen re-read takes as long as a claim may live on the wall clock.
+    class SuspendedCheckCore extends MemoryApprovalCore {
+      override async screen(address: string): Promise<string> {
+        wall.at += CLAIM_TTL_MS;
+        return super.screen(address);
+      }
+    }
+    const { core, mark } = asking((terminal) => new SuspendedCheckCore(terminal, CLAUDE_PROMPT_SCREEN));
+    const result = await answerApproval(core, mark, "allow", phone, wall.at, { clock, wall: () => wall.at });
+    expect(result.kind).toBe("failed");
+    expect(core.pressed).toEqual([]);
+  });
+
+  // Known limit, herdrdev/herdr-core#122: a key already on the wire when its claim lapses still lands. Closing it needs a
+  // conditional `terminal.keys` in hc; until then this case presses twice, and `test.failing` keeps that visible.
+  test.failing(
+    "Q1 (known limit, herdr-core#122): a key that stalls on the wire past another device's own CLAIM_TTL_MS watch is pressed twice",
+    async () => {
+      const { core, mark } = asking((terminal) => new StalledKeysCore(terminal, CLAUDE_PROMPT_SCREEN));
+      const [a, b] = [ownClock(), ownClock()];
+      core.stall = Promise.withResolvers<void>();
+      const release = core.stall;
+      const first = answerApproval(core, mark, "allow", phone, 1, { clock: a });
+      await core.stalled.promise;
+      expect((await answerApproval(core, mark, "allow", laptop, 2, { clock: b })).kind).toBe("lost");
+      b.at += CLAIM_TTL_MS;
+      await answerApproval(core, mark, "allow", laptop, 3, { clock: b });
+      release.resolve();
+      await first;
+      expect(core.pressed).toHaveLength(1);
+    },
+  );
 });

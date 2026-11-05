@@ -54,6 +54,11 @@ export interface HcSocket {
    * it: the feed drops an event older than one it has seen.
    */
   readonly holdFromHost: (...needles: string[]) => () => void;
+  /**
+   * While on, every layout write the page sends (`doc.set`) names a version the document is not at, so the host refuses
+   * each one as a conflict, as when another device keeps changing the layout: the page's retries run out.
+   */
+  readonly staleWrites: (on: boolean) => void;
 }
 
 interface HostHold {
@@ -78,6 +83,22 @@ function hcFrames(message: Buffer): Buffer[] {
   return frames;
 }
 
+/** The hc frame with its `doc.set` request's version moved off the document's, or the frame itself when it is no write. */
+function staleWrite(frame: Buffer): Buffer {
+  if (frame.byteLength < HEADER_BYTES) return frame;
+  const text = frame.subarray(HEADER_BYTES).toString("utf8");
+  if (!text.includes('"method":"doc.set"')) return frame;
+  const request: unknown = JSON.parse(text);
+  const params = typeof request === "object" && request !== null ? Reflect.get(request, "params") : undefined;
+  const version = typeof params === "object" && params !== null ? Reflect.get(params, "version") : undefined;
+  if (typeof version !== "number") return frame;
+  Reflect.set(params, "version", version + 1_000_000);
+  const payload = Buffer.from(JSON.stringify(request), "utf8");
+  const header = Buffer.from(frame.subarray(0, HEADER_BYTES));
+  header.writeUInt32LE(payload.byteLength, 5);
+  return Buffer.concat([header, payload]);
+}
+
 /** Call before page.goto: every connection to the e2e host passes through the returned handle. */
 export async function routeHcSocket(page: Page): Promise<HcSocket> {
   const live = new Set<WebSocketRoute>();
@@ -88,6 +109,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
   let delay = 0;
   let lastDue = 0;
   let held: readonly string[] = [];
+  let stale = false;
   const parked: ((fail: boolean) => void)[] = [];
   const received: string[] = [];
   const hostHolds = new Set<HostHold>();
@@ -98,7 +120,8 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       return;
     }
     const host = socket.connectToServer();
-    socket.onMessage((frame) => {
+    socket.onMessage((message) => {
+      const frame = stale && typeof message !== "string" ? Buffer.concat(hcFrames(message).map(staleWrite)) : message;
       const text = typeof frame === "string" ? frame : frame.toString("latin1");
       sent.push(text);
       const method = held.find((name) => text.includes(`"method":"${name}"`));
@@ -152,6 +175,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
         for (const deliver of hold.parked.splice(0)) deliver();
       };
     },
+    staleWrites: (on) => void (stale = on),
     hold: (...methods) => {
       held = methods;
       return (fail = false) => {

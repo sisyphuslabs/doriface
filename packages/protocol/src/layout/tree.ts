@@ -112,6 +112,54 @@ export function removePane(root: Node, id: string): Node | null {
   return next;
 }
 
+/** herdr-app keeps weights as f32; six places keep the document readable and the sum exact enough. */
+const round = (weight: number): number => Math.round(weight * 1e6) / 1e6;
+
+/** The smallest share a pane keeps of its row or column when resized, so a drag never makes it vanish. */
+export const MIN_SHARE = 0.05;
+
+/**
+ * The tree with the line between children `index` and `index + 1` of a row or column moved by `delta`, a fraction of
+ * that container's length (positive: toward the end). Only those two children's weights change, their sum stays, and
+ * neither drops below MIN_SHARE of the container. Null when that line does not exist or a side is sized in pixels.
+ */
+export function resizeAt(root: Node, container: string, index: number, delta: number): Node | null {
+  const path = pathTo(root, container);
+  const node = path === null ? null : nodeAt(root, path);
+  if (path === null || node === null || (typeOf(node) !== "row" && typeOf(node) !== "column")) return null;
+  const children = childrenOf(node);
+  const [before, after] = [children[index], children[index + 1]];
+  if (before === undefined || after === undefined) return null;
+  const weights = children.map(weightOf);
+  const [a, b] = [weights[index], weights[index + 1]];
+  if (a == null || b == null || weights.some((weight) => weight === null)) return null;
+  const total = weights.reduce<number>((sum, weight) => sum + (weight ?? 0), 0);
+  const floor = MIN_SHARE * total;
+  const moved = Math.min(Math.max(delta * total, floor - a), b - floor);
+  if (Math.abs(moved) < 1e-9) return null;
+  const next = children
+    .with(index, withField(before, "size", { weight: round(a + moved) }))
+    .with(index + 1, withField(after, "size", { weight: round(b - moved) }));
+  return replaceAt(root, path, (each) => ({ ...each, children: next }));
+}
+
+/** Every row and column of the tree shares its length evenly (Ghostty's `equalize_splits`); pixel sizes stay. */
+export function equalize(root: Node): Node {
+  const children = childrenOf(root);
+  if (children.length === 0) return root;
+  const even = typeOf(root) === "row" || typeOf(root) === "column";
+  let changed = false;
+  const next = children.map((child) => {
+    let out = equalize(child);
+    const weight = weightOf(out);
+    if (even && weight !== null && weight !== 1 && out["size"] !== undefined)
+      out = withField(out, "size", { weight: 1 });
+    if (out !== child) changed = true;
+    return out;
+  });
+  return changed ? { ...root, children: next } : root;
+}
+
 const halved = (node: Node, share: number): Node =>
   weightOf(node) === null ? node : withField(node, "size", { weight: share / 2 });
 

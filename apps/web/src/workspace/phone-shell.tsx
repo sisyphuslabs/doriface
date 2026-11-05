@@ -19,6 +19,8 @@ export interface PhoneShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Session[];
   readonly open: string | null;
+  /** The terminals of the tab that shows the open one, in its panes' order; one when that tab is not split. */
+  readonly panes: readonly string[];
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   readonly onNew: () => void;
@@ -28,7 +30,7 @@ export interface PhoneShellProps {
 
 /** Phones: the agents list first; opening one shows its terminal full screen with extra keys. */
 export function PhoneShell(props: PhoneShellProps) {
-  const { connection, terminals, open, onOpen, onBack, onNew, onPalette, onSession } = props;
+  const { connection, terminals, open, panes, onOpen, onBack, onNew, onPalette, onSession } = props;
   // The open terminal registers its dictation here, so the palette and a bound key reach it from this shell's handler.
   const dictate = useRef<(() => void) | null>(null);
   usePhoneActions(onNew, onSession, () => (dictate.current === null ? false : (dictate.current(), true)));
@@ -76,6 +78,7 @@ export function PhoneShell(props: PhoneShellProps) {
       connection={connection}
       terminal={terminal}
       terminals={terminals}
+      panes={panes}
       onOpen={onOpen}
       onBack={onBack}
       dictate={dictate}

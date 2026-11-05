@@ -1,7 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
-import { useSoftKeyboard } from "../terminal/keyboard-inset.ts";
+import { useMouseOnly, useSoftKeyboard } from "../terminal/keyboard-inset.ts";
 import { useHostPlatform } from "../terminal/host-os.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
@@ -12,6 +12,7 @@ import { VoiceDock } from "../voice/voice-dock.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
+import { PaneSwitcher } from "./phone-pane-switcher.tsx";
 import {
   DIRECTION_PAD_CLEARANCE,
   KEYBOARD_BUTTON_CLEARANCE,
@@ -27,6 +28,8 @@ export interface PhoneTerminalProps {
   readonly connection: HcConnection;
   readonly terminal: Session;
   readonly terminals: readonly Session[];
+  /** The terminals of the tab that shows this one, in its panes' order; one when that tab is not split. */
+  readonly panes: readonly string[];
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   /** Where this terminal registers its dictation for the shell's palette row and bound key; null while it takes none. */
@@ -34,13 +37,16 @@ export interface PhoneTerminalProps {
 }
 
 /** One session full screen on a phone, its terminal kept clear of the soft keyboard and the keys bar riding on it. */
-export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack, dictate }: PhoneTerminalProps) {
+export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, onBack, dictate }: PhoneTerminalProps) {
   const port = useRef<TerminalPort | null>(null);
   const onPort = useCallback((next: TerminalPort | null) => {
     port.current = next;
   }, []);
   const [scope, setScope] = useState<HTMLDivElement | null>(null);
   const keyboard = useSoftKeyboard(scope);
+  // A mouse-only device has no soft keyboard to ride on: its keys bar is opened and closed by hand (#287).
+  const mouseOnly = useMouseOnly();
+  const [keysShown, setKeysShown] = useState(false);
   const [menu, setMenu] = useState(false);
   const [pad, setPad] = useState(false);
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
@@ -68,7 +74,7 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack,
     if (ended || offline) voice.dictation.close();
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
-  const keysOpen = !ended && !dictating && (keyboard.up || menu);
+  const keysOpen = !ended && !dictating && (keyboard.up || menu || (mouseOnly && keysShown));
   // The terminal's jump button stays clear of what floats over its bottom right: the keyboard button, or the arrow pad.
   const keysControls =
     offline || ended || dictating ? null : !keysOpen ? KEYBOARD_BUTTON_CLEARANCE : pad ? DIRECTION_PAD_CLEARANCE : null;
@@ -84,6 +90,7 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack,
         action={offline || ended ? null : <DictateButton voice={voice} target={title} ref={mic} />}
       />
       <ConnectionLine />
+      <PaneSwitcher panes={panes} open={terminal.address} onOpen={onOpen} />
       <div
         ref={setScope}
         className="relative flex min-h-0 flex-1 flex-col"
@@ -139,6 +146,7 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack,
           onMenu={setMenu}
           pad={pad}
           onPad={setPad}
+          {...(mouseOnly ? { onKeys: setKeysShown } : {})}
         />
       )}
     </div>

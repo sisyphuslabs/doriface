@@ -107,8 +107,9 @@ describe("J-1: a link join run by the joiner's running host", () => {
     const welcome = records(a.dir)?.slice(0, 2);
     expect(welcome).toHaveLength(2);
     expect(records(b.dir)?.slice(0, 2)).toEqual(welcome);
-    const [ownAck] = records(b.dir)?.slice(2) ?? [];
+    // The joiner acks its admission once the inviter's hello is read on the kept session (#159), so read it after that.
     await ackReached;
+    const [ownAck] = records(b.dir)?.slice(2) ?? [];
     expect(records(a.dir)).toEqual(records(b.dir));
     expect(ownAck === undefined ? undefined : parseRecord(ownAck)).toMatchObject({
       type: "ack",
