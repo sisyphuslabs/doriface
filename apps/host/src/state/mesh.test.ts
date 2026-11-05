@@ -1,6 +1,7 @@
 import { base64urlEncode, CloseCode, rawStaticKey } from "@doriface/crypto";
 import { parseRecord, type Signed, viewOf } from "@doriface/mesh";
 import { afterEach, describe, expect, test } from "bun:test";
+import { cpuHeadroom } from "../testing/cpu-headroom.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,28 +153,30 @@ describe("H-3: counter discipline", () => {
 });
 
 describe("the index follows the view", () => {
-  test("members, over-cap members and every key a revoked member's cards named", () => {
-    const dir = scratch();
-    const founder = machine("founder");
-    const mesh = new MeshFixture(dir, founder);
-    const member = machine("member");
-    mesh.admit(founder, member);
-    const others = Array.from({ length: 11 }, (_, i) => machine(`m${i}`));
-    for (const other of others) mesh.admit(founder, other);
-    const old = member.identity.noise;
-    const fresh = { publicKey: crypto.getRandomValues(new Uint8Array(32)), secretKey: new Uint8Array(32) };
-    mesh.rekey(member, fresh);
-    mesh.revoke(founder, member);
-    const index = mesh.store.authorizeIndex();
-    const [last] = others.slice(-1);
-    if (index === undefined || last === undefined) throw new Error("no index");
-    expect(index.member(noiseOf(founder))?.name).toBe("founder");
-    expect(index.deviceRefusal(base64urlEncode(old.publicKey))).toBe("revoked mesh member");
-    expect(index.deviceRefusal(base64urlEncode(fresh.publicKey))).toBe("revoked mesh member");
-    expect(index.member(noiseOf(last))).toBeDefined();
-    const thirteenth = machine("m11");
-    mesh.admit(founder, thirteenth);
-    expect(mesh.store.authorizeIndex()?.deviceRefusal(noiseOf(thirteenth))).toBe("over-cap mesh member");
-    expect(mesh.store.authorizeIndex()?.member(noiseOf(thirteenth))).toBeUndefined();
-  });
+  test(
+    "members, over-cap members and every key a revoked member's cards named",
+    cpuHeadroom(17, () => {
+      const dir = scratch();
+      const founder = machine("founder");
+      const mesh = new MeshFixture(dir, founder);
+      const member = machine("member");
+      const others = Array.from({ length: 11 }, (_, i) => machine(`m${i}`));
+      mesh.admitAll(founder, [member, ...others]);
+      const old = member.identity.noise;
+      const fresh = { publicKey: crypto.getRandomValues(new Uint8Array(32)), secretKey: new Uint8Array(32) };
+      mesh.rekey(member, fresh);
+      mesh.revoke(founder, member);
+      const index = mesh.store.authorizeIndex();
+      const [last] = others.slice(-1);
+      if (index === undefined || last === undefined) throw new Error("no index");
+      expect(index.member(noiseOf(founder))?.name).toBe("founder");
+      expect(index.deviceRefusal(base64urlEncode(old.publicKey))).toBe("revoked mesh member");
+      expect(index.deviceRefusal(base64urlEncode(fresh.publicKey))).toBe("revoked mesh member");
+      expect(index.member(noiseOf(last))).toBeDefined();
+      const thirteenth = machine("m11");
+      mesh.admit(founder, thirteenth);
+      expect(mesh.store.authorizeIndex()?.deviceRefusal(noiseOf(thirteenth))).toBe("over-cap mesh member");
+      expect(mesh.store.authorizeIndex()?.member(noiseOf(thirteenth))).toBeUndefined();
+    }),
+  );
 });
