@@ -20,6 +20,7 @@ import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
 import { useTabs, type Tabs } from "./use-tabs.ts";
 import { useTerminals } from "./use-terminals.ts";
+import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
@@ -31,6 +32,7 @@ export interface WorkspaceProps {
 /** The live terminals of one core: the desktop shell from `md` up, the phone navigation below. */
 export function Workspace({ connection }: WorkspaceProps) {
   const fed = useTerminals(connection);
+  useResumeEnds(connection);
   const { entries, terminals, refresh, listError, views, retry, listed } = useMachines(connection, fed.terminals);
   const tabs = useTabs(connection.hello.core.id, fed.loaded ? terminals : null, views, listed);
   const narrow = useNarrow();
