@@ -48,7 +48,7 @@ for (const width of ["1440", "390"] as const) {
         const page = await context.newPage();
         try {
           await shot.run(page, width);
-          await page.mouse.move(0, 0);
+          if (shot.holdsPointer !== true) await page.mouse.move(0, 0);
           await page.evaluate(() => document.fonts.ready);
           await page.screenshot({ path: join(OUT, `${shot.name}-${width}-${theme}.png`), animations: "disabled" });
         } finally {

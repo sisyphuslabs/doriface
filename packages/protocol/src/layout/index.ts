@@ -16,6 +16,7 @@ export type { Axis, Node } from "./node.ts";
 export {
   equalize,
   MIN_SHARE,
+  movePane,
   nodeAt,
   panesOf,
   pathTo,
@@ -23,9 +24,10 @@ export {
   replaceAt,
   resizeAt,
   splitPane,
+  swapPanes,
   terminalBlock,
 } from "./tree.ts";
-export type { PaneRef } from "./tree.ts";
+export type { Edge, PaneRef } from "./tree.ts";
 export { arrangeIds, moveInOrder, movedOrder, ORDER_DOC, readOrderDocument, storedOrder } from "./order.ts";
 export { DocWriteError, LayoutDoc } from "./sync.ts";
 export type { DocCalls, DocEdit, DocState } from "./sync.ts";
