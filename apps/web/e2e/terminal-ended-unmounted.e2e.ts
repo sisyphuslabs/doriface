@@ -1,11 +1,21 @@
 import { writeFileSync } from "node:fs";
+import { getCoreDoc } from "./core-doc.ts";
 import { removeTerminal, stateOn, waitFor } from "./ended-terminal.ts";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
+import { LAYOUT_DOC } from "./layout-doc.ts";
 import { machineRow, newOn, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
+
+/** The terminal is in the shared layout before the page or the machine carrying its write goes away. */
+const savedPane = (terminal: string, on?: string) =>
+  expect
+    .poll(() => getCoreDoc(LAYOUT_DOC, on))
+    .toMatchObject({
+      spaces: [{ tabs: [{ root: { children: [{ content: { terminal } }] } }] }],
+    });
 
 test("a terminal whose program ends while the page is closed shows as ended after a reload, and closes from there", async ({
   page,
@@ -21,6 +31,7 @@ test("a terminal whose program ends while the page is closed shows as ended afte
     await page.keyboard.type(waitFor(go));
     await page.keyboard.press("Enter");
     await expect(terminal).toContainText("armed-9", { timeout: 15_000 });
+    await savedPane(address);
 
     // The page goes away; its tabs stay saved, and the program ends meanwhile.
     await page.goto("about:blank");
@@ -63,6 +74,7 @@ test("a terminal on an added machine whose program ends while the machine is off
     await page.keyboard.type(waitFor(go));
     await page.keyboard.press("Enter");
     await expect(terminal).toContainText("armed-9", { timeout: 15_000 });
+    await savedPane(local, MACHINE_NAME);
 
     // The line to the machine drops; its core and the program keep running, and the pane shows the machine offline.
     switchTo("drop");
