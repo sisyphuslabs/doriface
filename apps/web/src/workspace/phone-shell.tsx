@@ -47,7 +47,7 @@ export function PhoneShell(props: PhoneShellProps) {
       <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar pr-(--safe-right) pl-(--safe-left)">
         <header
           data-titlebar
-          className="flex h-12 shrink-0 items-center gap-1 pt-[env(safe-area-inset-top)] pr-4 pl-[var(--titlebar-inset-start,1rem)]"
+          className="flex h-[calc(3rem+var(--safe-top))] shrink-0 items-center gap-1 pt-(--safe-top) pr-4 pl-[var(--titlebar-inset-start,1rem)]"
         >
           <h1 className="flex-1 text-xl font-semibold text-foreground">Agents</h1>
           <IconButton label="Command palette" icon={<Search />} size="md" onClick={onPalette} />
@@ -83,6 +83,7 @@ export function PhoneShell(props: PhoneShellProps) {
           )}
         </ScrollArea>
         <StatusBar
+          className="h-[calc(var(--statusbar-height)+var(--safe-bottom))] pb-(--safe-bottom)"
           start={
             <>
               <StatusBarItem icon={<Monitor aria-hidden />}>{`${connection.hello.core.name} · ${route}`}</StatusBarItem>
