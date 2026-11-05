@@ -43,7 +43,40 @@ test.afterAll(() => {
   }
 });
 
+/**
+ * Counts the selected rows in the Spaces list after every change to the page, from its first render on, so a moment with
+ * two selected spaces fails the test even when it is gone by the next assertion. `window.spacesSelection` keeps the
+ * highest count and the rows marked at that moment.
+ */
+const WATCH_SPACES_SELECTION = `(() => {
+  const record = { most: 0, rows: [] };
+  window.spacesSelection = record;
+  const count = () => {
+    for (const section of document.querySelectorAll("section[aria-labelledby]")) {
+      const heading = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
+      if (heading?.textContent?.trim() !== "Spaces") continue;
+      const marked = [...section.querySelectorAll('[aria-current="true"]')];
+      if (marked.length > record.most) {
+        record.most = marked.length;
+        record.rows = marked.map((row) => row.textContent ?? "");
+      }
+    }
+  };
+  new MutationObserver(count).observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["aria-current"],
+  });
+})();`;
+
+interface SpacesSelection {
+  readonly most: number;
+  readonly rows: readonly string[];
+}
+
 test("a space named like one on another machine is selected, and opened, on its own machine only", async ({ page }) => {
+  await page.addInitScript(WATCH_SPACES_SELECTION);
   await page.goto("/");
   const spaces = page.getByRole("region", { name: "Spaces" });
   const shared = rows(spaces).filter({ hasText: SHARED_SPACE });
@@ -64,6 +97,8 @@ test("a space named like one on another machine is selected, and opened, on its 
   });
   await expect(there).toHaveAttribute("aria-current", "true");
   await expect(spaces.locator('[aria-current="true"]')).toHaveCount(1);
+  const seen = await page.evaluate(() => (window as unknown as { spacesSelection: SpacesSelection }).spacesSelection);
+  expect(seen.most, `at most one space was ever selected; at the peak: ${seen.rows.join(" | ")}`).toBe(1);
 });
 
 /** Every row of the Idle and Spaces lists ends inside its content box, so every age ends at one edge. */
