@@ -30,9 +30,7 @@ export function publishHostInfo(
   const write = async (): Promise<void> => {
     const connection = await HcConnection.open(child);
     try {
-      await writeOnce(connection, info).catch((error: unknown) =>
-        isConflict(error) ? writeOnce(connection, info) : Promise.reject(error),
-      );
+      await writeHostInfo(connection, info);
     } finally {
       connection.close();
     }
@@ -53,7 +51,17 @@ export function publishHostInfo(
   };
 }
 
-async function writeOnce(connection: HcConnection, info: HostInfo): Promise<"written" | "unchanged"> {
+/** Writes `info` unless the core holds it already; a `conflict` (another writer moved the document) is read and written once more. */
+export function writeHostInfo(
+  connection: Pick<HcConnection, "call">,
+  info: HostInfo,
+): Promise<"written" | "unchanged"> {
+  return writeOnce(connection, info).catch((error: unknown) =>
+    isConflict(error) ? writeOnce(connection, info) : Promise.reject(error),
+  );
+}
+
+async function writeOnce(connection: Pick<HcConnection, "call">, info: HostInfo): Promise<"written" | "unchanged"> {
   const current = await connection.call("doc.get", { name: HOST_INFO_DOC });
   if (parseHostInfo(current.value)?.os === info.os) return "unchanged";
   await connection.call("doc.set", { name: HOST_INFO_DOC, value: { ...info }, version: current.version });

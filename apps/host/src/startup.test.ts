@@ -1,6 +1,6 @@
 import { DEFAULT_PUSH_PREFS } from "@doriface/protocol";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -212,6 +212,44 @@ describe("a startup that fails after the push feed started", () => {
       expect(run.leftAfterExit).toEqual([]);
     } finally {
       await taken.stop(true);
+    }
+  });
+});
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+describe("a host whose core never answers the write of its OS", () => {
+  test("starts within the bound, the write still pending, and stop reaps the write's child", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-silent-"));
+    // An hc whose connect never answers the hello, keeps its output open, and exits once its input ends, as hc does.
+    const hc = join(dir, "hc");
+    writeFileSync(
+      hc,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/connect.pid"\nwhile read -r line; do :; done\n`,
+      { mode: 0o755 },
+    );
+    try {
+      const host = await startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        token: generateToken(),
+        hc,
+        platform: "darwin",
+        log: () => {},
+      });
+      // The client's own handshake deadline (10 s) has not passed: only the start's bound let it serve.
+      const pid = Number(readFileSync(join(dir, "connect.pid"), "utf8"));
+      expect(alive(pid)).toBe(true);
+      await host.stop();
+      expect(alive(pid)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
