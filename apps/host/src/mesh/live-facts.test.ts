@@ -75,7 +75,7 @@ describe("the gate in status (section 8.2)", () => {
 });
 
 describe("the counters and the revoke hint in status (sections 8.6 and 10.1)", () => {
-  test("peerCounter is the highest counter of this host's key a peer's hello showed", async () => {
+  test("peerCounter counts no claim on a counter this host already holds (a hello that claims what it signed)", async () => {
     const { clock, a, b } = pair();
     const own = a
       .records()
@@ -85,7 +85,7 @@ describe("the counters and the revoke hint in status (sections 8.6 and 10.1)", (
     expect(highest).toBeGreaterThan(0);
     await b.gossip.sync(a.member, "push");
     await settle();
-    expect(liveFactsOf(partsOf(a), clock).peerCounter).toBe(highest);
+    expect(liveFactsOf(partsOf(a), clock).peerCounter).toBe(0);
   });
 
   test("a sync dial a member refused with 4401 marks this host possibly revoked, until a dial to it connects", async () => {

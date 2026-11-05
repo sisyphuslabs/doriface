@@ -34,7 +34,7 @@ export interface LocalFacts {
   readonly self: string;
   readonly generation: number;
   readonly records: number;
-  /** `self.n` in mesh.json, and the highest counter of this host's key seen in the records or a peer's hello. */
+  /** `self.n` in mesh.json, and the highest counter of this host's key in the records or a standing claim. */
   readonly counter: { readonly file: number; readonly mesh: number };
   /** The name each member has on this core (mesh.json `local`, which state/mesh.ts keys by hostId). */
   readonly localNames: ReadonlyMap<string, string>;
