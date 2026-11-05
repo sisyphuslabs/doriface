@@ -1,25 +1,39 @@
-import { describe, expect, test } from "bun:test";
-import { hashOf, parseRecord, type Signed, viewOf } from "@doriface/mesh";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { hashOf, MAX_PREV, parseRecord, type Signed, viewOf } from "@doriface/mesh";
 import type { MeshStore } from "../state/mesh.ts";
 import { appendOwn, mergeBatch } from "./merge.ts";
 import { headsOfRecords, meshOf, peer, Signer, storeOf } from "./testing/mesh-peers.ts";
 
 const [a, b, c] = [peer("a"), peer("b"), peer("c")];
 
+/** b's store in a mesh a founded. */
+function atB() {
+  const { records, meshId } = meshOf([a, b]);
+  const founder = new Signer(a, records);
+  const store = storeOf(b, records);
+  return { store, deps: { store, identity: b.machine.identity, meshId }, founder };
+}
+
 /**
- * b's store in a mesh a founded. `seed` adds records of a's to it as stored, not merged: a wide set of heads costs one
- * signature check per record at the door, which is not what the fold tests check and dominated their run time.
+ * A mesh a founded with b, and 200 acks of a's on its first heads, signed once for the fold tests: each case needs a
+ * wide set of heads, not signatures of its own. Signing them per case, and passing a second wide batch through the
+ * door's signature checks, was most of those cases' CPU, so their wall time followed the host's load (#559).
  */
-function atB(seed: (founder: Signer, start: readonly string[]) => readonly Signed[] = () => []) {
+function wideMesh() {
   const { records, meshId } = meshOf([a, b]);
   const founder = new Signer(a, records);
   const start = headsOfRecords(records);
-  const store = storeOf(b, [...records, ...seed(founder, start)]);
-  return { store, deps: { store, identity: b.machine.identity, meshId }, founder, start };
+  return { records, meshId, founder, start, acks: Array.from({ length: 200 }, () => founder.ack(start)) };
 }
 
-const acks = (width: number) => (founder: Signer, start: readonly string[]) =>
-  Array.from({ length: width }, () => founder.ack(start));
+/**
+ * b's store holding `records` as stored, not merged: a wide set of heads costs one signature check per record at the
+ * door, which is not what the fold tests check and dominated their run time.
+ */
+function bOver(meshId: string, records: readonly Signed[]) {
+  const store = storeOf(b, records);
+  return { store, deps: { store, identity: b.machine.identity, meshId } };
+}
 
 const recordsOf = (store: MeshStore): readonly Signed[] => store.read()?.records ?? [];
 const headsAt = (store: MeshStore): readonly string[] => headsOfRecords(recordsOf(store));
@@ -30,6 +44,11 @@ const acksBy = (store: MeshStore, who: string): readonly Signed[] =>
   });
 
 describe("automatic acks (S-3, section 5.5)", () => {
+  let wide: ReturnType<typeof wideMesh>;
+  beforeAll(() => {
+    wide = wideMesh();
+  });
+
   test("a merged admission is acked in the same store transaction, the ack naming it", () => {
     const { store, deps, founder } = atB();
     const admit = founder.admit(c, headsAt(store));
@@ -68,7 +87,8 @@ describe("automatic acks (S-3, section 5.5)", () => {
   test.each([70, 120, 200])(
     "%i heads are folded by acks within the door's limits, and every record b signs stays effective (section 3.2)",
     (width) => {
-      const { store, deps, founder, start } = atB(acks(width));
+      const { records, meshId, founder, start } = wide;
+      const { store, deps } = bOver(meshId, [...records, ...wide.acks.slice(0, width)]);
       expect(headsAt(store).length).toBe(width);
       mergeBatch(deps, [founder.admit(c, start)]);
       expect(headsAt(store).length).toBeLessThanOrEqual(1);
@@ -82,18 +102,32 @@ describe("automatic acks (S-3, section 5.5)", () => {
     },
   );
 
-  test("the first fold names the head that covers b's own latest record, wherever it sits among the heads", () => {
-    const { store, deps, founder, start } = atB(acks(90));
-    mergeBatch(deps, [founder.admit(c, start)]);
-    const covering = founder.ack(headsAt(store));
-    mergeBatch(
-      deps,
-      Array.from({ length: 90 }, () => founder.ack(start)),
-    );
-    mergeBatch(deps, [covering, founder.admit(peer("d"), start)]);
-    const view = viewOf(recordsOf(store));
-    expect(acksBy(store, b.signPub).filter((record) => !view.eff.has(hashOf(record)))).toEqual([]);
-  });
+  // The covering head first, inside the first fold's reach, and past MAX_PREV, where no fold that takes heads from the
+  // front reaches it: one fold names at most 41 of these heads (the 2048-byte body binds before MAX_PREV).
+  test.each([0, 20, MAX_PREV])(
+    "the first fold names the head that covers b's own latest record, wherever it sits among the heads (at %i)",
+    (at) => {
+      const { records, meshId, founder, start } = wide;
+      const acked = bOver(meshId, records);
+      mergeBatch(acked.deps, [founder.admit(c, start)]);
+      const covering = founder.ack(headsAt(acked.store));
+      const others = wide.acks.slice(0, MAX_PREV);
+      const { store, deps } = bOver(meshId, [
+        ...recordsOf(acked.store),
+        ...others.slice(0, at),
+        covering,
+        ...others.slice(at),
+      ]);
+      expect(headsAt(store).indexOf(hashOf(covering))).toBe(at);
+      const result = mergeBatch(deps, [founder.admit(peer("d"), start)]);
+      const first = result.added.find((record) => parseRecord(record)?.by === b.signPub);
+      if (first === undefined) throw new Error("b signed no fold");
+      expect(parseRecord(first)?.prev).toContain(hashOf(covering));
+      expect(headsAt(store).length).toBeLessThanOrEqual(1);
+      const view = viewOf(recordsOf(store));
+      expect(acksBy(store, b.signPub).filter((record) => !view.eff.has(hashOf(record)))).toEqual([]);
+    },
+  );
 });
 
 describe("what a replayed batch costs (abuse, section 5.2)", () => {
