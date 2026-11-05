@@ -1,5 +1,6 @@
-import type { Locator, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { FIXTURE_FONT } from "./font-fixture.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -21,19 +22,48 @@ const wideSizes = (terminal: Locator) =>
     ),
   );
 
+/**
+ * The terminal's configured family: a web font whose W, the cell's advance, is 0.9 em, so its arrival changes the cell
+ * (and with it every wide glyph's fit) on every platform, wherever the fallback monospace rounds. The bundled JetBrains
+ * Mono no longer can: at 16 points its advance and the fallback's round to the same device pixels.
+ */
+const HELD = "Held Terminal Fixture";
+const HELD_URL = "/held-terminal-fixture.ttf";
+
 const webFontLoaded = (page: Page) =>
-  page.evaluate(() =>
-    [...document.fonts].some((face) => face.family.includes("JetBrains") && face.status === "loaded"),
+  page.evaluate(
+    // A FontFace reports a family with spaces quoted.
+    (family) =>
+      [...document.fonts].some((face) => face.family.replace(/^"|"$/g, "") === family && face.status === "loaded"),
+    HELD,
   );
 
-/** Holds every web font response until the returned function is called. */
-async function holdWebFonts(page: Page): Promise<() => void> {
+/** Every page of `context` gets HELD as a web font from HELD_URL, loaded when text first uses it; its response is held until the returned function is called. */
+async function holdWebFont(context: BrowserContext): Promise<() => void> {
   const gate = Promise.withResolvers<void>();
-  await page.route("**/*.woff2", async (route) => {
+  await context.route(`**${HELD_URL}`, async (route) => {
     await gate.promise;
-    await route.continue();
+    await route.fulfill({ contentType: "font/ttf", body: Buffer.from(FIXTURE_FONT, "base64") });
+  });
+  await context.addInitScript(({ family, url }) => document.fonts.add(new FontFace(family, `url(${url})`)), {
+    family: HELD,
+    url: HELD_URL,
   });
   return gate.resolve;
+}
+
+/** Sets the terminal's font-family to HELD in Settings (kept for the context's later pages), and comes back. */
+async function useHeldFamily(page: Page): Promise<void> {
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page
+    .getByRole("tab", { name: "Terminal", exact: true })
+    .or(page.getByRole("button", { name: "Terminal", exact: true }))
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Add font-family", exact: true }).click();
+  await page.keyboard.type(HELD);
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Close settings" }).first().click();
 }
 
 /** The wide-glyph sizes a page that loaded its web font before drawing any Hangul gets: the reference. */
@@ -41,7 +71,7 @@ async function referenceSizes(page: Page): Promise<readonly string[]> {
   const fresh = await page.context().newPage();
   await fresh.goto("/");
   const terminal = await openNewTerminal(fresh);
-  await fresh.evaluate(() => document.fonts.ready);
+  await fresh.evaluate((family) => document.fonts.load(`16px "${family}"`), HELD);
   await print(fresh, terminal, HANGUL);
   await expect.poll(async () => (await wideSizes(terminal)).length).toBe(2);
   const sizes = await wideSizes(terminal);
@@ -51,9 +81,11 @@ async function referenceSizes(page: Page): Promise<readonly string[]> {
 
 test("a web font that loads while no terminal is mounted re-sizes wide glyphs measured before it loaded", async ({
   page,
+  context,
 }) => {
-  const release = await holdWebFonts(page);
+  const release = await holdWebFont(context);
   await page.goto("/");
+  await useHeldFamily(page);
   const terminal = await openNewTerminal(page);
   await print(page, terminal, HANGUL);
   await expect.poll(async () => (await wideSizes(terminal)).length).toBe(2);
@@ -74,9 +106,13 @@ test("a web font that loads while no terminal is mounted re-sizes wide glyphs me
   expect(await wideSizes(back)).toEqual([...reference, ...reference]);
 });
 
-test("a web font that loads while a terminal is mounted re-sizes the wide glyphs already drawn", async ({ page }) => {
-  const release = await holdWebFonts(page);
+test("a web font that loads while a terminal is mounted re-sizes the wide glyphs already drawn", async ({
+  page,
+  context,
+}) => {
+  const release = await holdWebFont(context);
   await page.goto("/");
+  await useHeldFamily(page);
   const terminal = await openNewTerminal(page);
   await print(page, terminal, HANGUL);
   await expect.poll(async () => (await wideSizes(terminal)).length).toBe(2);

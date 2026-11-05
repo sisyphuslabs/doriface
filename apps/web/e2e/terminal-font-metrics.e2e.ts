@@ -4,6 +4,25 @@ import { loadFixtureFont } from "./font-fixture.ts";
 
 test.use({ serviceWorkers: "block" });
 
+/** Ghostty's points as CSS pixels on the platform the page runs on: 1:1 on Apple platforms, 96/72 elsewhere. */
+const cssPixels = async (page: Page, points: number): Promise<number> =>
+  points * ((await page.evaluate(() => /Mac|iPhone|iPad|iPod/i.test(navigator.platform))) ? 1 : 96 / 72);
+
+/** Layout positions are in 1/64 CSS-pixel units. */
+const layoutUnits = (px: number): number => Math.round(px * 64) / 64;
+
+/** The fixture's own advance for W at `px`, laid out by this platform in a plain span: what the cell is built from. */
+const fixtureAdvance = (page: Page, px: number): Promise<number> =>
+  page.evaluate((size) => {
+    const span = document.createElement("span");
+    span.style.cssText = `position:absolute;white-space:pre;font:${size}px "Terminal PUA Fixture"`;
+    span.textContent = "W";
+    document.body.append(span);
+    const width = span.getBoundingClientRect().width;
+    span.remove();
+    return width;
+  }, px);
+
 async function configure(page: Page, families: readonly string[]): Promise<Locator> {
   await page.getByRole("link", { name: "Settings" }).first().click();
   await page
@@ -28,10 +47,9 @@ async function configure(page: Page, families: readonly string[]): Promise<Locat
 }
 
 for (const dpr of [1, 2, 1.5]) {
-  test(`16 Ghostty points use native macOS glyph and cell metrics at DPR ${dpr}, and zoom applies live`, async ({
+  test(`16 Ghostty points use this platform's native glyph and cell metrics at DPR ${dpr}, and zoom applies live`, async ({
     page,
   }) => {
-    await page.addInitScript(() => Object.defineProperty(navigator, "platform", { value: "MacIntel" }));
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Emulation.setDeviceMetricsOverride", {
       width: 1440,
@@ -59,16 +77,22 @@ for (const dpr of [1, 2, 1.5]) {
         };
       });
     // Independent font design metrics: 900/1000 advance, 800/1000 ink height, 1000/1000 line height.
-    await expect.poll(async () => (await geometry()).size).toBe(16);
+    const px = await cssPixels(page, 16);
+    await expect.poll(async () => (await geometry()).size).toBeCloseTo(px, 3);
     const measured = await geometry();
-    expect(measured.height).toBeCloseTo(16 * 0.8, 4);
-    // Layout uses 1/64 CSS-pixel units after the native device-pixel rounding.
-    expect(measured.cell).toBe(Math.round((Math.round(16 * 0.9 * dpr) / dpr) * 64) / 64);
-    expect(measured.row).toBe(16);
+    // Linux Chromium rounds a glyph's ink box out to whole pixels, its top and bottom apiece (so by up to one pixel);
+    // macOS reports it exactly. Another face's W would differ by several pixels at this size.
+    expect(Math.abs(measured.height - px * 0.8)).toBeLessThanOrEqual(1);
+    // The cell is the font's advance on this platform, rounded to device pixels; a fractional device pixel (DPR 1.5) is
+    // stored to the nearer 1/64 px layout unit either way, so one unit of slack.
+    const advance = await fixtureAdvance(page, measured.size);
+    expect(Math.abs(measured.cell - Math.round(advance * dpr) / dpr)).toBeLessThanOrEqual(1 / 64);
+    expect(measured.row).toBe(layoutUnits(Math.round(px * dpr) / dpr));
     const mounted = await terminal.elementHandle();
     await terminal.getByRole("textbox").focus();
     await page.keyboard.press("ControlOrMeta+Equal");
-    await expect.poll(async () => (await geometry()).size).toBe(17);
+    const bigger = await cssPixels(page, 17);
+    await expect.poll(async () => (await geometry()).size).toBeCloseTo(bigger, 3);
     expect(await mounted?.evaluate((element) => element.isConnected)).toBe(true);
   });
 }
@@ -89,15 +113,19 @@ test("quoted configured families draw BMP and supplementary PUA glyphs through t
     .locator(".term-row:not(.term-scrollback-row) span")
     .filter({ hasText: /^[\ue0b0\uf015\uf07b\u{f0001}]$/u });
   await expect(spans).toHaveCount(4);
-  const advances = await spans.evaluateAll((nodes) =>
+  const drawn = await spans.evaluateAll((nodes) =>
     nodes.map((node) => {
       const range = document.createRange();
       range.selectNodeContents(node);
       const style = getComputedStyle(node);
       const spacing = style.letterSpacing === "normal" ? 0 : parseFloat(style.letterSpacing);
-      return (range.getBoundingClientRect().width - spacing) / parseFloat(style.fontSize);
+      return { advance: range.getBoundingClientRect().width - spacing, size: parseFloat(style.fontSize) };
     }),
   );
-  // The fixture's triangle has a 0.9 em advance; a fallback/tofu face has a different advance.
-  for (const advance of advances) expect(advance).toBeCloseTo(0.9, 2);
+  // Every fixture glyph shares W's 0.9 em advance, laid out as this platform lays it out; a fallback or tofu face's
+  // advance differs from it by far more than a layout unit.
+  for (const { advance, size } of drawn) {
+    // oxlint-disable-next-line no-await-in-loop -- one reference per glyph's own size
+    expect(Math.abs(advance - (await fixtureAdvance(page, size)))).toBeLessThanOrEqual(1 / 64);
+  }
 });

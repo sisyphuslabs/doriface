@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
  * 1000 units/em, ascent 800, descent 200, no line gap, advance 900. W and the three PUA ranges draw a triangle;
  * .notdef is empty. Keeping this in the spec bundle makes fallback tests independent of installed fonts.
  */
-const FONT = [
+export const FIXTURE_FONT = [
   "AAEAAAAKAIAAAwAgT1MvMgV9BXUAAAG4AAAAYGNtYXAAMoOdAAAArAAAAFhnbHlmqR9CjQAAAQQAAAAgaGVhZGKWRAUAAAEk",
   "AAAANmhoZWEDIgK/AAABXAAAACRobXR4BdwAAAAAAYAAAAAIbG9jYQAQAAAAAAGIAAAABm1heHAABAAEAAABkAAAACBuYW1l",
   "AAYAAAAAAbAAAAAGcG9zdAADAAAAAAIYAAAAIAAAAAEAAwAKAAAADAAMAAAAAABMAAAAAAAAAAUAAABXAAAAVwAAAAEAAOCw",
@@ -21,5 +21,5 @@ export async function loadFixtureFont(page: Page): Promise<void> {
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
     const face = await new FontFace("Terminal PUA Fixture", bytes).load();
     document.fonts.add(face);
-  }, FONT);
+  }, FIXTURE_FONT);
 }
