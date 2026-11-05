@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
-import { machineRow, newOn, STATE_BOUND_MS, switchOn, switchTo } from "./machine-switch.ts";
+import { machineRow, newOn, STATE_BOUND_MS, reconnect, switchTo } from "./machine-switch.ts";
 
 test.describe("machines added with hc machine add", () => {
   test("New terminal on a machine starts its shell there and attaches it at machine/tN", async ({ page }) => {
@@ -35,7 +35,8 @@ test.describe("machines added with hc machine add", () => {
       await expect(newOn(page)).toBeDisabled();
       expect(errors).toEqual([]);
     } finally {
-      switchOn();
+      // Dialed now, not after hc's redial backoff (up to 30 s): the next spec in this worker finds the machine connected.
+      reconnect();
     }
   });
 
@@ -50,7 +51,8 @@ test.describe("machines added with hc machine add", () => {
       await expect(state).toHaveCSS("opacity", "1");
       await expect(newOn(page)).toBeDisabled();
     } finally {
-      switchOn();
+      // Dialed now, not after hc's redial backoff (up to 30 s): the next spec in this worker finds the machine connected.
+      reconnect();
     }
   });
 });
