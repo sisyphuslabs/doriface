@@ -5,7 +5,8 @@ import { getCoreDoc, setCoreDoc } from "./core-doc.ts";
 import { expect, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { MACHINE_NAME } from "./machine.ts";
-import { hcOn, machineRow, newOn } from "./machine-switch.ts";
+import { hcOn, machineRow, newOn, reconnect } from "./machine-switch.ts";
+import { machineConnected } from "./sidebar-seed.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -13,6 +14,9 @@ test.use({ serviceWorkers: "block" });
 const RUN_ANSWER = '"result":{"address"';
 
 test("typing into a new terminal on an added machine while its tab is being written loses no key", async ({ page }) => {
+  // A spec before this one in the worker may have left the machine switched off or asking for a login.
+  reconnect();
+  await machineConnected(MACHINE_NAME);
   // Only a screen whose layouts hold no tab shows a listed terminal alone, as on a first start.
   const kept = { here: getCoreDoc(LAYOUT_DOC), there: getCoreDoc(LAYOUT_DOC, MACHINE_NAME) };
   setCoreDoc(LAYOUT_DOC, null);
