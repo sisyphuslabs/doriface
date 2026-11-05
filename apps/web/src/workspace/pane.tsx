@@ -1,5 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import type { ReactNode } from "react";
+import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
@@ -35,8 +36,9 @@ export function Pane({ connection, terminal, focused, split, onFocus, onEnd, onE
       onFocusCapture={() => onFocus(terminal.address)}
       data-split={split}
       data-focused={focused}
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card"
     >
+      {terminal.offline === true ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
       {terminal.offline === true && machine !== undefined ? (
         <MachineOffline machine={machine} />
       ) : (
