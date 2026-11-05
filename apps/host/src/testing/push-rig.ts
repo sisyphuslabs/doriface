@@ -41,6 +41,9 @@ export class FakeCore implements PushCore {
   readonly terminals = new Map<string, Terminal>();
   readonly screens = new Map<string, string>();
   readonly sent: { readonly terminal: string; readonly keys: readonly string[] }[] = [];
+  /** The next `screen` / `keys` call throws this, once, as a dropped link does; a `keys` throw comes after delivery. */
+  failScreen: Error | undefined;
+  failKeys: Error | undefined;
 
   async terminal(address: string): Promise<Terminal> {
     const found = this.terminals.get(address);
@@ -49,12 +52,18 @@ export class FakeCore implements PushCore {
   }
 
   async screen(address: string): Promise<string> {
+    const failure = this.failScreen;
+    this.failScreen = undefined;
+    if (failure !== undefined) throw failure;
     return this.screens.get(address) ?? "";
   }
 
   async keys(address: string, keys: readonly string[]): Promise<void> {
     await Promise.resolve();
     this.sent.push({ terminal: address, keys });
+    const failure = this.failKeys;
+    this.failKeys = undefined;
+    if (failure !== undefined) throw failure;
   }
 
   readonly #docs = new Map<string, { value: JsonValue; version: number }>();
@@ -88,6 +97,8 @@ export interface Rig {
   readonly posted: Posted[];
   readonly keys: ReceiverKeys;
   readonly paired: Set<string>;
+  /** Every line the service logged. */
+  readonly logs: string[];
   status: number;
   /** Decrypts each posted body as the subscribed browser would. */
   notices(): Promise<unknown[]>;
@@ -100,6 +111,7 @@ export async function rig(): Promise<Rig> {
   const core = new FakeCore();
   const posted: Posted[] = [];
   const paired = new Set(["device-a", "device-b"]);
+  const logs: string[] = [];
   const keys = await receiverKeys();
   const state = { status: 201 };
   const post: PushFetch = async (url, init) => {
@@ -113,7 +125,7 @@ export async function rig(): Promise<Rig> {
     subscriptions: store,
     paired: () => paired,
     post,
-    log: () => {},
+    log: (line) => void logs.push(line),
   });
   service.attach(core);
   return {
@@ -123,6 +135,7 @@ export async function rig(): Promise<Rig> {
     posted,
     keys,
     paired,
+    logs,
     get status() {
       return state.status;
     },
