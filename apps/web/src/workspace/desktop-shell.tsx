@@ -186,7 +186,7 @@ export function DesktopShell(props: DesktopShellProps) {
   return (
     // --titlebar-leading: where a titlebar row's own content starts, past the window buttons, the sidebar toggle and
     // herdr-app's 12 px gap.
-    <div className="relative flex h-dvh overflow-hidden bg-background [--titlebar-leading:calc(var(--titlebar-inset-start,0.5rem)+var(--control-sm)+0.75rem)]">
+    <div className="relative flex h-dvh overflow-hidden bg-background pt-(--safe-top) pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) [--titlebar-leading:calc(var(--titlebar-inset-start,0.5rem)+var(--control-sm)+0.75rem)]">
       <SkipLinks onSidebar={focusSidebar} />
       {sidebar ? (
         <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
@@ -195,7 +195,7 @@ export function DesktopShell(props: DesktopShellProps) {
           comes after the sidebar in the DOM so the skip links stay the first Tab stops and it is the stop just before the tabs. */}
       <div
         data-titlebar
-        className="absolute top-0 left-[var(--titlebar-inset-start,0.5rem)] z-10 flex h-11 items-center"
+        className="absolute top-(--safe-top) left-[calc(var(--safe-left)+var(--titlebar-inset-start,0.5rem))] z-10 flex h-11 items-center"
       >
         <IconButton
           label={sidebar ? "Hide sidebar" : "Show sidebar"}
