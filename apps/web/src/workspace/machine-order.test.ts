@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { arrangeMachines, moveMachine } from "./machine-order.ts";
+import { DocWriteError } from "@doriface/protocol/layout";
+import { arrangeMachines, moveMachine, orderNotSaved } from "./machine-order.ts";
 import type { MachineEntry } from "./machines.ts";
 
 const machine = (core: string, name: string, local = false): MachineEntry => ({
@@ -50,6 +51,32 @@ describe("moveMachine", () => {
   test("writes the core ids, not the names, in the new order", () => {
     expect(moveMachine([STUDIO, ALPHA, BUILD], "c-build", 0)(null)).toEqual({
       machine_order: ["c-build", "c-studio", "c-alpha"],
+    });
+  });
+});
+
+describe("a machine order that was not saved (#205, #161)", () => {
+  test("says why in the machine order's own words, never the layout's", () => {
+    const title = "The machine order was not saved";
+    expect(orderNotSaved(new DocWriteError("conflict", "", "The layout kept changing on another device"))).toEqual({
+      title,
+      description: "Another device kept changing the machine order. Retry to move the machine again.",
+    });
+    expect(
+      orderNotSaved(
+        new DocWriteError(
+          "unwritable",
+          "a machine order that is not a list of machine ids",
+          "The layout cannot take changes now",
+        ),
+      ),
+    ).toEqual({
+      title,
+      description: "The machine order cannot be changed now: a machine order that is not a list of machine ids.",
+    });
+    expect(orderNotSaved(new Error("the connection closed"))).toEqual({
+      title,
+      description: "The machine order could not be written: the connection closed.",
     });
   });
 });

@@ -40,6 +40,10 @@ export function ToastViewport({ className, container }: ToastViewportProps) {
             <BaseToast.Content className="min-w-0 flex-1">
               <BaseToast.Title className="text-sm font-semibold" />
               <BaseToast.Description className="text-sm text-muted-foreground" />
+              {/* The toast's next step (DESIGN.md 5(f)), e.g. Retry: only a toast that names one gets a button. */}
+              {toast.actionProps === undefined ? null : (
+                <BaseToast.Action className="mt-2 rounded-md border border-border px-2 py-0.5 text-sm font-medium outline-none hover:bg-selected focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring" />
+              )}
             </BaseToast.Content>
             <BaseToast.Close
               aria-label="Dismiss"
