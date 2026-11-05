@@ -1,6 +1,6 @@
-import { Button, Menu, MenuItem, SegmentedControl, SettingRow } from "@doriface/ui";
+import { Button, Menu, MenuItem, Notice, SegmentedControl, SettingRow } from "@doriface/ui";
 import { Check, ChevronDown } from "lucide-react";
-import { findRecognizer } from "../voice/recognizer.ts";
+import { findRecognizer, type Unavailable } from "../voice/recognizer.ts";
 import { type Engine, languageName, VOICE_LANGUAGES } from "../voice/voice-settings.ts";
 import { useVoiceSettings, voiceStore } from "../voice/voice-store.ts";
 
@@ -11,17 +11,18 @@ const ENGINES = [
 ] as const;
 
 const ENGINE_NOTE: Readonly<Record<Engine, string>> = {
-  ask: "The first dictation asks before the browser's speech service hears anything.",
+  ask: "The first dictation asks before any audio goes to the browser's speech service, which may run outside this device.",
   device: "Only the browser's on-device recognizer listens; the audio never leaves this device.",
   service: "The browser sends the audio to its speech service, which may run outside this device.",
 };
 
-const UNAVAILABLE = {
-  unsupported: "This browser has no speech recognition.",
-  insecure: "Dictation needs a secure (https) page.",
-} as const;
+const UNAVAILABLE: Readonly<Record<Unavailable, string>> = {
+  unsupported:
+    "This browser has no speech recognition, so the mic cannot listen. Type instead, or open doriface in Chrome or Safari.",
+  insecure: "The browser only listens on a secure (https) page. Open doriface over https to dictate, or type instead.",
+};
 
-/** Dictation: the language speech is recognized in, and where it is recognized. Neither keeps any audio. */
+/** Dictation: where it sends the audio, and the language and way it is recognized; nothing here keeps any audio. */
 export function VoiceSection() {
   const settings = useVoiceSettings();
   const support = findRecognizer(window);
@@ -29,14 +30,12 @@ export function VoiceSection() {
   const name = (tag: string) => (tag === "" ? `Browser language: ${languageName(browser)}` : languageName(tag));
   const listed = VOICE_LANGUAGES.includes(settings.language) || settings.language === "" ? [] : [settings.language];
   const choices = ["", ...VOICE_LANGUAGES, ...listed];
-  const reason = support.kind === "unavailable" ? UNAVAILABLE[support.why] : undefined;
-  const language = (disabled: boolean) => (
+  const language = (
     <Menu
       align="end"
       trigger={
         <Button
           variant="secondary"
-          disabled={disabled}
           aria-label={`Language, ${name(settings.language)}`}
           // A long language name gives way inside the row instead of pushing the button past the screen's edge.
           className="max-w-full min-w-0 justify-between [&>span]:max-w-full [&>span]:min-w-0"
@@ -59,30 +58,37 @@ export function VoiceSection() {
       ))}
     </Menu>
   );
-  const engine = (disabled: boolean) => (
-    <SegmentedControl<Engine>
-      label="Speech recognition"
-      options={ENGINES}
-      value={settings.engine}
-      disabled={disabled}
-      onValueChange={(next) => voiceStore.update({ engine: next })}
-    />
-  );
-  const languageNote = "Speech recognition takes one language at a time.";
-  return reason === undefined ? (
-    <>
-      <SettingRow title="Language" description={languageNote} control={language(false)} />
-      <SettingRow title="Speech recognition" description={ENGINE_NOTE[settings.engine]} control={engine(false)} />
-    </>
-  ) : (
-    <>
-      <SettingRow title="Language" description={languageNote} disabledReason={reason} control={() => language(true)} />
-      <SettingRow
-        title="Speech recognition"
-        description={ENGINE_NOTE[settings.engine]}
-        disabledReason={reason}
-        control={() => engine(true)}
-      />
-    </>
+  return (
+    <div className="flex flex-col gap-4">
+      <p data-voice-intro className="text-sm text-pretty text-muted-foreground">
+        Dictation types what you say into the focused terminal, at the cursor, without pressing Return. Start it with
+        the mic above the terminal, beside its title, then speak.
+      </p>
+      {support.kind === "unavailable" ? (
+        <Notice tone="info" title="Dictation isn't available here">
+          {UNAVAILABLE[support.why]}
+        </Notice>
+      ) : (
+        <div className="flex flex-col">
+          <SettingRow
+            title="Language"
+            description="Speech recognition takes one language at a time."
+            control={language}
+          />
+          <SettingRow
+            title="Speech recognition"
+            description={ENGINE_NOTE[settings.engine]}
+            control={
+              <SegmentedControl<Engine>
+                label="Speech recognition"
+                options={ENGINES}
+                value={settings.engine}
+                onValueChange={(next) => voiceStore.update({ engine: next })}
+              />
+            }
+          />
+        </div>
+      )}
+    </div>
   );
 }
