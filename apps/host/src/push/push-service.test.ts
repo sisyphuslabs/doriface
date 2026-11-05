@@ -176,6 +176,34 @@ describe("answering a permission notice", () => {
     expect(r.core.sent).toHaveLength(1);
   });
 
+  test("two answers from one device at once (its worker's Deny and its page's Allow) send exactly one", async () => {
+    const { r, id } = await noticed();
+    const replies = await Promise.all([
+      r.service.answer(id, "deny", "device-a"),
+      r.service.answer(id, "allow", "device-a"),
+    ]);
+    expect(replies.map((reply) => reply.t).toSorted()).toEqual(["answered", "stale"]);
+    expect(r.core.sent).toHaveLength(1);
+  });
+
+  test("a link that drops before the key press says it did not go through, with the reason logged", async () => {
+    const { r, id } = await noticed();
+    r.core.failScreen = new Error("terminal.read: the link dropped");
+    const reply = await r.service.answer(id, "allow", "device-a");
+    expect(reply).toMatchObject({ t: "failed", terminal: "t3", reason: "terminal.read: the link dropped" });
+    expect(r.core.sent).toEqual([]);
+    expect(r.logs.join("\n")).toContain("terminal.read: the link dropped");
+  });
+
+  test("a key press that may have landed is reported unknown, never answered or stale, and logged", async () => {
+    const { r, id } = await noticed();
+    r.core.failKeys = new Error("terminal.keys: the reply was lost");
+    expect(await r.service.answer(id, "allow", "device-a")).toEqual({ t: "unknown", terminal: "t3" });
+    expect(r.logs.join("\n")).toContain("terminal.keys: the reply was lost");
+    expect(await r.service.answer(id, "allow", "device-b")).toEqual({ t: "stale", terminal: "t3" });
+    expect(r.core.sent).toHaveLength(1);
+  });
+
   test("an agent this host cannot read, or an unknown id, is stale", async () => {
     const r = await subscribed();
     const other = { ...ASKING, app: "my-agent" };

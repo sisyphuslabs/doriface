@@ -13,13 +13,17 @@ const OTHER = "dictate-other";
 
 let address = "";
 let other = "";
+/** A shell a test started by splitting a pane: ended with the others, so no spec leaves a live terminal. */
+let split = "";
 test.beforeEach(() => {
   address = startShell("host", NAME);
   other = startShell("host", OTHER);
+  split = "";
 });
 test.afterEach(() => {
   endAgent("host", address);
   endAgent("host", other);
+  if (split !== "") endAgent("host", split);
 });
 
 test("Dictate in the tab bar docks under the focused pane and types into it without Enter", async ({ page }) => {
@@ -71,6 +75,43 @@ test("moving focus to another tab ends the dictation, so nothing heard for one p
   await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
   expect(hcOn("host", ["read", other])).not.toContain("echo stray");
   expect(hcOn("host", ["read", address])).not.toContain("echo stray");
+});
+
+test("moving focus to the other pane of a split tab ends the dictation, so nothing heard for one pane is typed into the other", async ({
+  page,
+}) => {
+  const speech = await stubSpeech(page);
+  await page.goto("/");
+  await agentRow(page, OTHER, false).click();
+  await expect(page.locator(`[data-terminal="${other}"]`)).toContainText("$", { timeout: 15_000 });
+  await agentRow(page, NAME, false).click();
+  const shown = page.locator("section[data-split='true']:visible");
+  const mine = shown.locator(`[data-terminal="${address}"]`);
+  await expect(page.locator(`[data-focused="true"] [data-terminal="${address}"]`)).toContainText("$", {
+    timeout: 15_000,
+  });
+  // Split right starts a new shell in the new pane, beside this one in the same tab.
+  await page.getByRole("button", { name: "Split right" }).click();
+  await expect(shown).toHaveCount(2);
+  const theirs = shown.locator(`[data-terminal]:not([data-terminal="${address}"])`);
+  await expect(theirs).toContainText("$", { timeout: 15_000 });
+  split = (await theirs.getAttribute("data-terminal")) ?? "";
+  await mine.click();
+  await expect(page.locator(`section[data-focused="true"]:visible [data-terminal="${address}"]`)).toBeVisible();
+
+  await page.getByRole("button", { name: `Dictate into ${NAME}` }).click();
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(page.locator("[data-voice-strip]")).toHaveAttribute("data-voice-strip", "listening");
+  await theirs.click();
+  await expect(page.locator(`section[data-focused="true"]:visible [data-terminal="${split}"]`)).toBeVisible();
+
+  await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+  expect(await speech.aborts()).toBe(1);
+  await speech.say(["echo stray-pane", true]);
+  await speech.end();
+  await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+  expect(hcOn("host", ["read", split])).not.toContain("echo stray-pane");
+  expect(hcOn("host", ["read", address])).not.toContain("echo stray-pane");
 });
 
 test("a dictation under way ends when its terminal's machine drops: the recognizer is aborted, the strip goes (#254)", async ({

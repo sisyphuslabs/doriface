@@ -39,12 +39,12 @@ function startFlipping(name: string, first: string, then: string): { address: st
 test.beforeAll(() => {
   dir = mkdtempSync(join(process.env["TMPDIR"] ?? tmpdir(), "rc206-"));
 });
+// Each test ends what it started before the next one runs: a spec ends what it opens (#226).
+test.afterEach(() => {
+  for (const address of started.splice(0)) endAgent("host", address);
+});
 test.afterAll(() => {
-  try {
-    for (const address of started) endAgent("host", address);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test("the agents group comes first, and its status groups and counts follow hc's state live", async ({ page }) => {
