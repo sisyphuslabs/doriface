@@ -63,6 +63,11 @@ function inTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement && !NOT_TEXT.has(target.type);
 }
 
+/** A focused row of a list that can be reordered (`data-reorder-keys`) moves itself with the tab move keys (#140). */
+function inReorderableRow(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("[data-reorder-keys]") !== null;
+}
+
 export function useKeymapDispatcher(): void {
   const overrides = useOverrides();
   const keymap = useMemo(() => resolveKeymap(currentPlatform(), overrides), [overrides]);
@@ -76,7 +81,8 @@ export function useKeymapDispatcher(): void {
       const action = actionFor(id);
       if (action === null) return;
       if (action.scope === "terminal" && !inTerminal(event.target)) return;
-      if (TEXT_FIELD_KEEPS.has(id) && inTextField(event.target)) return;
+      // The tab move keys stay with a text field (they select text) and with a reorderable row (they move the row).
+      if (TEXT_FIELD_KEEPS.has(id) && (inTextField(event.target) || inReorderableRow(event.target))) return;
       if (dispatch(action.scope, id)) {
         event.preventDefault();
         event.stopPropagation();

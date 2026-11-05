@@ -6,25 +6,33 @@ const digits = (prefix: string, action: string): [string, string][] =>
   Array.from({ length: 9 }, (_, index) => [`${prefix}${index + 1}`, `${action}:${index + 1}`]);
 
 /**
- * herdr-app's keys.macos.json merged with Ghostty's macOS defaults. Where the two disagree
- * herdr-app wins and Ghostty's trigger is added as an alias when it is free; the PR body lists each.
+ * herdr-app's keys.macos.json merged with Ghostty's macOS defaults. Where the two disagree herdr-app wins and Ghostty's
+ * trigger is added as an alias when it is free, except for panes, where Ghostty's are taken: ⌘W closes the focused pane
+ * (the last one closes its tab) and ⌘⌥W the tab, so a split never loses every pane to one key. DESIGN.md lists each.
  */
 const MAC: readonly [string, string][] = [
   ["super+t", "tab.new"],
-  ["super+w", "tab.close"],
+  ["super+alt+w", "tab.close"],
   ["ctrl+tab", "tab.next"],
   ["ctrl+shift+tab", "tab.prev"],
   ["super+shift+]", "tab.next"],
   ["super+shift+[", "tab.prev"],
-  ["super+alt+right", "tab.next"],
-  ["super+alt+left", "tab.prev"],
   ["super+shift+left", "tab.move:left"],
   ["super+shift+right", "tab.move:right"],
   ...digits("super+", "tab.select"),
-  ["super+d", "pane.split"],
-  ["super+shift+w", "pane.close"],
-  ["super+alt+shift+left", "pane.go:left"],
-  ["super+alt+shift+right", "pane.go:right"],
+  ["super+d", "pane.split:right"],
+  ["super+shift+d", "pane.split:down"],
+  ["super+w", "pane.close"],
+  ["super+alt+left", "pane.go:left"],
+  ["super+alt+right", "pane.go:right"],
+  ["super+alt+up", "pane.go:up"],
+  ["super+alt+down", "pane.go:down"],
+  ["super+ctrl+left", "pane.resize:left"],
+  ["super+ctrl+right", "pane.resize:right"],
+  ["super+ctrl+up", "pane.resize:up"],
+  ["super+ctrl+down", "pane.resize:down"],
+  ["super+ctrl+=", "pane.equalize"],
+  ["super+shift+enter", "pane.zoom"],
   ["super+]", "agent.next"],
   ["super+[", "agent.prev"],
   ["super+b", "layout.toggle:sidebar"],
@@ -53,7 +61,10 @@ const MAC: readonly [string, string][] = [
   ["super+backspace", "send:\u0015"],
 ];
 
-/** herdr-app's keys.json merged with Ghostty's Linux and Windows defaults. */
+/**
+ * herdr-app's keys.json merged with Ghostty's Linux and Windows defaults. Panes move with Ctrl+Alt+arrows, Ghostty's
+ * keys, instead of herdr-app's Alt+arrows and Alt+H/J/K/L, which shells and editors use for word moves and Meta keys.
+ */
 const OTHER: readonly [string, string][] = [
   ["ctrl+shift+t", "tab.new"],
   ["ctrl+shift+w", "tab.close"],
@@ -68,12 +79,20 @@ const OTHER: readonly [string, string][] = [
   ["ctrl+shift+page_down", "tab.move:right"],
   ...digits("ctrl+", "tab.select"),
   ...digits("alt+", "tab.select"),
-  ["ctrl+shift+o", "pane.split"],
+  ["ctrl+shift+o", "pane.split:right"],
+  ["ctrl+shift+e", "pane.split:down"],
   ["ctrl+shift+x", "pane.close"],
-  ["alt+h", "pane.go:left"],
-  ["alt+l", "pane.go:right"],
-  ["alt+left", "pane.go:left"],
-  ["alt+right", "pane.go:right"],
+  ["ctrl+alt+left", "pane.go:left"],
+  ["ctrl+alt+right", "pane.go:right"],
+  ["ctrl+alt+up", "pane.go:up"],
+  ["ctrl+alt+down", "pane.go:down"],
+  ["ctrl+alt+shift+left", "pane.resize:left"],
+  ["ctrl+alt+shift+right", "pane.resize:right"],
+  ["ctrl+alt+shift+up", "pane.resize:up"],
+  ["ctrl+alt+shift+down", "pane.resize:down"],
+  ["ctrl+alt+=", "pane.equalize"],
+  ["ctrl+shift+enter", "pane.zoom"],
+  ["ctrl+shift+z", "pane.zoom"],
   ["alt+down", "agent.next"],
   ["alt+up", "agent.prev"],
   ["ctrl+shift+b", "layout.toggle:sidebar"],

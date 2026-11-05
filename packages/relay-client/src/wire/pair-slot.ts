@@ -2,7 +2,7 @@ import { MUX_HEADER_BYTES, MuxType, muxHeader } from "./mux.ts";
 import { PAIR_SLOT_LENGTH, PAIR_SLOT_PATTERN } from "./pair-code.ts";
 
 /**
- * PAIR_SLOT (type 4, host -> relay): `slot (3 ASCII) || noiseStaticPub (32)`, or the signed form (contract v1.8)
+ * PAIR_SLOT (type 4, host -> relay): `slot (3 ASCII) || noiseStaticPub (32)`, or the signed form (contract v1.9)
  * `slot || noiseStaticPub || expiresAt (u64 BE, ms) || signature (64)`, or empty to clear the host's slot; the relay
  * knows signPub from the challenge and stores the signature without checking it. PAIR_SLOT_ACK (type 5, relay -> host):
  * `status u8 || slot (3 ASCII)`.
@@ -59,7 +59,7 @@ export function pairSlotStatement(
   return out;
 }
 
-/** The unsigned form, or with `signed` the signed form of contract v1.8. */
+/** The unsigned form, or with `signed` the signed form of contract v1.9. */
 export function encodePairSlotRequest(
   slot: string,
   noiseStaticPub: Uint8Array,

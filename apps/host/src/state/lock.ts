@@ -1,5 +1,16 @@
-import { linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 export const DEFAULT_LOCK_TIMEOUT_MS = 2000;
 const RETRY_MS = 5;
@@ -65,6 +76,44 @@ function emptyLockIsFresh(path: string): boolean {
   }
 }
 
+let bootId: string | undefined;
+
+/**
+ * When the process with this pid started, in a form a later process given the same pid does not share, or undefined
+ * where it cannot be read: on Linux the boot id with `/proc/<pid>/stat` field 22 (start time in ticks since boot), on
+ * macOS `ps -o lstart=` (wall-clock start). Other platforms (Windows) have none, and their holders are still known by
+ * pid alone (#276).
+ */
+export function processStart(pid: number): string | undefined {
+  try {
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      // Fields after the command name (which may hold spaces) start at field 3, so field 22 is the 20th of them.
+      const ticks = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+      bootId ??= readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+      return ticks === undefined || ticks === "" ? undefined : `linux:${bootId}:${ticks}`;
+    }
+    if (process.platform === "darwin") {
+      const ps = Bun.spawnSync(["ps", "-o", "lstart=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" });
+      const start = ps.stdout.toString().trim().split(/\s+/).join("-");
+      return ps.exitCode === 0 && start !== "" ? `darwin:${start}` : undefined;
+    }
+  } catch (error) {
+    if (errorCode(error) === "ENOENT" || errorCode(error) === "ESRCH") return undefined;
+    throw error;
+  }
+  return undefined;
+}
+
+let ownStart: string | undefined | null = null;
+
+/** What a holder writes: `<pid> <token>`, and its start time where one can be read (#276). */
+function holderContent(): string {
+  ownStart ??= processStart(process.pid);
+  const token = `${process.pid} ${crypto.randomUUID()}`;
+  return ownStart === undefined ? token : `${token} ${ownStart}`;
+}
+
 /** Whether `pid` may still be running. Anything that is not a valid pid counts as running. */
 function pidIsLive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return true;
@@ -76,10 +125,19 @@ function pidIsLive(pid: number): boolean {
   }
 }
 
-/** Whether the lock with this content may still be held. Anything that does not name a dead pid counts as held. */
+/**
+ * Whether the lock with this content may still be held. Anything that does not name a dead pid counts as held. A pid
+ * that is running but started at another time than the holder wrote is a dead holder's, reused by another process
+ * (#276); a holder that wrote no start time (an older host, or a platform without one) is known by its pid alone.
+ */
 function isHeld(path: string, content: string): boolean {
   if (content.trim() === "") return emptyLockIsFresh(path);
-  return pidIsLive(Number(content.split(" ")[0]));
+  const [pidText, , start] = content.trim().split(" ");
+  const pid = Number(pidText);
+  if (!pidIsLive(pid)) return false;
+  if (start === undefined) return true;
+  const current = processStart(pid);
+  return current === undefined || current === start;
 }
 
 /** Writes `content` to a new temp file beside `path`, named with this pid so a sweep keeps it while this process lives. */
@@ -124,7 +182,7 @@ function tryAcquire(path: string, content: string): boolean {
  */
 function breakStaleLock(path: string, observed: string): boolean {
   const guard = `${path}.break`;
-  const token = `${process.pid} ${crypto.randomUUID()}`;
+  const token = holderContent();
   if (!tryAcquire(guard, token)) {
     const breaker = readLock(guard);
     if (breaker !== undefined && !isHeld(guard, breaker) && readLock(guard) === breaker) rmSync(guard, { force: true });
@@ -187,8 +245,10 @@ function sweep(dir: string, mine: number): void {
  * holds the highest one, or `retry` after losing a race to a process that has moved the lock on.
  */
 function attempt(dir: string, content: string, step: LockStepHook): number | "wait" | "retry" {
-  const top = highest(dir);
-  if (top > 0) {
+  const inDir = highest(dir);
+  // A lock directory made after a retired one numbers its generations above it; the retired one itself holds nothing.
+  const top = Math.max(inDir, floorOf(dir));
+  if (top > 0 && top === inDir) {
     const holder = readLock(join(dir, String(top)));
     if (holder === undefined) return "retry";
     if (holder !== FREE && isHeld(join(dir, String(top)), holder)) {
@@ -215,7 +275,8 @@ function attempt(dir: string, content: string, step: LockStepHook): number | "wa
  * up to `timeoutMs`.
  *
  * The lock is the directory `state.lock`, whose entries are numbered generations, each published whole with `link`
- * (so exactly one process wins each number) and never rewritten: `<pid> <token>` for a holder, `free` after a release.
+ * (so exactly one process wins each number) and never rewritten: `<pid> <token> <start>` for a holder (the start time
+ * tells a reused pid from the holder's, #276; it is left out where none can be read), `free` after a release.
  * The highest generation is the lock's state. A process takes the lock by publishing the next number over a highest
  * one that is free or names a dead pid, then checking that nothing newer exists; if something does, it was late (the
  * number it won had been taken, released and removed), so it removes its own and tries again. Nothing is ever deleted
@@ -235,18 +296,53 @@ export function withStateLock<T>(
   step: LockStepHook = () => {},
   io: ReleaseIo = DEFAULT_RELEASE_IO,
 ): T {
+  return locked(stateDir, fn, timeoutMs, step, io, false);
+}
+
+/**
+ * Takes the state lock and, holding it, retires the lock directory instead of releasing it: renames it to
+ * `state.lock.retired-<generation>-<id>` and removes the older retired ones. A host calls this on a clean stop, so a
+ * state dir nobody holds has no `state.lock` for a host from before #270 to read as a file (#297). The next take makes
+ * a fresh directory whose generations number above the retired one, so the highest generation still never goes back.
+ * If the rename fails, the lock is released as usual.
+ */
+export function retireStateLock(
+  stateDir: string,
+  timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+  step: LockStepHook = () => {},
+): void {
+  locked(stateDir, () => undefined, timeoutMs, step, DEFAULT_RELEASE_IO, true);
+}
+
+function locked<T>(
+  stateDir: string,
+  fn: () => T,
+  timeoutMs: number,
+  step: LockStepHook,
+  io: ReleaseIo,
+  retire: boolean,
+): T {
   const dir = join(stateDir, "state.lock");
-  const content = `${process.pid} ${crypto.randomUUID()}`;
+  const content = holderContent();
   const deadline = Date.now() + timeoutMs;
   let free: string | undefined;
   try {
     for (;;) {
       let mine: number | "wait" | "retry" = "wait";
-      if (ensureLockDir(dir)) {
-        free ??= writeTemporary(join(dir, FREE), FREE);
-        mine = attempt(dir, content, step);
-        if (typeof mine === "number") return hold(dir, mine, free, fn, step, io);
+      try {
+        if (ensureLockDir(dir)) {
+          // A free generation written in a directory since retired went with it.
+          if (free !== undefined && !existsSync(free)) free = undefined;
+          free ??= writeTemporary(join(dir, FREE), FREE);
+          mine = attempt(dir, content, step);
+        }
+      } catch (error) {
+        // The directory was retired under this take (a host stopped): its written free generation went with it.
+        if (errorCode(error) !== "ENOENT") throw error;
+        free = undefined;
+        mine = "retry";
       }
+      if (typeof mine === "number" && free !== undefined) return hold(dir, mine, free, fn, step, io, retire);
       if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${dir})`);
       if (mine === "wait") Bun.sleepSync(RETRY_MS);
     }
@@ -260,17 +356,29 @@ export function withStateLock<T>(
  * link that fails is tried again up to RELEASE_TRIES times; one that never succeeds leaves `mine` in place (the highest
  * generation must never go back) and is handed to `io.wedged`.
  */
-function hold<T>(dir: string, mine: number, free: string, fn: () => T, step: LockStepHook, io: ReleaseIo): T {
+function hold<T>(
+  dir: string,
+  mine: number,
+  free: string,
+  fn: () => T,
+  step: LockStepHook,
+  io: ReleaseIo,
+  retire: boolean,
+): T {
   step("acquired", mine);
   try {
     return fn();
   } finally {
-    const failure = release(free, join(dir, String(mine + 1)), io.link);
-    if (failure === undefined) {
+    if (retire && retireDir(dir, mine)) {
       step("released", mine + 1);
-      rmSync(join(dir, String(mine)), { force: true });
     } else {
-      io.wedged(failure.error, dir);
+      const failure = release(free, join(dir, String(mine + 1)), io.link);
+      if (failure === undefined) {
+        step("released", mine + 1);
+        rmSync(join(dir, String(mine)), { force: true });
+      } else {
+        io.wedged(failure.error, dir);
+      }
     }
   }
 }
@@ -288,4 +396,36 @@ function release(free: string, next: string, link: ReleaseIo["link"]): { readonl
     }
   }
   return failure;
+}
+
+const RETIRED = /^state\.lock\.retired-([1-9][0-9]{0,14})-/;
+
+/** The newest generation a retired lock directory reached beside `dir`, or 0. */
+function floorOf(dir: string): number {
+  let floor = 0;
+  for (const name of readdirSync(dirname(dir))) {
+    const generation = Number(RETIRED.exec(name)?.[1] ?? 0);
+    if (generation > floor) floor = generation;
+  }
+  return floor;
+}
+
+/** Renames `dir`, held at generation `mine`, out of the way and keeps only the newest retired one; false if it could not. */
+function retireDir(dir: string, mine: number): boolean {
+  const retired = `${dir}.retired-${mine}-${crypto.randomUUID()}`;
+  try {
+    renameSync(dir, retired);
+  } catch {
+    return false;
+  }
+  const parent = dirname(dir);
+  for (const name of readdirSync(parent)) {
+    const generation = Number(RETIRED.exec(name)?.[1] ?? 0);
+    if (generation > 0 && join(parent, name) !== retired && generation <= mine) {
+      rmSync(join(parent, name), { recursive: true, force: true });
+    }
+  }
+  // Only its name matters now (it carries the floor); what was inside is no one's.
+  for (const name of readdirSync(retired)) rmSync(join(retired, name), { recursive: true, force: true });
+  return true;
 }

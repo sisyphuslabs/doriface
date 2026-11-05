@@ -20,6 +20,9 @@ import { uniqueSlot } from "./support/slots.ts";
 import { startTestHost, type TestHost } from "./support/test-host.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 
+/** The expiry a host signs with its slot: one offer TTL from now (#22). */
+const offerExpiry = (): number => Date.now() + 10 * 60 * 1000;
+
 let relay: LocalRelay;
 
 setUpOnce(async () => {
@@ -33,7 +36,9 @@ afterEach(runDeferred);
 async function pairingHost(): Promise<{ readonly host: TestHost; readonly slot: string }> {
   const host = await startTestHost(relay.url, testIp());
   const slot = uniqueSlot();
-  expect(await host.uplink.registerPairSlot(slot, crypto.getRandomValues(new Uint8Array(32)))).toBe("registered");
+  expect(await host.uplink.registerPairSlot(slot, crypto.getRandomValues(new Uint8Array(32)), offerExpiry())).toBe(
+    "registered",
+  );
   return { host, slot };
 }
 

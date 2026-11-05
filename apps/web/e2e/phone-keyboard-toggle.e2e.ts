@@ -2,9 +2,9 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { fakeSoftKeyboard, key, keysBar, showKeyboard } from "./phone-key-bar.ts";
 
-// A phone-width page with a fine pointer (as headless Chrome is): the keyboard toggle has to follow the keyboard itself,
-// not the terminal's focus (#274).
-test.use({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
+// A touch phone: the keyboard toggle has to follow the keyboard itself, not the terminal's focus (#274). A mouse-only
+// window of this width opens the keys bar by hand instead (phone-keys-mouse.e2e.ts, #287).
+test.use({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
 async function openTerminal(page: Page) {
   await page.goto("/");
@@ -51,6 +51,8 @@ test("a browser that shrinks the page for the keyboard: Show keyboard while it i
   await expect(input).toBeFocused();
   await expectDown(page);
 
+  // A tap in the terminal raises the keyboard, which shrinks the page.
+  await page.locator("[data-terminal]").click();
   await page.setViewportSize({ width: 390, height: 844 - 336 });
   await expectUp(page);
 

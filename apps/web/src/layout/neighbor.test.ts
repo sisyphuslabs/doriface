@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Node } from "@doriface/protocol/layout";
-import { nearest } from "./neighbor.ts";
+import { nearest, paneMove } from "./neighbor.ts";
 import { arrange } from "./rects.ts";
 
 const block = (id: string): Node => ({ content: { terminal: id }, id, type: "block" });
@@ -46,5 +46,17 @@ describe("moving focus by direction", () => {
     expect(nearest("one", "right", panes)).toBe("two");
     expect(nearest("one", "right", panes, ["three", "two"])).toBe("two");
     expect(nearest("one", "right", panes, ["two", "three"])).toBe("three");
+  });
+});
+
+describe("what a pane move key does", () => {
+  test("a lone pane leaves the key to its program", () => {
+    const lone = arrange(box("row", "root", [block("only")]), { x: 0, y: 0, width: 1000, height: 800 }, 8).panes;
+    expect(paneMove("only", "left", lone)).toEqual({ kind: "pass" });
+  });
+
+  test("in a split it goes to the pane that way, and with none there it nudges the focused pane", () => {
+    expect(paneMove("five", "up", panes)).toEqual({ kind: "go", to: "four" });
+    expect(paneMove("one", "left", panes)).toEqual({ kind: "bump" });
   });
 });

@@ -208,12 +208,54 @@ export function appendOwn(deps: MergeDeps, draft: RecordDraft): MergeResult {
 }
 
 /**
+ * Whether the stored records owe this host's automatic ack (section 5.5): it is a member that has signed a record, and a
+ * membership record by another member is not an ancestor of its latest own record. Derived from the records, so an ack
+ * a claim held back is still owed after a restart (#156). A member that has signed nothing owes its admission ack
+ * instead (see `owesAdmission`).
+ */
+export function owesAck(deps: MergeDeps): boolean {
+  return deps.store.transact((tx) => {
+    const self = selfOf(deps);
+    if (!viewOnce(tx)().members.some((member) => member.signPub === self)) return false;
+    const byHash = new Map(tx.records.map((record) => [hashOf(record), record]));
+    let latest: { readonly n: number; readonly hash: string } | undefined;
+    for (const [hash, record] of byHash) {
+      const body = parseRecord(record);
+      if (body?.by === self && (latest === undefined || body.n > latest.n)) latest = { n: body.n, hash };
+    }
+    if (latest === undefined) return false;
+    const covered = new Set<string>();
+    const stack = [latest.hash];
+    for (let hash = stack.pop(); hash !== undefined; hash = stack.pop()) {
+      if (covered.has(hash)) continue;
+      covered.add(hash);
+      const record = byHash.get(hash);
+      for (const prev of record === undefined ? [] : (parseRecord(record)?.prev ?? [])) stack.push(prev);
+    }
+    return [...byHash].some(([hash, record]) => {
+      const body = parseRecord(record);
+      return body !== undefined && body.by !== self && MEMBERSHIP.has(body.type) && !covered.has(hash);
+    });
+  });
+}
+
+/** Whether this host is a member that has signed no record yet, so it owes the ack of its own admission. */
+export function owesAdmission(deps: MergeDeps): boolean {
+  return deps.store.transact(
+    (tx) =>
+      ownN(tx.records, selfOf(deps)) === 0 && viewOnce(tx)().members.some((member) => member.signPub === selfOf(deps)),
+  );
+}
+
+/**
  * The joiner's side of section 5.5: a member admitted by another stores its admit from the welcome, not from a merge,
- * so it acks its admission once, as its first own record, when its sync starts. Undefined when there is nothing to ack.
+ * so it acks its admission once, as its first own record. The caller signs it only after a member's hello and with no
+ * claim standing (see Claims), and never below `counterFloor`. Undefined when there is nothing to ack.
  */
 export function ackAdmission(deps: MergeDeps): MergeResult | undefined {
   return deps.store.transact((tx) => {
-    if (ownN(tx.records, selfOf(deps)) > 0) return undefined;
+    const own = ownN(tx.records, selfOf(deps));
+    if (own > 0 || (deps.counterFloor !== undefined && own < deps.counterFloor.n)) return undefined;
     const view = viewOnce(tx);
     if (!view().members.some((member) => member.signPub === selfOf(deps))) return undefined;
     const before = tx.records.length;
