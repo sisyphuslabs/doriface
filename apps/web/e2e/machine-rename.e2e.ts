@@ -3,8 +3,13 @@ import { agentRow, endAgent, startShell } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, STATE_BOUND_MS } from "./machine-switch.ts";
+import { tabOf } from "./tab-strip.ts";
 
 const RENAMED = "build-renamed";
+
+/** The selected tab shows the terminal: a tab reads its number, as herdr-app's, so it is found by what it shows. */
+const inSelectedTab = (page: Page, address: string) =>
+  page.locator(`[role="tabpanel"]:not([hidden]) [data-terminal="${address}"]`);
 
 /** A WebSocket message as text: JSON-RPC sits in it as plain UTF-8 after each frame header. */
 const text = (message: string | Buffer): string => (typeof message === "string" ? message : message.toString("latin1"));
@@ -59,9 +64,9 @@ test.describe("renaming a machine with its terminals open", () => {
     await agentRow(page, "home", false).click();
     await agentRow(page, "e2e", true).click();
     const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-    await expect(tabs.filter({ hasText: "e2e" })).toHaveAttribute("aria-selected", "true", { timeout: 20_000 });
+    await expect(inSelectedTab(page, `${MACHINE_NAME}/${remote}`)).toHaveCount(1, { timeout: 20_000 });
     // This machine's tab is in a space of its own machine, so the strip shows only the added machine's (#404).
-    await expect(tabs.filter({ hasText: "home" })).toHaveCount(0);
+    await expect(await tabOf(page, local)).toHaveCount(0);
     await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`)).toBeVisible({ timeout: 15_000 });
     const open = await tabs.count();
 
@@ -70,7 +75,7 @@ test.describe("renaming a machine with its terminals open", () => {
     const moved = page.locator(`[data-terminal="${RENAMED}/${remote}"]`);
     await expect(moved).toBeVisible({ timeout: STATE_BOUND_MS });
     await expect(tabs).toHaveCount(open);
-    await expect(tabs.filter({ hasText: "e2e" })).toHaveAttribute("aria-selected", "true");
+    await expect(inSelectedTab(page, `${RENAMED}/${remote}`)).toHaveCount(1);
 
     await moved.click();
     await page.keyboard.type("echo renamed-$((40 + 2))\r");
@@ -83,7 +88,7 @@ test.describe("renaming a machine with its terminals open", () => {
     await agentRow(page, "home", false).click();
     await agentRow(page, "e2e", true).click();
     const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-    await expect(tabs.filter({ hasText: "e2e" })).toHaveAttribute("aria-selected", "true", { timeout: 20_000 });
+    await expect(inSelectedTab(page, `${MACHINE_NAME}/${remote}`)).toHaveCount(1, { timeout: 20_000 });
     await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`)).toBeVisible({ timeout: 15_000 });
     layout.release();
     const open = await tabs.count();

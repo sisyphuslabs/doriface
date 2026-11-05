@@ -15,10 +15,10 @@ export async function setConfirmClose(page: Page, value: "true" | "false" | "alw
   await page.goto("/");
 }
 
-/** Starts `sleep 600` in front of the shell and waits until its tab is named for it, so the screen knows it runs. */
+/** Starts `sleep 600` in front of the shell and waits until its session is named for it, so the screen knows it runs. */
 export async function runSleep(page: Page, terminal: Locator): Promise<void> {
   await terminal.getByRole("textbox").focus();
   await page.keyboard.type("sleep 600");
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("tab", { selected: true })).toHaveText(/^sleep/, { timeout: 15_000 });
+  await expect(page.getByRole("button", { name: /^Session actions for sleep/ })).toBeVisible({ timeout: 15_000 });
 }

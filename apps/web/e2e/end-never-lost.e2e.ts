@@ -4,6 +4,7 @@ import { E2E_HOST_ENV } from "./config.ts";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { type HcSocket, routeHcSocket } from "./hc-socket.ts";
 import { readSavedEnv } from "./saved-env.ts";
+import { tabOf } from "./tab-strip.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -122,7 +123,9 @@ async function twoTabs(page: Page, prefix: string) {
     const address = (await terminal.getAttribute("data-terminal")) ?? "";
     const name = `${prefix}-${which}-${address}`;
     hc("label", address, `herdr.name=${name}`);
-    await expect(page.getByRole("tab", { name })).toBeVisible({ timeout: 15_000 });
+    // A tab reads its number, as herdr-app's; the session's name shows on its actions.
+    await expect(page.getByRole("button", { name: `Session actions for ${name}` })).toBeVisible({ timeout: 15_000 });
+    addressOf.set(name, address);
     return { name, address };
   };
   const first = await named("a");
@@ -130,14 +133,17 @@ async function twoTabs(page: Page, prefix: string) {
   return { link, a: first.name, b: second.name, addressOfA: first.address };
 }
 
+/** Each named terminal's address, to find its tab, which reads its number rather than the session's name. */
+const addressOf = new Map<string, string>();
+
 async function endFromStrip(page: Page, name: string): Promise<void> {
-  await page.getByRole("tab", { name }).click();
+  await (await tabOf(page, addressOf.get(name) ?? "")).click();
   await page.getByRole("button", { name: `Session actions for ${name}` }).click();
   await page.getByRole("menuitem", { name: "End session…" }).click();
 }
 
 async function renameFromStrip(page: Page, name: string) {
-  await page.getByRole("tab", { name }).click();
+  await (await tabOf(page, addressOf.get(name) ?? "")).click();
   await page.getByRole("button", { name: `Session actions for ${name}` }).click();
   await page.getByRole("menuitem", { name: "Rename…" }).click();
   const rename = page.getByRole("dialog", { name: /^Rename / });
@@ -158,7 +164,7 @@ test("an End left with Cancel that later succeeds does not close another session
   const rename = await renameFromStrip(page, b);
   deliver();
   await expect.poll(() => onCore(addressOfA), { timeout: 15_000 }).toBe(false);
-  await expect(page.getByRole("tab", { name: a })).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.locator(`[role="tabpanel"] [data-terminal="${addressOfA}"]`)).toHaveCount(0, { timeout: 15_000 });
   await expect(rename).toBeVisible();
   await expect(rename.getByRole("textbox", { name: "Name" })).toBeEditable();
 });

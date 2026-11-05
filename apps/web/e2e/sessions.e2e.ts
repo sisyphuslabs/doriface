@@ -34,8 +34,8 @@ test("a pane has no title bar: the tab names the terminal and the status bar nam
       return (await sessionActions.getAttribute("aria-label")) === `Session actions for ${title}`;
     })
     .toBe(true);
-  // Which chord: tab-shortcuts.e2e.ts presses each tab's and checks it selects that tab.
-  await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", /\((⌘|Ctrl\+)\d\)$/);
+  // No tooltip on a tab, as herdr-app's strip (#466 ruling A); tab-shortcuts.e2e.ts presses each tab's chord.
+  await expect(page.getByRole("tab", { selected: true })).not.toHaveAttribute("title");
   // The status bar names the focused terminal's space: the same one the sidebar's Spaces list marks current.
   const currentSpace = page
     .getByRole("region", { name: "Spaces" })
@@ -46,7 +46,9 @@ test("a pane has no title bar: the tab names the terminal and the status bar nam
   );
 });
 
-test("renaming a session from the tab strip updates the tab", async ({ page }) => {
+test("renaming a session from the tab strip renames its pane, and the tab keeps its number, as herdr-app's", async ({
+  page,
+}) => {
   await page.goto("/");
   await openNewTerminal(page);
   await sessionMenu(page, "Rename…");
@@ -54,7 +56,8 @@ test("renaming a session from the tab strip updates the tab", async ({ page }) =
   await dialog.getByRole("textbox", { name: "Name" }).fill("deploy-check");
   await page.keyboard.press("Enter");
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("tab", { name: "deploy-check" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Session actions for deploy-check" })).toBeVisible();
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/^\d+$/);
   await expect(pane(page)).toHaveAttribute("aria-label", "deploy-check terminal");
 });
 
@@ -77,7 +80,7 @@ test("closing a tab whose shell runs a program asks first: Cancel leaves it runn
   await closeSelected(page).click();
   await ask.getByRole("button", { name: "Cancel" }).click();
   await expect(ask).toBeHidden();
-  await expect(page.getByRole("tab", { selected: true })).toHaveText(/^sleep/);
+  await expect(page.getByRole("button", { name: /^Session actions for sleep/ })).toBeVisible();
   await expect(page.getByRole("contentinfo")).toContainText(`${before} terminal`);
 
   await closeSelected(page).click();
