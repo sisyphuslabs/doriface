@@ -9,7 +9,7 @@ export interface MeshLiveFacts {
   readonly lines: ReadonlyMap<string, LineFacts>;
   readonly budget: BudgetFacts;
   readonly possiblyRevoked: boolean;
-  /** The highest counter of this host's key that a peer's `hello` showed (section 10.1). */
+  /** The highest counter of this host's key a standing claim holds (section 10.1), 0 when none stands. */
   readonly peerCounter: number;
 }
 
