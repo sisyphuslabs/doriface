@@ -63,8 +63,13 @@ describe("KnownHosts under the state lock", () => {
     const workers = ["a", "b", "c", "d"].map(() =>
       Bun.spawn([process.execPath, WORKER, "add", dir, "15"], { stdout: "pipe", stderr: "pipe" }),
     );
-    const outputs = await Promise.all(workers.map((worker) => new Response(worker.stdout).text()));
-    expect(await Promise.all(workers.map((worker) => worker.exited))).toEqual([0, 0, 0, 0]);
+    const [outputs, errors] = await Promise.all([
+      Promise.all(workers.map((worker) => new Response(worker.stdout).text())),
+      Promise.all(workers.map((worker) => new Response(worker.stderr).text())),
+    ]);
+    const codes = await Promise.all(workers.map((worker) => worker.exited));
+    // A worker that fails says why: its own error, not only its exit code (#464).
+    expect(codes.flatMap((code, i) => (code === 0 ? [] : [`exit ${code}: ${errors[i]}`]))).toEqual([]);
     const added = outputs.flatMap((output) => output.trim().split("\n"));
     const store = new KnownHosts(dir);
     expect(added).toHaveLength(60);
