@@ -9,7 +9,8 @@
   ],
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./layout": "./src/layout/index.ts"
   },
   "scripts": {
     "gen:api": "bun scripts/gen-api.ts",

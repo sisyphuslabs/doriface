@@ -138,21 +138,8 @@ export const SHOTS: readonly Shot[] = [
       if (width === "390") return void (await expect(page.getByText("Needs you")).toBeVisible());
       await openTerminal(page, /shell/, "$");
       await openTerminal(page, /deploy/, "Waiting for approval");
-      // The tab that opens by default is whichever seeded terminal the core lists first, and Split pairs the active tab
-      // with the first other one: close that default tab if it is neither of these two (keeping its session), so the
-      // pair is deploy and shell every run.
-      const other = page.getByRole("button", { name: /^Close (?!shell$|deploy$)/ });
-      if ((await other.count()) > 0) {
-        await other.click();
-        await page
-          .getByRole("dialog", { name: /^Close .+\?$/ })
-          .getByRole("button", { name: "Keep running" })
-          .click();
-      }
-      await expect(page.getByRole("tab")).toHaveCount(2);
-      await page.getByRole("button", { name: "Split" }).click();
-      // Hidden tabs stay mounted, so only the two shown panes count; both must have drawn a row of output (the hidden
-      // help line does not count).
+      await page.getByRole("button", { name: "Split right" }).click();
+      // Hidden tabs stay mounted, so only the two shown panes count.
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
       const shown = page.locator("section[data-split='true']:visible");
       await expect(shown.and(page.getByLabel("deploy terminal"))).toHaveCount(1);

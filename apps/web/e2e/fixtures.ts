@@ -1,6 +1,7 @@
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
+import { clearLayouts } from "./layout-doc.ts";
 import { type HcSocket, routeHcSocket } from "./hc-socket.ts";
 import { readSavedEnv } from "./saved-env.ts";
 import { beginTest, endTest } from "./terminal-guard.ts";
@@ -42,6 +43,7 @@ export const test = base.extend<{ loopbackUrl: string; ownTerminals: undefined }
       token: E2E_TOKEN,
     };
     await page.addInitScript((value) => localStorage.setItem("doriface.connection", value), JSON.stringify(settings));
+    clearLayouts();
     await use(page);
   },
 });
