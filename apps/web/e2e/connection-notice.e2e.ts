@@ -11,6 +11,9 @@ const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 /** What the screen says about the connection, wherever it says it. */
 const notice = (page: Page, text: RegExp) => page.getByRole("status").filter({ hasText: text });
 const OFFLINE = /Offline/;
+const NEXT_STEP = "Reconnects when the network is back";
+const onlineDot = (page: Page) => page.locator('[data-machine-dot="online"]');
+
 const RECONNECTING = /Reconnecting/;
 
 /** What the OS says about the network, as the page sees it; a link to 127.0.0.1 keeps its own state either way. */
@@ -65,6 +68,24 @@ test.describe("desktop", () => {
       await context.setOffline(false);
       await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
       await echoes(page, "back-online");
+    });
+
+    test("offline, the status bar says what happens next in visible text with an action, and no machine still shows connected (#475, #476)", async ({
+      page,
+      context,
+    }) => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await pairAcrossTheNetwork(page, host);
+      await page.goto("/");
+      await openNewTerminal(page);
+      await expect(onlineDot(page).first()).toBeVisible({ timeout: 20_000 });
+      await context.setOffline(true);
+      const bar = page.getByRole("contentinfo");
+      await expect(bar.getByText(NEXT_STEP)).toBeVisible({ timeout: 2_000 });
+      await expect(bar.getByRole("button", { name: "Try again" })).toBeVisible();
+      await expect(onlineDot(page)).toHaveCount(0);
+      await context.setOffline(false);
+      await expect(onlineDot(page).first()).toBeVisible({ timeout: 20_000 });
     });
   });
 
@@ -167,6 +188,21 @@ test.describe("phone", () => {
       await expect(notice(page, OFFLINE)).toBeVisible({ timeout: 2_000 });
       await context.setOffline(false);
       await expect(notice(page, OFFLINE)).toHaveCount(0, { timeout: 2_000 });
+    });
+
+    test("offline, the phone's list says what happens next in visible text, and no machine still shows connected (#475, #476)", async ({
+      page,
+      context,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await pairAcrossTheNetwork(page, host);
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
+      await expect(onlineDot(page).first()).toBeVisible({ timeout: 20_000 });
+      await context.setOffline(true);
+      await expect(page.getByText(NEXT_STEP).filter({ visible: true }).first()).toBeVisible({ timeout: 2_000 });
+      await expect(onlineDot(page)).toHaveCount(0);
+      await context.setOffline(false);
     });
 
     for (const width of [390, 320]) {
