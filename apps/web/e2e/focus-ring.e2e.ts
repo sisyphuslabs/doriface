@@ -59,6 +59,15 @@ for (const colorScheme of ["light", "dark"] as const) {
       await ringOnTab(page, page.getByRole("tab").first());
     });
 
+    test("a scrolling region Tab reaches draws a focus ring (#357)", async ({ page }) => {
+      // The viewport is a Tab stop only while it scrolls: a short window makes the settings body overflow.
+      await page.setViewportSize({ width: 1280, height: 360 });
+      await page.goto("/settings");
+      const body = page.locator('[data-slot="settings-body"]');
+      await expect.poll(() => body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+      await ringOnTab(page, body);
+    });
+
     test("the settings controls Tab reaches draw a focus ring", async ({ page }) => {
       await page.goto("/settings");
       const nav = page.getByRole("navigation", { name: "Settings" });
