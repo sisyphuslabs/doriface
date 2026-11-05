@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { runSleep } from "./close-confirm.ts";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
 
 test.use({ serviceWorkers: "block" });
@@ -66,36 +67,38 @@ test("ending a session from the tab strip stops the program", async ({ page }) =
   await expect(page.getByRole("contentinfo")).toContainText(`${before - 1} terminal`, { timeout: 15_000 });
 });
 
-test("closing a tab asks whether to keep the session running or end it", async ({ page }) => {
+test("closing a tab whose shell runs a program asks first: Cancel leaves it running, Close ends it", async ({
+  page,
+}) => {
   await page.goto("/");
-  await openNewTerminal(page);
-  const kept = await liveCount(page);
+  await runSleep(page, await openNewTerminal(page));
+  const before = await liveCount(page);
   const ask = page.getByRole("dialog", { name: /^Close .+\?$/ });
   await closeSelected(page).click();
-  await ask.getByRole("button", { name: "Keep running" }).click();
+  await ask.getByRole("button", { name: "Cancel" }).click();
   await expect(ask).toBeHidden();
-  await expect(page.getByRole("contentinfo")).toContainText(`${kept} terminal`);
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/^sleep/);
+  await expect(page.getByRole("contentinfo")).toContainText(`${before} terminal`);
 
-  await openNewTerminal(page);
-  const before = await liveCount(page);
   await closeSelected(page).click();
-  await ask.getByRole("button", { name: "End session" }).click();
+  await ask.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("contentinfo")).toContainText(`${before - 1} terminal`, { timeout: 15_000 });
 });
 
-test("End session in the close prompt is styled destructive and Enter does not end the session", async ({ page }) => {
+test("Close in the close prompt is styled destructive like End session, and Enter does not close", async ({ page }) => {
   await page.goto("/");
-  await openNewTerminal(page);
+  const terminal = await openNewTerminal(page);
   await sessionMenu(page, "End session…");
   const confirm = page.getByRole("dialog", { name: /^End / });
   const destructive = await confirm
     .getByRole("button", { name: "End session" })
     .evaluate((button) => getComputedStyle(button).backgroundColor);
   await confirm.getByRole("button", { name: "Cancel" }).click();
+  await runSleep(page, terminal);
   const before = await liveCount(page);
   await closeSelected(page).click();
   const ask = page.getByRole("dialog", { name: /^Close .+\?$/ });
-  const end = ask.getByRole("button", { name: "End session" });
+  const end = ask.getByRole("button", { name: "Close" });
   expect(await end.evaluate((button) => getComputedStyle(button).backgroundColor)).toBe(destructive);
   await page.keyboard.press("Enter");
   await expect(ask).toBeHidden();

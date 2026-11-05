@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { startShell } from "./agents.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, test, terminalCount } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { fractionOf, paneOf, renameTab, savedTab, seedLayout, type Fraction, type SeedTab } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
@@ -50,7 +50,14 @@ const keyboardAddress = (page: Page): Promise<string | null> =>
 
 const shells: string[] = [];
 test.afterEach(() => {
-  for (const address of shells.splice(0)) hcOn("host", ["kill", address]);
+  for (const address of shells.splice(0)) {
+    try {
+      hcOn("host", ["kill", address]);
+    } catch (error) {
+      // A test that closed its pane ended that shell already (#409); any other failure stands.
+      if (!(error instanceof Error && error.message.includes('"kind":"not_found"'))) throw error;
+    }
+  }
 });
 
 const shell = (name: string): string => {
@@ -218,7 +225,6 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
   await paneOf(page, two).getByRole("textbox").focus();
   await paneOf(page, three).getByRole("textbox").focus();
   await paneOf(page, three).getByRole("button", { name: "Close pane" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
   await expect(paneOf(page, three)).toHaveCount(0);
   // The column of four and five takes three's place, the whole bottom right.
   await expectAt(page, four, { x: 0.5, y: 0.5, w: 0.5, h: 0.25 });
@@ -233,7 +239,6 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
     await previous;
     await paneOf(page, address).getByRole("textbox").focus();
     await page.keyboard.press(KEYS.other.close);
-    await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
     await expect(paneOf(page, address)).toHaveCount(0);
   }, Promise.resolve());
   await expect(tabs).toHaveCount(1);
@@ -310,16 +315,43 @@ test("the last pane of the tab in view ending while its layout write is refused 
   expect(savedTab("tb-solo")).toBe(saved);
 });
 
-test("closing the tab in view while its layout write is refused keeps that tab in view", async ({ page }) => {
+test("closing the tab in view while its layout write is refused keeps that tab in view, and says so once", async ({
+  page,
+}) => {
   const socket = await routeHcSocket(page);
-  await soloInView(page);
+  const { solo } = await soloInView(page);
   const saved = savedTab("tb-solo");
+  const { before } = await terminalCount(page);
+  /** Whether hc has answered the page's terminal.get for the closed session with not_found (the dead-pane check). */
+  const toldGone = (): boolean => {
+    const asks = socket
+      .sent()
+      .filter((text) => text.includes('"method":"terminal.get"') && text.includes(`"terminal":"${solo}"`));
+    const ids = asks.flatMap((text) => /"id":(\d+)/.exec(text)?.[1] ?? []);
+    return socket
+      .received()
+      .some(
+        (text) =>
+          text.includes("not_found") && ids.some((id) => text.includes(`"id":${id},`) || text.includes(`"id":${id}}`)),
+      );
+  };
 
+  // Closing ends the session and removes it (#409). The feed's word that it is gone waits until the drop its end asked
+  // for has been refused, so the removal reaches the page after it, in a known order.
   socket.staleWrites(true);
+  const release = socket.holdFromHost('"method":"event"', '"method":"heartbeat"', '"method":"missed"');
   await page.getByRole("button", { name: /^Close .*solo/ }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
-  await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  const told = page.getByText("The layout was not saved");
+  await expect(told).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.getByRole("region", { name: "resize-solo terminal" })).toHaveCount(1);
+
+  // The removal is the same ending: the dead-pane check finds the session gone, and the pane is not dropped again, so
+  // nothing more is refused or said and the tab stays in view.
+  release();
+  await expect(page.getByRole("contentinfo")).toContainText(`${before - 1} terminal`, { timeout: 15_000 });
+  await expect.poll(toldGone, { timeout: 15_000 }).toBe(true);
   await expect(page.getByRole("tab", { selected: true })).toHaveText(/solo/);
+  await expect(told).toHaveCount(1);
   expect(savedTab("tb-solo")).toBe(saved);
 });
 
@@ -403,7 +435,6 @@ test("zoomed, moving focus or splitting shows every pane again, so a close acts 
   await expect(paneOf(page, five)).toBeVisible();
   await expect.poll(() => keyboardAddress(page), { timeout: 5_000 }).toBe(two);
   await page.keyboard.press(KEYS.other.close);
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
   await expect(paneOf(page, two)).toHaveCount(0);
   await expect(paneOf(page, four)).toBeVisible();
 

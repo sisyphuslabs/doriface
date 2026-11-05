@@ -84,9 +84,7 @@ export const BEHAVIOR_KEYS: readonly KeyDef[] = [
     kind: { type: "enum", values: ["true", "false", "always"] },
     repeatable: false,
     defaults: ["true"],
-    description: "Ask before closing a tab with a program running in it (always: every tab).",
-    support: unsupported(
-      "The browser cannot tell a running program from an idle shell, so it cannot ask only when one is running.",
-    ),
+    description: "Ask before closing a pane or tab with a program running in it (always: every time; false: never).",
+    support: LIVE,
   },
 ];

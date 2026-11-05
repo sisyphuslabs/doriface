@@ -131,8 +131,8 @@ function looseTab(address: string, layouts: readonly MachineLayout[]): LayoutTab
  * Every tab of every machine's document, this core's first, then the terminals opened on this screen while their
  * machine's layout could not take a tab (`loose`: offline, loading). With no tab at all, the first live terminal is
  * shown alone, as it opened before the layout lived in the core, but only while this core has no layout yet: a layout
- * whose tabs the person closed (Keep running on the last one) shows none, so the workspace is empty and the terminal
- * waits in the sidebar (#354).
+ * whose tabs were all closed shows none while a terminal runs on outside any tab (started outside the app, or kept by an
+ * older build's Keep running), so the workspace is empty and the terminal waits in the sidebar (#354).
  */
 export function buildTabs(
   layouts: readonly MachineLayout[],

@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   agentCounts,
   agentStatus,
+  asksBeforeClosing,
   firstInSpace,
   groupAgents,
+  runsProgram,
   spaceId,
   tabPosition,
   terminalTitle,
@@ -22,6 +24,37 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
   screen: "exact",
   state: "live",
   ...fields,
+});
+
+const front = (argv: string[]) => ({ argv, cwd: "/work", name: argv[0] ?? "", pid: 2 });
+const reportedState = (state: string) => ({ state }) as unknown as NonNullable<Terminal["status"]>;
+const read = (fields: Partial<Terminal>) => runsProgram(terminal(fields));
+
+describe("closing", () => {
+  test("a shell at its prompt and an agent between turns run nothing; a program in front or an agent's turn does", () => {
+    expect([
+      read({ argv: ["/bin/zsh"], foreground: front(["-zsh"]) }),
+      read({ argv: ["/bin/sh"] }),
+      read({ argv: ["cmd.exe"] }),
+      read({ argv: ["/bin/zsh"], foreground: front(["vim", "notes.md"]) }),
+      read({ argv: ["htop"] }),
+      read({ argv: ["/bin/zsh"], foreground: front(["claude"]), status: reportedState("working") }),
+      read({ argv: ["/bin/zsh"], foreground: front(["claude"]), status: reportedState("idle") }),
+      read({ argv: ["/bin/zsh"], foreground: front(["vim"]), state: "finished" }),
+    ]).toEqual([false, false, false, true, true, true, false, false]);
+  });
+
+  test("confirm-close-surface: false never asks, always always does, and the default asks while a program runs", () => {
+    const idle = terminal({ argv: ["/bin/sh"] });
+    const busy = terminal({ argv: ["/bin/sh"], foreground: front(["sleep", "600"]) });
+    expect([
+      asksBeforeClosing("false", [busy]),
+      asksBeforeClosing("always", [idle]),
+      asksBeforeClosing("true", [idle]),
+      asksBeforeClosing("true", [idle, busy]),
+      asksBeforeClosing("", [busy]),
+    ]).toEqual([false, true, false, true, true]);
+  });
 });
 
 describe("spaces", () => {

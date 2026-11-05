@@ -29,6 +29,49 @@ export function agentStatus(terminal: Session): AgentStatus {
   return word !== undefined && Object.hasOwn(OSC_STATES, word) ? (OSC_STATES[word] ?? "idle") : "idle";
 }
 
+/** The shells herdr-app reads as a prompt rather than a program (its `defaults/programs.json` `shells`). */
+const SHELLS: ReadonlySet<string> = new Set([
+  "zsh",
+  "bash",
+  "fish",
+  "sh",
+  "dash",
+  "nu",
+  "pwsh",
+  "powershell",
+  "cmd",
+  "elvish",
+  "xonsh",
+  "tcsh",
+  "csh",
+  "ksh",
+  "ion",
+]);
+
+/** `/bin/zsh`, a login shell's `-zsh` and `cmd.exe` as the bare program name. */
+const programName = (path: string): string =>
+  (path.split(/[/\\]/).at(-1) ?? path).replace(/^-+/, "").replace(/\.exe$/i, "");
+
+/**
+ * Whether closing would stop a program at work, as herdr-app's `busy` reads it: an agent in its turn, or a program in
+ * front of the shell. A shell at its prompt and an agent between turns are not.
+ */
+export function runsProgram(terminal: Session): boolean {
+  if (terminal.state !== "live") return false;
+  if (terminal.status?.state !== undefined) return agentStatus(terminal) === "working";
+  const front = terminal.foreground?.argv[0] ?? terminal.foreground?.name ?? terminal.argv[0] ?? "";
+  return !SHELLS.has(programName(front));
+}
+
+/**
+ * Whether closing these sessions asks first, by the terminal config's `confirm-close-surface` (as Ghostty reads it):
+ * `false` never, `always` every time, anything else while one of them runs a program.
+ */
+export function asksBeforeClosing(confirm: string, sessions: readonly Session[]): boolean {
+  if (confirm === "false") return false;
+  return confirm === "always" || sessions.some(runsProgram);
+}
+
 export function terminalTitle(terminal: Terminal): string {
   const renamed = terminal.labels[TITLE_LABEL];
   if (renamed !== undefined && renamed !== "") return renamed;
