@@ -97,9 +97,15 @@ function basename(path: string): string {
   return path.split("/").findLast((part) => part !== "") ?? "/";
 }
 
+/**
+ * The hc label that names a terminal's space. A loose terminal carrying it is adopted into the space of that name, and a
+ * rename writes it on the space's live terminals too, so hc and the layout document agree (#395, #404).
+ */
+export const SPACE_LABEL = "space";
+
 /** A space is the `space` label, else the working directory's last segment. */
 export function spaceName(terminal: Terminal): string {
-  return terminal.labels["space"] ?? basename(terminal.foreground?.cwd ?? terminal.cwd);
+  return terminal.labels[SPACE_LABEL] ?? basename(terminal.foreground?.cwd ?? terminal.cwd);
 }
 
 const spaceDir = (terminal: Terminal): string => terminal.foreground?.cwd ?? terminal.cwd;

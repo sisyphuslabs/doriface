@@ -174,6 +174,13 @@ describe("space rename (#395)", () => {
       expect(rename(false)).toEqual([]);
     },
   );
+
+  test("a layout that takes no edits lists Rename space as unavailable, with why (#404)", () => {
+    const listed = availableActions("desktop", true, "the machine is not connected").find(
+      ({ id }) => id === "space.rename",
+    );
+    expect(listed).toEqual({ id: "space.rename", unavailable: "the machine is not connected" });
+  });
 });
 
 describe("dictation (#194)", () => {

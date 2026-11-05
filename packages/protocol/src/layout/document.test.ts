@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../json.ts";
-import { addTab, docSpaces, editTab, moveTab, readDocument, tabsOf } from "./document.ts";
+import { addTab, docSpaces, editTab, moveTab, readDocument, renameSpace, tabsOf } from "./document.ts";
 import { panesOf, splitPane, terminalBlock, removePane } from "./tree.ts";
 
 // Written by herdr-app 0.1.12 against hc 0.1.17: ⌘D ⌘⇧D ⌘D ⌘⇧D in one tab, a second tab split down then beside a
@@ -205,5 +205,23 @@ describe("spaces and their tabs' order (#404)", () => {
     ]);
     expect(order(moveTab(two, "a1", 9))?.[0]).toEqual(["spc-a", ["a2", "a3", "a1"]]);
     expect([moveTab(two, "a2", 1), moveTab(two, "b1", 3), moveTab(two, "gone", 0)]).toEqual([null, null, null]);
+  });
+
+  test("a rename sets only that space's name, keeps its other fields, and writes nothing when it changes nothing", () => {
+    const [alpha, beta] = docSpaces(two).map((each) => ({ folder: each.folder, id: each.id, name: each.name }));
+    const kept: JsonObject = {
+      spaces: [
+        { ...alpha, extra: 1, tabs: [] },
+        { ...beta, tabs: [tab("b1")] },
+      ],
+    };
+    const renamed = renameSpace(kept, "spc-b", "beta");
+    const spaces = renamed?.["spaces"];
+    expect(Array.isArray(spaces) ? spaces : null).toEqual([
+      { folder: "/a", id: "spc-a", name: "alpha", extra: 1, tabs: [] },
+      { folder: "/b", id: "spc-b", name: "beta", tabs: [tab("b1")] },
+    ]);
+    expect(Array.isArray(spaces) ? spaces[0] : null).toBe(Array.isArray(kept["spaces"]) ? kept["spaces"][0] : null);
+    expect([renameSpace(two, "spc-a", "alpha"), renameSpace(two, "gone", "x")]).toEqual([null, null]);
   });
 });
