@@ -2,6 +2,7 @@ import type { TerminalStream } from "@doriface/client";
 import type { WTerm } from "@wterm/react";
 import { useEffect, type RefObject } from "react";
 import type { RendererOptions } from "../ghostty/render-options.ts";
+import { copiedText } from "./copied-text.ts";
 
 export interface PendingPaste {
   readonly text: string;
@@ -14,7 +15,7 @@ export function useBehaviors(
   options: RendererOptions,
   onUnsafePaste: (paste: PendingPaste) => void,
 ): void {
-  const { copyOnSelect, hideMouseWhileTyping, pasteProtection } = options;
+  const { copyOnSelect, hideMouseWhileTyping, pasteProtection, trimCopy } = options;
   useEffect(() => {
     if (wt === null) return undefined;
     const element = wt.element;
@@ -28,8 +29,24 @@ export function useBehaviors(
     if (copyOnSelect) {
       on("mouseup", () => {
         const text = wt.getSelectionText();
-        if (text !== null && text !== "") void navigator.clipboard?.writeText(text).catch(() => undefined);
+        if (text !== null && text !== "") {
+          void navigator.clipboard?.writeText(copiedText(text, trimCopy)).catch(() => undefined);
+        }
       });
+    }
+    if (trimCopy) {
+      // The browser's own Copy (Ctrl/Cmd+C on a selection) puts the same trimmed text there as the Copy action.
+      on(
+        "copy",
+        (event) => {
+          const text = wt.getSelectionText();
+          if (text === null || text === "" || event.clipboardData === null) return;
+          event.clipboardData.setData("text/plain", copiedText(text, true));
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        },
+        true,
+      );
     }
     if (hideMouseWhileTyping) {
       on("keydown", () => element.classList.add("cursor-none"));
@@ -53,5 +70,5 @@ export function useBehaviors(
       abort.abort();
       element.classList.remove("cursor-none");
     };
-  }, [wt, stream, copyOnSelect, hideMouseWhileTyping, pasteProtection, onUnsafePaste]);
+  }, [wt, stream, copyOnSelect, hideMouseWhileTyping, pasteProtection, trimCopy, onUnsafePaste]);
 }
