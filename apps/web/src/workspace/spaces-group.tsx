@@ -161,7 +161,7 @@ function SpacesLists({
     );
   // While this device's own link is down, the machine list it last read is not news: no row claims a live link (#476).
   const notice = useConnectionNotice();
-  const linkDown = notice === null ? null : notice.offline ? "not known while offline" : "not known while reconnecting";
+  const linkDown = notice === null ? null : "unknown";
   const header = (machine: MachineEntry, button: HeaderButton | undefined) => (
     <MachineHeader
       {...(button === undefined ? {} : { buttonProps: button })}

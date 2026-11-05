@@ -42,12 +42,26 @@ export function useConnectionNotice(): ConnectionNotice | null {
 const glyph = (notice: ConnectionNotice) => (notice.offline ? <WifiOff aria-hidden /> : <Spinner />);
 
 /** Status bar item while the workspace on screen is offline or waits for its connection; typing meanwhile is kept. */
-export function ReconnectStatus() {
+/** `compact`: the label only, for a phone, whose screen says the whole notice in a ConnectionLine instead. */
+export function ReconnectStatus({ compact = false }: { readonly compact?: boolean }) {
   const notice = useConnectionNotice();
   if (notice === null) return null;
+  if (compact) {
+    return (
+      <span role="status" className="flex min-w-0" title={notice.detail}>
+        <StatusBarItem icon={glyph(notice)}>
+          <span className="text-foreground">{notice.label}</span>
+        </StatusBarItem>
+      </span>
+    );
+  }
   // Offline, what happens next is said in the bar itself (a phone shows no tooltip), with a way to try at once (#475).
   return (
-    <span role="status" className="flex min-w-0 items-center gap-2" title={notice.detail}>
+    <span
+      role="status"
+      className={notice.offline ? "flex shrink-0 items-center gap-2" : "flex min-w-0"}
+      title={notice.detail}
+    >
       <StatusBarItem icon={glyph(notice)}>
         <span className="text-foreground">{notice.offline ? notice.detail : notice.label}</span>
       </StatusBarItem>
@@ -61,15 +75,20 @@ export function ConnectionLine() {
   const notice = useConnectionNotice();
   if (notice === null) return null;
   return (
-    <p
-      role="status"
-      className="flex shrink-0 items-start gap-2 border-b border-border bg-chrome px-4 py-2 text-sm text-foreground [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
-    >
-      {glyph(notice)}
-      {/* The sentence is required content (DESIGN.md 5 (e)): it wraps at narrow widths rather than losing its end. */}
-      <span className="min-w-0 text-pretty break-words" title={notice.detail}>
-        {notice.offline ? notice.detail : notice.label}
-      </span>
-    </p>
+    <div className="flex shrink-0 items-start gap-2 border-b border-border bg-chrome px-4 py-2">
+      <p
+        role="status"
+        className="flex min-w-0 flex-1 items-start gap-2 text-sm text-foreground [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
+      >
+        {glyph(notice)}
+        {/* The sentence is required content (DESIGN.md 5 (e)): it wraps at narrow widths rather than losing its end. */}
+        <span className="min-w-0 text-pretty break-words" title={notice.detail}>
+          {notice.offline ? notice.detail : notice.label}
+        </span>
+      </p>
+      {notice.offline ? (
+        <RetryButton size="sm" className="-my-1 shrink-0" onRetry={() => Promise.resolve(connectionStore.retryNow())} />
+      ) : null}
+    </div>
   );
 }

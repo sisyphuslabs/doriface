@@ -77,7 +77,6 @@ test.describe("desktop", () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await pairAcrossTheNetwork(page, host);
       await page.goto("/");
-      await openNewTerminal(page);
       await expect(onlineDot(page).first()).toBeVisible({ timeout: 20_000 });
       await context.setOffline(true);
       const bar = page.getByRole("contentinfo");
@@ -200,7 +199,13 @@ test.describe("phone", () => {
       await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
       await expect(onlineDot(page).first()).toBeVisible({ timeout: 20_000 });
       await context.setOffline(true);
-      await expect(page.getByText(NEXT_STEP).filter({ visible: true }).first()).toBeVisible({ timeout: 2_000 });
+      const sentence = page.getByText(NEXT_STEP).filter({ visible: true }).first();
+      await expect(sentence).toBeVisible({ timeout: 2_000 });
+      // The whole sentence is read, not cut behind an ellipsis.
+      expect(await sentence.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+      const retry = page.getByRole("button", { name: "Try again" }).filter({ visible: true }).first();
+      const box = await retry.boundingBox();
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
       await expect(onlineDot(page)).toHaveCount(0);
       await context.setOffline(false);
     });
