@@ -158,3 +158,15 @@ export async function pressNewTab(button: Locator, options: { readonly timeout?:
       .click(options);
   }
 }
+
+/**
+ * A sheet or dialog once it is open and at rest: visible, past its starting style, and with every animation inside it
+ * finished, so a measurement reads its resting size and not a frame of the open transition (#583).
+ */
+export async function opened(sheet: Locator): Promise<void> {
+  await expect(sheet).toBeVisible();
+  await expect(sheet).not.toHaveAttribute("data-starting-style");
+  await sheet.evaluate(async (el) => {
+    await Promise.all(el.getAnimations({ subtree: true }).map((animation) => animation.finished));
+  });
+}
