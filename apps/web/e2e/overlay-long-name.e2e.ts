@@ -29,15 +29,18 @@ async function expectInside(overlay: Locator, what: string): Promise<void> {
       range.selectNodeContents(node);
       for (const rect of range.getClientRects()) rects.push({ text, rect });
     }
+    // A box that scrolls keeps lines above and below its fold; they still have to fit its width.
+    const scrolls = element.scrollHeight > element.clientHeight + 1;
     for (const { text, rect } of rects) {
       // Inside the viewport, and a text also inside the overlay's box (1 px of rounding either way).
-      const inView = rect.left >= -1 && rect.top >= -1 && rect.right <= right + 1 && rect.bottom <= bottom + 1;
+      const vertical = text === null || !scrolls;
+      const inView =
+        rect.left >= -1 && rect.right <= right + 1 && (!vertical || (rect.top >= -1 && rect.bottom <= bottom + 1));
       const inBox =
         text === null ||
         (rect.left >= box.left - 1 &&
-          rect.top >= box.top - 1 &&
           rect.right <= box.right + 1 &&
-          rect.bottom <= box.bottom + 1);
+          (!vertical || (rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1)));
       if (inView && inBox) continue;
       const at = `${Math.round(rect.left)}..${Math.round(rect.right)} x ${Math.round(rect.top)}..${Math.round(rect.bottom)}`;
       found.push(
@@ -114,6 +117,62 @@ for (const width of [320, 390] as const) {
       });
     });
   }
+}
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test.describe(`on a short 320x360 phone, ${colorScheme}`, () => {
+    test.use({ ...PHONE, viewport: { width: 320, height: 360 }, colorScheme, serviceWorkers: "block" });
+
+    test("a question taller than the screen opens at its title, scrolls inside, sits above the keys, and End works", async ({
+      page,
+    }) => {
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
+      await agentRow(page, LONG, false).click({ timeout: 20_000 });
+      const header = page.getByRole("banner");
+      await expect(header.getByRole("heading", { name: LONG })).toBeVisible({ timeout: 15_000 });
+      const keyboard = page.getByRole("button", { name: "Show keyboard" });
+      await expect(keyboard).toBeVisible({ timeout: 15_000 });
+      const button = await keyboard.boundingBox();
+      expect(button, "the Show keyboard button has a box").not.toBeNull();
+
+      await header.getByRole("button", { name: `Session actions for ${LONG}` }).click();
+      await page.getByRole("menuitem", { name: "End session…" }).click();
+      const ask = page.getByRole("dialog", { name: `End ${LONG}?` });
+      await expectInside(ask, "the End dialog on a short screen");
+      expect(
+        await ask.evaluate((element) => element.scrollHeight > element.clientHeight),
+        "the question is taller than the screen, so the dialog scrolls inside",
+      ).toBe(true);
+
+      // It opens at its title: focus is on the dialog itself, not on a button below the fold that scrolls it there.
+      await expect(ask).toBeFocused();
+      expect(await ask.evaluate((element) => element.scrollTop), "the dialog's scroll position as it opens").toBe(0);
+      const title = await ask.getByText(`End ${LONG}?`).boundingBox();
+      const box = await ask.boundingBox();
+      expect(title !== null && box !== null && title.y >= box.y, "the title starts inside the dialog").toBe(true);
+
+      // The keys' button stays under the modal layer: the point at its centre belongs to the dialog or its backdrop.
+      const centre = {
+        x: (button?.x ?? 0) + (button?.width ?? 0) / 2,
+        y: (button?.y ?? 0) + (button?.height ?? 0) / 2,
+      };
+      const onTop = await page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.closest("[aria-label='Show keyboard']") !== null,
+        centre,
+      );
+      expect(onTop, "the Show keyboard button is drawn above the open dialog").toBe(false);
+
+      const end = ask.getByRole("button", { name: "End session" });
+      await end.scrollIntoViewIfNeeded();
+      await expectInside(end, "End session, scrolled into view");
+      await end.click();
+      ended = true;
+      await expect(ask).toBeHidden({ timeout: 15_000 });
+      await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 15_000 });
+      await expect(agentRow(page, LONG, false)).toHaveCount(0, { timeout: 15_000 });
+    });
+  });
 }
 
 for (const colorScheme of ["light", "dark"] as const) {
