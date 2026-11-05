@@ -1,7 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
-import { useSoftKeyboard } from "../terminal/keyboard-inset.ts";
+import { useMouseOnly, useSoftKeyboard } from "../terminal/keyboard-inset.ts";
 import { useHostPlatform } from "../terminal/host-os.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
@@ -44,6 +44,9 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   }, []);
   const [scope, setScope] = useState<HTMLDivElement | null>(null);
   const keyboard = useSoftKeyboard(scope);
+  // A mouse-only device has no soft keyboard to ride on: its keys bar is opened and closed by hand (#287).
+  const mouseOnly = useMouseOnly();
+  const [keysShown, setKeysShown] = useState(false);
   const [menu, setMenu] = useState(false);
   const [pad, setPad] = useState(false);
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
@@ -71,7 +74,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
     if (ended || offline) voice.dictation.close();
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
-  const keysOpen = !ended && !dictating && (keyboard.up || menu);
+  const keysOpen = !ended && !dictating && (keyboard.up || menu || (mouseOnly && keysShown));
   // The terminal's jump button stays clear of what floats over its bottom right: the keyboard button, or the arrow pad.
   const keysControls =
     offline || ended || dictating ? null : !keysOpen ? KEYBOARD_BUTTON_CLEARANCE : pad ? DIRECTION_PAD_CLEARANCE : null;
@@ -143,6 +146,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
           onMenu={setMenu}
           pad={pad}
           onPad={setPad}
+          {...(mouseOnly ? { onKeys: setKeysShown } : {})}
         />
       )}
     </div>
