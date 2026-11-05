@@ -6,11 +6,63 @@ interface Timer {
   readonly run: () => void;
 }
 
-/** Lets every promise chain a step started run to its end, without letting any time pass. */
-export async function settle(turns = 25): Promise<void> {
-  if (turns === 0) return;
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  return settle(turns - 1);
+/**
+ * WebCrypto work this test process has started and not yet seen settle. Its promises resolve on a later event-loop turn
+ * (a Noise handshake's X25519, for one), so a chain through it is not finished when the turn that started it ends.
+ */
+let cryptoInFlight = 0;
+const COUNTED = Symbol.for("doriface.fake-clock.counted-subtle");
+const subtle = globalThis.crypto.subtle as SubtleCrypto & { [COUNTED]?: true };
+if (subtle[COUNTED] === undefined) {
+  subtle[COUNTED] = true;
+  for (const name of [
+    "decrypt",
+    "deriveBits",
+    "deriveKey",
+    "digest",
+    "encrypt",
+    "exportKey",
+    "generateKey",
+    "importKey",
+    "sign",
+    "unwrapKey",
+    "verify",
+    "wrapKey",
+  ] as const) {
+    const original = subtle[name].bind(subtle) as (...args: unknown[]) => Promise<unknown>;
+    Object.defineProperty(subtle, name, {
+      configurable: true,
+      value: (...args: unknown[]): Promise<unknown> => {
+        cryptoInFlight += 1;
+        return original(...args).finally(() => {
+          cryptoInFlight -= 1;
+        });
+      },
+    });
+  }
+}
+
+/** Turns with nothing in flight before settle() calls the process quiet: one drains every microtask, one more confirms. */
+const QUIET_TURNS = 2;
+/** A chain still going after this many turns is a leak (a loop that never yields), not work to wait for. */
+const MAX_TURNS = 10_000;
+
+const turn = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Lets every promise chain a step started run to its end, without letting any time pass. It returns at a quiet point:
+ * {@link QUIET_TURNS} event-loop turns in a row with no WebCrypto work in flight (each turn drains every microtask,
+ * which is how the in-memory links deliver). A fixed turn count made timer-heavy tests cost tens of thousands of turns
+ * whatever they did, so their run time followed the runner's event-loop latency (#316, #323).
+ */
+export async function settle(): Promise<void> {
+  let quiet = 0;
+  for (let turns = 0; turns < MAX_TURNS; turns += 1) {
+    await turn();
+    quiet = cryptoInFlight === 0 ? quiet + 1 : 0;
+    if (quiet >= QUIET_TURNS) return;
+  }
+  throw new Error(`settle(): still busy after ${MAX_TURNS} event-loop turns`);
 }
 
 /** Virtual time: timers fire only inside `advance`, in due order, each followed by `settle()`. */
