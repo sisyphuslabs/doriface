@@ -18,6 +18,7 @@ import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
 import { windowZoom, type WindowZoom } from "./zoom.ts";
+import { revealWhenReady } from "./window-reveal.ts";
 import type { ZoomStep } from "../shared/bridge.ts";
 
 const platform = parsePlatform(process.platform);
@@ -102,7 +103,13 @@ function createWindow(path: string): BrowserWindow {
   const window = new BrowserWindow(windowOptions(platform, opening, { background, placement }));
   mainWindow = window;
   currentZoom().applyOnEveryLoad(window);
-  window.once("ready-to-show", () => window.show());
+  revealWhenReady({
+    show: () => window.show(),
+    isVisible: () => window.isVisible(),
+    isDestroyed: () => window.isDestroyed(),
+    onReady: (listener) => void window.once("ready-to-show", listener),
+    onClosed: (listener) => void window.once("closed", listener),
+  });
   if (platform === "darwin") applyMacTitlebar(window);
   rememberPlacement(window, placementFile);
   window.webContents.on("context-menu", (_event, params) => {
