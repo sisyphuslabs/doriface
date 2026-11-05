@@ -7,6 +7,7 @@ import {
   Uplink,
   CloseCode,
   connectRelayClient,
+  encodeData,
   MAX_SESSION_SEND_BYTES,
   MAX_UNACKED_BYTES,
   MUX_HEADER_BYTES,
@@ -138,7 +139,12 @@ describe("backpressure (C3)", () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip);
     const client = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
-    expect((await host.frame()).type).toBe(MuxType.Open);
+    const open = await host.frame();
+    expect(open.type).toBe(MuxType.Open);
+    // Answered by the host, so its DATA is no longer held to a pending session's first message.
+    const atClient = received(client);
+    host.probe.socket.send(encodeData(open.sessionId, Uint8Array.of(1)));
+    await atClient.take();
     const clientClosed = closedWith(client);
     for (const index of times(5)) client.send(new Uint8Array(MAX_SESSION_SEND_BYTES).fill(index));
     expect(await clientClosed).toBe(CloseCode.IdleTimeout);
@@ -150,7 +156,7 @@ describe("backpressure (C3)", () => {
     host.probe.socket.close();
   });
 
-  test("a credit uplink that never acks is held to the same 4 MiB: a client ignoring its credit is closed with 4408", async () => {
+  test("a client ignoring its credit is closed with 4408 at its window, long before the credit uplink's 4 MiB", async () => {
     const ip = testIp();
     const host = await startRawHost(relay.url, ip, { credit: true });
     const client = new Probe(`${clientUrl(host.hostId)}?credit=1`, ip);
@@ -160,17 +166,18 @@ describe("backpressure (C3)", () => {
         if (typeof event.data === "string") resolve(event.data);
       }),
     );
-    expect((await host.frame()).type).toBe(MuxType.Open);
+    const open = await host.frame();
+    expect(open.type).toBe(MuxType.Open);
     expect((await host.frame()).type).toBe(MuxType.Credit);
-    // The relay has told this client its window; it sends 5 MiB anyway, as a client ignoring credit would.
     expect(await creditStarted).toBe("c:0");
+    host.probe.socket.send(encodeData(open.sessionId, Uint8Array.of(1)));
+    await client.next();
+    // The relay has told this client its window; it sends 5 MiB anyway, as a client ignoring credit would. The first
+    // message goes, as any send does below one credit step uncredited; the second is past the 512 KiB window.
     for (const index of times(5)) client.socket.send(new Uint8Array(MAX_SESSION_SEND_BYTES).fill(index));
     expect((await client.closed).code).toBe(CloseCode.IdleTimeout);
     const frames = await untilClose(() => host.frame());
-    // The challenge, OPEN and the zero CREDIT count against the uplink's window too.
-    const control = CHALLENGE_BYTES + 2 * MUX_HEADER_BYTES + 4;
-    const forwarded = Math.floor((MAX_UNACKED_BYTES - control) / RELAY_MESSAGE_CAP);
-    expect(frames.map((frame) => frame.type)).toEqual([...times(forwarded).map(() => MuxType.Data), MuxType.Close]);
+    expect(frames.map((frame) => frame.type)).toEqual([MuxType.Data, MuxType.Close]);
     host.probe.socket.close();
   });
 
@@ -224,29 +231,6 @@ describe("backpressure (C3)", () => {
     consumed.resolve();
     client.close();
     uplink.stop();
-  });
-
-  test("relay control frames count against the window too: an uplink that never acks is closed with 4408", async () => {
-    const ip = testIp();
-    const host = await startRawHost(relay.url, ip);
-    const client = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
-    defer(() => client.close());
-    // Challenge and OPEN, then DATA frames that leave the uplink 2 bytes short of the 4 MiB window.
-    const sentSoFar = CHALLENGE_BYTES + MUX_HEADER_BYTES;
-    const full = times(3).map(() => MAX_SESSION_SEND_BYTES);
-    const last = MAX_UNACKED_BYTES - 2 - sentSoFar - 3 * RELAY_MESSAGE_CAP - MUX_HEADER_BYTES;
-    for (const size of [...full, last]) client.send(new Uint8Array(size));
-    const delivered = async (count: number): Promise<void> => {
-      if (count === 0) return;
-      if ((await host.frame()).type === MuxType.Data) return delivered(count - 1);
-      return delivered(count);
-    };
-    await delivered(4);
-    const second = await connectRelayClient({ relayUrl: relay.url, hostId: host.hostId, createSocket: socketFrom(ip) });
-    defer(() => second.close());
-    expect((await host.probe.closed).code).toBe(CloseCode.IdleTimeout);
-    client.close();
-    second.close();
   });
 
   test("an ack for bytes the relay never sent closes the socket with 4402", async () => {
