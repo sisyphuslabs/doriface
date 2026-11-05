@@ -2,9 +2,10 @@ import type { Host } from "@doriface/host";
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { HcSession } from "../../apps/host/src/testing/hc-session.ts";
 import type { LocalRelay } from "./support/relay-dev.ts";
+import { liveAmong } from "./support/processes.ts";
 import { startRelayedHost } from "./support/relayed-host.ts";
 
 /** Processes still running with this hc session in their environment: its core and any `hc connect` the host ran. */
@@ -69,4 +70,36 @@ describe("startRelayedHost", () => {
       rmSync(root, { recursive: true, force: true });
     }
   }, 120_000);
+
+  test("a file's afterAll stop whose relay must escalate to SIGKILL finishes inside its hook and leaves nothing running", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "relayed-stop-"));
+    try {
+      const fixture = join(import.meta.dir, "fixtures", "relayed-stop-escalates.fixture.ts");
+      const proc = Bun.spawn(
+        [process.execPath, "test", "--path-ignore-patterns", ".relay/**", `./${relative(process.cwd(), fixture)}`],
+        { env: { ...process.env, TMPDIR: tmp }, stdout: "pipe", stderr: "pipe" },
+      );
+      const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+      expect(stderr).not.toContain("hook timed out");
+      expect(code).toBe(0);
+      const left: unknown = JSON.parse(readFileSync(join(tmp, "left.json"), "utf8"));
+      if (typeof left !== "object" || left === null || !("pids" in left) || !("socket" in left))
+        throw new Error("bad left.json");
+      const { pids, socket } = left;
+      if (!Array.isArray(pids) || !pids.every((pid) => typeof pid === "number") || typeof socket !== "string")
+        throw new Error("bad left.json");
+      expect(await liveAmong(pids)).toEqual([]);
+      // The hc core: nothing answers on its socket any more.
+      const answered = await Bun.connect({ unix: socket, socket: { data: () => {} } }).then(
+        (probe) => {
+          probe.end();
+          return true;
+        },
+        () => false,
+      );
+      expect(answered).toBe(false);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 240_000);
 });

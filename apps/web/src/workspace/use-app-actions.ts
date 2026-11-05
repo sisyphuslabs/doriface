@@ -21,7 +21,7 @@ export interface AppActionTargets {
   readonly onToggleSidebar: () => void;
   /** Moves focus from the terminal to the sidebar, or back. */
   readonly onFocusSidebar: () => void;
-  /** Renames or ends the session in view; false when there is none. */
+  /** Renames or ends the session in view, or renames its space; false when there is none. */
   readonly onSession: SessionVerb;
   /** Starts dictating into the session in view, or ends the dictation under way; false with no session in view. */
   readonly onDictate: () => boolean;
@@ -29,11 +29,12 @@ export interface AppActionTargets {
   readonly focusedTab?: () => string | null;
 }
 
-export type SessionVerb = (verb: "rename" | "end") => boolean;
+export type SessionVerb = (verb: "rename" | "end" | "rename-space") => boolean;
 
 function sessionAction(action: string, onSession: SessionVerb): boolean {
   if (action === "session.rename") return onSession("rename");
   if (action === "session.end") return onSession("end");
+  if (action === "space.rename") return onSession("rename-space");
   return stepTerminalFont(action);
 }
 

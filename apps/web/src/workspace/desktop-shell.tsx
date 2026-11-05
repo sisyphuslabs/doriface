@@ -18,6 +18,7 @@ import { useDictation } from "../voice/use-dictation.ts";
 import { VoiceDock } from "../voice/voice-dock.tsx";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
+import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
 import { panelId, SplitPanes } from "./split-panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
@@ -152,6 +153,9 @@ export function DesktopShell(props: DesktopShellProps) {
     if (nothingToType) dictation.close();
   }, [dictation, nothingToType]);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
+  // As on the phone: no tabs means nothing is open only once the saved layout has answered, or once the core has listed
+  // no live terminal (then there is nothing for the layout to bring back).
+  const nothingOpen = layout.restored || (loaded && live.length === 0);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   useArrivalReady(
     workspaceSettled(loaded, { open: layout.tabs.map((tab) => tab.key), restored: layout.restored }, live.length),
@@ -234,7 +238,11 @@ export function DesktopShell(props: DesktopShellProps) {
             </>
           }
         />
-        {layout.tabs.length === 0 ? <NoTerminal onNew={onNew} /> : null}
+        {layout.tabs.length > 0 ? null : nothingOpen ? (
+          <NoTerminal onNew={onNew} />
+        ) : (
+          <QuietBusy label="Restoring your tabs" text="Restoring your tabs…" className="flex-1" />
+        )}
         <SplitPanes
           connection={connection}
           terminals={terminals}

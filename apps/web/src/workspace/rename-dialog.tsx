@@ -5,11 +5,19 @@ export interface RenameDialogProps {
   readonly title: string;
   readonly busy: boolean;
   readonly error: string | null;
+  readonly description?: string;
   readonly onRename: (name: string) => void;
   readonly onCancel: () => void;
 }
 
-export function RenameDialog({ title, busy, error, onRename, onCancel }: RenameDialogProps) {
+export function RenameDialog({
+  title,
+  busy,
+  error,
+  description = "Every device shows the new name. Leave it empty to show the program's own title again.",
+  onRename,
+  onCancel,
+}: RenameDialogProps) {
   const id = useId();
   const [name, setName] = useState(title);
   return (
@@ -19,7 +27,7 @@ export function RenameDialog({ title, busy, error, onRename, onCancel }: RenameD
         if (!open) onCancel();
       }}
       title={`Rename ${title}`}
-      description="Every device shows the new name. Leave it empty to show the program's own title again."
+      description={description}
     >
       <form
         onSubmit={(event) => {

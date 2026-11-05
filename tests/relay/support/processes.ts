@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+
 interface ProcessRow {
   readonly pid: number;
   readonly ppid: number;
@@ -29,6 +31,41 @@ export async function liveDescendants(root: number): Promise<number[]> {
   };
   visit(root);
   return found;
+}
+
+/**
+ * Live processes whose environment contains `fragment`, this process excluded. On macOS `ps -E` shows the environment
+ * of this user's processes, except Apple platform binaries (none of wrangler's tree: node, esbuild, workerd).
+ */
+export async function liveWithEnvironment(fragment: string): Promise<number[]> {
+  if (process.platform === "linux") {
+    return readdirSync("/proc").flatMap((entry) => {
+      const pid = Number(entry);
+      if (!Number.isInteger(pid) || pid === process.pid) return [];
+      try {
+        return readFileSync(`/proc/${pid}/environ`, "utf8").includes(fragment) ? [pid] : [];
+      } catch (error) {
+        // gone since readdir, or another user's process
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          ["ENOENT", "ESRCH", "EACCES", "EPERM"].includes(String(error.code))
+        )
+          return [];
+        throw error;
+      }
+    });
+  }
+  const ps = Bun.spawn(["ps", "-Eww", "-U", String(process.getuid?.()), "-o", "pid=,command="], {
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const text = await new Response(ps.stdout).text();
+  if ((await ps.exited) !== 0) throw new Error("ps failed");
+  return text.split("\n").flatMap((line) => {
+    const pid = Number(line.trim().split(/\s+/)[0]);
+    return Number.isInteger(pid) && pid !== process.pid && pid !== ps.pid && line.includes(fragment) ? [pid] : [];
+  });
 }
 
 /** Which of `pids` are still live (not ended) processes. */

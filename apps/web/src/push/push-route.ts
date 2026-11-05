@@ -3,6 +3,7 @@ import { base64urlDecode, secureLink } from "@doriface/crypto";
 import { connectRelayClient } from "@doriface/relay-client";
 import { loadDeviceKey } from "../connection/device-key.ts";
 import type { ConnectionSettings } from "../connection/settings.ts";
+import { loopbackOnly } from "../connection/loopback-address.ts";
 import { openWebSocketLink } from "../connection/ws-link.ts";
 import { deviceStore, type KeyValueStore } from "../storage/idb.ts";
 import { parsePushClientLine, type PushPrefs } from "@doriface/protocol";
@@ -71,7 +72,9 @@ const TOKEN_PREFIX = "doriface.token.";
 
 /** Opens the push stream: an E2EE session with `stream:"push"` over the relay, or the loopback socket. */
 export async function openPushLink(route: PushRoute): Promise<ByteLink> {
-  if (route.mode === "loopback") return openWebSocketLink(route.pushUrl, [SUBPROTOCOL, TOKEN_PREFIX + route.token]);
+  if (route.mode === "loopback") {
+    return openWebSocketLink(loopbackOnly(route.pushUrl, "push"), [SUBPROTOCOL, TOKEN_PREFIX + route.token]);
+  }
   const link = await connectRelayClient({ relayUrl: route.relayUrl, hostId: route.hostId });
   try {
     return await secureLink(link, {

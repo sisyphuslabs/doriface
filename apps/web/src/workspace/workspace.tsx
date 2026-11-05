@@ -12,6 +12,7 @@ import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
 import { SessionContext, type SessionAsk } from "./session-context.ts";
 import { SessionDialogs } from "./session-dialogs.tsx";
+import { SpaceRename } from "./space-rename-dialog.tsx";
 import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
 import type { SessionVerb } from "./use-app-actions.ts";
@@ -142,6 +143,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   const showOnPhone = useCallback((address: string) => setPhoneKey(tabKey(address, ids)), [ids]);
   const [palette, setPalette] = useState(false);
   const [ask, setAsk] = useState<SessionAsk | null>(null);
+  const [spaceAsk, setSpaceAsk] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   useActionHandler("app", (action) => {
     if (action !== "app.palette") return false;
@@ -215,10 +217,13 @@ export function Workspace({ connection }: WorkspaceProps) {
   const phonePanes = phoneTab?.tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
   usePushPresence(inView);
   useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
+  const spaces = useMemo(() => layoutSpaces(layouts, terminals, gitOf), [layouts, terminals, gitOf]);
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
-    if (inView === null) return false;
-    setAsk({ kind: verb, address: inView });
+    const space = spaces.find((each) => inView !== null && each.addresses.includes(inView));
+    if (inView === null || (verb === "rename-space" && space === undefined)) return false;
+    if (verb === "rename-space") setSpaceAsk(space?.id ?? null);
+    else setAsk({ kind: verb, address: inView });
     return true;
   };
   const done = useCallback(() => setAsk(null), []);
@@ -259,7 +264,6 @@ export function Workspace({ connection }: WorkspaceProps) {
     }),
     [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, runs, inNewSpace],
   );
-  const spaces = useMemo(() => layoutSpaces(layouts, terminals, gitOf), [layouts, terminals, gitOf]);
   const { selectSpace } = layout;
   const selectedSpace = layout.active?.spaceKey ?? null;
   const spaceSelection = useMemo(
@@ -272,33 +276,42 @@ export function Workspace({ connection }: WorkspaceProps) {
         <SpaceSelectionContext value={spaceSelection}>
           <PinContext value={pin}>
             <SessionContext value={setAsk}>
-              {narrow ? (
-                <PhoneShell
-                  connection={connection}
-                  terminals={terminals}
-                  open={phoneOpen}
-                  panes={phonePanes}
-                  onOpen={showOnPhone}
-                  onBack={() => setPhoneKey(null)}
-                  onNew={() => newTerminal()}
-                  onPalette={onPalette}
-                  onSession={onSession}
-                />
-              ) : (
-                <DesktopShell
-                  connection={connection}
-                  terminals={terminals}
-                  loaded={fed.loaded}
-                  layout={layout}
-                  onNew={() => newTerminal()}
-                  onSplit={split}
-                  onCloseTab={closeTab}
-                  onClosePane={(address) => setAsk({ kind: "close", address })}
-                  onEnd={onEnd}
-                  onPalette={onPalette}
-                  onSession={onSession}
-                />
-              )}
+              <SpaceRename
+                connection={connection}
+                terminals={terminals}
+                layouts={layouts}
+                spaces={spaces}
+                ask={spaceAsk}
+                onAsk={setSpaceAsk}
+              >
+                {narrow ? (
+                  <PhoneShell
+                    connection={connection}
+                    terminals={terminals}
+                    open={phoneOpen}
+                    panes={phonePanes}
+                    onOpen={showOnPhone}
+                    onBack={() => setPhoneKey(null)}
+                    onNew={() => newTerminal()}
+                    onPalette={onPalette}
+                    onSession={onSession}
+                  />
+                ) : (
+                  <DesktopShell
+                    connection={connection}
+                    terminals={terminals}
+                    loaded={fed.loaded}
+                    layout={layout}
+                    onNew={() => newTerminal()}
+                    onSplit={split}
+                    onCloseTab={closeTab}
+                    onClosePane={(address) => setAsk({ kind: "close", address })}
+                    onEnd={onEnd}
+                    onPalette={onPalette}
+                    onSession={onSession}
+                  />
+                )}
+              </SpaceRename>
             </SessionContext>
           </PinContext>
           <PromptAnswerBanner />

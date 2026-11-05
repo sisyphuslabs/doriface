@@ -38,7 +38,8 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
     },
     {
-      command: `bunx --bun vite build --outDir ${WEB_OUT} --emptyOutDir && bunx --bun vite preview --outDir ${WEB_OUT} --host 127.0.0.1 --port ${E2E_WEB_PORT} --strictPort`,
+      // E2E_WEB_MODE=development serves a dev build (import.meta.env.DEV), for specs that differ by build (#458).
+      command: `${process.env["E2E_WEB_MODE"] === "development" ? "NODE_ENV=development " : ""}bunx --bun vite build --outDir ${WEB_OUT} --emptyOutDir && bunx --bun vite preview --outDir ${WEB_OUT} --host 127.0.0.1 --port ${E2E_WEB_PORT} --strictPort`,
       url: `http://127.0.0.1:${E2E_WEB_PORT}`,
       reuseExistingServer: false,
       timeout: 120_000,

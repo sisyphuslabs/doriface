@@ -3,7 +3,7 @@ import { generateX25519 } from "@doriface/crypto";
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
+import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "./support/relayed-host.ts";
 import { watchScreen } from "./support/watch.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 
@@ -27,7 +27,7 @@ setUpOnce(async () => {
 afterAll(async () => {
   connection?.close();
   await relayed?.stop();
-});
+}, RELAYED_STOP_MS);
 
 describe("frames and streams far past one relay message, through the relay", () => {
   test("a 6 MiB file.write (one 8 MiB frame) and its file.read reply arrive whole", async () => {

@@ -187,4 +187,24 @@ describe("TerminalStream", () => {
     expect(() => void stream.close()).not.toThrow();
     expect(connection.closed).toBe(true);
   });
+
+  test("input, focus, resize and display facts on a socket that went away are refused with false, never thrown (#403)", async () => {
+    const core = new FakeCore();
+    const { link, refuse } = refusingLink(core);
+    const opening = HcConnection.open(link);
+    await core.waitHello();
+    core.push(`${HELLO_REPLY_LINE}\n`);
+    const connection = await opening;
+    const attaching = connection.attach({ terminal: "t1", cols: 100, rows: 30 });
+    const request = await core.waitRequest("terminal.attach");
+    core.push(frame(0, 0, withId(ATTACH_REPLY, Number(request.id))));
+    const stream = await attaching;
+    refuse();
+    // The first refused write ends the connection; each one after it finds the stream closed.
+    expect(stream.focus(false)).toBe(false);
+    expect(stream.write("x")).toBe(false);
+    expect(stream.resize(80, 24)).toBe(false);
+    expect(stream.facts({ fg: "#ffffff" })).toBe(false);
+    expect(connection.closed).toBe(true);
+  });
 });
