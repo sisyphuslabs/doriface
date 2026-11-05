@@ -72,7 +72,8 @@ export interface UplinkOptions {
 /** Reconnecting cannot fix these: the key is wrong, or another uplink for this host took over. */
 const FINAL_CODES: ReadonlySet<number> = new Set([CloseCode.RelayAuthFailed, CloseCode.UplinkReplaced]);
 const CONNECTING = 0;
-const PAIR_SLOT_REPLY_TIMEOUT_MS = 10_000;
+/** How long a pair-slot request waits for the relay's reply; a host's stop waits this long to release its slot. */
+export const PAIR_SLOT_REPLY_TIMEOUT_MS = 10_000;
 /** An uplink that stayed up this long after answering starts the next backoff from the bottom again. */
 const STABLE_MS = 30_000;
 

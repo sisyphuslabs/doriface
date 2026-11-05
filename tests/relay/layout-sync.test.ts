@@ -11,7 +11,7 @@ import {
   type DocCalls,
 } from "@doriface/protocol/layout";
 import { afterAll, describe, expect, test } from "bun:test";
-import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
+import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "./support/relayed-host.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 import { Matches } from "./support/watch.ts";
 
@@ -190,7 +190,7 @@ afterAll(async () => {
     hc.close();
   }
   await relayed?.stop();
-});
+}, RELAYED_STOP_MS);
 
 const both = (): readonly [Device, Device] => {
   const [a, b] = devices;

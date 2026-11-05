@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { KnownHosts } from "../../apps/host/src/state/known-hosts.ts";
 import { HELLO, rpcFrame } from "../../apps/host/src/testing/hc-session.ts";
 import { runConnect } from "./support/connect-cli.ts";
-import { type RelayedHost, startRelayedHost } from "./support/relayed-host.ts";
+import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "./support/relayed-host.ts";
 import { within } from "./support/watch.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 
@@ -31,7 +31,7 @@ setUpOnce(async () => {
 afterAll(async () => {
   await relayed?.stop();
   rmSync(scratch, { recursive: true, force: true });
-});
+}, RELAYED_STOP_MS);
 
 describe("doriface-host connect: stdin and stdout piped to the host's hc connect through the relay", () => {
   test("a pairing link pairs once, then the hostId alone reaches hc, byte for byte like a direct hc connect", async () => {

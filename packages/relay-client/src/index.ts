@@ -33,6 +33,12 @@ export {
 export { SessionLink, type SessionTransport } from "./session-link.ts";
 export { ed25519Signer, generateSigningKey, type HostSigner } from "./signer.ts";
 export { type CreateSocket, relaySocketUrl } from "./socket.ts";
-export { type SessionRefusal, Uplink, type UplinkOptions, type UplinkState } from "./uplink.ts";
+export {
+  PAIR_SLOT_REPLY_TIMEOUT_MS,
+  type SessionRefusal,
+  Uplink,
+  type UplinkOptions,
+  type UplinkState,
+} from "./uplink.ts";
 export { WebSocketLink } from "./websocket-link.ts";
 export * from "./wire/index.ts";
