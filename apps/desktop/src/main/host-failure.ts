@@ -8,7 +8,7 @@ export const STARTUP_ERROR_PREFIX = "doriface-host startup-error ";
 /** Where doriface-host's usage text begins; it is printed only for a command line it refused, and is never shown. */
 const USAGE_START = /^usage: doriface-host\b/;
 
-export type StartupReport = Pick<LocalHostFailure, "code" | "message" | "path" | "address">;
+export type StartupReport = Pick<LocalHostFailure, "code" | "message" | "path" | "address" | "version">;
 
 const stringField = (value: object, key: string): string | undefined => {
   const field: unknown = Reflect.get(value, key);
@@ -29,7 +29,14 @@ export function parseStartupError(line: string): StartupReport | undefined {
   if (code === undefined || message === undefined) return undefined;
   const path = stringField(value, "path");
   const address = stringField(value, "address");
-  return { code, message, ...(path === undefined ? {} : { path }), ...(address === undefined ? {} : { address }) };
+  const version = stringField(value, "version");
+  return {
+    code,
+    message,
+    ...(path === undefined ? {} : { path }),
+    ...(address === undefined ? {} : { address }),
+    ...(version === undefined ? {} : { version }),
+  };
 }
 
 /** The last `limit` stderr lines a failure shows under Details, with the usage text left out. */

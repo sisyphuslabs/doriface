@@ -2,6 +2,7 @@ import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HC_VERSION_FLOOR } from "./hc-install.ts";
 import { hcSpawnError } from "./hc-pipe.ts";
 import { startHost } from "./host.ts";
 import { parseStartupErrorLine, STARTUP_EXIT_CODES, type StartupErrorReport } from "./startup-error.ts";
@@ -66,6 +67,7 @@ describe("a host that cannot start", () => {
     expect(exit.code).toBe(STARTUP_EXIT_CODES["hc-binary-missing"]);
     expect(exit.reports).toEqual([expect.objectContaining({ code: "hc-binary-missing", path: missing })]);
     expect(exit.stderr).not.toContain("usage:");
+    expect(exit.stderr).toContain("doriface-host --install-hc");
   });
 
   test("with no hc on PATH reports hc-binary-missing for the bare name", async () => {
@@ -91,6 +93,26 @@ describe("a host that cannot start", () => {
     const exit = await serve(["--listen", "127.0.0.1:0", "--hc", other]);
     expect(exit.code).toBe(STARTUP_EXIT_CODES["hc-version-failed"]);
     expect(exit.reports).toEqual([expect.objectContaining({ code: "hc-version-failed", path: other })]);
+  });
+
+  test("startHost refuses an hc older than the version floor as hc-version-failed, naming its version", async () => {
+    const old = join(scratch(), "hc");
+    writeFileSync(old, "#!/bin/sh\necho 'hc 0.1.0'\n", { mode: 0o755 });
+    const started = startHost({ listen: { hostname: "127.0.0.1", port: 0 }, token: "t", hc: old, log: () => {} });
+    await expect(started).rejects.toMatchObject({
+      code: "hc-version-failed",
+      message: `${old} is herdr-core 0.1.0; doriface-host needs ${HC_VERSION_FLOOR} or newer`,
+      detail: { path: old, version: "0.1.0" },
+    });
+  });
+
+  test("the CLI reports an hc older than the floor with its version, and names --install-hc", async () => {
+    const old = join(scratch(), "hc");
+    writeFileSync(old, "#!/bin/sh\necho 'hc 0.1.0'\n", { mode: 0o755 });
+    const exit = await serve(["--listen", "127.0.0.1:0", "--hc", old]);
+    expect(exit.code).toBe(STARTUP_EXIT_CODES["hc-version-failed"]);
+    expect(exit.reports).toEqual([expect.objectContaining({ code: "hc-version-failed", path: old, version: "0.1.0" })]);
+    expect(exit.stderr).toContain("doriface-host --install-hc");
   });
 
   test("on a port another listener holds reports port-in-use with the address", async () => {
