@@ -53,6 +53,6 @@
 - Relayed sessions are faster on bulk output and handle split frames correctly. (#517)
 - The desktop app's content security policy stays strict while scroll areas hide their native scrollbars. (#520)
 - The app starts and keeps working when the browser refuses storage, as private windows and blocked site data do. (#550, #554)
-- On phones, the app and its sheets keep clear of the notch, the rounded corners and the home indicator on every side. (#561)
+- On phones, the app, its header, its status bar and its sheets keep clear of the notch, the rounded corners and the home indicator on every side. (#561, #565)
 - An older browser gets an Update your browser screen instead of a page that does not work. (#563)
-- Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558)
+- Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558, #564)
