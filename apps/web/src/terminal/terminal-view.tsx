@@ -8,7 +8,7 @@ import { useScreenAwake } from "../device/keep-awake.ts";
 import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
 import { rendererOptions } from "../ghostty/render-options.ts";
 import { readDisplay } from "./display.ts";
-import { mayTakeFocus } from "./may-take-focus.ts";
+import { keyboardIsIdle, mayTakeFocus } from "./may-take-focus.ts";
 import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
@@ -40,6 +40,12 @@ export interface TerminalViewProps {
   /** Whether the core lists the terminal as live; a view waiting for a restart ends when it stops being live. */
   readonly live: boolean;
   readonly focused: boolean;
+  /**
+   * This page asked for this terminal's pane (opened, split, picked it): starting, it takes the keyboard from wherever
+   * it is. Unset where no other device edits what is shown (the phone shows one terminal at a time). Not asked for (a
+   * view another device's layout edit mounts again, #332), it takes the keyboard only from nowhere.
+   */
+  readonly claimed?: boolean;
   readonly label: string;
   readonly className?: string;
   /** Rewrites typed input before it is sent (latched phone modifiers); an empty result sends nothing. */
@@ -74,7 +80,7 @@ function handBack(event: FocusEvent<HTMLElement>): void {
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onPort, onEnd } = props;
-  const { closeLabel = "Close tab", onEnded, jumpClearance } = props;
+  const { closeLabel = "Close tab", onEnded, jumpClearance, claimed = true } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -124,10 +130,16 @@ export function TerminalView(props: TerminalViewProps) {
     [],
   );
 
+  const isClaimed = useRef(claimed);
+  isClaimed.current = claimed;
+  /** Whether this view may move the keyboard into itself now, on its own (see `claimed`). */
+  const mayTakeKeyboard = (element: HTMLElement): boolean =>
+    mayTakeFocus(element) && (isClaimed.current || keyboardIsIdle(element));
+
   // Becoming the focused pane (a tab closed, a split moved) takes keyboard focus, unless a modal is open over it.
   useEffect(() => {
     const instance = handle.current?.instance ?? null;
-    if (focused && instance !== null && mayTakeFocus(instance.element)) instance.focus();
+    if (focused && instance !== null && mayTakeKeyboard(instance.element)) instance.focus();
   }, [focused]);
 
   // The default cursor shape is the terminal's own state, set locally; programs still override it.
@@ -213,7 +225,7 @@ export function TerminalView(props: TerminalViewProps) {
   }, [focused]);
   /** The view in use takes keyboard focus once it is ready, unless a modal is open over it. */
   const focusWhenFree = (ready: WTerm): void => {
-    if (isFocused.current && mayTakeFocus(ready.element)) ready.focus();
+    if (isFocused.current && mayTakeKeyboard(ready.element)) ready.focus();
   };
   // Read when the stream ends, not when it attached, so an end acts on the tabs as they are by then.
   const onEndNow = useRef(onEnd);

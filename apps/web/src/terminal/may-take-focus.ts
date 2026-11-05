@@ -17,3 +17,12 @@ export function mayTakeFocus(terminal: HTMLElement): boolean {
   const active = terminal.ownerDocument.activeElement;
   return active === null || terminal.contains(active) || active.closest(LAYERS) === null;
 }
+
+/**
+ * Whether the keyboard is nowhere a terminal starting on its own would take it from: on no element, the page itself
+ * (where it lands when the focused terminal's view goes away), or inside `terminal` already.
+ */
+export function keyboardIsIdle(terminal: HTMLElement): boolean {
+  const active = terminal.ownerDocument.activeElement;
+  return active === null || active === terminal.ownerDocument.body || terminal.contains(active);
+}

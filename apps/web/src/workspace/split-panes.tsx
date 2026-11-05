@@ -146,6 +146,7 @@ export function SplitPanes(props: SplitPanesProps) {
                       pane={pane}
                       terminal={pane.address === null ? undefined : byAddress.get(pane.address)}
                       focused={selected && layout.focused?.id === pane.id}
+                      claimed={layout.claimed === pane.id}
                       zoomed={zoomed === pane.id}
                       onFocus={() => layout.focusPane(tab.key, pane.id)}
                       onEnd={onEnd}
@@ -202,6 +203,8 @@ interface PaneSlotProps {
   readonly pane: LayoutPane;
   readonly terminal: Session | undefined;
   readonly focused: boolean;
+  /** This screen asked for this pane: its terminal takes the keyboard as it starts (#332). */
+  readonly claimed: boolean;
   readonly onFocus: () => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
   readonly zoomed: boolean;
@@ -220,6 +223,7 @@ function PaneSlot(props: PaneSlotProps) {
     pane,
     terminal,
     focused,
+    claimed,
     zoomed,
     onFocus,
     onEnd,
@@ -236,6 +240,7 @@ function PaneSlot(props: PaneSlotProps) {
         connection={connection}
         terminal={terminal}
         focused={focused}
+        claimed={claimed}
         split={tab.panes.length > 1}
         onFocus={onFocus}
         onEnd={onEnd}
