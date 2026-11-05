@@ -497,10 +497,104 @@ jobs:
             echo "| Checks | checksums, codesign --verify, spctl (Notarized Developer ID), stapler validate, bundle version, launch |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  smoke-windows:
+    name: Smoke Windows ${{ matrix.arch }} setup.exe
+    needs: [version, release]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-2025 }
+          - { arch: arm64, runner: windows-11-arm }
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+      SETUP: doriface-${{ needs.version.outputs.version }}-${{ matrix.arch }}-setup.exe
+      # Git Bash would turn the installer's /S flag into a path.
+      MSYS2_ARG_CONV_EXCL: "*"
+    steps:
+      - name: Download the installer from the draft release
+        run: |
+          mkdir -p "$RUNNER_TEMP/dl"
+          cd "$RUNNER_TEMP/dl"
+          gh release download "$TAG" --pattern SHA256SUMS.txt --pattern "$SETUP"
+          grep -E "  $SETUP\$" SHA256SUMS.txt | sha256sum --check --strict
+      - name: Install it for this user, silently
+        working-directory: ${{ runner.temp }}/dl
+        run: |
+          "./$SETUP" /S
+          # The one-click installer puts the app under the user's Programs folder; find it there, bounded.
+          for _ in $(seq 1 60); do
+            host=$(find "$LOCALAPPDATA/Programs" -maxdepth 4 -name doriface-host.exe 2>/dev/null | head -1)
+            [ -n "$host" ] && break
+            sleep 2
+          done
+          if [ -z "$host" ]; then
+            echo "::error::no doriface-host.exe under $LOCALAPPDATA/Programs after the install"
+            find "$LOCALAPPDATA/Programs" -maxdepth 3 2>/dev/null | head -50
+            exit 1
+          fi
+          app="$(dirname "$(dirname "$(dirname "$host")")")/doriface.exe"
+          test -f "$app"
+          echo "HOST_EXE=$host" >> "$GITHUB_ENV"
+          echo "APP_EXE=$app" >> "$GITHUB_ENV"
+          echo "host: $host"
+          echo "app: $app"
+      # #406: the packaged host created its keys and then refused them. Two starts on one state folder under the
+      # profile (the trusted namespace the host requires) must create, re-check and reload the same identity.
+      - name: The packaged host keeps its keys across two starts
+        run: |
+          state="$USERPROFILE/.doriface-release-smoke"
+          first=$("$HOST_EXE" fingerprint --state-dir "$state")
+          second=$("$HOST_EXE" fingerprint --state-dir "$state")
+          echo "first:  $first"
+          echo "second: $second"
+          [[ "$first" =~ ^([0-9A-F]{4}\ ){9}[0-9A-F]{4}$ ]]
+          test "$first" = "$second"
+      - name: The app carries the version and starts
+        shell: pwsh
+        run: |
+          # Windows keeps a four-part numeric version, so 0.1.1-rc.2 is recorded as 0.1.1.0.
+          $expected = "$(($env:VERSION -split "-")[0]).0"
+          $product = (Get-Item $env:APP_EXE).VersionInfo.ProductVersion
+          if ($product -ne $expected) { Write-Error "the app says $product, expected $expected (for $env:VERSION)"; exit 1 }
+          # Chromium prints this line once its browser process is up; wait for it, bounded, then check it still runs.
+          $log = Join-Path $env:RUNNER_TEMP "launch.log"
+          $proc = Start-Process -FilePath $env:APP_EXE -ArgumentList "--remote-debugging-port=0", "--enable-logging=stderr" `
+            -RedirectStandardError $log -RedirectStandardOutput "$log.out" -PassThru
+          $up = $false
+          foreach ($i in 1..60) {
+            if ((Test-Path $log) -and (Select-String -Path $log -Pattern "DevTools listening on" -Quiet)) { $up = $true; break }
+            if ($proc.HasExited) { break }
+            Start-Sleep -Seconds 1
+          }
+          Get-Content $log -ErrorAction SilentlyContinue
+          if (-not $up) { Write-Error "the app did not bring up its browser process"; exit 1 }
+          if ($proc.HasExited) { Write-Error "the app exited after starting (code $($proc.ExitCode))"; exit 1 }
+          Stop-Process -Id $proc.Id
+      - name: Workflow summary
+        if: always()
+        run: |
+          {
+            echo "## Smoke: Windows ${{ matrix.arch }} setup.exe from the draft release"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Job status | ${{ job.status }} |"
+            echo "| File | $SETUP |"
+            echo "| Checks | checksum, silent per-user install, packaged host fingerprint twice (same identity), app version, launch |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   publish:
     name: Publish
     if: github.event_name == 'push'
-    needs: [version, smoke-linux, smoke-mac]
+    needs: [version, smoke-linux, smoke-mac, smoke-windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
