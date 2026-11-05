@@ -110,6 +110,32 @@ jobs:
         env:
           DORIFACE_MESH_E2E: require
         run: bun run relay:test
+      # mesh-attach.e2e.ts is a browser spec that needs this job's relay checkout: the web app paired with one mesh
+      # member attaches to a terminal on another, through the mesh (G009 C004). Web e2e has no relay, so it skips it.
+      - uses: actions/cache@v4
+        if: env.RELAY_TOKEN_SET == 'true'
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Chromium
+        if: env.RELAY_TOKEN_SET == 'true'
+        run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+      - name: Browser spec through the mesh
+        if: env.RELAY_TOKEN_SET == 'true'
+        run: bun run test:e2e e2e/mesh-attach.e2e.ts
+        working-directory: apps/web
+        env:
+          CI: "1"
+          DORIFACE_RELAY_DIR: ${{ github.workspace }}/.relay
+      - if: always() && env.RELAY_TOKEN_SET == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: relay-web-e2e
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          if-no-files-found: ignore
       - name: Relay suites without the token
         if: env.RELAY_TOKEN_SET != 'true'
         env:
