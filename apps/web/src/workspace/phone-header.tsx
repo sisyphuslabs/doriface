@@ -7,6 +7,7 @@ import {
   agentStatus,
   machineOf,
   type Session,
+  liveTabs,
   spaceName,
   tabPosition,
   terminalTitle,
@@ -133,8 +134,12 @@ function SpaceSwitcher(props: {
             title={space.machine === undefined ? space.name : `${space.machine} · ${space.name}`}
             count={space.tabs}
           >
-            {space.addresses
-              .flatMap((address) => terminals.filter((entry) => entry.address === address && entry.state === "live"))
+            {/* One row per tab: the open pane when it is this tab's, else the tab's first live pane. */}
+            {liveTabs(space, terminals)
+              .flatMap((panes) => {
+                const shown = panes.includes(active) ? active : panes[0];
+                return terminals.filter((entry) => entry.address === shown);
+              })
               .map((entry) => (
                 <AgentRow
                   key={entry.address}
