@@ -12,6 +12,8 @@ import { MeshSection } from "../settings/mesh-section.tsx";
 import { MachinesSection } from "../settings/machines-section.tsx";
 import { NotificationsSection } from "../settings/notifications-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
+import { UpdateRow } from "../settings/update-row.tsx";
+import { usePendingUpdate } from "../update/update-store.ts";
 import { useCloseSettings } from "../settings/use-close-settings.ts";
 import { VoiceSection } from "../settings/voice-section.tsx";
 
@@ -41,6 +43,7 @@ function Group({ title, children }: { readonly title: string; readonly children:
 export function SettingsRoute() {
   const [section, setSection] = useState<SectionId>("connections");
   const close = useCloseSettings();
+  const update = usePendingUpdate();
   const back = (
     <IconButton
       label="Close settings"
@@ -93,6 +96,11 @@ export function SettingsRoute() {
       </nav>
       <ScrollArea slot="settings-body" className="flex-1">
         <div className="flex max-w-2xl flex-col gap-8 px-4 py-6 md:px-8">
+          {update === null ? null : (
+            <Group title="Update">
+              <UpdateRow update={update} />
+            </Group>
+          )}
           {section === "connections" ? (
             <>
               <Group title="Connection">

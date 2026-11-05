@@ -2,7 +2,13 @@ import { allowedExternal } from "../config/external.ts";
 import { terminalLinkTarget } from "../config/terminal-link.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
-import { isZoomStep, type LocalHostEndpoint, type LocalHostStartFailed, type ZoomStep } from "../shared/bridge.ts";
+import {
+  isZoomStep,
+  type LocalHostEndpoint,
+  type LocalHostStartFailed,
+  type UpdateReady,
+  type ZoomStep,
+} from "../shared/bridge.ts";
 import { LocalHostStartError } from "./local-host.ts";
 import { SHELL_MENU_ACTIONS } from "./shell-menu.ts";
 
@@ -22,6 +28,9 @@ export interface IpcDeps {
   readonly setMenuKeys: (keys: ReadonlyMap<string, string>) => void;
   /** Shows the file dialog for hc and keeps the choice; undefined when it was cancelled. */
   readonly chooseHc: () => Promise<string | undefined>;
+  readonly takeUpdate: () => UpdateReady | null;
+  /** Quits and installs the staged update; false when none is staged. */
+  readonly installUpdate: () => boolean;
 }
 
 export interface IpcHandlers {
@@ -40,6 +49,10 @@ export interface IpcHandlers {
   setMenuKeys(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Choose hc: the chosen file's path, or null when the dialog was cancelled. */
   chooseHc(event: IpcSender): Promise<string | null>;
+  /** The staged update, or null. */
+  takeUpdate(event: IpcSender): UpdateReady | null;
+  /** Restart to update: false when no update is staged. */
+  installUpdate(event: IpcSender): Promise<boolean>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -116,6 +129,14 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async chooseHc(event) {
       assertAppFrame(event, deps.origin);
       return (await deps.chooseHc()) ?? null;
+    },
+    takeUpdate(event) {
+      assertAppFrame(event, deps.origin);
+      return deps.takeUpdate();
+    },
+    async installUpdate(event) {
+      assertAppFrame(event, deps.origin);
+      return deps.installUpdate();
     },
   };
 }

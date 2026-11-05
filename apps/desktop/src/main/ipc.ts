@@ -15,4 +15,6 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(Channel.takePairingLink, (event) => handlers.takePairingLink(event));
   ipcMain.handle(Channel.setMenuKeys, (event, candidate: unknown) => handlers.setMenuKeys(event, candidate));
   ipcMain.handle(Channel.chooseHc, (event) => handlers.chooseHc(event));
+  ipcMain.handle(Channel.takeUpdate, (event) => handlers.takeUpdate(event));
+  ipcMain.handle(Channel.installUpdate, (event) => handlers.installUpdate(event));
 }
