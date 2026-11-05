@@ -59,4 +59,21 @@ export const VOICE_SHOTS: readonly Shot[] = [
       await expect(page.getByRole("heading", { name: "Voice input", level: 2 })).toBeVisible();
     },
   },
+  {
+    name: "settings-voice-desktop",
+    start: "connected",
+    run: async (page) => {
+      // The desktop shell's Chromium has a recognizer its speech service refuses, so the app's page says so instead.
+      await page.addInitScript(() => {
+        Reflect.set(window, "doriface", { version: "0.1.0", platform: "darwin" });
+      });
+      await page.goto("/settings");
+      await page
+        .getByRole("tab", { name: "Voice input" })
+        .or(page.getByRole("button", { name: "Voice input" }))
+        .first()
+        .click();
+      await expect(page.getByText("The desktop app can't dictate yet")).toBeVisible();
+    },
+  },
 ];
