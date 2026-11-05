@@ -41,7 +41,9 @@
   --term-preedit-bg: light-dark(var(--term-bg), var(--term-fg));
 }
 
-/* A two-cell glyph is usually narrower than its cells; centre it in the pair rather than leaving a gap after it. */
+/* A two-cell glyph is sized to fill its cells as Ghostty sizes a fallback face (use-wide-glyph-scale.ts); what is left
+   is split either side. adjust-cell-width is already in the two cells, so the glyph takes no letter-spacing of its own. */
 .wterm .term-wide {
   text-align: center;
+  letter-spacing: 0;
 }
