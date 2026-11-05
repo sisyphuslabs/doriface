@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { APP_ORIGIN } from "../src/config/origin.ts";
 import { openPairingLink, takePairingLink } from "../src/main/deep-link.ts";
-import { ipcHandlers, type IpcSender } from "../src/main/ipc-handlers.ts";
+import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
+import { Channel } from "../src/shared/bridge.ts";
+import { ipcHandlers, type IpcReplySender, type IpcSender } from "../src/main/ipc-handlers.ts";
 import { LocalHostStartError } from "../src/main/local-host.ts";
 
 const endpoint = { url: "ws://127.0.0.1:1/v1/hc", token: "t".repeat(43) };
@@ -16,7 +18,11 @@ const setup = (
   start: () => Promise<typeof endpoint> = async () => endpoint,
   choose: () => Promise<string | undefined> = async () => undefined,
   staged: { readonly version: string } | null = null,
+  install: (onPhase: (phase: string) => void) => Promise<HcInstalled> = async () => {
+    throw new Error("no install");
+  },
 ) => {
+  let hcInstalls = 0;
   let chooses = 0;
   let installs = 0;
   const opened: string[] = [];
@@ -52,6 +58,10 @@ const setup = (
       installs += 1;
       return staged !== null;
     },
+    installHc: async (onPhase) => {
+      hcInstalls += 1;
+      return install(onPhase);
+    },
   });
   return {
     handlers,
@@ -62,7 +72,14 @@ const setup = (
     closes: () => closes,
     chooses: () => chooses,
     installs: () => installs,
+    hcInstalls: () => hcInstalls,
   };
+};
+
+/** The app frame, with the replies it was sent on its own channels. */
+const replying = (): { event: IpcReplySender; sent: unknown[][] } => {
+  const sent: unknown[][] = [];
+  return { event: { ...app, sender: { send: (...args: unknown[]) => void sent.push(args) } }, sent };
 };
 
 afterEach(() => void takePairingLink());
@@ -106,6 +123,33 @@ describe("IPC sender gate", () => {
     expect(await picked.handlers.chooseHc(app)).toBe("/opt/herdr/hc");
     expect(await setup().handlers.chooseHc(app)).toBeNull();
     expect(picked.chooses()).toBe(1);
+  });
+
+  test("Install herdr-core sends each phase to the page and answers the installed hc, or its failure as a value", async () => {
+    const done = setup(undefined, undefined, null, async (onPhase) => {
+      onPhase("download");
+      onPhase("verify");
+      return { version: "0.1.18", path: "/h/.local/bin/herdr-core", action: "installed" };
+    });
+    const page = replying();
+    expect(await done.handlers.installHc(page.event)).toEqual({
+      installed: { version: "0.1.18", path: "/h/.local/bin/herdr-core" },
+    });
+    expect(page.sent).toEqual([
+      [Channel.hcInstallPhase, "download"],
+      [Channel.hcInstallPhase, "verify"],
+    ]);
+    const damaged = setup(undefined, undefined, null, async () => {
+      throw new HcInstallError("verify", "the download is damaged (checksum mismatch)");
+    });
+    expect(await damaged.handlers.installHc(replying().event)).toEqual({
+      failed: { phase: "verify", message: "the download is damaged (checksum mismatch)" },
+    });
+    await expect(setup().handlers.installHc(replying().event)).rejects.toThrow("no install");
+    const foreignFrame = { ...replying().event, senderFrame: { url: "https://example.com/" } };
+    const refused = setup();
+    await expect(refused.handlers.installHc(foreignFrame)).rejects.toThrow("refused IPC");
+    expect(refused.hcInstalls()).toBe(0);
   });
 
   test("the Shell menu takes only its own actions and short trigger text from the page, entry by entry", async () => {

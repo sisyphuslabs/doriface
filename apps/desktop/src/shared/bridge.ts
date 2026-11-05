@@ -24,6 +24,10 @@ export const Channel = {
   takeUpdate: "doriface:take-update",
   /** Renderer to main: quit and install the staged update (Restart to update). */
   installUpdate: "doriface:install-update",
+  /** Renderer to main: download, verify and install herdr-core for this user (Install herdr-core). */
+  installHc: "doriface:install-hc",
+  /** Main to renderer: the phase an Install herdr-core has reached, e.g. `download`. */
+  hcInstallPhase: "doriface:hc-install-phase",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -48,6 +52,8 @@ export interface LocalHostFailure {
   readonly message: string;
   readonly path?: string;
   readonly address?: string;
+  /** For `hc-version-failed`: the version of an hc older than doriface-host supports. */
+  readonly version?: string;
   /** For `hc-binary-missing`: the folders searched for hc after PATH, on this platform. */
   readonly searched?: readonly string[];
   /** The host's own output, for a Details disclosure; never its usage text. */
@@ -61,6 +67,21 @@ export interface UpdateReady {
 
 export const isUpdateReady = (value: unknown): value is UpdateReady =>
   typeof value === "object" && value !== null && typeof Reflect.get(value, "version") === "string";
+
+/** What Install herdr-core answers: the installed version and binary, or why it failed (as a value, like a start). */
+export type HcInstallAnswer =
+  | { readonly installed: { readonly version: string; readonly path: string } }
+  | { readonly failed: { readonly phase: string; readonly message: string } };
+
+const strings = (part: unknown, keys: readonly string[]): boolean =>
+  typeof part === "object" && part !== null && keys.every((key) => typeof Reflect.get(part, key) === "string");
+
+export function isHcInstallAnswer(value: unknown): value is HcInstallAnswer {
+  if (typeof value !== "object" || value === null) return false;
+  const installed: unknown = Reflect.get(value, "installed");
+  const failed: unknown = Reflect.get(value, "failed");
+  return strings(installed, ["version", "path"]) || strings(failed, ["phase", "message"]);
+}
 
 /** A failed start crosses IPC as a value: Electron hands the renderer only the message of a thrown error. */
 export interface LocalHostStartFailed {
@@ -91,6 +112,8 @@ export interface DorifaceBridge {
   setMenuKeys(keys: Readonly<Record<string, string>>): Promise<boolean>;
   /** Asks for herdr-core's hc in a file dialog and keeps it; resolves with its path, or null when cancelled. */
   chooseHc(): Promise<string | null>;
+  /** Downloads, verifies and installs herdr-core for this user, calling `onPhase` as it goes; later starts use it. */
+  installHc(onPhase: (phase: string) => void): Promise<HcInstallAnswer>;
   /** Calls `listener` once an update is staged, at once when one already is. */
   onUpdateReady(listener: (update: UpdateReady) => void): void;
   /** Quits and installs the staged update; resolves false when none is staged. */
@@ -117,7 +140,8 @@ export function isLocalHostStartFailed(value: unknown): value is LocalHostStartF
     typeof Reflect.get(failure, "message") === "string" &&
     typeof Reflect.get(failure, "details") === "string" &&
     optionalString(failure, "path") &&
-    optionalString(failure, "address")
+    optionalString(failure, "address") &&
+    optionalString(failure, "version")
   );
 }
 

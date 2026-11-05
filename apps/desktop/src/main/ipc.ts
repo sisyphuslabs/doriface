@@ -16,4 +16,5 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(Channel.chooseHc, (event) => handlers.chooseHc(event));
   ipcMain.handle(Channel.takeUpdate, (event) => handlers.takeUpdate(event));
   ipcMain.handle(Channel.installUpdate, (event) => handlers.installUpdate(event));
+  ipcMain.handle(Channel.installHc, (event) => handlers.installHc(event));
 }
