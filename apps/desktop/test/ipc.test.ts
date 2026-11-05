@@ -15,8 +15,10 @@ const foreign: readonly IpcSender[] = [
 const setup = (
   start: () => Promise<typeof endpoint> = async () => endpoint,
   choose: () => Promise<string | undefined> = async () => undefined,
+  staged: { readonly version: string } | null = null,
 ) => {
   let chooses = 0;
+  let installs = 0;
   const opened: string[] = [];
   const painted: string[] = [];
   const zooms: string[] = [];
@@ -49,6 +51,11 @@ const setup = (
       chooses += 1;
       return choose();
     },
+    takeUpdate: () => staged,
+    installUpdate: () => {
+      installs += 1;
+      return staged !== null;
+    },
   });
   return {
     handlers,
@@ -59,6 +66,7 @@ const setup = (
     starts: () => starts,
     closes: () => closes,
     chooses: () => chooses,
+    installs: () => installs,
   };
 };
 
@@ -66,7 +74,7 @@ afterEach(() => void takePairingLink());
 
 describe("IPC sender gate", () => {
   test("refuses foreign and detached frames before touching the shell or the host", async () => {
-    const { handlers, opened, zooms, starts } = setup();
+    const { handlers, opened, zooms, starts, installs } = setup(undefined, undefined, { version: "0.2.0" });
     openPairingLink("#p=waiting");
     await Promise.all(
       foreign.flatMap((event) => [
@@ -78,13 +86,26 @@ describe("IPC sender gate", () => {
         expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
         expect(handlers.zoomWindow(event, "out")).rejects.toThrow("refused IPC"),
         expect(handlers.chooseHc(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.installUpdate(event)).rejects.toThrow("refused IPC"),
       ]),
     );
     for (const event of foreign) expect(() => handlers.takePairingLink(event)).toThrow("refused IPC");
+    for (const event of foreign) expect(() => handlers.takeUpdate(event)).toThrow("refused IPC");
+    expect(installs()).toBe(0);
     expect(opened).toEqual([]);
     expect(zooms).toEqual([]);
     expect(starts()).toBe(0);
     expect(handlers.takePairingLink(app)).toBe("#p=waiting");
+  });
+
+  test("the page reads the staged update and asks to restart into it; with none staged it reads null", async () => {
+    const staged = setup(undefined, undefined, { version: "0.2.0" });
+    expect(staged.handlers.takeUpdate(app)).toEqual({ version: "0.2.0" });
+    expect(await staged.handlers.installUpdate(app)).toBe(true);
+    expect(staged.installs()).toBe(1);
+    const none = setup();
+    expect(none.handlers.takeUpdate(app)).toBeNull();
+    expect(await none.handlers.installUpdate(app)).toBe(false);
   });
 
   test("Choose hc answers the chosen file, or null when the dialog is cancelled", async () => {

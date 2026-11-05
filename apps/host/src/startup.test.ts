@@ -292,11 +292,13 @@ const alive = (pid: number): boolean => {
 describe("the write of a host's OS", () => {
   test("starts no hc connect until a client opens a pipe, and stop reaps the write's child", async () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-silent-"));
-    // An hc whose connect never answers the hello, keeps its output open, and exits once its input ends, as hc does.
+    // An hc whose connect never answers the hello, keeps its output open, and exits once its input ends, as hc does. Its
+    // pid file is written under another name and moved into place, so a connect-* name only appears with its pid in it
+    // (`echo > name` creates the file before it writes, and an empty one read as pid 0, #365).
     const hc = join(dir, "hc");
     writeFileSync(
       hc,
-      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/connect-$$.pid"\nwhile read -r line; do :; done\n`,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/.pid-$$" && mv "${dir}/.pid-$$" "${dir}/connect-$$.pid"\nwhile read -r line; do :; done\n`,
       { mode: 0o755 },
     );
     const connects = () => readdirSync(dir).filter((name) => name.startsWith("connect-"));
@@ -321,6 +323,8 @@ describe("the write of a host's OS", () => {
       const client = await openWsClient(host.url, token);
       await both;
       const pids = connects().map((name) => Number(readFileSync(join(dir, name), "utf8")));
+      // kill(0) signals this process's own group, so 0 (or NaN) would count as a live child.
+      for (const pid of pids) expect(pid).toBeGreaterThan(0);
       expect(pids.every(alive)).toBe(true);
       client.socket.close();
       await host.stop();
