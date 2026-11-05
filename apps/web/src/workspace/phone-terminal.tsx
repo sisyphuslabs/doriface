@@ -1,5 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
 import { useSoftKeyboard } from "../terminal/keyboard-inset.ts";
 import { hostPlatform } from "../terminal/keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
@@ -75,9 +76,10 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack,
       <ConnectionLine />
       <div
         ref={setScope}
-        className="flex min-h-0 flex-1 flex-col"
+        className="relative flex min-h-0 flex-1 flex-col"
         style={keysOpen ? { paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})` } : undefined}
       >
+        {offline ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
         {offline ? (
           <MachineOffline machine={machine} />
         ) : (
