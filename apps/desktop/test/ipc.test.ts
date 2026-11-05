@@ -50,6 +50,7 @@ describe("IPC sender gate", () => {
     await Promise.all(
       foreign.flatMap((event) => [
         expect(handlers.openExternal(event, "https://github.com/")).rejects.toThrow("refused IPC"),
+        expect(handlers.openLink(event, "https://example.com/")).rejects.toThrow("refused IPC"),
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
@@ -121,5 +122,25 @@ describe("IPC sender gate", () => {
     const { handlers, closes } = setup();
     await handlers.closeWindow(app);
     expect(closes()).toBe(1);
+  });
+
+  test("a terminal link opens any http, https or mailto target in the system browser, and nothing else", async () => {
+    const { handlers, opened } = setup();
+    expect(await handlers.openLink(app, "https://anywhere.example/a b")).toBe(true);
+    expect(await handlers.openLink(app, "http://plain.example")).toBe(true);
+    expect(await handlers.openLink(app, "mailto:me@example.com")).toBe(true);
+    const refused = [
+      "javascript:alert(1)",
+      "file:///etc/passwd",
+      "data:text/html,x",
+      "vscode://open",
+      "https://user:pw@example.com/",
+      "not a url",
+      42,
+    ];
+    expect(await Promise.all(refused.map((candidate) => handlers.openLink(app, candidate)))).toEqual(
+      refused.map(() => false),
+    );
+    expect(opened).toEqual(["https://anywhere.example/a%20b", "http://plain.example/", "mailto:me@example.com"]);
   });
 });

@@ -102,6 +102,37 @@ export function ContextMenu({ trigger, children, open, onOpenChange, finalFocus 
   );
 }
 
+export interface PointMenuProps {
+  /** Where the menu opens, in viewport px; null keeps it closed. */
+  readonly at: { readonly x: number; readonly y: number } | null;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+  /** Names the menu for assistive tech. */
+  readonly label: string;
+}
+
+/** A menu that opens at a point rather than from a trigger: e.g. a link tapped inside a terminal. */
+export function PointMenu({ at, onClose, children, label }: PointMenuProps) {
+  const anchor =
+    at === null ? null : { getBoundingClientRect: () => DOMRect.fromRect({ x: at.x, y: at.y, width: 0, height: 0 }) };
+  return (
+    <BaseMenu.Root open={at !== null} onOpenChange={(open) => !open && onClose()}>
+      <BaseMenu.Portal>
+        <BaseMenu.Positioner anchor={anchor} sideOffset={6} positionMethod="fixed">
+          <BaseMenu.Popup aria-label={label} className={cn(overlaySurface, "min-w-48 p-1", bounded)}>
+            {children}
+          </BaseMenu.Popup>
+        </BaseMenu.Positioner>
+      </BaseMenu.Portal>
+    </BaseMenu.Root>
+  );
+}
+
+/** A line of text at the head of a menu, not an item: e.g. where a link really goes. */
+export function MenuCaption({ children }: { readonly children: ReactNode }) {
+  return <div className="max-w-80 px-2 pt-1 pb-1.5 font-mono text-xs break-all text-muted-foreground">{children}</div>;
+}
+
 export interface MenuItemProps extends Omit<ComponentProps<typeof BaseMenu.Item>, "className" | "children"> {
   readonly icon?: ReactNode;
   readonly keys?: readonly string[];

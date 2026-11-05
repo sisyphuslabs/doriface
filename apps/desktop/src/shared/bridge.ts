@@ -1,6 +1,8 @@
 /** IPC channels between the preload and the main process. */
 export const Channel = {
   openExternal: "doriface:open-external",
+  /** A link a terminal printed, opened in the system browser (http, https, mailto). */
+  openLink: "doriface:open-link",
   startLocalHost: "doriface:start-local-host",
   setWindowBackground: "doriface:set-window-background",
   closeWindow: "doriface:close-window",
@@ -55,6 +57,8 @@ export interface DorifaceBridge {
   readonly platform: DesktopPlatform;
   /** Opens an allowlisted https link in the system browser; resolves false when the link is refused. */
   openExternal(url: string): Promise<boolean>;
+  /** Opens a link a terminal printed in the system browser; resolves false when its scheme may not open. */
+  openLink(url: string): Promise<boolean>;
   /** Starts (or reuses) doriface-host + hc on this machine; resolves with why it did not start otherwise. */
   startLocalHost(): Promise<LocalHostEndpoint | LocalHostStartFailed>;
   /** Calls `listener` with an app path to show, e.g. `/settings` from the app menu. */

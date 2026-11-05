@@ -33,6 +33,9 @@ export { Kbd, type KbdProps } from "./components/kbd.tsx";
 export {
   ContextMenu,
   Menu,
+  MenuCaption,
+  PointMenu,
+  type PointMenuProps,
   MenuItem,
   MenuRadioGroup,
   MenuRadioItem,

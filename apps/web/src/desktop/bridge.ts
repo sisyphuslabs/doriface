@@ -106,6 +106,21 @@ export function zoomDesktopWindow(step: ZoomStep, scope: object = globalThis): b
   return true;
 }
 
+/**
+ * Opens a link a terminal printed: in the desktop app, in the system browser through the shell (never in the app
+ * window); in a browser, in a new tab with no opener. `href` is already one that may open (`openableLink`).
+ */
+export function openTerminalLink(href: string, scope: object = globalThis): void {
+  const open = bridgeMethod("openLink", scope);
+  if (open !== null) {
+    const opened = open(href);
+    if (opened instanceof Promise) opened.catch((error: unknown) => console.error(`open link: ${String(error)}`));
+    return;
+  }
+  const view: unknown = Reflect.get(scope, "open");
+  if (typeof view === "function") Reflect.apply(view, scope, [href, "_blank", "noopener,noreferrer"]);
+}
+
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
 export function setDesktopBackground(color: string, scope: object = globalThis): void {
   const painted = bridgeMethod("setWindowBackground", scope)?.(color);

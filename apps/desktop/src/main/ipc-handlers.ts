@@ -1,4 +1,5 @@
 import { allowedExternal } from "../config/external.ts";
+import { terminalLinkTarget } from "../config/terminal-link.ts";
 import { isHexColour } from "../config/window.ts";
 import { isSameOrigin } from "../config/origin.ts";
 import { isZoomStep, type LocalHostEndpoint, type LocalHostStartFailed, type ZoomStep } from "../shared/bridge.ts";
@@ -21,6 +22,8 @@ export interface IpcDeps {
 
 export interface IpcHandlers {
   openExternal(event: IpcSender, candidate: unknown): Promise<boolean>;
+  /** A link a terminal printed: any host, but only http, https and mailto (`terminalLinkTarget`). */
+  openLink(event: IpcSender, candidate: unknown): Promise<boolean>;
   startLocalHost(event: IpcSender): Promise<LocalHostEndpoint | LocalHostStartFailed>;
   /** Paints the window and the next launch with the in-app theme's background; only `#rrggbb` is taken. */
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
@@ -42,6 +45,13 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
     async openExternal(event, candidate) {
       assertAppFrame(event, deps.origin);
       const url = typeof candidate === "string" ? allowedExternal(candidate) : undefined;
+      if (url === undefined) return false;
+      await deps.openExternal(url);
+      return true;
+    },
+    async openLink(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      const url = typeof candidate === "string" ? terminalLinkTarget(candidate) : undefined;
       if (url === undefined) return false;
       await deps.openExternal(url);
       return true;
