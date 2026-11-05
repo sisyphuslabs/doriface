@@ -5,7 +5,9 @@ import { isSameOrigin } from "../config/origin.ts";
 import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
 import {
   Channel,
+  type DesktopNotice,
   type HcInstallAnswer,
+  isDesktopNotice,
   type LocalHostEndpoint,
   type LocalHostStartFailed,
   type UpdateReady,
@@ -38,6 +40,8 @@ export interface IpcDeps {
   readonly installUpdate: () => boolean;
   /** Installs herdr-core for this user and keeps it as the hc later starts use; throws HcInstallError with why not. */
   readonly installHc: (onPhase: (phase: string) => void) => Promise<HcInstalled>;
+  readonly noticesSupported: () => boolean;
+  readonly showNotice: (notice: DesktopNotice) => void;
 }
 
 export interface IpcHandlers {
@@ -60,6 +64,9 @@ export interface IpcHandlers {
   installUpdate(event: IpcSender): Promise<boolean>;
   /** Install herdr-core: each phase is sent to the page as it starts; a failure is answered as a value. */
   installHc(event: IpcReplySender): Promise<HcInstallAnswer>;
+  noticesSupported(event: IpcSender): Promise<boolean>;
+  /** Shows a native notification; only a known kind and a terminal address are taken, never text. */
+  showNotice(event: IpcSender, candidate: unknown): Promise<boolean>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -148,6 +155,16 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
         if (error instanceof HcInstallError) return { failed: { phase: error.phase, message: error.message } };
         throw error;
       }
+    },
+    async noticesSupported(event) {
+      assertAppFrame(event, deps.origin);
+      return deps.noticesSupported();
+    },
+    async showNotice(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (!isDesktopNotice(candidate)) return false;
+      deps.showNotice({ kind: candidate.kind, terminal: candidate.terminal });
+      return true;
     },
   };
 }
