@@ -3,10 +3,18 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { relayDir } from "../private-relay.ts";
-import { adoptProcessGroup, stopProcessGroup } from "./process-group.ts";
+import { adoptProcessGroup, STOP_BOUND_MS, stopProcessGroup } from "./process-group.ts";
+import { liveWithEnvironment } from "./processes.ts";
 
 const READY = /Ready on (http:\/\/\S+)/;
 const START_TIMEOUT_MS = 90_000;
+/**
+ * The bound for a hook that stops a relay: the longest its process group's stop waits (STOP_BOUND_MS), plus 3 s for what
+ * follows it. Measured under induced load (~160) over 20 stops: the group was gone in at most 3.8 s, never needing
+ * SIGKILL; draining took 0 ms and removing the scratch at most 0.4 s. bun's 5 s hook default is shorter than the stop's
+ * own SIGKILL path, so a slow stop was abandoned mid-way instead of finishing or failing with its own error.
+ */
+export const RELAY_STOP_MS = STOP_BOUND_MS + 3_000;
 /** Each attempt binds a freshly picked HTTP port; the next attempt runs only after a proven bind race on it. */
 const START_ATTEMPTS = 3;
 
@@ -111,6 +119,8 @@ async function startOnce(
   }
   const scratch = await mkdtemp(join(tmpdir(), "relay-"));
   const port = String(httpPort);
+  const logPath = join(scratch, "logs");
+  const logMark = `WRANGLER_LOG_PATH=${logPath}`;
   const proc = await removingOnFailure(scratch, () =>
     Bun.spawn(
       [
@@ -141,7 +151,7 @@ async function startOnce(
           ...process.env,
           WRANGLER_SEND_METRICS: "false",
           XDG_CONFIG_HOME: join(scratch, "config"),
-          WRANGLER_LOG_PATH: join(scratch, "logs"),
+          WRANGLER_LOG_PATH: logPath,
         },
       },
     ),
@@ -182,8 +192,19 @@ async function startOnce(
   );
   const stop = async (): Promise<void> => {
     await stopGroup();
+    // Every process wrangler starts inherits this entry; one still carrying it left the group and outlived the stop.
+    // It is killed before the pipes are awaited: a survivor holding wrangler's stdout or stderr keeps them open.
+    const left = await liveWithEnvironment(logMark);
+    for (const pid of left) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
+      }
+    }
     await drained;
     await rm(scratch, { recursive: true, force: true });
+    if (left.length > 0) throw new Error(`relay processes outlived stop() (now killed): ${left.join(", ")}`);
   };
   try {
     const url = await ready.promise;
