@@ -20,7 +20,7 @@ import { captureInstallPrompt } from "./device/install.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
-import { captureNotice, listenForNotices } from "./push/notice-open.ts";
+import { captureNotice, listenForDesktopNotices, listenForNotices } from "./push/notice-open.ts";
 import { followConnection } from "./push/push-settings.ts";
 import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
 import { reportMenuKeys } from "./keys/menu-keys.ts";
@@ -65,6 +65,8 @@ if (desktopBridge() !== null) {
   setActionFallback("pane.close", () => closeDesktopWindow());
   // The Shell menu runs the page's own actions and shows the page's own keys for them.
   onDesktopRunAction((action) => void runAction(action));
+  // A clicked notification opens its pane in the workspace, from Settings too.
+  listenForDesktopNotices(() => void router.navigate({ to: "/" }));
   reportMenuKeys();
   // Screens with no workspace (Settings, pairing) handle no text-size action, so the View menu's text-size items and
   // keys step the terminal text from here; the window itself is never zoomed (#388).

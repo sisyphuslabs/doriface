@@ -13,7 +13,7 @@ import { defer, runDeferred } from "./support/cleanup.ts";
 import { Probe, socketFrom, testIp } from "./support/probe.ts";
 import { AsyncQueue } from "./support/queue.ts";
 import { type LocalRelay, startLocalRelay } from "./support/relay-dev.ts";
-import { inOrder, times } from "./support/sequential.ts";
+import { times } from "./support/sequential.ts";
 import { uniqueSlot } from "./support/slots.ts";
 import { startTestHost } from "./support/test-host.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
@@ -30,6 +30,16 @@ setUpOnce(async () => {
 afterAll(() => relay?.stop());
 
 afterEach(runDeferred);
+
+/** PAIR_LIMIT's period in the relay's wrangler config: 20 lookups per IP per 60 s. */
+const RATE_WINDOW_MS = 60_000;
+/** The room a window must have left for the rate case to start in it, else it waits for the next one. */
+const RATE_ROOM_MS = 20_000;
+/**
+ * The rate case's own budget beside that wait: its 21 lookups, measured at most 18.4 s on a 40-core host driven to load
+ * ~160 (p50 under 7 s), and about 1 s at rest.
+ */
+const RATE_RUN_MS = 30_000;
 
 /** A typed code for `slot` as a person might enter it: lower case, with the display space. */
 const typed = (slot: string): string => `${slot}0 abcd`.toLowerCase();
@@ -168,11 +178,24 @@ describe("pairing slots", () => {
     host.uplink.stop();
   });
 
-  test("lookups over the per-IP rate are refused with 429", async () => {
-    const ip = testIp();
-    const results = await inOrder(times(21), () => lookup(typed(uniqueSlot()), ip).catch((error: unknown) => error));
-    expect(results.slice(0, 20)).toEqual(Array.from({ length: 20 }, () => undefined));
-    const refused = results[20];
-    expect(refused instanceof PairLookupError ? refused.status : refused).toBe(429);
-  });
+  test(
+    "lookups over the per-IP rate are refused with 429",
+    async () => {
+      // The local relay's rate limiter (miniflare) counts in windows aligned to the wall clock, so a run that crosses a
+      // boundary starts a fresh count and its 21st lookup is allowed. Start in a window with room for the whole run.
+      const left = RATE_WINDOW_MS - (Date.now() % RATE_WINDOW_MS);
+      if (left < RATE_ROOM_MS) await Bun.sleep(left + 50);
+      const window = Math.floor(Date.now() / RATE_WINDOW_MS);
+      const ip = testIp();
+      // The limit counts requests, not their order: the 20 it allows go together, and the 21st once they are counted.
+      const allowed = await Promise.all(
+        times(20).map(() => lookup(typed(uniqueSlot()), ip).catch((error: unknown) => error)),
+      );
+      const refused = await lookup(typed(uniqueSlot()), ip).catch((error: unknown) => error);
+      expect(Math.floor(Date.now() / RATE_WINDOW_MS), "the run stayed in one rate window").toBe(window);
+      expect(allowed).toEqual(Array.from({ length: 20 }, () => undefined));
+      expect(refused instanceof PairLookupError ? refused.status : refused).toBe(429);
+    },
+    RATE_ROOM_MS + RATE_RUN_MS,
+  );
 });

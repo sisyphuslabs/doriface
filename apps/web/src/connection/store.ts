@@ -2,7 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
 import { connect, DeviceNotPairedError } from "./connect.ts";
-import { type ConnectionSettings, isConfigured, loadSettings, saveSettings } from "./settings.ts";
+import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSettings } from "./settings.ts";
 
 /**
  * `stale` is the connection that dropped while this one retries: its workspace stays on screen meanwhile.
@@ -38,7 +38,7 @@ export class ConnectionStore {
   readonly #connect: typeof connect;
 
   constructor(settings: ConnectionSettings, open: typeof connect = connect) {
-    this.#settings = settings;
+    this.#settings = lockRelay(settings);
     this.#connect = open;
   }
 
@@ -55,9 +55,10 @@ export class ConnectionStore {
     return () => this.#listeners.delete(listener);
   };
 
+  /** Saves and connects with `settings`; a release build keeps the production relay whatever relay they name. */
   update(settings: ConnectionSettings): void {
-    this.#settings = settings;
-    saveSettings(settings);
+    this.#settings = lockRelay(settings);
+    saveSettings(this.#settings);
     this.start();
   }
 

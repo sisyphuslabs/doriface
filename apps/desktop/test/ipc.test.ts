@@ -5,6 +5,7 @@ import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
 import { Channel } from "../src/shared/bridge.ts";
 import { ipcHandlers, type IpcReplySender, type IpcSender } from "../src/main/ipc-handlers.ts";
 import { LocalHostStartError } from "../src/main/local-host.ts";
+import type { DesktopNotice } from "../src/shared/bridge.ts";
 
 const endpoint = { url: "ws://127.0.0.1:1/v1/hc", token: "t".repeat(43) };
 const app: IpcSender = { senderFrame: { url: "app://doriface/hosts" } };
@@ -30,7 +31,12 @@ const setup = (
   let starts = 0;
   let closes = 0;
   const menus: ReadonlyMap<string, string>[] = [];
+  const notices: DesktopNotice[] = [];
   const handlers = ipcHandlers({
+    noticesSupported: () => true,
+    showNotice: (notice) => {
+      notices.push(notice);
+    },
     setMenuKeys: (keys) => {
       menus.push(keys);
     },
@@ -68,6 +74,7 @@ const setup = (
     opened,
     painted,
     menus,
+    notices,
     starts: () => starts,
     closes: () => closes,
     chooses: () => chooses,
@@ -86,7 +93,7 @@ afterEach(() => void takePairingLink());
 
 describe("IPC sender gate", () => {
   test("refuses foreign and detached frames before touching the shell or the host", async () => {
-    const { handlers, opened, starts, installs } = setup(undefined, undefined, { version: "0.2.0" });
+    const { handlers, opened, notices, starts, installs } = setup(undefined, undefined, { version: "0.2.0" });
     openPairingLink("#p=waiting");
     await Promise.all(
       foreign.flatMap((event) => [
@@ -98,8 +105,11 @@ describe("IPC sender gate", () => {
         expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
         expect(handlers.chooseHc(event)).rejects.toThrow("refused IPC"),
         expect(handlers.installUpdate(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.noticesSupported(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.showNotice(event, { kind: "done", terminal: "t1" })).rejects.toThrow("refused IPC"),
       ]),
     );
+    expect(notices).toEqual([]);
     for (const event of foreign) expect(() => handlers.takePairingLink(event)).toThrow("refused IPC");
     for (const event of foreign) expect(() => handlers.takeUpdate(event)).toThrow("refused IPC");
     expect(installs()).toBe(0);
@@ -214,6 +224,29 @@ describe("IPC sender gate", () => {
     );
     expect(refused).toEqual([false, false, false, false, false, false]);
     expect(painted).toEqual(["#131518"]);
+  });
+
+  test("a native notification takes a known kind and a terminal address, never text of its own", async () => {
+    const { handlers, notices } = setup();
+    expect(await handlers.noticesSupported(app)).toBe(true);
+    expect(await handlers.showNotice(app, { kind: "done", terminal: "box/t7", body: "rm -rf" })).toBe(true);
+    expect(await handlers.showNotice(app, { kind: "test", terminal: null })).toBe(true);
+    const refused = [
+      { kind: "done" },
+      { kind: "shout", terminal: "t1" },
+      { kind: "done", terminal: "" },
+      { kind: "done", terminal: "t".repeat(161) },
+      { kind: "done", terminal: 7 },
+      "done",
+      null,
+    ];
+    expect(await Promise.all(refused.map((candidate) => handlers.showNotice(app, candidate)))).toEqual(
+      refused.map(() => false),
+    );
+    expect(notices).toEqual([
+      { kind: "done", terminal: "box/t7" },
+      { kind: "test", terminal: null },
+    ]);
   });
 
   test("the app origin can ask its window to close", async () => {
