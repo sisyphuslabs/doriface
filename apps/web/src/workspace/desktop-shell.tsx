@@ -1,7 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
@@ -40,6 +40,8 @@ export interface DesktopShellProps {
   readonly onSession: SessionVerb;
 }
 
+const viewKey = (address: string, pid: number | null): string => `${address}#${pid ?? ""}`;
+
 export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette, onSession }: DesktopShellProps) {
   const [sidebar, setSidebar] = useSidebarShown();
   const paletteKeys = useActionKeys("app.palette");
@@ -55,6 +57,14 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   // A dictation belongs to the pane it started in: moving focus to another tab or pane ends it, typing nothing.
   const { dictation } = voice;
   useEffect(() => dictation.close(), [dictation, tabs.active]);
+  // Views that showed their program had already ended (a restarted program has a new pid, so its view counts afresh).
+  const [endedViews, setEndedViews] = useState<ReadonlySet<string>>(() => new Set());
+  const onEnded = useCallback((address: string, pid: number | null) => {
+    const key = viewKey(address, pid);
+    setEndedViews((seen) => (seen.has(key) ? seen : new Set(seen).add(key)));
+  }, []);
+  const showsEnded = (terminal: { readonly address: string; readonly pid?: number | null }): boolean =>
+    endedViews.has(viewKey(terminal.address, terminal.pid ?? null));
   useAppActions({
     terminals,
     tabs,
@@ -65,7 +75,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     // The session in view, as the tab bar's mic acts on it; none in view (or its machine offline) leaves the key alone.
     onDictate: () => {
       const target = terminals.find((terminal) => terminal.address === tabs.active);
-      if (target === undefined || target.offline === true) return false;
+      if (target === undefined || target.offline === true || showsEnded(target)) return false;
       voice.toggle();
       return true;
     },
@@ -90,9 +100,10 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   });
   const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
   const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
-  // As on the phone: a focused terminal that is gone or whose machine is offline has nothing to type into, so a dictation
-  // under way ends (its recognizer aborted) rather than listening on under a pane that can't take it (#254).
-  const nothingToType = focusedTerminal === undefined || focusedTerminal.offline === true;
+  // As on the phone: a focused terminal that is gone, whose machine is offline, or whose view showed it had ended has
+  // nothing to type into, so a dictation under way ends (its recognizer aborted) and no mic or bound key starts one (#254, #258).
+  const nothingToType =
+    focusedTerminal === undefined || focusedTerminal.offline === true || showsEnded(focusedTerminal);
   useEffect(() => {
     if (nothingToType) dictation.close();
   }, [dictation, nothingToType]);
@@ -157,7 +168,7 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           }
           trailing={
             <>
-              {focusedTerminal === undefined || focusedTerminal.offline === true ? null : (
+              {focusedTerminal === undefined || nothingToType ? null : (
                 <DictateButton voice={voice} target={terminalTitle(focusedTerminal)} size="sm" ref={mic} />
               )}
               {focusedTerminal === undefined ? null : (
@@ -176,9 +187,10 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           split={tabs.split}
           onFocus={tabs.focus}
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, () => tabs.drop(address)) : undefined)}
+          onEnded={onEnded}
           sends={sends}
           dock={
-            focusedTerminal === undefined || focusedTerminal.offline === true ? null : (
+            focusedTerminal === undefined || nothingToType ? null : (
               <VoiceDock
                 voice={voice}
                 target={terminalTitle(focusedTerminal)}
