@@ -32,7 +32,7 @@ test("Turn on is the only thing that asks; the host then holds the subscription,
 test("a tapped notice opens its pane, in an open window and in a fresh one", async ({ page, context }) => {
   const service = suite.service();
   await turnOn(page);
-  const agent = finishingAgent("push-open", suite.later);
+  const agent = finishingAgent("push-open", suite.endAfterTest);
   press(agent);
   const posted = await service.next();
   expect(posted.notice["k"]).toBe("done");
@@ -52,8 +52,8 @@ test("a tapped notice opens its pane, in an open window and in a fresh one", asy
 test("no notice about the pane this device shows; the other panes still send theirs", async ({ page }) => {
   const service = suite.service();
   await turnOn(page);
-  const shown = finishingAgent("push-shown", suite.later);
-  const other = finishingAgent("push-other", suite.later);
+  const shown = finishingAgent("push-shown", suite.endAfterTest);
+  const other = finishingAgent("push-other", suite.endAfterTest);
   // The app tells the host which pane it shows; the host's ok to that line is when the hold starts.
   const held = new Promise<void>((resolve) => {
     page.on("websocket", (socket) => {

@@ -63,6 +63,12 @@ describe("push stream lines", () => {
 
   test("host lines parse for the app", () => {
     expect(parsePushHostLine('{"t":"stale","terminal":"box/t3"}')).toEqual({ t: "stale", terminal: "box/t3" });
+    expect(parsePushHostLine('{"t":"failed","terminal":"t3","reason":"link dropped"}')).toEqual({
+      t: "failed",
+      terminal: "t3",
+      reason: "link dropped",
+    });
+    expect(parsePushHostLine('{"t":"unknown","terminal":"t3"}')).toEqual({ t: "unknown", terminal: "t3" });
     expect(parsePushHostLine('{"t":"notice","terminal":null,"kind":null}')).toEqual({
       t: "notice",
       terminal: null,

@@ -7,6 +7,7 @@ import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_ENV, E2E_LAYOUT_PORT, E2E_PUSH_
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
+import { writeSavedEnv } from "./saved-env.ts";
 import { seed } from "./seed.ts";
 
 const layout = process.argv[2] === "layout";
@@ -39,9 +40,11 @@ writeFileSync(
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
 // Each host owns its own file: the layout host runs beside the main ones and must not overwrite or delete theirs.
-// The pid lets the run's leftover check stop a host that outlived its worker.
+// The pid lets the run's leftover check stop a host that outlived its worker. The main host's file is saved again with
+// `ready` once setup has finished: a worker waits for that, so the core it first sees already holds every seed (#226).
 const savedEnv = layout ? E2E_LAYOUT_ENV : E2E_HOST_ENV;
-writeFileSync(savedEnv, JSON.stringify({ hc, env: own, pid: process.pid }));
+const saved = { hc, env: own, pid: process.pid };
+writeSavedEnv(savedEnv, saved);
 const host = Bun.spawn(
   [
     "bun",
@@ -96,6 +99,7 @@ try {
     if (capture) await seed(hc, env, join(dir, "work"));
     await seedMeshDoc(hc, session, env);
     stopMachine = await addMachine(hc, env, join(dir, "machine"), capture);
+    writeSavedEnv(E2E_HOST_ENV, { ...saved, ready: true });
   }
 } catch (error) {
   console.error(`e2e host setup failed: ${String(error)}`);
