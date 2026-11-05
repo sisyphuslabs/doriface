@@ -2,20 +2,30 @@ import { SettingRow } from "@doriface/ui";
 import { Monitor, Server } from "lucide-react";
 import { useSyncExternalStore, type ReactNode } from "react";
 import type { ConnectionSettings } from "../connection/settings.ts";
+import { hostFailure } from "../connection/host-failure.ts";
 import { connectionStore, useConnection, type ConnectionState } from "../connection/store.ts";
 
 function useConnectionSettings(): ConnectionSettings {
   return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
 }
 
-function describe(state: ConnectionState): string {
+function describe(state: ConnectionState): ReactNode {
   switch (state.phase) {
     case "open":
       return "Connected";
     case "connecting":
       return "Connecting";
     case "failed":
-      return state.error.message;
+      return (
+        <>
+          {hostFailure(state.error)}
+          {/* The transport's own words (a close code) only behind a disclosure, for a report (#477). */}
+          <details className="mt-1 text-xs">
+            <summary className="cursor-pointer">Details</summary>
+            <span className="[overflow-wrap:anywhere]">{state.error.message}</span>
+          </details>
+        </>
+      );
     case "host-failed":
       return state.failure.message;
     case "unconfigured":
@@ -25,9 +35,10 @@ function describe(state: ConnectionState): string {
 
 function label(icon: ReactNode, text: string) {
   return (
-    <span className="flex items-center gap-2 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
-      {icon}
-      <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
+    <span className="flex items-start gap-2 [&_svg]:size-4 [&_svg]:text-muted-foreground">
+      {/* One line tall, so the icon centres on the text's first line however many lines the text takes. */}
+      <span className="flex h-[1lh] shrink-0 items-center">{icon}</span>
+      <span className="min-w-0">{text}</span>
     </span>
   );
 }

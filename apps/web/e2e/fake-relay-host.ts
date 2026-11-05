@@ -12,8 +12,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { addMachine, DEMO_MACHINE } from "./machine.ts";
 
-const [webOrigin, relayAddress] = process.argv.slice(2);
+const [webOrigin, relayAddress] = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
 if (webOrigin === undefined || !/^https?:\/\//.test(webOrigin) || relayAddress === undefined) {
   console.error("usage: fake-relay-host.ts <web origin> <relay address the page dials>");
   process.exit(2);
@@ -35,6 +36,13 @@ const host = await startHost({
   log: () => {},
 });
 await relay.answers.next();
+// With --machine, the host's core also has an added machine, as a host with more than one computer does.
+const stopMachine = process.argv.includes("--machine")
+  ? await addMachine(hc.hc, hc.env, join(stateDir, "machine"), false, {
+      ...DEMO_MACHINE,
+      dir: join(stateDir, "machine-files"),
+    })
+  : undefined;
 
 async function pairingLink(): Promise<string> {
   const args = ["pair", "--no-qr", "--web-origin", webOrigin ?? "", "--relay", relayAddress ?? ""];
@@ -57,6 +65,7 @@ void (async () => {
 try {
   await done.promise;
 } finally {
+  await stopMachine?.();
   await host.stop();
   await hc.dispose();
   await bridge.stop();

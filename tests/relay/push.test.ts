@@ -15,6 +15,7 @@ import { capturingSockets } from "./support/capture.ts";
 import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "./support/relayed-host.ts";
 import { setUpOnce } from "./support/set-up-once.ts";
 import { within } from "./support/watch.ts";
+import { killAndRemove } from "./support/terminals.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "relay-push-"));
 const captureFile = join(scratch, "relay-observed.bin");
@@ -107,8 +108,7 @@ describe("web push through the relay", () => {
     expect(readFileSync(keyLog, "utf8").trim().split("\n")).toEqual(['"1"']);
     expect(await ask({ t: "unsubscribe", endpoint: ENDPOINT })).toEqual({ t: "ok" });
     link.close();
-    hc(["kill", agent]);
-    hc(["rm", agent]);
+    killAndRemove(hc, agent);
 
     const observed = Buffer.from(readFileSync(captureFile));
     expect(observed.byteLength).toBeGreaterThan(0);

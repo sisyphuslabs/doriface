@@ -53,6 +53,15 @@ describe("faceScalesFor", () => {
     expect(own).not.toBe(faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor));
   });
 
+  test("a changed native device-pixel cell grid remeasures fallback faces at the same font size", () => {
+    forgetMeasuredFaces();
+    const before = faceScalesFor(16, DEFAULT, DEFAULT, measureFor, 10);
+    const after = faceScalesFor(16, DEFAULT, DEFAULT, measureFor, 10.5);
+    expect(before).not.toBe(after);
+    expect(15 * (before?.scaleOf("\u{D55C}") ?? 0)).toBeCloseTo(20, 2);
+    expect(15 * (after?.scaleOf("\u{D55C}") ?? 0)).toBeCloseTo(21, 2);
+  });
+
   test("forgetting the measurements, as a finished font load does, measures again", () => {
     forgetMeasuredFaces();
     const before = faceScalesFor(17.33, DEFAULT, DEFAULT, measureFor);
@@ -65,9 +74,9 @@ describe("FaceScales", () => {
   test("a fallback face is sized to the primary's ideograph width, the same for every glyph of a block", () => {
     const scales = new FaceScales(fakeCanvas().measure, DEFAULT, DEFAULT);
     const hangul = scales.scaleOf("\u{D55C}");
-    expect(15 * hangul).toBeCloseTo(18.2, 2);
+    expect(15 * hangul).toBeCloseTo(20.8, 2);
     expect(scales.scaleOf("\u{AE00}")).toBe(hangul);
-    expect(15 * scales.scaleOf("\u{6F22}")).toBeCloseTo(18.2, 2);
+    expect(15 * scales.scaleOf("\u{6F22}")).toBeCloseTo(20.8, 2);
   });
 
   test("canvas measuring does not grow with the number of distinct glyphs drawn", () => {
@@ -86,6 +95,14 @@ describe("FaceScales", () => {
     const scales = new FaceScales(fakeCanvas().measure, `"Own CJK", ${DEFAULT}`, DEFAULT);
     expect(scales.scaleOf("\u{D55C}")).toBe(1);
     expect(scales.scaleOf("\u{6F22}")).not.toBe(1);
+  });
+
+  test("a configured second family is still a fallback, and its Hangul is sized to the primary advance (#410)", () => {
+    const canvas = fakeCanvas();
+    const measure: Measure = (text, family, scale) =>
+      canvas.measure(text, family.includes('"Own CJK"') ? '"Own CJK"' : family, scale);
+    const scales = new FaceScales(measure, `"ASCII Primary", "Own CJK", ${DEFAULT}`, DEFAULT);
+    expect(16 * scales.scaleOf("\u{D55C}")).toBeCloseTo(20.8, 2);
   });
 
   test("a narrow CJK bracket takes its face's scale, as Ghostty sizes the whole face", () => {

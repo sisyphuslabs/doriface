@@ -28,7 +28,7 @@ export const CONNECT_USAGE = `usage: doriface-host connect <hostId | pairing lin
                      adds these lines itself, with --state-dir and the member's hostId`;
 
 /** hc gives a dial 20 s for the hello reply; failing earlier leaves it a clear reason on stderr. */
-const DIAL_TIMEOUT_MS = 15_000;
+export const DIAL_TIMEOUT_MS = 15_000;
 
 function stdoutOutput(): Output {
   return {

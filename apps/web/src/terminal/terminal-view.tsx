@@ -24,9 +24,10 @@ import { Ended } from "./ended.tsx";
 import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } from "./terminal-scroll.tsx";
+import { QuietBusy } from "./quiet-busy.tsx";
 import { TerminalLinks } from "./terminal-links.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
-import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
+import { useTerminalFont } from "./use-terminal-font.ts";
 import { wideGlyphScaler } from "./face-scales.ts";
 import { GlyphWarmup } from "./glyph-warmup.ts";
 
@@ -94,6 +95,8 @@ export function TerminalView(props: TerminalViewProps) {
   const toasts = useToastManager();
   /** Why attaching failed, in plain words; Try again clears it, which mounts the terminal and attaches again. */
   const [unopened, setUnopened] = useState<string | null>(null);
+  /** The first attach is unanswered: the pane says it is opening, not a ready shell with nothing in it (#483). */
+  const [opening, setOpening] = useState(false);
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
@@ -182,7 +185,7 @@ export function TerminalView(props: TerminalViewProps) {
   outputShown.current = scroll.changed;
   useTerminalPort(handle, typed, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
-  useWideGlyphScale(wt, config);
+  useTerminalFont(wt, config);
   // Wide characters in the output are laid out in idle time, so scrolling back to them is not the first time (#286).
   const warmup = useRef<GlyphWarmup | null>(null);
   useEffect(() => {
@@ -271,11 +274,14 @@ export function TerminalView(props: TerminalViewProps) {
     const display = readDisplay(ready.element);
     // A reattach after a reconnect says so: the core applies its size only once this viewer is active again.
     const resumed = attachedBefore.current ? { resumed: true } : {};
+    // A reattach after a reconnect keeps its screen and has the connection's own status; only a first attach says so.
+    if (!attachedBefore.current) setOpening(true);
     connection
       .attach({ terminal: address, cols, rows, history: HISTORY_LINES, display, ...resumed }, { autoCredit: false })
       .then(
         (attached) => {
           if (unmounted.current) return void attached.close();
+          setOpening(false);
           // The program restarted while the line was down: what was typed for it must not reach the new one.
           if (attachedBefore.current && attached.terminal.pid !== program.current) {
             void attached.close();
@@ -318,6 +324,7 @@ export function TerminalView(props: TerminalViewProps) {
         (cause: unknown) => {
           // The connection dropped mid-attach: the next one attaches again (below).
           if (connection.closed || unmounted.current) return;
+          setOpening(false);
           settle(ready, { cause });
         },
       );
@@ -352,7 +359,7 @@ export function TerminalView(props: TerminalViewProps) {
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
     // The scrollbar and the jump button overlay the terminal: neither takes room from the grid.
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" aria-busy={opening}>
       <Terminal
         ref={handle}
         core={core}
@@ -381,6 +388,9 @@ export function TerminalView(props: TerminalViewProps) {
         }}
         onBlur={() => stream.current?.focus(false)}
       />
+      {opening ? (
+        <QuietBusy label="Opening terminal" text="Opening…" className="absolute inset-0 z-10 bg-term-bg" />
+      ) : null}
       {wt === null ? null : (
         <>
           <TerminalScrollbar wt={wt} scroll={scroll} />

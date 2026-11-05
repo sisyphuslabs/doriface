@@ -45,12 +45,17 @@ export async function routeRelaySockets(page: Page, toRelay: string): Promise<vo
   });
 }
 
-export async function startFakeRelayHost(): Promise<FakeRelayHost> {
+/** `machine`: the host's core also has an added machine (the sidebar then lists machines with their state). */
+export async function startFakeRelayHost(options: { readonly machine?: boolean } = {}): Promise<FakeRelayHost> {
   const script = join(import.meta.dirname, "fake-relay-host.ts");
-  const driver: ChildProcess = spawn("bun", [script, `http://127.0.0.1:${E2E_WEB_PORT}`, FAKE_RELAY], {
-    cwd: join(import.meta.dirname, ".."),
-    stdio: ["pipe", "pipe", "inherit"],
-  });
+  const driver: ChildProcess = spawn(
+    "bun",
+    [script, `http://127.0.0.1:${E2E_WEB_PORT}`, FAKE_RELAY, ...(options.machine === true ? ["--machine"] : [])],
+    {
+      cwd: join(import.meta.dirname, ".."),
+      stdio: ["pipe", "pipe", "inherit"],
+    },
+  );
   const out = driver.stdout;
   const input = driver.stdin;
   if (out === null || input === null) throw new Error("the fake relay host has no stdio");
