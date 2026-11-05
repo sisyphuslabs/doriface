@@ -51,6 +51,8 @@ test("a browser that shrinks the page for the keyboard: Show keyboard while it i
   await expect(input).toBeFocused();
   await expectDown(page);
 
+  // A tap in the terminal raises the keyboard, which shrinks the page.
+  await page.locator("[data-terminal]").click();
   await page.setViewportSize({ width: 390, height: 844 - 336 });
   await expectUp(page);
 
