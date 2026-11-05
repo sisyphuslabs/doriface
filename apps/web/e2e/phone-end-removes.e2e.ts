@@ -222,4 +222,8 @@ test("dismissing a failed End takes its mark off the session, which runs on", as
   await expect(ask).toHaveCount(0);
   await expect.poll(() => terminalOf(address).marked).toBe(false);
   expect(terminalOf(address).state).toBe("live");
+  // It ran on as it should; ended here, it is not left for a later spec to find (#226).
+  hc("kill", address);
+  hc("rm", address);
+  expect(onCore(address)).toBe(false);
 });
