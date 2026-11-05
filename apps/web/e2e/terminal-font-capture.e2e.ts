@@ -23,8 +23,6 @@ for (const colorScheme of ["light", "dark"] as const) {
       await page.goto("/");
       const opened = await openNewTerminal(page);
       const address = (await opened.getAttribute("data-terminal")) ?? "";
-      const tab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { selected: true });
-      const name = ((await tab.getAttribute("title")) ?? "").split(" (")[0] ?? "";
       await page.getByRole("link", { name: "Settings" }).first().click();
       await page
         .getByRole("tab", { name: "Terminal", exact: true })
@@ -38,12 +36,13 @@ for (const colorScheme of ["light", "dark"] as const) {
       await page.keyboard.press("Enter");
       await page.getByRole("button", { name: "Close settings" }).first().click();
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-      // The phone list shows every agent; this one is the row named after the terminal opened above.
+      // The phone lists the agents, and the terminal opened above is this test's only one (the terminal guard ends every
+      // test's own). Its row is found by being the one, not by its title: a shell retitles its tab (/bin/sh, then sh)
+      // after it starts, so a title read early names a row that never shows (#527).
       if (width === 390) {
-        await page
-          .getByRole("button", { name: new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`) })
-          .first()
-          .click();
+        const agents = page.locator("button:has([data-floor='name']):has(time)");
+        await expect(agents, "the phone lists the one terminal this test opened").toHaveCount(1, { timeout: 30_000 });
+        await agents.click();
       }
       const terminal = page.locator(`[data-terminal="${address}"]:visible`);
       await expect(terminal).toContainText("$");
