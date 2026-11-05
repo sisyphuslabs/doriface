@@ -34,6 +34,8 @@ export const E2E_WEB_PORT = port("E2E_WEB_PORT");
 export const E2E_LAYOUT_PORT = port("E2E_LAYOUT_PORT");
 /** The layout spec's core environment, so each spec starts with no tabs saved there either. */
 export const E2E_LAYOUT_ENV = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-host.json`);
+/** What the layout host had to stop as it shut down (hc processes it left), for the run's teardown to fail on (#251). */
+export const E2E_LAYOUT_LEFT = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-left.json`);
 export const E2E_LAYOUT_MACHINE_DIR = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-machine`);
 /**
  * The test push services the e2e hosts may post web push notices to (`--push-test-origin`): any port on loopback,

@@ -11,7 +11,8 @@
     ".": "./src/index.ts",
     "./hc-install": "./src/hc-install.ts",
     "./testing": "./src/testing/index.ts",
-    "./testing/push-receiver": "./src/testing/push-receiver.ts"
+    "./testing/push-receiver": "./src/testing/push-receiver.ts",
+    "./testing/run-cores": "./src/testing/run-cores.ts"
   },
   "scripts": {
     "start": "bun src/cli.ts",
