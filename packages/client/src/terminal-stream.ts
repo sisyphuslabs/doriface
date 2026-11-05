@@ -8,6 +8,7 @@ import {
   type Frame,
   type Terminal,
 } from "@doriface/protocol";
+import { HcConnectionClosedError } from "./errors.ts";
 import { Listeners, type Unsubscribe } from "./listeners.ts";
 import { closeFromPayload, connectionClose, type StreamClose } from "./stream-close.ts";
 import type { ChannelHandler } from "./wire.ts";
@@ -107,7 +108,7 @@ export class TerminalStream implements ChannelHandler {
   resize(cols: number, rows: number): boolean {
     if (!isGridSide(cols) || !isGridSide(rows)) throw new RangeError(`grid ${cols}x${rows} is outside 1..${MAX_U16}`);
     if (this.#state !== "open") return false;
-    this.#wire.sendBytes(encodeResize(this.channel, cols, rows));
+    if (!this.#sent(() => this.#wire.sendBytes(encodeResize(this.channel, cols, rows)))) return false;
     this.#size = { cols, rows };
     return true;
   }
@@ -126,7 +127,7 @@ export class TerminalStream implements ChannelHandler {
       throw new RangeError(`consumed(${bytes}) exceeds the ${this.#uncredited} uncredited bytes on this stream`);
     }
     this.#uncredited -= bytes;
-    if (bytes > 0 && this.#state === "open") this.#wire.sendBytes(encodeCredit(this.channel, bytes));
+    if (bytes > 0 && this.#state === "open") this.#sent(() => this.#wire.sendBytes(encodeCredit(this.channel, bytes)));
   }
 
   /** Detaches this viewer; resolves when the core confirms with its own CLOSE. */
@@ -183,7 +184,7 @@ export class TerminalStream implements ChannelHandler {
 
   #credit(bytes: number): void {
     if (bytes === 0 || this.#state !== "open") return;
-    if (this.autoCredit) this.#wire.sendBytes(encodeCredit(this.channel, bytes));
+    if (this.autoCredit) this.#sent(() => this.#wire.sendBytes(encodeCredit(this.channel, bytes)));
     else this.#uncredited += bytes;
   }
 
@@ -191,15 +192,30 @@ export class TerminalStream implements ChannelHandler {
     if (this.#state !== "open") return false;
     const bytes = typeof data === "string" ? utf8.encode(data) : data;
     for (let offset = 0; offset < bytes.byteLength; offset += INPUT_CHUNK_BYTES) {
-      this.#wire.send(this.channel, kind, bytes.subarray(offset, offset + INPUT_CHUNK_BYTES));
+      const chunk = bytes.subarray(offset, offset + INPUT_CHUNK_BYTES);
+      if (!this.#sent(() => this.#wire.send(this.channel, kind, chunk))) return false;
     }
     return true;
   }
 
   #control(kind: number, payload: Uint8Array): boolean {
     if (this.#state !== "open") return false;
-    this.#wire.send(this.channel, kind, payload);
-    return true;
+    return this.#sent(() => this.#wire.send(this.channel, kind, payload));
+  }
+
+  /**
+   * Sends on the wire; false when the link refused the write, as when its socket went away before the wire learned it
+   * (the wire is closed now, and this stream with it). Callers read false as a stream that is no longer open, the
+   * contract `write` already states; a thrown error here escaped as an uncaught page error (#403).
+   */
+  #sent(send: () => void): boolean {
+    try {
+      send();
+      return true;
+    } catch (error) {
+      if (error instanceof HcConnectionClosedError) return false;
+      throw error;
+    }
   }
 
   #finish(info: StreamClose): void {
