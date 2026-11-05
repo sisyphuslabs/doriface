@@ -99,8 +99,14 @@ function staleWrite(frame: Buffer): Buffer {
   return Buffer.concat([header, payload]);
 }
 
-/** Call before page.goto: every connection to the e2e host passes through the returned handle. */
-export async function routeHcSocket(page: Page): Promise<HcSocket> {
+/**
+ * Call before page.goto: every connection to the e2e host passes through the returned handle. `observe` subscribes to
+ * frames as they are sent or delivered, so a spec can await a particular request or answer without polling.
+ */
+export async function routeHcSocket(
+  page: Page,
+  observe?: { readonly sent?: (frame: string) => void; readonly received?: (frame: string) => void },
+): Promise<HcSocket> {
   const live = new Set<WebSocketRoute>();
   const sent: string[] = [];
   let down = false;
@@ -124,6 +130,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
       const frame = stale && typeof message !== "string" ? Buffer.concat(hcFrames(message).map(staleWrite)) : message;
       const text = typeof frame === "string" ? frame : frame.toString("latin1");
       sent.push(text);
+      observe?.sent?.(text);
       const method = held.find((name) => text.includes(`"method":"${name}"`));
       if (method === undefined) host.send(frame);
       else
@@ -138,6 +145,7 @@ export async function routeHcSocket(page: Page): Promise<HcSocket> {
         const text = typeof frame === "string" ? frame : frame.toString("latin1");
         const deliver = (): void => {
           received.push(text);
+          observe?.received?.(text);
           socket.send(frame);
         };
         const hold = [...hostHolds].find((entry) => entry.needles.some((needle) => text.includes(needle)));
