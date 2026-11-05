@@ -81,12 +81,22 @@ export function Workspace({ connection }: WorkspaceProps) {
     [toasts],
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
+  const unsaved = useCallback(
+    (message: string) =>
+      toasts.add({
+        type: "error",
+        title: "The tab order was not saved",
+        description: `${message.replace(/\.$/, "")}. This window keeps it until it reloads.`,
+      }),
+    [toasts],
+  );
   const layout = useLayout(
     connection.hello.core.id,
     layouts,
     fed.loaded ? terminals : [],
     failed,
     told,
+    unsaved,
     machineReads > 0,
   );
   useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, layout.dropPane);
