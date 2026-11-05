@@ -158,6 +158,11 @@ jobs:
         working-directory: apps/web
         env:
           CI: "1"
+      - name: Two e2e runs at once, each on its own ports (#37)
+        run: bun run test:e2e:two-runs
+        working-directory: apps/web
+        env:
+          CI: "1"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
