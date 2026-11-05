@@ -4,6 +4,7 @@ import {
   awayFromBottom,
   type ScrollBox,
   scrollbarGrabAt,
+  scrollbarLane,
   scrollbarRowAt,
   scrollbarThumb,
   scrollRows,
@@ -29,6 +30,14 @@ describe("scrollbarThumb", () => {
     expect(scrollbarThumb({ total: 10, offset: 0, len: 25 }, 400, 16)).toBeNull();
     expect(scrollbarThumb({ total: 100, offset: 0, len: 0 }, 400, 16)).toBeNull();
     expect(scrollbarThumb({ total: 100, offset: 0, len: 25 }, 0, 16)).toBeNull();
+  });
+});
+
+describe("scrollbarLane", () => {
+  test("runs from the text's end to the edge, the last 8 px when the text runs closer, never past the pane", () => {
+    expect(scrollbarLane(1000, 985.5, 8)).toBe(14.5);
+    expect(scrollbarLane(1000, 994, 8)).toBe(8);
+    expect(scrollbarLane(6, 4, 8)).toBe(6);
   });
 });
 
