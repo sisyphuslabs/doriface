@@ -23,7 +23,7 @@ export function AgentLists({ terminals, active, onOpen, rail = false, heading = 
   return (
     <div className="flex flex-col gap-4 px-2 pb-3">
       <AgentsGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} heading={heading} />
-      <SpacesGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
+      <SpacesGroup onOpen={onOpen} rail={rail} />
     </div>
   );
 }
@@ -37,7 +37,7 @@ export function SidebarLists({ terminals, active, onOpen, rail = false }: Omit<A
       spaces={
         terminalsLoaded ? (
           <div className={pad}>
-            <SpacesGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
+            <SpacesGroup onOpen={onOpen} rail={rail} />
           </div>
         ) : (
           <div aria-busy="true" className={pad} />

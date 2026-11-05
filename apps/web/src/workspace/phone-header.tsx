@@ -6,13 +6,12 @@ import {
   agentStatus,
   machineOf,
   type Session,
-  spaceId,
   spaceName,
   tabPosition,
   terminalTitle,
   toAgent,
-  toSpaces,
 } from "./model.ts";
+import { useSpaceSelection } from "./space-selection.ts";
 import { SessionMenu } from "./session-menu.tsx";
 import { useNow } from "./use-now.ts";
 
@@ -35,8 +34,11 @@ const COUNTED = [
 export function PhoneHeader({ terminal, terminals, onBack, onOpen, action }: PhoneHeaderProps) {
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
-  const where = machine === undefined ? spaceName(terminal) : `${machine} · ${spaceName(terminal)}`;
-  const position = tabPosition(terminals, terminal.address);
+  // Where it is: the layout space whose tab shows it (#404), else where it runs.
+  const { spaces } = useSpaceSelection();
+  const space = spaces.find((each) => each.addresses.includes(terminal.address))?.name ?? spaceName(terminal);
+  const where = machine === undefined ? space : `${machine} · ${space}`;
+  const position = tabPosition(spaces, terminals, terminal.address);
   const counts = agentCounts(terminals);
   return (
     <header
@@ -94,6 +96,8 @@ function SpaceSwitcher(props: {
   readonly onOpen: (address: string) => void;
 }) {
   const { terminals, active, onOpen } = props;
+  // The layout documents' spaces, as the sidebar lists them (#404).
+  const { spaces } = useSpaceSelection();
   const [open, setOpen] = useState(false);
   const now = useNow();
   const pick = (address: string): void => {
@@ -109,14 +113,14 @@ function SpaceSwitcher(props: {
       trigger={<IconButton label="Switch space or tab" icon={<ArrowLeftRight />} size="md" />}
     >
       <div className="flex flex-col gap-4">
-        {toSpaces(terminals).map((space) => (
+        {spaces.map((space) => (
           <SidebarSection
             key={space.id}
             title={space.machine === undefined ? space.name : `${space.machine} · ${space.name}`}
             count={space.tabs}
           >
-            {terminals
-              .filter((entry) => entry.state === "live" && spaceId(entry) === space.id)
+            {space.addresses
+              .flatMap((address) => terminals.filter((entry) => entry.address === address && entry.state === "live"))
               .map((entry) => (
                 <AgentRow
                   key={entry.address}

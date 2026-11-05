@@ -153,7 +153,8 @@ export function desktopActions(
 ): ActionHandler {
   return (action) => {
     const live = terminals.filter((terminal) => terminal.state === "live").map((terminal) => terminal.address);
-    const keys = layout.tabs.map((tab) => tab.key);
+    // The tab bar's tabs: the selected space's (#404).
+    const keys = layout.shown.map((tab) => tab.key);
     const active = layout.active?.key ?? null;
     const focused = layout.focused?.address ?? null;
     const [verb, argument = ""] = action.split(":");

@@ -1,16 +1,15 @@
-import type { Terminal } from "@doriface/protocol";
+import type { JsonObject, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import {
   agentCounts,
   agentStatus,
   asksBeforeClosing,
-  firstInSpace,
   groupAgents,
   runsProgram,
-  spaceId,
   tabPosition,
   terminalTitle,
-  toSpaces,
+  layoutSpaces,
+  type SpacesSource,
 } from "./model.ts";
 
 const terminal = (fields: Partial<Terminal>): Terminal => ({
@@ -57,62 +56,101 @@ describe("closing", () => {
   });
 });
 
-describe("spaces", () => {
-  test("one name on two machines is two spaces, each opening and matching its own machine's terminal", () => {
-    const here = terminal({ address: "t1", cwd: "/home/me/api" });
-    const there = terminal({ address: "box/t4", cwd: "/srv/api" });
-    const spaces = toSpaces([here, there]);
-    expect(spaces.map((space) => space.name)).toEqual(["api", "api"]);
-    expect(new Set(spaces.map((space) => space.id)).size).toBe(2);
-    for (const active of [here, there]) {
-      const selected = spaces.filter((space) => space.id === spaceId(active));
-      expect(selected).toHaveLength(1);
-      expect(firstInSpace([here, there], selected[0]?.id ?? "")).toBe(active.address);
-    }
-  });
+/** A layout document of these spaces, each tab one row of terminal panes (local addresses). */
+const docOf = (
+  spaces: readonly { id: string; name?: string; folder?: string; tabs: readonly (readonly string[])[] }[],
+): JsonObject => ({
+  spaces: spaces.map((space) => ({
+    id: space.id,
+    name: space.name ?? "",
+    folder: space.folder ?? "",
+    tabs: space.tabs.map((terminals, index) => ({
+      id: `${space.id}-t${index}`,
+      name: "",
+      root: {
+        id: `${space.id}-t${index}`,
+        type: "row",
+        children: terminals.map((local, at) => ({
+          id: `${space.id}-p${index}-${at}`,
+          type: "block",
+          content: { terminal: local },
+        })),
+      },
+    })),
+  })),
 });
+const here = (doc: JsonObject): SpacesSource => ({ machine: null, machineId: null, doc });
+const on = (machine: string, doc: JsonObject): SpacesSource => ({ machine, machineId: `id-${machine}`, doc });
 
-describe("same-named spaces on one machine (#397)", () => {
-  test("two directories ending the same way are two spaces, told apart by their parent, each selecting only itself", () => {
-    const home = terminal({ address: "t1", cwd: "/Users/yeongyu" });
-    const other = terminal({ address: "t2", cwd: "/Volumes/data/yeongyu" });
-    const spaces = toSpaces([home, other]);
-    expect(spaces.map((space) => space.name)).toEqual(["yeongyu · Users", "yeongyu · data"]);
-    for (const active of [home, other]) {
-      const selected = spaces.filter((space) => space.id === spaceId(active));
-      expect(selected).toHaveLength(1);
-      expect(firstInSpace([home, other], selected[0]?.id ?? "")).toBe(active.address);
-    }
+describe("spaces from the layout documents (#404)", () => {
+  test("one name on two machines is two spaces, each keyed to its own machine", () => {
+    const spaces = layoutSpaces(
+      [
+        on("box", docOf([{ id: "spc1", folder: "/srv/api", tabs: [["t4"]] }])),
+        here(docOf([{ id: "spc1", folder: "/home/me/api", tabs: [["t1"]] }])),
+      ],
+      [],
+    );
+    expect(spaces.map((space) => [space.id, space.name, space.machine])).toEqual([
+      ["space:spc1", "api", undefined],
+      ["space:id-box/spc1", "api", "box"],
+    ]);
   });
 
-  test("a space label still gathers terminals from any directory, and an unshared name gets no suffix", () => {
-    const spaces = toSpaces([
-      terminal({ address: "t1", cwd: "/a/x", labels: { space: "api" } }),
-      terminal({ address: "t2", cwd: "/b/y", labels: { space: "api" } }),
+  test("two folders ending the same way are told apart by their parent (#397); a saved name keeps no suffix", () => {
+    const spaces = layoutSpaces(
+      [
+        here(
+          docOf([
+            { id: "a", folder: "/Users/yeongyu", tabs: [["t1"]] },
+            { id: "b", folder: "/Volumes/data/yeongyu", tabs: [["t2"]] },
+            { id: "c", name: "api", folder: "/a/x", tabs: [["t3"]] },
+          ]),
+        ),
+      ],
+      [],
+    );
+    expect(spaces.map((space) => space.name)).toEqual(["yeongyu · Users", "yeongyu · data", "api"]);
+  });
+
+  test("a space counts its tabs, is named after its first live terminal when it saves no name or folder, and lists its terminals in tab order", () => {
+    const working = { state: "working" } as unknown as NonNullable<Terminal["status"]>;
+    const spaces = layoutSpaces(
+      [
+        here(docOf([{ id: "s", tabs: [["t1", "t2"], ["t3"]] }])),
+        on("box", docOf([{ id: "r", folder: "/srv", tabs: [["t9"]] }])),
+      ],
+      [
+        terminal({ address: "t1", cwd: "/w/web", status: working }),
+        terminal({ address: "t2", cwd: "/w/other" }),
+        terminal({ address: "t3", cwd: "/w/x", state: "finished" }),
+      ],
+    );
+    expect(spaces.map((space) => [space.name, space.tabs, space.attention, space.addresses])).toEqual([
+      ["web", 2, "working", ["t1", "t2", "t3"]],
+      ["srv", 1, undefined, ["box/t9"]],
     ]);
-    expect(spaces.map((space) => [space.name, space.tabs])).toEqual([["api", 2]]);
   });
 });
 
 describe("tabPosition", () => {
   const terminals = [
-    terminal({ address: "t1", cwd: "/home/me/api" }),
-    terminal({ address: "t2", cwd: "/home/me/web" }),
-    terminal({ address: "t3", cwd: "/home/me/api", state: "finished" }),
-    terminal({ address: "t4", cwd: "/home/me/api" }),
-    terminal({ address: "box/t4", cwd: "/srv/api" }),
+    terminal({ address: "t1" }),
+    terminal({ address: "t2" }),
+    terminal({ address: "t3", state: "finished" }),
+    terminal({ address: "t4" }),
   ];
+  const spaces = layoutSpaces([here(docOf([{ id: "s", folder: "/w", tabs: [["t1"], ["t3"], ["t4"]] }]))], terminals);
 
-  test("counts the live terminals of the same space on the same machine, in feed order", () => {
-    expect(tabPosition(terminals, "t1")).toEqual({ index: 1, count: 2 });
-    expect(tabPosition(terminals, "t4")).toEqual({ index: 2, count: 2 });
-    expect(tabPosition(terminals, "t2")).toEqual({ index: 1, count: 1 });
-    expect(tabPosition(terminals, "box/t4")).toEqual({ index: 1, count: 1 });
+  test("counts the live terminals of its space's tabs, in tab order", () => {
+    expect(tabPosition(spaces, terminals, "t1")).toEqual({ index: 1, count: 2 });
+    expect(tabPosition(spaces, terminals, "t4")).toEqual({ index: 2, count: 2 });
   });
 
-  test("a finished or unknown terminal has no position", () => {
-    expect(tabPosition(terminals, "t3")).toBeUndefined();
-    expect(tabPosition(terminals, "t9")).toBeUndefined();
+  test("a finished terminal, one in no tab and an unknown one have no position", () => {
+    expect(tabPosition(spaces, terminals, "t3")).toBeUndefined();
+    expect(tabPosition(spaces, terminals, "t2")).toBeUndefined();
+    expect(tabPosition(spaces, terminals, "t9")).toBeUndefined();
   });
 });
 

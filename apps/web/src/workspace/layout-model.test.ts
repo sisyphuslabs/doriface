@@ -1,8 +1,11 @@
-import type { Terminal } from "@doriface/protocol";
+import type { JsonObject, Terminal } from "@doriface/protocol";
+import { docSpaces, panesOf, tabsOf } from "@doriface/protocol/layout";
 import { describe, expect, test } from "bun:test";
 import {
+  adoptLoose,
   afterClosing,
   buildTabs,
+  HOME_SPACE,
   keepMounts,
   keepTransient,
   looseKey,
@@ -68,6 +71,7 @@ const alone = (address: string): LayoutTab => ({
   key: TRANSIENT,
   id: TRANSIENT,
   space: "",
+  spaceKey: "space:",
   machine: null,
   name: "",
   root: { children: [], id: "", type: "row" },
@@ -117,5 +121,79 @@ describe("keepMounts: a document tab that takes over a terminal shown alone keep
     keepMounts([shownAlone("box/t9")], mounts);
     const tabs = keepMounts([docTab("core/tb1", "p1", "box/t2"), docTab("core/tb9", "p9", "box/t9")], mounts);
     expect(tabs.map((tab) => tab.mount ?? tab.key)).toEqual([TRANSIENT, "core/tb9"]);
+  });
+});
+
+const loose = (address: string, cwd: string, fields: Partial<Terminal> = {}): Terminal =>
+  ({
+    address,
+    argv: ["sh"],
+    cols: 80,
+    rows: 24,
+    created_ms: 0,
+    cwd,
+    labels: {},
+    screen: "exact",
+    state: "live",
+    ...fields,
+  }) as Terminal;
+const ids = (): ((prefix: "tb" | "p" | "spc") => string) => {
+  let n = 0;
+  return (prefix) => `${prefix}${(n += 1)}`;
+};
+const saved: JsonObject = {
+  spaces: [
+    {
+      id: "spc-w",
+      name: "",
+      folder: "/w",
+      tabs: [
+        {
+          id: "tb-x",
+          name: "",
+          root: { children: [{ content: { terminal: "t1" }, id: "p-x", type: "block" }], id: "tb-x", type: "row" },
+        },
+      ],
+    },
+    { id: "spc-api", name: "", folder: "/w/api", tabs: [] },
+  ],
+};
+const where = (doc: JsonObject | null) =>
+  doc === null ? null : tabsOf(doc).map((tab) => [tab.space, panesOf(tab.root).map((pane) => pane.terminal)]);
+
+describe("adoptLoose (#404)", () => {
+  test("a terminal no tab shows goes to the deepest space whose folder holds it, else to one Home space", () => {
+    const adopted = adoptLoose(
+      saved,
+      [loose("t1", "/w"), loose("t2", "/w/api/src"), loose("t3", "/w/web"), loose("t4", "/tmp"), loose("t5", "/srv")],
+      ids(),
+    );
+    expect(where(adopted)).toEqual([
+      ["spc-w", ["t1"]],
+      ["spc-w", ["t3"]],
+      ["spc-api", ["t2"]],
+      ["spc7", ["t4"]],
+      ["spc7", ["t5"]],
+    ]);
+    expect(adopted === null ? null : docSpaces(adopted).at(-1)?.name).toBe(HOME_SPACE);
+  });
+
+  test("nothing to adopt writes nothing: shown, finished and started-by-another terminals stay as they are", () => {
+    expect(
+      adoptLoose(saved, [
+        loose("t1", "/w"),
+        loose("t6", "/w", { state: "finished" }),
+        loose("t7", "/w", { parent: "t1" }),
+      ]),
+    ).toBeNull();
+  });
+
+  test("adopting again adopts nothing more, and an existing Home is reused", () => {
+    const once = adoptLoose(null, [loose("t1", "/a")], ids());
+    expect(once === null ? null : adoptLoose(once, [loose("t1", "/a")])).toBeNull();
+    const twice = once === null ? null : adoptLoose(once, [loose("t1", "/a"), loose("t2", "/b")], ids());
+    expect(twice === null ? null : docSpaces(twice).map((space) => [space.name, space.tabs.length])).toEqual([
+      [HOME_SPACE, 2],
+    ]);
   });
 });

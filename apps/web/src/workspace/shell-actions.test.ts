@@ -22,6 +22,7 @@ const tab: LayoutTab = {
   key: "tb1",
   id: "tb1",
   space: "spc1",
+  spaceKey: "space:spc1",
   machine: null,
   name: "",
   root: { children: [{ content: { terminal: "t1" }, id: "p1", type: "block" }], id: "tb1", type: "row" },
@@ -31,6 +32,8 @@ const tab: LayoutTab = {
 };
 const layout: Layout = {
   tabs: [tab],
+  shown: [tab],
+  selectSpace: noop,
   active: tab,
   focused: pane,
   zoomed: null,
@@ -99,6 +102,7 @@ const stripTab = (key: string): LayoutTab => ({
   key,
   id: key,
   space: "s",
+  spaceKey: "space:s",
   machine: null,
   name: "",
   root: { children: [], id: key, type: "row" },

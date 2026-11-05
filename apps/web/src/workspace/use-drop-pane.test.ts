@@ -6,6 +6,7 @@ const tab = (key: string, machine: string | null, addresses: readonly string[]):
   key,
   id: key,
   space: "s",
+  spaceKey: "space:s",
   machine,
   name: "",
   root: { children: [], id: key, type: "row" },

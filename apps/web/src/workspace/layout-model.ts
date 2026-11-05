@@ -1,6 +1,6 @@
-import type { Terminal } from "@doriface/protocol";
-import { type Node, panesOf, tabsOf, terminalBlock } from "@doriface/protocol/layout";
-import { tabKey, type View } from "../layout/view.ts";
+import type { JsonObject, Terminal } from "@doriface/protocol";
+import { addTab, docSpaces, freshId, type Node, panesOf, tabsOf, terminalBlock } from "@doriface/protocol/layout";
+import { spaceKey, tabKey, type View } from "../layout/view.ts";
 import { machineOf } from "./model.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
@@ -17,6 +17,8 @@ export interface LayoutTab {
   readonly key: string;
   readonly id: string;
   readonly space: string;
+  /** The space it belongs to across machines (`spaceKey`); a tab of no document is a space of its own. */
+  readonly spaceKey: string;
   readonly machine: string | null;
   readonly name: string;
   readonly root: Node;
@@ -98,6 +100,7 @@ function docTabs(layout: MachineLayout): LayoutTab[] {
     key: tabKey(layout.machineId, tab.id),
     id: tab.id,
     space: tab.space,
+    spaceKey: spaceKey(layout.machineId, tab.space),
     machine: layout.machine,
     name: tab.name,
     root: tab.root,
@@ -118,6 +121,7 @@ function looseTab(address: string, layouts: readonly MachineLayout[]): LayoutTab
     key: looseKey(address),
     id: looseKey(address),
     space: "",
+    spaceKey: looseKey(address),
     machine,
     name: "",
     root: { children: [terminalBlock(TRANSIENT, localOf(address))], id: "", type: "row" },
@@ -146,7 +150,16 @@ export function buildTabs(
   const local = layouts.find((layout) => layout.machine === null);
   const first = terminals.find((terminal) => terminal.state === "live");
   if (local === undefined || !local.loaded || local.doc !== null || first === undefined) return [];
-  return [{ ...looseTab(first.address, layouts), key: TRANSIENT, id: TRANSIENT }];
+  return [{ ...looseTab(first.address, layouts), key: TRANSIENT, id: TRANSIENT, spaceKey: TRANSIENT }];
+}
+
+/**
+ * The tabs the tab bar shows: those of the space the tab in view belongs to, in their document's order, as herdr-app's
+ * strip shows the selected space's tabs (#404). With no tab in view, the first tab's space.
+ */
+export function spaceTabs(tabs: readonly LayoutTab[], active: LayoutTab | null): LayoutTab[] {
+  const space = (active ?? tabs[0])?.spaceKey;
+  return space === undefined ? [] : tabs.filter((tab) => tab.spaceKey === space);
 }
 
 export interface Picked {
@@ -182,11 +195,14 @@ export function keepTransient(
 }
 
 /**
- * The tab shown once this screen closes `closed`, the tab in view: the last of the others, as the tab strip closed tabs
- * before the layout lived in the core, so the keyboard lands in a terminal that is left. Null when no other tab is open.
+ * The tab shown once this screen closes `closed`, the tab in view: the last of the others in its own space, else the last
+ * of all the others, so the keyboard lands in a terminal that is left and the space stays in view while it has a tab.
+ * Null when no other tab is open.
  */
 export function afterClosing(tabs: readonly LayoutTab[], closed: string): string | null {
-  return tabs.findLast((tab) => tab.key !== closed)?.key ?? null;
+  const space = tabs.find((tab) => tab.key === closed)?.spaceKey;
+  const others = tabs.filter((tab) => tab.key !== closed);
+  return (others.findLast((tab) => tab.spaceKey === space) ?? others.at(-1))?.key ?? null;
 }
 
 export function findTerminal(tabs: readonly LayoutTab[], address: string): { tab: LayoutTab; pane: LayoutPane } | null {
@@ -195,4 +211,58 @@ export function findTerminal(tabs: readonly LayoutTab[], address: string): { tab
     if (pane !== undefined) return { tab, pane };
   }
   return null;
+}
+
+/** Whether a space's folder holds the directory: the folder itself, or one inside it. */
+const holds = (folder: string, dir: string): boolean =>
+  folder !== "" && (dir === folder || dir.startsWith(folder.endsWith("/") ? folder : `${folder}/`));
+
+/** The space adopted terminals with no space of their own go to, as herdr-app names its fallback. */
+export const HOME_SPACE = "Home";
+
+/**
+ * The document with every live terminal of its machine that no tab shows adopted as a tab of its own (#404): in the space
+ * whose folder holds its working directory (the deepest such folder), else in the machine's Home space, made when there
+ * is none. A terminal another one started (`parent`) is not a tab of its own. Null when every terminal has a tab, so
+ * nothing is written; read inside the document's edit, so a reload or a second device adopts nothing twice.
+ */
+export function adoptLoose(
+  doc: JsonObject | null,
+  terminals: readonly Terminal[],
+  makeId: (prefix: "tb" | "p" | "spc") => string = freshId,
+): JsonObject | null {
+  const shown = new Set(
+    doc === null
+      ? []
+      : tabsOf(doc).flatMap((tab) =>
+          panesOf(tab.root).flatMap((pane) => (pane.terminal === null ? [] : [pane.terminal])),
+        ),
+  );
+  const loose = terminals.filter(
+    (terminal) =>
+      terminal.state === "live" && (terminal.parent ?? null) === null && !shown.has(localOf(terminal.address)),
+  );
+  if (loose.length === 0) return null;
+  const spaces = doc === null ? [] : docSpaces(doc);
+  let home = spaces.find((space) => space.name === HOME_SPACE && space.folder === "")?.id;
+  let next = doc;
+  for (const terminal of loose) {
+    const dir = terminal.foreground?.cwd ?? terminal.cwd;
+    const owner = spaces
+      .filter((space) => holds(space.folder, dir))
+      .toSorted((a, b) => b.folder.length - a.folder.length)[0];
+    const id = makeId("tb");
+    const tab: JsonObject = {
+      id,
+      name: "",
+      root: { children: [terminalBlock(makeId("p"), localOf(terminal.address))], id, type: "row" },
+    };
+    if (owner !== undefined) {
+      next = addTab(next, { id: owner.id, folder: owner.folder }, tab);
+    } else {
+      home ??= makeId("spc");
+      next = addTab(next, { id: home, folder: "", name: HOME_SPACE }, tab);
+    }
+  }
+  return next;
 }
