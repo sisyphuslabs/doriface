@@ -25,9 +25,10 @@ function describe(state: ConnectionState): string {
 
 function label(icon: ReactNode, text: string) {
   return (
-    <span className="flex items-center gap-2 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
-      {icon}
-      <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
+    <span className="flex items-start gap-2 [&_svg]:size-4 [&_svg]:text-muted-foreground">
+      {/* One line tall, so the icon centres on the text's first line however many lines the text takes. */}
+      <span className="flex h-[1lh] shrink-0 items-center">{icon}</span>
+      <span className="min-w-0">{text}</span>
     </span>
   );
 }
