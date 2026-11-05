@@ -55,6 +55,16 @@ const programName = (path: string): string =>
   (path.split(/[/\\]/).at(-1) ?? path).replace(/^-+/, "").replace(/\.exe$/i, "");
 
 /**
+ * What runs in a terminal, as herdr-app's tab strip draws its icon: an agent (one that reports its state over OSC 7501),
+ * a shell at its prompt, or another program in front of the shell.
+ */
+export function programKind(terminal: Session): "agent" | "shell" | "program" {
+  if (terminal.status?.state !== undefined) return "agent";
+  const front = terminal.foreground?.argv[0] ?? terminal.foreground?.name ?? terminal.argv[0] ?? "";
+  return SHELLS.has(programName(front)) ? "shell" : "program";
+}
+
+/**
  * Whether closing would stop a program at work, as herdr-app's `busy` reads it: an agent in its turn, or a program in
  * front of the shell. A shell at its prompt and an agent between turns are not.
  */

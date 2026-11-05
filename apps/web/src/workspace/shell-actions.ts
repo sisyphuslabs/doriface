@@ -23,6 +23,7 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
     "pane.equalize",
     "pane.zoom",
     "tab.close",
+    "tab.rename",
     "tab.move:left",
     "tab.move:right",
     "session.rename",
@@ -69,7 +70,7 @@ function canMove(id: string, { keys, active }: Strip): boolean {
  * then each is listed as unavailable, with why.
  */
 function unavailable(id: string, inView: boolean, readOnly: string | null): string | undefined {
-  if (id === "space.rename") return readOnly ?? undefined;
+  if (id === "space.rename" || id === "tab.rename") return readOnly ?? undefined;
   if (!id.startsWith("pane.split:")) return undefined;
   return inView ? (readOnly ?? undefined) : "No terminal to split";
 }
