@@ -153,6 +153,56 @@ test("Hangul fills its two cells as Ghostty sizes a fallback font, leaving no wi
   }
 });
 
+test("a block split across two fallback faces keeps every wide glyph's ink inside its two cells (#252)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  // \u6C34 and \u4E2D come from the first face that has them (a Korean Hanja font, where one is installed); the
+  // simplified-only \u6D4B\u8BD5\u7B80\u4F53 fall back to a Chinese face. Hangul and kana are their own blocks.
+  await print(page, terminal, "\u{6D4B}\u{8BD5}\u{7B80}\u{4F53} \u{6C34}\u{4E2D} \u{D55C}\u{AE00} \u{3042}\u{3044}");
+  const wide = liveWide(terminal);
+  await expect(wide).toHaveCount(10, { timeout: 15_000 });
+  const glyphs = await wide.evaluateAll((spans) => {
+    const context = document.createElement("canvas").getContext("2d");
+    return spans.map((span) => {
+      const box = span.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      const advance = range.getBoundingClientRect();
+      const style = getComputedStyle(span);
+      let inkLeft = advance.left;
+      let inkRight = advance.right;
+      if (context !== null) {
+        context.font = `${style.fontSize} ${style.fontFamily}`;
+        const ink = context.measureText(span.textContent ?? "");
+        inkLeft = advance.left - ink.actualBoundingBoxLeft;
+        inkRight = advance.left + ink.actualBoundingBoxRight;
+      }
+      return {
+        text: span.textContent ?? "",
+        box: { left: box.left, right: box.right },
+        advance: { left: advance.left, right: advance.right },
+        ink: { left: inkLeft, right: inkRight },
+      };
+    });
+  });
+  for (const glyph of glyphs) {
+    // Half a pixel either way for subpixel positioning; a glyph sized past its cells is a whole pixel over.
+    expect
+      .soft(glyph.advance.left, `${glyph.text}: advance starts inside`)
+      .toBeGreaterThanOrEqual(glyph.box.left - 0.5);
+    expect.soft(glyph.advance.right, `${glyph.text}: advance ends inside`).toBeLessThanOrEqual(glyph.box.right + 0.5);
+    expect.soft(glyph.ink.left, `${glyph.text}: ink starts inside`).toBeGreaterThanOrEqual(glyph.box.left - 0.5);
+    expect.soft(glyph.ink.right, `${glyph.text}: ink ends inside`).toBeLessThanOrEqual(glyph.box.right + 0.5);
+  }
+  // Hangul and kana still fill their two cells: their size does not change.
+  for (const glyph of glyphs.filter(({ text }) => /[\u{AC00}-\u{D7A3}\u{3040}-\u{30FF}]/u.test(text))) {
+    const box = glyph.box.right - glyph.box.left;
+    expect.soft(glyph.advance.right - glyph.advance.left, `${glyph.text}: fills its cells`).toBeGreaterThan(box - 1);
+  }
+});
+
 /** WCAG relative luminance of a computed `rgb(...)` colour. */
 function luminance(css: string): number {
   const channels = (css.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
