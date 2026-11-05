@@ -15,7 +15,7 @@ import {
   onDesktopRunAction,
   setDesktopBackground,
 } from "./desktop/bridge.ts";
-import { bootConnection } from "./desktop/local-host.ts";
+import { bootConnection, startFailure } from "./desktop/local-host.ts";
 import { captureInstallPrompt } from "./device/install.ts";
 import { TerminalStyle } from "./ghostty/terminal-style.tsx";
 import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
@@ -51,7 +51,11 @@ if (location.protocol === "https:" || location.protocol === "http:") {
   listenForNotices(() => void router.navigate({ to: "/" }));
   followConnection();
 } else void removeServiceWorkers();
-void bootConnection(desktopBridge(), connectionStore);
+const desktop = desktopBridge();
+// This computer's host, if it dies while the app runs, is started again before the link to it is tried again (#515).
+if (desktop !== null)
+  connectionStore.restartsLocalHost({ start: () => desktop.startLocalHost(), failure: startFailure });
+void bootConnection(desktop, connectionStore);
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
 function paintWindow(): void {
   setDesktopBackground(getComputedStyle(document.documentElement).getPropertyValue("--background").trim());
