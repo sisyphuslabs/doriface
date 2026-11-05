@@ -183,6 +183,11 @@ export function useLayout(
     [layouts, terminals, loose],
   );
   const { active, focused, zoomed } = pick(tabs, view);
+  // A document tab that took over the selected loose tab's view is the selected tab from now on, also after a reload.
+  const takenOver = active !== null && active.key !== view.active && active.mount === view.active ? active.key : null;
+  useEffect(() => {
+    if (takenOver !== null) setView((prev) => ({ ...prev, active: takenOver }));
+  }, [takenOver]);
   const shown = useMemo(() => spaceTabs(tabs, active), [tabs, active]);
   // Each space remembers the tab it showed, so picking the space again brings that tab back (herdr-app's `Space.active`).
   const remembered = active === null ? undefined : view.spaces[active.spaceKey];

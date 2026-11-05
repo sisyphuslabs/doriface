@@ -11,6 +11,7 @@ import {
   layoutIds,
   looseKey,
   newMounts,
+  pick,
   TRANSIENT,
   type LayoutTab,
 } from "./layout-model.ts";
@@ -137,6 +138,18 @@ describe("keepMounts: a document tab that takes over a terminal shown alone keep
     keepMounts([shownAlone("box/t2")], mounts);
     const [tab] = keepMounts([docTab("core/tb1", "p1", "box/t2")], mounts);
     expect(tab?.mount).toBeUndefined();
+  });
+
+  test("a loose tab adopted into its machine's layout keeps the selection in the tab that took its view (#495)", () => {
+    const ids = layoutIds([here]);
+    const key = looseKey("box/t2", ids);
+    const mounts = newMounts();
+    keepMounts([docTab("core/tb0", "p0", "t1"), { ...shownAlone("box/t2"), key, id: key }], mounts);
+    const tabs = keepMounts([docTab("core/tb0", "p0", "t1"), docTab("box/tb1", "p1", "box/t2")], mounts);
+    const view = { active: key, focused: { [key]: TRANSIENT }, zoomed: {}, spaces: {} };
+    expect(pick(tabs, view).active?.key).toBe("box/tb1");
+    expect(pick(tabs, view).focused?.address).toBe("box/t2");
+    expect(pick(tabs, { ...view, active: "gone" }).active?.key).toBe("core/tb0");
   });
 
   test("two document tabs never share the lone tab's mount", () => {

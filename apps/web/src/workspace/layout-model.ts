@@ -179,9 +179,15 @@ export interface Picked {
   readonly zoomed: string | null;
 }
 
-/** The selected tab and its focused pane: what the view remembers when it is still there, else the first. */
+/**
+ * The selected tab and its focused pane: what the view remembers when it is still there, else the document tab that took
+ * over its view (a loose or lone tab whose terminal a document now holds, as an adoption writes it: keepMounts), else
+ * the first. Without the take-over a loose tab adopted into its machine's layout would lose the selection to the first
+ * tab while its terminal's view lived on, hidden (#495).
+ */
 export function pick(tabs: readonly LayoutTab[], view: View): Picked {
-  const active = tabs.find((tab) => tab.key === view.active) ?? tabs[0] ?? null;
+  const active =
+    tabs.find((tab) => tab.key === view.active) ?? tabs.find((tab) => tab.mount === view.active) ?? tabs[0] ?? null;
   if (active === null) return { active, focused: null, zoomed: null };
   const remembered = view.focused[active.key];
   const focused = active.panes.find((pane) => pane.id === remembered) ?? active.panes[0] ?? null;
