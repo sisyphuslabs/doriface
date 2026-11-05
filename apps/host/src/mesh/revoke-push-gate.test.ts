@@ -82,7 +82,7 @@ describe("a held revoke push that meets a dial gate (sections 5.3 and 8.2)", () 
     const dueAt = gate?.nextAt ?? 0;
     const firstWindow = clock.now() + 60_000;
     expect(dueAt).toBeLessThan(firstWindow);
-    await clock.until(holds(b, revoke), firstWindow - clock.now() + 1_000);
+    await clock.untilTimers(holds(b, revoke), firstWindow - clock.now() + 1_000);
     expect(clock.now()).toBeLessThanOrEqual(firstWindow + 1_000);
     await clock.advance(4 * 60_000);
     expect((await Promise.all(lines)).every((grant) => grant.ok)).toBe(true);
@@ -94,7 +94,7 @@ describe("the released revoke push (sections 5.3 and 8.2)", () => {
     const { clock, a, b } = pair();
     const pushes = queue(a, "push");
     const revoke = revokeOf(a, b);
-    const took = await clock.until(holds(b, revoke), 120_000);
+    const took = await clock.untilTimers(holds(b, revoke), 120_000);
     expect(took).toBeLessThanOrEqual(61_000);
     await clock.advance(120_000);
     expect((await Promise.all(pushes)).every((grant) => grant.ok)).toBe(true);
@@ -119,7 +119,7 @@ describe("the released revoke push (sections 5.3 and 8.2)", () => {
     const revoke = revokeOf(a, b);
     await clock.advance(GOSSIP_TIMINGS.revokedLastMs + 1);
     mesh.online("b");
-    await clock.until(holds(b, revoke), 60_000);
+    await clock.untilTimers(holds(b, revoke), 60_000);
     const purposes: DialPurpose[] = [];
     const acquire = a.policy.acquire.bind(a.policy);
     spyOn(a.policy, "acquire").mockImplementation((member, purpose, options) => {
