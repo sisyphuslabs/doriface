@@ -2,6 +2,7 @@ import type { AvatarColor } from "@doriface/ui";
 import { AVATAR_COLORS } from "@doriface/ui";
 import { useSyncExternalStore } from "react";
 import { assignColors, type AgentSort } from "./sidebar-model.ts";
+import { guardedLocalStorage } from "../storage/guarded.ts";
 
 /** The sidebar's own choices that outlive a reload: how agents sort, and each space's avatar colour. */
 export interface SidebarPrefs {
@@ -16,7 +17,7 @@ const DEFAULT: SidebarPrefs = { sort: "status", colors: {}, collapsed: [] };
 
 const isColor = (value: unknown): value is AvatarColor => AVATAR_COLORS.some((color) => color === value);
 
-export function loadSidebarPrefs(storage: Pick<Storage, "getItem"> = localStorage): SidebarPrefs {
+export function loadSidebarPrefs(storage: Pick<Storage, "getItem"> = guardedLocalStorage()): SidebarPrefs {
   let parsed: unknown;
   try {
     parsed = JSON.parse(storage.getItem(SIDEBAR_KEY) ?? "null");
@@ -51,7 +52,7 @@ class SidebarPrefsStore {
   update(patch: Partial<SidebarPrefs>): void {
     this.#value = { ...this.#value, ...patch };
     try {
-      localStorage.setItem(SIDEBAR_KEY, JSON.stringify(this.#value));
+      guardedLocalStorage().setItem(SIDEBAR_KEY, JSON.stringify(this.#value));
     } finally {
       for (const listener of this.#listeners) listener();
     }
