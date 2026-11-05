@@ -62,7 +62,9 @@ describe("frame codec", () => {
       for (let at = 0; at < stream.byteLength; at += size) {
         const part = stream.subarray(at, at + size);
         reused.set(part);
-        frames.push(...decoder.push(reused.subarray(0, part.byteLength)).map((f) => ({ ...f, payload: f.payload.slice() })));
+        for (const f of decoder.push(reused.subarray(0, part.byteLength))) {
+          frames.push({ channel: f.channel, kind: f.kind, payload: f.payload.slice() });
+        }
         reused.fill(0xff);
       }
       expect(frames.map((f) => [f.channel, f.kind, f.payload.byteLength])).toEqual([
