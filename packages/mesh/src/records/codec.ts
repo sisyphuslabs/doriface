@@ -154,12 +154,26 @@ function cardBodyOf(body: JsonObject): CardBody | undefined {
   };
 }
 
+/**
+ * Cards already checked, by their signature and the hash of their body, with what the check found: a stored card is
+ * read again by every write (the door's index, the authorize index, `recordsOf`), and its ed25519 check is the cost
+ * (#94). The result depends on those bytes alone, so it holds for the process. Oldest first out past the bound.
+ */
+const checkedCards = new Map<string, CardBody | null>();
+const MAX_CHECKED_CARDS = 4096;
+
 /** The card's body when it is well formed and its signature verifies under its own signPub; otherwise undefined. */
 export function verifyCard(card: Signed): CardBody | undefined {
   if (!isSigned(card) || !fitsBody(card.body)) return undefined;
+  const key = `${card.sig}.${hashOf(card)}`;
+  const known = checkedCards.get(key);
+  if (known !== undefined) return known ?? undefined;
   const raw = parseIJsonObject(card.body);
   const body = raw === undefined ? undefined : cardBodyOf(raw);
-  return body !== undefined && verifies("card", card, body.signPub) ? body : undefined;
+  const checked = body !== undefined && verifies("card", card, body.signPub) ? body : undefined;
+  if (checkedCards.size >= MAX_CHECKED_CARDS) checkedCards.delete(checkedCards.keys().next().value ?? "");
+  checkedCards.set(key, checked ?? null);
+  return checked;
 }
 
 export function cardOf(body: RecordBody): Signed | undefined {
