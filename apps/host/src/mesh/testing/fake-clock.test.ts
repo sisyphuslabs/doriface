@@ -17,15 +17,16 @@ describe("settle() waits for a quiet point (#323)", () => {
     expect(steps).toBe(40);
   });
 
-  test("a timer whose run starts WebCrypto work is done when advance() returns", async () => {
+  test("a timer whose run starts a WebCrypto chain is done when advance() returns", async () => {
     const clock = new FakeClock();
     let derived = false;
     clock.after(1_000, () => {
       void crypto.subtle
-        .generateKey({ name: "X25519" }, true, ["deriveBits"])
-        .then((pair) => crypto.subtle.exportKey("raw", (pair as CryptoKeyPair).publicKey))
-        .then(() => {
+        .digest("SHA-256", new Uint8Array([1]))
+        .then((first) => crypto.subtle.digest("SHA-256", first))
+        .then((second) => {
           derived = true;
+          return second;
         });
     });
     await clock.advance(1_000);

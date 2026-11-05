@@ -55,14 +55,11 @@ const turn = (): Promise<void> => new Promise<void>((resolve) => setImmediate(re
  * which is how the in-memory links deliver). A fixed turn count made timer-heavy tests cost tens of thousands of turns
  * whatever they did, so their run time followed the runner's event-loop latency (#316, #323).
  */
-export async function settle(): Promise<void> {
-  let quiet = 0;
-  for (let turns = 0; turns < MAX_TURNS; turns += 1) {
-    await turn();
-    quiet = cryptoInFlight === 0 ? quiet + 1 : 0;
-    if (quiet >= QUIET_TURNS) return;
-  }
-  throw new Error(`settle(): still busy after ${MAX_TURNS} event-loop turns`);
+export async function settle(quiet = 0, turns = 0): Promise<void> {
+  if (quiet >= QUIET_TURNS) return;
+  if (turns >= MAX_TURNS) throw new Error(`settle(): still busy after ${MAX_TURNS} event-loop turns`);
+  await turn();
+  return settle(cryptoInFlight === 0 ? quiet + 1 : 0, turns + 1);
 }
 
 /** Virtual time: timers fire only inside `advance`, in due order, each followed by `settle()`. */
