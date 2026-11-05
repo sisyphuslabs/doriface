@@ -12,7 +12,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Browser, devices, type Page } from "@playwright/test";
+import { type Browser, devices, type Locator, type Page } from "@playwright/test";
 import { agentRow } from "./agents.ts";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { getCoreDoc } from "./core-doc.ts";
@@ -70,6 +70,9 @@ const tabBar = (page: Page) => page.getByRole("tablist", { name: "Tabs" }).getBy
 const tabItem = (page: Page, text: string) =>
   page.getByRole("tablist", { name: "Tabs" }).locator("[data-tab-id]").filter({ hasText: text });
 const selected = (page: Page) => page.getByRole("tab", { selected: true });
+/** A row of the phone's Spaces sheet by the name it shows, the tab's title. */
+const tabRow = (scope: Locator, title: string) =>
+  scope.getByRole("button").filter({ has: scope.page().locator(`[data-floor="name"][title="${title}"]`) });
 const spaceRow = (page: Page, name: string) =>
   page
     .getByRole("complementary", { name: "Workspace" })
@@ -487,11 +490,12 @@ test.describe("10: on a phone at 390", () => {
     await switcher.click();
     const sheet = page.getByRole("dialog", { name: "Spaces" });
     await expect(sheet).toBeVisible();
+    // Each row is named as the strip names its tab, the terminal it opens after it (ruling A).
     const rows = [
-      ["alpha", "parity-a1"],
-      ["alpha", "parity-a2"],
-      ["beta", "parity-b1"],
-      ["beta", "parity-b2"],
+      ["alpha", "a-one"],
+      ["alpha", "a-two"],
+      ["beta", "b-one"],
+      ["beta", "b-two"],
     ] as const;
     const heights = await Promise.all(
       rows.map(
@@ -500,7 +504,12 @@ test.describe("10: on a phone at 390", () => {
       ),
     );
     for (const height of heights) expect(height).toBeGreaterThanOrEqual(44);
-    await agentRow(sheet.getByRole("region", { name: "beta" }), "parity-b2", false).click();
+    const beta = sheet.getByRole("region", { name: "beta" });
+    await expect(beta.getByRole("button")).toHaveCount(2);
+    await expect(tabRow(beta, "b-one")).toContainText("parity-b1");
+    await expect(tabRow(beta, "b-two")).toContainText("parity-b2");
+    await expect(tabRow(beta, "parity-b1")).toHaveCount(0);
+    await agentRow(beta, "b-two", false).click();
     await expect(sheet).toBeHidden();
     await expect(header.getByRole("heading", { name: "b-two", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(header.getByText("2/2", { exact: true })).toBeVisible();
@@ -543,11 +552,11 @@ test.describe("10: on a phone at 390", () => {
 
     await header.getByRole("button", { name: "Switch space or tab" }).click();
     const web = page.getByRole("dialog", { name: "Spaces" }).getByRole("region", { name: "web" });
-    // One row per tab; the split tab shows the pane in view.
-    await expect(agentRow(web, "split-w1", false)).toHaveCount(1);
-    await expect(agentRow(web, "split-w2b", false)).toHaveCount(1);
-    await expect(agentRow(web, "split-w3", false)).toHaveCount(1);
-    await expect(agentRow(web, "split-w2", false)).toHaveCount(0);
+    // One row per tab, read as the strip reads it (its number); the split tab's row opens the pane in view.
     await expect(web.getByRole("button")).toHaveCount(3);
+    await expect(tabRow(web, "1")).toContainText("split-w1");
+    await expect(tabRow(web, "2")).toContainText("split-w2b");
+    await expect(tabRow(web, "3")).toContainText("split-w3");
+    await expect(tabRow(web, "2")).toHaveAttribute("aria-current", "true");
   });
 });

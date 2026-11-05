@@ -203,6 +203,8 @@ export type ListedSpace = Space & {
   readonly addresses: readonly string[];
   /** Each tab once, in tab order, with its panes' addresses (live or not), so a split tab counts as one. */
   readonly tabPanes: readonly (readonly string[])[];
+  /** Each tab's own name, as saved (empty when unnamed), in the order of `tabPanes`. */
+  readonly tabNames: readonly string[];
   readonly dir: string;
 };
 
@@ -228,15 +230,15 @@ export function layoutSpaces(
     if (doc === null) return [];
     const tabs = tabsOf(doc);
     return docSpaces(doc).map((space) => {
-      const tabPanes = tabs
-        .filter((tab) => tab.space === space.id)
-        .map((tab) =>
-          panesOf(tab.root).flatMap((pane) =>
-            pane.terminal === null
-              ? []
-              : [source.machine === null ? pane.terminal : `${source.machine}/${pane.terminal}`],
-          ),
-        );
+      const own = tabs.filter((tab) => tab.space === space.id);
+      const tabNames = own.map((tab) => tab.name);
+      const tabPanes = own.map((tab) =>
+        panesOf(tab.root).flatMap((pane) =>
+          pane.terminal === null
+            ? []
+            : [source.machine === null ? pane.terminal : `${source.machine}/${pane.terminal}`],
+        ),
+      );
       const addresses = tabPanes.flat();
       const live = addresses.flatMap((address) => {
         const terminal = byAddress.get(address);
@@ -253,6 +255,7 @@ export function layoutSpaces(
         tabs: space.tabs.length,
         addresses,
         tabPanes,
+        tabNames,
         statuses: new Set(live.map(agentStatus)),
       };
     });
@@ -268,6 +271,7 @@ export function layoutSpaces(
       tabs: entry.tabs,
       addresses: entry.addresses,
       tabPanes: entry.tabPanes,
+      tabNames: entry.tabNames,
       dir: entry.dir,
     };
     if (entry.machine !== undefined) Object.assign(space, { machine: entry.machine });
@@ -294,6 +298,21 @@ export function liveTabs(space: ListedSpace, terminals: readonly Terminal[]): re
   return space.tabPanes
     .map((panes) => panes.filter((address) => liveAt.has(address)))
     .filter((panes) => panes.length > 0);
+}
+
+/** A tab of a space that shows a live terminal: its title as the strip reads it, and its live panes in order. */
+export interface LiveTab {
+  readonly title: string;
+  readonly panes: readonly string[];
+}
+
+/** The tabs of a space that show a live terminal, in tab order, each titled as the strip titles it (tabTitle). */
+export function titledTabs(space: ListedSpace, terminals: readonly Terminal[]): readonly LiveTab[] {
+  const liveAt = new Set(terminals.filter((t) => t.state === "live").map((t) => t.address));
+  return space.tabPanes.flatMap((panes, at) => {
+    const live = panes.filter((address) => liveAt.has(address));
+    return live.length === 0 ? [] : [{ title: tabTitle(space.tabNames[at] ?? "", at), panes: live }];
+  });
 }
 
 /** Where a terminal sits in the listed space whose tabs show it; none when it is finished or in no space's tab. */

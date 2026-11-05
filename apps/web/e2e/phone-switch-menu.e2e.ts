@@ -53,6 +53,11 @@ for (const keyboard of ["overlay", "resize"] as const) {
     const title = (await first.locator("span").first().innerText()).trim();
     await first.scrollIntoViewIfNeeded();
     await first.click();
-    await expect(page.locator("header h1")).toHaveText(title, { timeout: 15_000 });
+    // The header reads the tab (#466 ruling A); the session actions name the session shown.
+    await expect(
+      page.getByRole("banner").getByRole("button", { name: `Session actions for ${title}`, exact: true }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
   });
 }

@@ -134,7 +134,10 @@ test("Switch session lists the terminals and opens the one picked", async ({ pag
 
   await key(page, "Switch session").click();
   await page.getByRole("menuitem", { name: new RegExp(`keys-one-${firstAddress}`) }).click();
-  await expect(page.locator("header h1")).toHaveText(`keys-one-${firstAddress}`, { timeout: 15_000 });
+  // The header reads the tab (#466 ruling A); the session actions name the session shown.
+  await expect(
+    page.getByRole("banner").getByRole("button", { name: `Session actions for keys-one-${firstAddress}` }),
+  ).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("[data-terminal]")).toHaveAttribute("data-terminal", firstAddress);
   await expect(keysBar(page)).toBeVisible();
 });

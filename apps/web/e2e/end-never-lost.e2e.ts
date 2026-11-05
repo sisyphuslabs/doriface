@@ -40,7 +40,12 @@ async function phoneOnTerminal(page: Page, name: string) {
   if (address === null) throw new Error("the new terminal has no address");
   const named = `${name}-${address}`;
   hc("label", address, `herdr.name=${named}`);
-  await expect(page.locator("header h1")).toHaveText(named, { timeout: 15_000 });
+  // The header reads the tab (#466 ruling A); the session actions name the session shown.
+  await expect(
+    page.getByRole("banner").getByRole("button", { name: `Session actions for ${named}`, exact: true }),
+  ).toBeVisible({
+    timeout: 15_000,
+  });
   return { link, name: named, address };
 }
 

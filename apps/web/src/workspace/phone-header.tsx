@@ -7,10 +7,10 @@ import {
   agentStatus,
   machineOf,
   type Session,
-  liveTabs,
   spaceName,
   tabPosition,
   terminalTitle,
+  titledTabs,
   toAgent,
 } from "./model.ts";
 import { useSpaceSelection } from "./space-selection.ts";
@@ -137,20 +137,23 @@ function SpaceSwitcher(props: {
             title={space.machine === undefined ? space.name : `${space.machine} · ${space.name}`}
             count={space.tabs}
           >
-            {/* One row per tab: the open pane when it is this tab's, else the tab's first live pane. */}
-            {liveTabs(space, terminals)
-              .flatMap((panes) => {
-                const shown = panes.includes(active) ? active : panes[0];
-                return terminals.filter((entry) => entry.address === shown);
-              })
-              .map((entry) => (
-                <AgentRow
-                  key={entry.address}
-                  agent={toAgent(entry, now)}
-                  selected={entry.address === active}
-                  onSelect={pick}
-                />
-              ))}
+            {/*
+              One row per tab, named as the strip names it (its name, else its number), the terminal it opens after it:
+              the open pane when it is this tab's, else the tab's first live pane.
+            */}
+            {titledTabs(space, terminals).flatMap(({ title, panes }) => {
+              const shown = panes.includes(active) ? active : panes[0];
+              return terminals
+                .filter((entry) => entry.address === shown)
+                .map((entry) => (
+                  <AgentRow
+                    key={entry.address}
+                    agent={{ ...toAgent(entry, now), name: title, detail: terminalTitle(entry) }}
+                    selected={entry.address === active}
+                    onSelect={pick}
+                  />
+                ));
+            })}
           </SidebarSection>
         ))}
       </div>
