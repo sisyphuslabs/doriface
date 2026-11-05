@@ -161,6 +161,17 @@ describe("session actions", () => {
   });
 });
 
+describe("space rename (#395)", () => {
+  test.each(["desktop", "phone"] as const)(
+    "%s: Rename space is a palette row with a session in view, and left out without",
+    (shell) => {
+      const rename = (inView: boolean) => availableActions(shell, inView).filter(({ id }) => id === "space.rename");
+      expect(rename(true)).toEqual([{ id: "space.rename" }]);
+      expect(rename(false)).toEqual([]);
+    },
+  );
+});
+
 describe("dictation (#194)", () => {
   test.each(["desktop", "phone"] as const)(
     "%s: Dictate is a palette row with a session in view, and left out without",
