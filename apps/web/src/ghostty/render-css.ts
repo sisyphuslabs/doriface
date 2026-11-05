@@ -159,5 +159,14 @@ function selectionRules(config: TerminalConfig): string[] {
   const declarations: Declarations = {};
   if (background !== "") declarations["background"] = cellColor(background, "");
   if (foreground !== "") declarations["color"] = cellColor(foreground, "");
-  return [block(`${T} ::selection`, declarations)];
+  return [
+    block(`${T} ::selection`, declarations),
+    // Inside rows the selected cells are painted whole by use-selection-cells.ts, as Ghostty does; the browser's
+    // highlight would follow each glyph's box instead (#410). A cell with a background of its own is drawn over that
+    // layer, so it keeps the browser's highlight.
+    block(`${T} .term-row ::selection`, { "background-color": "transparent" }),
+    block(`${T} .term-row [style*="--term-cell-bg"]::selection, ${T} .term-row [style*="--term-cell-bg"] ::selection`, {
+      "background-color": "var(--term-selection-bg)",
+    }),
+  ];
 }
