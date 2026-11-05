@@ -2,6 +2,7 @@
 // the tooltip, the menus, the dialogs and the statement that a session already ended, on a phone and on a desktop.
 import type { Locator, Page } from "@playwright/test";
 import { agentRow, endAgent, startShell } from "./agents.ts";
+import { setConfirmClose } from "./close-confirm.ts";
 import { expect, test } from "./fixtures.ts";
 import { hcOn } from "./machine-switch.ts";
 import { fakeSoftKeyboard, key, PHONE } from "./phone-key-bar.ts";
@@ -180,7 +181,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     test.use({ viewport: { width: 1440, height: 900 }, colorScheme, serviceWorkers: "block" });
 
     test("the close tooltip and the Close dialog keep a 200-character name inside", async ({ page }) => {
-      await page.goto("/");
+      await setConfirmClose(page, "always");
       await agentRow(page, LONG, false).click({ timeout: 20_000 });
       const tab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: new RegExp(LONG) });
       await expect(tab).toBeVisible({ timeout: 15_000 });
