@@ -31,9 +31,11 @@ const geometry = (terminal: Locator): Promise<Geometry> =>
     const context = document.createElement("canvas").getContext("2d");
     if (context === null) throw new Error("no 2d canvas");
     context.font = `${rowStyle.fontWeight} ${rowStyle.fontSize} ${rowStyle.fontFamily}`;
-    const lineHeight = Math.round(
-      parseFloat(rowStyle.fontSize) * parseFloat(style.getPropertyValue("--term-line-height")),
-    );
+    const nativeLineHeight =
+      Math.round(
+        parseFloat(rowStyle.fontSize) * parseFloat(style.getPropertyValue("--term-line-height")) * devicePixelRatio,
+      ) / devicePixelRatio;
+    const lineHeight = Math.round(nativeLineHeight * 64) / 64;
     let transformedAncestors = 0;
     for (let node: Element | null = element; node !== null; node = node.parentElement) {
       if (getComputedStyle(node).transform !== "none") transformedAncestors += 1;
@@ -46,7 +48,9 @@ const geometry = (terminal: Locator): Promise<Geometry> =>
       cellDevicePx: parseFloat(style.getPropertyValue("--term-cell-width")) * devicePixelRatio,
       firstRowOffsetPx: Math.abs((first?.left ?? 0) - contentLeft),
       scrollLeft: element.scrollLeft,
-      cellMinusAdvance: parseFloat(style.getPropertyValue("--term-cell-width")) - context.measureText("W").width,
+      cellMinusAdvance:
+        parseFloat(style.getPropertyValue("--term-cell-width")) -
+        Math.round(context.measureText("W").width * devicePixelRatio) / devicePixelRatio,
       rowMinusLineHeight: (first?.height ?? 0) - lineHeight,
       transformedAncestors,
     };

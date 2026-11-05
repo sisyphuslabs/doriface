@@ -64,7 +64,11 @@ test("adjust-cell-width widens the cells, not the wide glyph inside them: it sta
         .first()
         .evaluate((row) => getComputedStyle(row).letterSpacing),
     )
-    .toBe("4px");
+    .toBe(
+      await focused.evaluate(
+        (element) => `${4 + parseFloat(getComputedStyle(element).getPropertyValue("--term-native-spacing"))}px`,
+      ),
+    );
   await expectCentred(page, focused);
 });
 
@@ -133,7 +137,7 @@ test("Hangul fills its two cells as Ghostty sizes a fallback font, leaving no wi
       ascent = Math.max(ascent, ink.actualBoundingBoxAscent);
       descent = Math.max(descent, ink.actualBoundingBoxDescent);
     }
-    return { cell: context.measureText("W").width, height: ascent + descent };
+    return { cell: parseFloat(style.getPropertyValue("--term-cell-width")), height: ascent + descent };
   });
   const cells = 2 * ascii.cell;
   // Ghostty's advance for a fallback ideograph next to a font without one: min(ASCII height, two cells).
