@@ -15,7 +15,7 @@ interface Scratch {
 let scratch: Scratch | undefined;
 let launched: ElectronApplication | undefined;
 
-// One app, one profile: the last test relaunches it to read the zoom it saved.
+// One app, one profile: the last test relaunches it to read the text size it saved.
 test.describe.configure({ mode: "serial" });
 
 const launch = (): Promise<ElectronApplication> => {
@@ -63,6 +63,8 @@ const app = (): ElectronApplication => {
 
 const zoomFactor = (): Promise<number> =>
   app().evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.webContents.getZoomFactor() ?? 0);
+
+const chrome = (page: Page) => page.locator("aside [data-titlebar]").first().boundingBox();
 
 const clickMenuItem = (id: string): Promise<void> =>
   app().evaluate(({ BrowserWindow, Menu }, wanted) => {
@@ -128,14 +130,27 @@ async function settled(page: Page, ready: (now: Drawn) => boolean = () => true):
   return drawn(page);
 }
 
-/** One Cmd/Ctrl + - to `factor`: the terminal, once refit, holds at least the rows and more columns than `last`. */
-async function zoomOutTo(page: Page, factor: number, last: Drawn): Promise<Drawn> {
-  await page.keyboard.press("ControlOrMeta+Minus");
-  await expect.poll(zoomFactor).toBe(factor);
-  return settled(page, (next) => next.rows >= last.rows && next.cols > last.cols);
+/** Points of the configured terminal font size, e.g. "13pt" -> 13. */
+const points = (now: Drawn): number => parseFloat(now.fontSize);
+
+/** One text-size step: the font size moves by `delta` points and the window zoom and chrome stay where they were. */
+async function step(page: Page, press: () => Promise<void>, from: Drawn, delta: number): Promise<Drawn> {
+  const header = await chrome(page);
+  await press();
+  const now = await settled(page, (next) => points(next) === points(from) + delta);
+  expect(await zoomFactor()).toBe(1);
+  expect(now.dpr).toBe(from.dpr);
+  expect(now.cssWidth).toBe(from.cssWidth);
+  expect(now.transformedAncestors).toBe(0);
+  if (delta > 0) expect(now.cellDevicePx).toBeGreaterThan(from.cellDevicePx);
+  else expect(now.cellDevicePx).toBeLessThan(from.cellDevicePx);
+  expect(await chrome(page)).toEqual(header);
+  return now;
 }
 
-test("the zoom keys zoom the whole window and the terminal refits to it", async () => {
+let opened: Drawn | undefined;
+
+test("Cmd/Ctrl + = / - / 0 size the terminal text, not the window", async () => {
   const page = await app().firstWindow();
   await page.getByRole("button", { name: "Use this computer" }).click();
   await page
@@ -146,67 +161,61 @@ test("the zoom keys zoom the whole window and the terminal refits to it", async 
   await expect(terminalIn(page)).toContainText("$", { timeout: 30_000 });
   expect(await zoomFactor()).toBe(1);
   const before = await settled(page);
-  expect(before.transformedAncestors).toBe(0);
-
+  opened = before;
   await terminalIn(page).getByRole("textbox").focus();
-  let previous = before;
-  // 90%, 80%, 75% and 67%: at every step the cell is the font's own advance, so nothing scales the terminal behind wterm's
-  // getBoundingClientRect measure.
-  for (const factor of [0.9, 0.8, 0.75, 0.67]) {
-    // oxlint-disable-next-line no-await-in-loop -- one window: each zoom step is applied and read before the next
-    const now = await zoomOutTo(page, factor, previous);
-    // The window zoomed, not only the terminal: the page lays out more CSS pixels on the same screen.
-    expect(now.dpr).toBeCloseTo(before.dpr * factor, 3);
-    expect(now.cssWidth).toBeGreaterThan(previous.cssWidth);
-    expect(now.cellDevicePx).toBeLessThan(previous.cellDevicePx);
-    expect(now.transformedAncestors).toBe(0);
-    // The window zoom leaves the configured terminal font size as it was.
-    expect(now.fontSize).toBe(before.fontSize);
-    previous = now;
-  }
+
+  const bigger = await step(page, () => page.keyboard.press("ControlOrMeta+Equal"), before, 1);
+  const smaller = await step(page, () => page.keyboard.press("ControlOrMeta+Minus"), bigger, -1);
+  const smallest = await step(page, () => page.keyboard.press("ControlOrMeta+Minus"), smaller, -1);
+  expect(smallest.cols).toBeGreaterThan(before.cols);
 
   await page.keyboard.press("ControlOrMeta+0");
-  await expect.poll(zoomFactor).toBe(1);
   const reset = await settled(page, (now) => now.grid === before.grid);
-  expect(reset.transformedAncestors).toBe(0);
+  expect(reset.fontSize).toBe(before.fontSize);
+  expect(await zoomFactor()).toBe(1);
 });
 
-test("View > Zoom Out, Zoom In and Actual Size drive the same window zoom as the keys", async () => {
-  await clickMenuItem("zoom-out");
-  await expect.poll(zoomFactor).toBe(0.9);
-  await clickMenuItem("zoom-out");
-  await expect.poll(zoomFactor).toBe(0.8);
-  await clickMenuItem("zoom-in");
-  await expect.poll(zoomFactor).toBe(0.9);
-  await clickMenuItem("zoom-reset");
-  await expect.poll(zoomFactor).toBe(1);
-  await clickMenuItem("zoom-out");
-  await expect.poll(zoomFactor).toBe(0.9);
+test("View > Bigger, Smaller and Default Text Size step the same terminal text size as the keys", async () => {
+  const page = await app().firstWindow();
+  const before = await settled(page);
+  const bigger = await step(page, () => clickMenuItem("font-size-increase"), before, 1);
+  const smaller = await step(page, () => clickMenuItem("font-size-decrease"), bigger, -1);
+  await step(page, () => clickMenuItem("font-size-decrease"), smaller, -1);
+  await clickMenuItem("font-size-reset");
+  await settled(page, (now) => now.fontSize === before.fontSize);
 });
 
-test("the zoom keys zoom the window on Settings, where no workspace handles them", async () => {
+test("the text-size keys leave the window zoom alone on Settings too", async () => {
   const page = await app().firstWindow();
   await page.keyboard.press("ControlOrMeta+Comma");
   await expect(page).toHaveURL(/\/settings$/);
-  expect(await zoomFactor()).toBe(0.9);
   await page.keyboard.press("ControlOrMeta+Minus");
-  await expect.poll(zoomFactor).toBe(0.8);
+  await page.keyboard.press("ControlOrMeta+Minus");
   await page.keyboard.press("ControlOrMeta+Equal");
-  await expect.poll(zoomFactor).toBe(0.9);
-  await page.keyboard.press("ControlOrMeta+0");
-  await expect.poll(zoomFactor).toBe(1);
-  // Leaves the window at 90%, which the next test reads back at launch.
-  await page.keyboard.press("ControlOrMeta+Minus");
-  await expect.poll(zoomFactor).toBe(0.9);
+  expect(await zoomFactor()).toBe(1);
+  expect(await page.evaluate(() => devicePixelRatio)).toBe(opened?.dpr);
+  await page.keyboard.press("ControlOrMeta+Comma");
+  // One step smaller than at launch, which the next test reads back after a relaunch.
+  await expect(page).not.toHaveURL(/\/settings$/);
+  await settled(page, (now) => opened !== undefined && points(now) === points(opened) - 1);
 });
 
-test("the window opens at the zoom it was left at", async () => {
+test("the window opens unzoomed even after an older build saved a window zoom, and keeps the text size", async () => {
+  if (scratch === undefined || opened === undefined) throw new Error("no scratch session");
   await app().close();
+  // What the window zoom of earlier builds left behind: 67%, which put the title under the window buttons (#388).
+  writeFileSync(join(scratch.profile, "window-zoom.json"), JSON.stringify({ factor: 0.67 }));
   launched = await launch();
   const page = await app().firstWindow();
   await page.waitForLoadState("domcontentloaded");
-  await expect.poll(zoomFactor).toBe(0.9);
-  await clickMenuItem("zoom-reset");
-  await expect.poll(zoomFactor).toBe(1);
-  await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBe(1);
+  expect(await zoomFactor()).toBe(1);
+  expect(await page.evaluate(() => devicePixelRatio)).toBe(opened.dpr);
+  await page
+    .getByRole("button", { name: "New tab" })
+    .or(page.getByRole("button", { name: "New terminal" }))
+    .first()
+    .click({ timeout: 30_000 });
+  await expect(terminalIn(page)).toContainText("$", { timeout: 30_000 });
+  const reopened = await settled(page);
+  expect(points(reopened)).toBe(points(opened) - 1);
 });

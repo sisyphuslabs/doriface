@@ -14,7 +14,6 @@ import {
   onDesktopPairingLink,
   onDesktopRunAction,
   setDesktopBackground,
-  zoomDesktopWindow,
 } from "./desktop/bridge.ts";
 import { bootConnection } from "./desktop/local-host.ts";
 import { captureInstallPrompt } from "./device/install.ts";
@@ -27,6 +26,7 @@ import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispat
 import { reportMenuKeys } from "./keys/menu-keys.ts";
 import { router } from "./router.tsx";
 import { updateStore } from "./update/update-store.ts";
+import { stepTerminalFont } from "./workspace/use-app-actions.ts";
 
 startAppearance();
 captureInstallPrompt();
@@ -66,11 +66,11 @@ if (desktopBridge() !== null) {
   // The Shell menu runs the page's own actions and shows the page's own keys for them.
   onDesktopRunAction((action) => void runAction(action));
   reportMenuKeys();
-  // The View menu shows the zoom keys without registering them, so on Linux and Windows only the keymap zooms. Screens
-  // with no workspace (Settings, pairing) handle no zoom action, so the window zooms from here.
-  setActionFallback("app.zoom_in", () => zoomDesktopWindow("in"));
-  setActionFallback("app.zoom_out", () => zoomDesktopWindow("out"));
-  setActionFallback("app.zoom_reset", () => zoomDesktopWindow("reset"));
+  // Screens with no workspace (Settings, pairing) handle no text-size action, so the View menu's text-size items and
+  // keys step the terminal text from here; the window itself is never zoomed (#388).
+  for (const action of ["app.zoom_in", "app.zoom_out", "app.zoom_reset"]) {
+    setActionFallback(action, () => stepTerminalFont(action));
+  }
   paintWindow();
   appearanceStore.subscribe(paintWindow);
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintWindow);
