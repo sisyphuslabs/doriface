@@ -1,6 +1,7 @@
 import { RowDropCaret, RowDropIndicator, rowPlacement, useListDrag } from "@doriface/ui";
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RowReorder } from "./machine-group.tsx";
+import { refocusMoved } from "./refocus-moved.ts";
 import type { MachineEntry } from "./machines.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
@@ -8,6 +9,17 @@ import { useMachinesContext } from "./use-machines.ts";
 interface Moved {
   readonly core: string;
   readonly count: number;
+}
+
+/**
+ * The announcement of this person's last saved move: worded once, from the list the save produced (`order`), and read
+ * out only while the list stays that way. Another client's order, a machine added or removed, or a move that was not
+ * saved clears it; none of them rewords it (#161).
+ */
+interface Announced {
+  readonly moved: Moved;
+  readonly text: string | null;
+  readonly order: string | null;
 }
 
 export interface MachineReorder {
@@ -31,12 +43,20 @@ export function useMachineReorder(
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const focused = useRef<string | null>(null);
   const [moved, setMoved] = useState<Moved | null>(null);
+  const [announced, setAnnounced] = useState<Announced | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const movable = enabled && entries.length > 1;
+  const count = useRef(0);
   const move = (core: string, to: number): void => {
-    setMoved((last) => ({ core, count: (last?.count ?? 0) + 1 }));
-    moveMachine(core, to);
+    count.current += 1;
+    const made = { core, count: count.current };
+    setMoved(made);
+    const announceOnceSaved = async (): Promise<void> => {
+      if (await moveMachine(core, to)) setAnnounced({ moved: made, text: null, order: null });
+    };
+    void announceOnceSaved();
   };
+  const order = entries.map((machine) => machine.core).join("\n");
   const { drag, settle, lifted, touching, onPointerDown, onClickCapture } = useListDrag(
     list,
     entries.map((machine) => machine.core),
@@ -52,18 +72,23 @@ export function useMachineReorder(
 
   useLayoutEffect(() => {
     if (moved === null || focused.current !== moved.core) return;
-    const button = buttons.current.get(moved.core);
-    const dropped = document.activeElement === null || document.activeElement === document.body;
-    if (button !== undefined && dropped) button.focus();
+    refocusMoved(buttons.current.get(moved.core), document.activeElement, document.body);
   }, [moved, entries]);
 
-  const movedAt = moved === null ? -1 : entries.findIndex((machine) => machine.core === moved.core);
-  const movedMachine = entries[movedAt];
-  // The count's parity changes the text each time, so a second move to the same place is still read out.
-  const announcement =
-    moved === null || movedMachine === undefined
-      ? ""
-      : `Moved ${movedMachine.name} to position ${movedAt + 1} of ${entries.length}${moved.count % 2 === 0 ? "" : "\u00a0"}`;
+  useEffect(() => {
+    if (announced === null) return;
+    if (announced.order === null) {
+      const at = entries.findIndex((machine) => machine.core === announced.moved.core);
+      const machine = entries[at];
+      if (machine === undefined) return setAnnounced(null);
+      // The count's parity changes the text each time, so a second move to the same place is still read out.
+      const mark = announced.moved.count % 2 === 0 ? "" : "\u00a0";
+      const text = `Moved ${machine.name} to position ${at + 1} of ${entries.length}${mark}`;
+      return setAnnounced({ ...announced, text, order });
+    }
+    if (announced.order !== order) setAnnounced(null);
+  }, [announced, entries, order]);
+  const announcement = announced?.order === order ? (announced.text ?? "") : "";
 
   const reorderOf = (machine: MachineEntry, index: number): RowReorder | undefined => {
     if (!movable) return undefined;

@@ -8,8 +8,12 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
+  useMemo,
   useRef,
 } from "react";
+import type { Keymap } from "../keys/defaults.ts";
+import { resolveKeymap } from "../keys/keymap.ts";
+import { useOverrides } from "../keys/keymap-store.ts";
 import { currentPlatform } from "../keys/trigger.ts";
 import { reorderKeys, reorderStep } from "./reorder-keys.ts";
 
@@ -58,6 +62,8 @@ export interface MachineGroupProps {
  */
 export function MachineGroup({ core, name, reorder, header, children }: MachineGroupProps) {
   const button = useRef<HTMLButtonElement | null>(null);
+  const overrides = useOverrides();
+  const keymap = useMemo(() => resolveKeymap(currentPlatform(), overrides), [overrides]);
   if (reorder === undefined) {
     return (
       <section aria-label={name} className="flex flex-col gap-px">
@@ -67,7 +73,7 @@ export function MachineGroup({ core, name, reorder, header, children }: MachineG
     );
   }
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
-    const step = reorderStep(event, currentPlatform());
+    const step = reorderStep(event, currentPlatform(), keymap);
     if (step === null) return;
     event.preventDefault();
     event.stopPropagation();
@@ -112,7 +118,7 @@ export function MachineGroup({ core, name, reorder, header, children }: MachineG
         reorder.className,
       )}
     >
-      <GroupMenu handle={handle} reorder={reorder} button={button} />
+      <GroupMenu handle={handle} reorder={reorder} button={button} keymap={keymap} />
       {children}
     </section>
   );
@@ -122,16 +128,17 @@ interface GroupMenuProps {
   readonly handle: ReactElement;
   readonly reorder: RowReorder;
   readonly button: RefObject<HTMLButtonElement | null>;
+  readonly keymap: Keymap;
 }
 
-function GroupMenu({ handle, reorder, button }: GroupMenuProps) {
-  const keys = reorderKeys(currentPlatform());
+function GroupMenu({ handle, reorder, button, keymap }: GroupMenuProps) {
+  const keys = reorderKeys(currentPlatform(), keymap);
   return (
     <ContextMenu trigger={handle} open={reorder.menuOpen} onOpenChange={reorder.onMenuOpen} finalFocus={button}>
       <MenuItem
         icon={<ArrowUp />}
         disabled={reorder.index === 0}
-        keys={keys.up}
+        {...(keys.up === undefined ? {} : { keys: keys.up })}
         onClick={() => reorder.onMove(reorder.index - 1)}
       >
         Move up
@@ -139,7 +146,7 @@ function GroupMenu({ handle, reorder, button }: GroupMenuProps) {
       <MenuItem
         icon={<ArrowDown />}
         disabled={reorder.index === reorder.count - 1}
-        keys={keys.down}
+        {...(keys.down === undefined ? {} : { keys: keys.down })}
         onClick={() => reorder.onMove(reorder.index + 1)}
       >
         Move down

@@ -41,7 +41,7 @@ export const DEMO_MACHINE: MachineSpec = {
 };
 
 /** The `--via` command: refuses as the switch says, else runs hc's line against the second core. */
-function viaCommand(own: Readonly<Record<string, string>>, spec: MachineSpec): string {
+export function viaCommand(own: Readonly<Record<string, string>>, spec: MachineSpec): string {
   const env = Object.entries(own)
     .map(([key, value]) => `${key}="${value}"`)
     .join(" ");
