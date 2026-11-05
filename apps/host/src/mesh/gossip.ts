@@ -72,7 +72,6 @@ export class Gossip implements SyncHost {
   /** Revoked members whose released revoke push did not get through yet: retried as a revoke push when they are due. */
   readonly #revokeOwed = new Set<string>();
   #view: MeshView;
-  #peerCounter = 0;
 
   constructor(options: GossipOptions) {
     this.#options = options;
@@ -161,9 +160,12 @@ export class Gossip implements SyncHost {
     return this.#lastSync.get(peer);
   }
 
-  /** The highest counter of this host's key any peer's `hello` showed (section 10.1). */
+  /**
+   * The highest counter of this host's key that a standing claim holds (section 10.1), 0 when none stands: a claim that
+   * resolved, expired or is ignored in its cooldown no longer counts, so status shows only what holds signing back (#151).
+   */
   get peerCounter(): number {
-    return this.#peerCounter;
+    return this.#claims.floor()?.n ?? 0;
   }
 
   /** A member refused this host's sync dial with 4401: this host may be revoked (section 8.6). */
@@ -254,7 +256,6 @@ export class Gossip implements SyncHost {
     this.#confirmed.heard(peer, heads);
     if (this.#confirmed.owedCount(peer) === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self] ?? 0;
-    this.#peerCounter = Math.max(this.#peerCounter, claim);
     const holds = this.#claims.claim(peer, claim);
     if (!holds) this.#claims.release();
     return holds;
