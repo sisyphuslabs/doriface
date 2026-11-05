@@ -1,7 +1,7 @@
-import { GhosttyCore } from "@wterm/ghostty";
-import type { GhosttyOptions } from "@wterm/ghostty";
+import { type GhosttyCore, loadGhosttyWasm } from "@wterm/ghostty";
 import buildJson from "../wasm/build.json" with { type: "json" };
 import { parseBuildInfo } from "./build-info.ts";
+import { type CoreOptions, EnginePool } from "./engine-pool.ts";
 
 export type { BuildInfo, PatchRecord } from "./build-info.ts";
 export { BuildInfoError, parseBuildInfo } from "./build-info.ts";
@@ -11,8 +11,12 @@ export const ghosttyWasmUrl: string = new URL("../wasm/ghostty-vt.wasm", import.
 
 export const ghosttyBuild = parseBuildInfo(buildJson);
 
-export type CoreOptions = Omit<GhosttyOptions, "wasmPath">;
+export type { CoreOptions } from "./engine-pool.ts";
+export { EnginePool, TERMINALS_PER_ENGINE } from "./engine-pool.ts";
 
+const engines = new EnginePool(() => loadGhosttyWasm(ghosttyWasmUrl));
+
+/** A terminal core on a shared engine instance (#318); its `dispose` frees the terminal and its place on the engine. */
 export function loadGhosttyCore(options: CoreOptions = {}): Promise<GhosttyCore> {
-  return GhosttyCore.load({ ...options, wasmPath: ghosttyWasmUrl });
+  return engines.core(options);
 }
