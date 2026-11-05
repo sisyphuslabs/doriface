@@ -1,135 +1,143 @@
+import { type ApprovalClock, CLAIM_TTL_MS, clockOf, FENCE_MARGIN_MS, holds } from "./approval-clock.ts";
 import { promptStillThere, type ApprovalCore } from "./approval-live.ts";
 import { type ApprovalMark, approvalKey } from "./approval-prompt.ts";
+import {
+  type Answerer,
+  type ApprovalOutcome,
+  type ApprovalRecord,
+  readRecords,
+  recordJson,
+  update,
+} from "./approval-records.ts";
 import type { ApprovalAnswer } from "./approval-screen.ts";
-import { isJsonObject, type JsonValue } from "./json.ts";
 
-/** Who answers: a device name people recognise, and this client's own id, so two tabs of one browser are told apart. */
-export interface Answerer {
-  readonly by: string;
-  readonly client: string;
-}
-
-/** `claimed`: the winner is checking the screen. `sent`: it pressed the agent's key. `stale`: the prompt had gone; nothing was pressed. */
-export type ApprovalOutcome = "claimed" | "sent" | "stale";
-
-export interface ApprovalRecord extends Answerer {
-  readonly prompt: string;
-  readonly answer: ApprovalAnswer;
-  readonly atMs: number;
-  readonly outcome: ApprovalOutcome;
-}
+export { approvalClock, CLAIM_TTL_MS, FENCE_MARGIN_MS, type ApprovalClock } from "./approval-clock.ts";
+export { readApprovalRecord, type Answerer, type ApprovalOutcome, type ApprovalRecord } from "./approval-records.ts";
 
 export type AnswerResult =
   | { readonly kind: "sent" }
   | { readonly kind: "stale" }
-  /** Another device claimed this prompt first; its record says who and what. */
+  /**
+   * Nothing was pressed: the re-check failed, or the claim lapsed before the press; anyone may answer again. `attempt`
+   * names this answer's claim, which the same client may pass as `retake` if the `failed` record could not be written.
+   */
+  | { readonly kind: "failed"; readonly reason: string; readonly attempt: string }
+  /** The key press failed and may have reached the agent; the prompt stays held, so nobody presses again. */
+  | { readonly kind: "unknown"; readonly reason: string }
+  /** Another answer holds this prompt; its record says who and what. */
   | { readonly kind: "lost"; readonly record: ApprovalRecord };
 
-/** Records kept per terminal: newest last. Older prompts' records drop off; they only ever serve "answered on ...". */
-const KEPT = 16;
-const ATTEMPTS = 8;
+const failure = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-function docOf(address: string): { readonly name: string; readonly on: string | undefined } {
-  const slash = address.indexOf("/");
-  return slash === -1
-    ? { name: `approval.${address}`, on: undefined }
-    : { name: `approval.${address.slice(slash + 1)}`, on: address.slice(0, slash) };
-}
-
-const OUTCOMES: ReadonlySet<unknown> = new Set(["claimed", "sent", "stale"]);
-
-function isRecord(value: unknown): value is ApprovalRecord {
-  if (typeof value !== "object" || value === null) return false;
-  const field = (name: string): unknown => Reflect.get(value, name);
-  return (
-    typeof field("prompt") === "string" &&
-    (field("answer") === "allow" || field("answer") === "deny") &&
-    typeof field("by") === "string" &&
-    typeof field("client") === "string" &&
-    typeof field("atMs") === "number" &&
-    OUTCOMES.has(field("outcome"))
-  );
-}
-
-function recordsIn(value: JsonValue): ApprovalRecord[] {
-  const list = isJsonObject(value) ? value["records"] : undefined;
-  return Array.isArray(list) ? list.filter(isRecord) : [];
-}
-
-const recordJson = (record: ApprovalRecord, outcome = record.outcome): JsonValue => ({
-  prompt: record.prompt,
-  answer: record.answer,
-  by: record.by,
-  client: record.client,
-  atMs: record.atMs,
-  outcome,
-});
-
-/** The terminal's records with `change` applied, or undefined to leave the document as it is. */
-type Change = (records: readonly ApprovalRecord[]) => readonly JsonValue[] | undefined;
-
-/** The terminal's approval document, then `change` applied and written back at the version read, retried on a conflict. */
-async function update(
-  core: ApprovalCore,
-  address: string,
-  change: Change,
-  attempt = 1,
-): Promise<readonly ApprovalRecord[] | undefined> {
-  const { name, on } = docOf(address);
-  const current = await core.doc(name, on);
-  const next = change(recordsIn(current.value));
-  if (next === undefined) return recordsIn(current.value);
-  if ((await core.setDoc(name, on, { records: next.slice(-KEPT) }, current.version)) === "ok") return undefined;
-  if (attempt >= ATTEMPTS) throw new Error(`approval document ${name} kept moving: ${ATTEMPTS} conflicts in a row`);
-  return update(core, address, change, attempt + 1);
-}
-
-/** What was recorded for the marked prompt, by whichever client answered it. */
-export async function readApprovalRecord(core: ApprovalCore, mark: ApprovalMark): Promise<ApprovalRecord | undefined> {
-  const { name, on } = docOf(mark.terminal);
-  const key = approvalKey(mark);
-  return recordsIn((await core.doc(name, on)).value).findLast((record) => record.prompt === key);
-}
-
-async function settle(core: ApprovalCore, mark: ApprovalMark, client: string, outcome: ApprovalOutcome): Promise<void> {
-  const key = approvalKey(mark);
+/** Sets the outcome of exactly this answer's record (prompt, client and attempt), never another answer's. */
+async function settle(core: ApprovalCore, mark: ApprovalMark, mine: ApprovalRecord, outcome: ApprovalOutcome) {
+  const ours = (record: ApprovalRecord) =>
+    record.prompt === mine.prompt && record.client === mine.client && record.attempt === mine.attempt;
   await update(core, mark.terminal, (records) =>
-    records.map((record) =>
-      recordJson(record, record.prompt === key && record.client === client ? outcome : record.outcome),
-    ),
+    records.some(ours)
+      ? records.map((record) => recordJson(record, ours(record) ? outcome : record.outcome))
+      : undefined,
   );
 }
 
 /**
- * Answer one prompt, exactly once across every client: claim it in the terminal's approval document with a
- * compare-and-set (`doc.set` at the version read; the first writer wins, a later one finds the record and loses), then
- * re-read the live screen and press the agent's own key only if the marked prompt is still there.
- *
- * Someone typing in the terminal itself is not part of the claim: between the re-read and the key press they can still
- * answer first. Closing that needs a conditional `terminal.keys` in hc.
+ * The claimer's fence, read right before its key press: the prompt's record is still this answer's own `claimed` one,
+ * and this client's own clock says the claim is younger than `CLAIM_TTL_MS - FENCE_MARGIN_MS`.
  */
+async function fenced(
+  core: ApprovalCore,
+  address: string,
+  mine: ApprovalRecord,
+  clock: ApprovalClock,
+  claimedAt: number,
+) {
+  const current = (await readRecords(core, address)).findLast((record) => record.prompt === mine.prompt);
+  return (
+    current?.client === mine.client &&
+    current.attempt === mine.attempt &&
+    current.outcome === "claimed" &&
+    clock.now() - claimedAt < CLAIM_TTL_MS - FENCE_MARGIN_MS
+  );
+}
+
+/**
+ * Answer one prompt with one key press across every client.
+ *
+ * 1. Claim it in the terminal's approval document with a compare-and-set (`doc.set` at the version read). A record that
+ *    holds the prompt (`claimed` and watched for less than CLAIM_TTL_MS on this client's own clock, or `sent`, `stale`,
+ *    `unknown`) makes this answer lose. The only claim of its own a client takes over is the one it names by attempt id
+ *    in `retake`, from an answer it saw end as `failed`.
+ * 2. Re-read the live screen: press only if the marked prompt is still there.
+ * 3. Fence: re-read the document; press only if the prompt's record is still this answer's own claim and this client's
+ *    clock says the claim is younger than CLAIM_TTL_MS - FENCE_MARGIN_MS. Otherwise nothing is pressed (`failed`).
+ * 4. Press the agent's own key, then record `sent`. A press that throws is `unknown`: it may have landed, so the prompt
+ *    stays held until the screen moves.
+ *
+ * `wallMs` is only shown to people. Two limits stay: a key already on the wire when its claim lapses, and someone
+ * typing in the terminal itself; both need a conditional `terminal.keys` in hc (herdrdev/herdr-core#122).
+ */
+export interface AnswerOptions {
+  /** This client's own clock; one per core by default. */
+  readonly clock?: ApprovalClock;
+  /** The attempt id of this client's own earlier `failed` answer, whose claim it may take over. */
+  readonly retake?: string;
+}
+
 export async function answerApproval(
   core: ApprovalCore,
   mark: ApprovalMark,
   answer: ApprovalAnswer,
   who: Answerer,
-  nowMs: number,
+  wallMs: number,
+  options: AnswerOptions = {},
 ): Promise<AnswerResult> {
+  const clock = options.clock ?? clockOf(core);
   const key = approvalKey(mark);
-  const claim: ApprovalRecord = { prompt: key, answer, ...who, atMs: nowMs, outcome: "claimed" };
+  const claimedAt = clock.now();
+  const claim: ApprovalRecord = {
+    prompt: key,
+    answer,
+    ...who,
+    atMs: wallMs,
+    attempt: crypto.randomUUID(),
+    outcome: "claimed",
+  };
   const taken = await update(core, mark.terminal, (records) =>
-    records.some((record) => record.prompt === key)
+    records.some((record) => record.prompt === key && holds(record, clock, options.retake))
       ? undefined
-      : [...records, claim].map((record) => recordJson(record)),
+      : [...records.filter((record) => record.prompt !== key), claim].map((record) => recordJson(record)),
   );
   const winner = taken?.findLast((record) => record.prompt === key);
-  if (winner !== undefined) return { kind: "lost", record: winner };
+  if (taken !== undefined) return winner === undefined ? { kind: "stale" } : { kind: "lost", record: winner };
 
-  if ((await promptStillThere(core, mark)) !== "pending") {
-    await settle(core, mark, who.client, "stale");
-    return { kind: "stale" };
+  let press: boolean;
+  try {
+    if ((await promptStillThere(core, mark)) !== "pending") {
+      await settle(core, mark, claim, "stale");
+      return { kind: "stale" };
+    }
+    press = await fenced(core, mark.terminal, claim, clock, claimedAt);
+  } catch (error) {
+    // Nothing was pressed. Release the claim as `failed` if the document is reachable; if it is not, it lapses after
+    // CLAIM_TTL_MS of every other client's watch.
+    await settle(core, mark, claim, "failed").catch(() => undefined);
+    return { kind: "failed", reason: failure(error), attempt: claim.attempt ?? "" };
   }
-  await core.keys(mark.terminal, [mark.prompt.keys[answer]]);
-  await settle(core, mark, who.client, "sent");
+  if (!press) {
+    await settle(core, mark, claim, "failed").catch(() => undefined);
+    return {
+      kind: "failed",
+      reason: "the claim lapsed or was taken before the key press; nothing was pressed",
+      attempt: claim.attempt ?? "",
+    };
+  }
+  try {
+    await core.keys(mark.terminal, [mark.prompt.keys[answer]]);
+  } catch (error) {
+    await settle(core, mark, claim, "unknown").catch(() => undefined);
+    return { kind: "unknown", reason: failure(error) };
+  }
+  // The key was delivered. If `sent` cannot be written, the claim lapses later and the screen re-check finds no prompt.
+  await settle(core, mark, claim, "sent").catch(() => undefined);
   return { kind: "sent" };
 }
