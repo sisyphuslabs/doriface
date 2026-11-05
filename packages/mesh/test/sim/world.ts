@@ -178,13 +178,14 @@ export function attack(
     if (roll < 0.3) {
       const fellow = batch.filter((k) => k !== by);
       const z = r.next() < 0.3 && fellow.length > 0 ? pick(r, fellow) : `Z${j}`;
-      draft = admit(id, by, z, prev);
+      // Sometimes with an honest member's Noise key: a twin (#90), which R1 must void.
+      draft = admit(id, by, z, prev, r.next() < 0.25 ? `${pick(r, honest)}-key` : undefined);
       if (!signers.includes(z)) signers.push(z);
     } else if (roll < 0.6) {
       const targets = honest.filter(() => r.next() < 0.6);
       draft = revoke(id, by, targets.length > 0 ? targets : [pick(r, honest)], prev);
     } else if (roll < 0.75) draft = name(id, by, pick(r, honest), prev, `pwn${j}`);
-    else if (roll < 0.85) draft = rekey(id, by, prev, `${by}-evil-${j}`);
+    else if (roll < 0.85) draft = rekey(id, by, prev, r.next() < 0.4 ? `${pick(r, honest)}-key` : `${by}-evil-${j}`);
     else draft = ack(id, by, prev);
     const rec: Rec = { ...draft, n };
     world.records.push(rec);

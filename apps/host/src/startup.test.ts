@@ -1,6 +1,6 @@
 import { DEFAULT_PUSH_PREFS } from "@doriface/protocol";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -212,6 +212,87 @@ describe("a startup that fails after the push feed started", () => {
       expect(run.leftAfterExit).toEqual([]);
     } finally {
       await taken.stop(true);
+    }
+  });
+});
+
+describe("a startup that fails while the push feed's hc connect ignores EOF and TERM", () => {
+  test("the unwind kills that child by its pid, so the startup-error exit leaves none behind", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-hung-"));
+    const session = `dh-hung-${crypto.randomUUID().slice(0, 8)}`;
+    // An hc whose connect never exits on its own: closing its stdin and SIGTERM both leave it running.
+    const hc = join(dir, "hc");
+    writeFileSync(
+      hc,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\ntrap \'\' TERM HUP\nwhile :; do sleep 1; done\n',
+      { mode: 0o755 },
+    );
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir, { mode: 0o700 });
+    new SubscriptionStore(stateDir).put(
+      LOOPBACK_OWNER,
+      { endpoint: "https://fcm.googleapis.com/fcm/send/hung", p256dh: "B".repeat(87), auth: "C".repeat(22) },
+      DEFAULT_PUSH_PREFS,
+    );
+    mkdirSync(join(stateDir, "host.sock"));
+    writeFileSync(join(stateDir, "host.sock", "keep"), "");
+    try {
+      const args = ["--listen", "127.0.0.1:0", "--hc", hc, "--session", session, "--state-dir", stateDir, "--no-relay"];
+      // A file, not a pipe: a child left alive would hold a stderr pipe open, and reading it would never end.
+      const errors = join(dir, "stderr.txt");
+      const proc = Bun.spawn([process.execPath, CLI, ...args], { stdout: "ignore", stderr: Bun.file(errors) });
+      const status = await proc.exited;
+      const stderr = await Bun.file(errors).text();
+      const report = stderr
+        .split("\n")
+        .map(parseStartupErrorLine)
+        .find((line) => line !== undefined);
+      expect(status).toBe(3);
+      expect(report?.code).toBe("startup-failed");
+      expect(stderr).toContain("killed hc connect pid");
+      expect(stderr.toLowerCase()).not.toContain("unhandled");
+      expect(hcConnectPids(session)).toEqual([]);
+    } finally {
+      for (const pid of hcConnectPids(session)) process.kill(pid, "SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+describe("a host whose core never answers the write of its OS", () => {
+  test("starts within the bound, the write still pending, and stop reaps the write's child", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-silent-"));
+    // An hc whose connect never answers the hello, keeps its output open, and exits once its input ends, as hc does.
+    const hc = join(dir, "hc");
+    writeFileSync(
+      hc,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/connect.pid"\nwhile read -r line; do :; done\n`,
+      { mode: 0o755 },
+    );
+    try {
+      const host = await startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        token: generateToken(),
+        hc,
+        platform: "darwin",
+        log: () => {},
+      });
+      // The client's own handshake deadline (10 s) has not passed: only the start's bound let it serve.
+      const pid = Number(readFileSync(join(dir, "connect.pid"), "utf8"));
+      expect(alive(pid)).toBe(true);
+      await host.stop();
+      expect(alive(pid)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

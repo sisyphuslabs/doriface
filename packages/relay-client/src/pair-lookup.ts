@@ -2,8 +2,10 @@ import {
   fromBase64Url,
   HOST_ID_PATTERN,
   hostIdOf,
+  isPairSlotExpiry,
   NOISE_STATIC_PUB_BYTES,
   normalizePairCode,
+  PAIR_SLOT_SIGNATURE_BYTES,
   pairSlotOf,
   SIGN_PUB_BYTES,
 } from "./wire/index.ts";
@@ -13,6 +15,10 @@ export interface PairSlotRecord {
   readonly hostId: string;
   readonly noiseStaticPub: Uint8Array;
   readonly signPub: Uint8Array;
+  /** Present when the host registered the signed form (contract v1.8): the offer's expiry, ms since the epoch. */
+  readonly expiresAt?: number;
+  /** With `expiresAt`: the host's Ed25519 signature over `pairSlotStatement`, as the relay stored it. */
+  readonly slotSig?: Uint8Array;
 }
 
 export class PairLookupError extends Error {
@@ -61,7 +67,13 @@ async function parseRecord(body: unknown): Promise<PairSlotRecord | undefined> {
   const signPub = fromBase64Url(sign);
   if (!HOST_ID_PATTERN.test(hostId) || noiseStaticPub?.byteLength !== NOISE_STATIC_PUB_BYTES) return undefined;
   if (signPub?.byteLength !== SIGN_PUB_BYTES || (await hostIdOf(signPub)) !== hostId) return undefined;
-  return { hostId, noiseStaticPub, signPub };
+  const expiresAt = field(body, "expiresAt");
+  const sig = field(body, "slotSig");
+  if (expiresAt === undefined && sig === undefined) return { hostId, noiseStaticPub, signPub };
+  // The signed form's two fields come together; one alone, or either out of shape, is a malformed answer.
+  const slotSig = typeof sig === "string" ? fromBase64Url(sig) : undefined;
+  if (!isPairSlotExpiry(expiresAt) || slotSig?.byteLength !== PAIR_SLOT_SIGNATURE_BYTES) return undefined;
+  return { hostId, noiseStaticPub, signPub, expiresAt, slotSig };
 }
 
 /**
