@@ -61,12 +61,31 @@ function list(): Listing {
   );
 }
 
+/** How long a killed program may take to exit before the guard reports it; it only bounds a kill that never lands. */
+const ENDED_WITHIN_MS = 30_000;
+const pause = new Int32Array(new SharedArrayBuffer(4));
+
+/**
+ * Waits until hc lists `address` as no longer live. `hc kill` returns once the hangup is sent, not once the program has
+ * exited, and `hc rm` refuses a terminal that is still running: on a loaded host the exit lands well after the kill.
+ */
+function untilEnded(address: string): void {
+  const deadline = Date.now() + ENDED_WITHIN_MS;
+  while ([...list().values()].some((terminal) => terminal.address === address && terminal.live)) {
+    if (Date.now() > deadline) throw new Error(`${address} was still running ${ENDED_WITHIN_MS} ms after hc kill`);
+    Atomics.wait(pause, 0, 0, 100);
+  }
+}
+
 /** Ends each of `keys` that is live and removes it; returns the core afterwards and every refusal from hc. */
 function end(keys: readonly string[], now: Listing): { readonly now: Listing; readonly errors: string[] } {
   const errors: string[] = [];
   for (const terminal of keys.flatMap((key) => now.get(key) ?? [])) {
     try {
-      if (terminal.live) hcOn("host", ["kill", terminal.address]);
+      if (terminal.live) {
+        hcOn("host", ["kill", terminal.address]);
+        untilEnded(terminal.address);
+      }
       hcOn("host", ["rm", terminal.address]);
     } catch (error) {
       errors.push(`${terminal.address}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
