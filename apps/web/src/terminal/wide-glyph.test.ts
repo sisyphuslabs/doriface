@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { primaryMetrics, wideGlyphScale } from "./wide-glyph.ts";
 
-// JetBrains Mono at 13pt in Chromium: a 10.40625 px cell, ASCII ink 18.2 px tall (below two cells, 20.8125 px).
-const jetbrains = { cell: 10.406_25, asciiHeight: 18.2 };
+// A 10.40625 px cell owns a 20.8125 px wide advance, independently of the ASCII ink height.
+const jetbrains = { cell: 10.406_25 };
 
 /** A face whose advance grows with its size, as a browser lays it out with subpixel advances. */
 const linear = (advance: number) => (scale: number) => advance * scale;
@@ -13,20 +13,25 @@ const whole = (scale: number) => Math.ceil(16 * scale + 0.4);
 describe("wideGlyphScale", () => {
   test("a fallback face narrower than the cells grows to the primary's ideograph width, as Ghostty sizes it", () => {
     // Apple SD Gothic Neo draws Hangul with a 15 px advance at that size.
-    expect(15 * wideGlyphScale(linear(15), jetbrains)).toBeCloseTo(18.2, 2);
+    expect(15 * wideGlyphScale(linear(15), jetbrains)).toBeCloseTo(20.8125, 2);
   });
 
-  test("the ideograph width is two cells when the ASCII ink is taller than two cells", () => {
-    const tall = { cell: 8, asciiHeight: 19 };
+  test("the ideograph width follows two primary cells", () => {
+    const tall = { cell: 8 };
     expect(17 * wideGlyphScale(linear(17), tall)).toBeCloseTo(16, 2);
   });
 
   test("a fallback face wider than the primary's ideograph width shrinks to it", () => {
-    expect(20 * wideGlyphScale(linear(20), jetbrains)).toBeCloseTo(18.2, 2);
+    expect(23 * wideGlyphScale(linear(23), jetbrains)).toBeCloseTo(20.8125, 2);
   });
 
   test("where advances round up to whole pixels, the glyph is shrunk until the advance drawn fits the cells", () => {
-    const scale = wideGlyphScale(whole, { cell: 10, asciiHeight: 20 });
+    const scale = wideGlyphScale(whole, { cell: 10 });
+    expect(whole(scale)).toBe(20);
+  });
+
+  test("whole-pixel advances fit a fractional two-cell boundary without stopping on a rounded-up pixel", () => {
+    const scale = wideGlyphScale(whole, { cell: 10.43 });
     expect(whole(scale)).toBe(20);
   });
 
@@ -42,7 +47,7 @@ describe("wideGlyphScale", () => {
 });
 
 describe("primaryMetrics", () => {
-  test("the cell is W's advance and the ASCII height spans the tallest ascent and the deepest descent", () => {
+  test("the cell is the primary W's advance, regardless of other glyphs' ink heights", () => {
     const ink: Record<string, { ascent: number; descent: number }> = {
       W: { ascent: 10, descent: 0 },
       j: { ascent: 9, descent: 4 },
@@ -57,6 +62,6 @@ describe("primaryMetrics", () => {
         };
       },
     };
-    expect(primaryMetrics(context)).toEqual({ cell: 9.5, asciiHeight: 16 });
+    expect(primaryMetrics(context)).toEqual({ cell: 9.5 });
   });
 });

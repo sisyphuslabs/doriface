@@ -56,15 +56,22 @@ const sameGlyph = (a: GlyphMetrics, b: GlyphMetrics): boolean => INK.every((key)
 export class FaceScales {
   readonly #measure: Measure;
   readonly #family: string;
+  readonly #primaryFamily: string;
   readonly #defaultFamily: string;
+  readonly #cell: number | undefined;
   readonly #scales = new Map<string, number>();
   #primary: PrimaryMetrics | undefined;
 
   /** `family` is the terminal's font stack; `defaultFamily` is the stack without the families the user chose. */
-  constructor(measure: Measure, family: string, defaultFamily: string) {
+  constructor(measure: Measure, family: string, defaultFamily: string, cell?: number) {
     this.#measure = measure;
     this.#family = family;
     this.#defaultFamily = defaultFamily;
+    this.#cell = cell;
+    // The first family is the primary face. A later configured family is still a fallback, just like a system face.
+    // Computed CSS quotes family names containing commas; preserve quoted strings and their escapes.
+    const first = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^,]+)/.exec(family)?.[0] ?? family;
+    this.#primaryFamily = `${first}, ${defaultFamily}`;
   }
 
   scaleOf(text: string): number {
@@ -104,11 +111,17 @@ export class FaceScales {
    */
   #faceScale(sample: string): number | undefined {
     const drawn = this.#measure(sample, this.#family, 1);
-    // The user's chosen font drew the sample when it differs from what the default stack falls back to; like Ghostty,
-    // only a fallback face is resized.
-    if (this.#family !== this.#defaultFamily && !sameGlyph(drawn, this.#measure(sample, this.#defaultFamily, 1)))
+    // Compare the primary alone with the default, rather than the entire configured list: a Korean second family
+    // differs from the system fallback too, but must not be mistaken for the primary and bypass sizing (#410).
+    if (
+      this.#family !== this.#defaultFamily &&
+      !sameGlyph(this.#measure(sample, this.#primaryFamily, 1), this.#measure(sample, this.#defaultFamily, 1))
+    )
       return undefined;
-    this.#primary ??= primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) });
+    this.#primary ??=
+      this.#cell === undefined
+        ? primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) })
+        : { cell: this.#cell };
     if (!(drawn.width > this.#primary.cell)) return undefined;
     return wideGlyphScale(
       (at) => (at === 1 ? drawn.width : this.#measure(sample, this.#family, at).width),
@@ -137,13 +150,14 @@ export function faceScalesFor(
   family: string,
   defaultFamily: string,
   measureFor: (size: number) => Measure | null,
+  cell?: number,
 ): FaceScales | null {
-  const key = `${size}px ${family} | ${defaultFamily}`;
+  const key = `${size}px ${family} | ${defaultFamily} | ${cell ?? "font"}`;
   const known = faces.get(key);
   if (known !== undefined) return known;
   const measure = measureFor(size);
   if (measure === null) return null;
-  const made = new FaceScales(measure, family, defaultFamily);
+  const made = new FaceScales(measure, family, defaultFamily, cell);
   faces.set(key, made);
   return made;
 }
@@ -155,6 +169,7 @@ export function faceScalesFor(
 export function wideGlyphScaler(element: HTMLElement): ((text: string) => number) | null {
   const style = getComputedStyle(element);
   const family = style.fontFamily;
+  const nativeCell = style.getPropertyValue("--term-native-cell-width").trim();
   const scales = faceScalesFor(
     parseFloat(style.fontSize),
     family,
@@ -167,6 +182,7 @@ export function wideGlyphScaler(element: HTMLElement): ((text: string) => number
         return context.measureText(text);
       };
     },
+    nativeCell === "" ? undefined : parseFloat(nativeCell),
   );
   return scales === null ? null : (text) => scales.scaleOf(text);
 }
