@@ -25,24 +25,43 @@ const stateDir = mkdtempSync(join(tmpdir(), "dw-fake-relay-"));
 const relay = new FakeRelay();
 const bridge = new RelayClientBridge(relay);
 const hc = createHcSession("web-e2e-fake-relay");
-const host = await startHost({
-  listen: { hostname: "127.0.0.1", port: 0 },
-  token: `fake-relay-host-${crypto.randomUUID()}`,
-  hc: hc.hc,
-  session: hc.name,
-  env: hc.env,
-  stateDir,
-  relay: { url: relay.url },
-  log: () => {},
-});
-await relay.answers.next();
-// With --machine, the host's core also has an added machine, as a host with more than one computer does.
-const stopMachine = process.argv.includes("--machine")
-  ? await addMachine(hc.hc, hc.env, join(stateDir, "machine"), false, {
+let host: Awaited<ReturnType<typeof startHost>> | undefined;
+let stopMachine: (() => Promise<void>) | undefined;
+async function stopAll(): Promise<void> {
+  // Its own core first, then the added machine's: while the core runs, it redials a stopped machine and starts that
+  // machine's core again, which then outlives the run (#502), as host.ts orders its shutdown.
+  await host?.stop();
+  await hc.dispose();
+  await stopMachine?.();
+  await bridge.stop();
+  await relay.stop();
+  rmSync(stateDir, { recursive: true, force: true });
+}
+try {
+  host = await startHost({
+    listen: { hostname: "127.0.0.1", port: 0 },
+    token: `fake-relay-host-${crypto.randomUUID()}`,
+    hc: hc.hc,
+    session: hc.name,
+    env: hc.env,
+    stateDir,
+    relay: { url: relay.url },
+    log: () => {},
+  });
+  await relay.answers.next();
+  // With --machine, the host's core also has an added machine, as a host with more than one computer does.
+  if (process.argv.includes("--machine")) {
+    stopMachine = await addMachine(hc.hc, hc.env, join(stateDir, "machine"), false, {
       ...DEMO_MACHINE,
       dir: join(stateDir, "machine-files"),
-    })
-  : undefined;
+    });
+  }
+} catch (error) {
+  // A start that fails stops what it started, so no core outlives it, and exits with the reason on stderr.
+  console.error(error);
+  await stopAll();
+  process.exit(1);
+}
 
 async function pairingLink(): Promise<string> {
   const args = ["pair", "--no-qr", "--web-origin", webOrigin ?? "", "--relay", relayAddress ?? ""];
@@ -65,11 +84,6 @@ void (async () => {
 try {
   await done.promise;
 } finally {
-  await stopMachine?.();
-  await host.stop();
-  await hc.dispose();
-  await bridge.stop();
-  await relay.stop();
-  rmSync(stateDir, { recursive: true, force: true });
+  await stopAll();
 }
 process.exit(0);
