@@ -138,10 +138,10 @@ const machinesOf = async (entry: Running): Promise<readonly string[]> => {
 const added = (entry: Running): number => entry.logged.filter((line) => line.startsWith("mesh: added machine")).length;
 
 /**
- * Design section 8.2 (#106, M-E3): a newcomer joining N - 1 members starts 3N - 3 charged relay upgrades (its pairing
- * dial, N - 2 ack pushes, and herdr's probe and the line for each of the N - 1 machines it adds) against the budget per
- * window, so `machine.list` on every online member reflects the join within that many windows: 60 s up to 5 members,
- * 120 s up to 9, 180 s up to 12.
+ * Design section 8.2 (#106, M-E3): a newcomer joining N - 1 members needs at least 3N - 3 charged relay upgrades (its
+ * pairing dial, N - 2 ack pushes, and herdr's probe and the line for each of the N - 1 machines it adds). Up to 5
+ * members that fits one window of the budget, so `machine.list` on every online member reflects the join within 60 s.
+ * Above 5 the bound is not guaranteed yet (#106 follow-up), so this test stays at 5.
  */
 const joinBoundMs = (members: number): number =>
   Math.ceil((3 * members - 3) / DIAL_LIMITS.budget) * DIAL_LIMITS.windowMs;
