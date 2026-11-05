@@ -1,0 +1,62 @@
+diff --git a/dist/ghostty-core.d.ts b/dist/ghostty-core.d.ts
+index e10d82010dba2128a7d7162dcb1c3cf4378d5f06..5b4721d416ca53de125916289f11fe44480f018f 100644
+--- a/dist/ghostty-core.d.ts
++++ b/dist/ghostty-core.d.ts
+@@ -1,4 +1,5 @@
+ import type { CellData, CursorState, TerminalColorOverrides, TerminalThemeColors, ShellIntegrationState, UnhandledSequence, TerminalCore, TerminalGraphicsState, TerminalImageData, TerminalResourceState, TerminalRowMetadata, TerminalPosition, TrackedTerminalPosition } from "@wterm/core";
++import type { GhosttyWasm } from "./wasm-bindings.js";
+ /** Maximum decoded bytes accepted for one direct Kitty image. */
+ export declare const MAX_IMAGE_BYTES: number;
+ export interface GhosttyOptions {
+@@ -59,6 +60,12 @@ export declare class GhosttyCore implements TerminalCore {
+      * The returned core is ready to be passed as the `core` option to `WTerm`.
+      */
+     static load(options?: GhosttyOptions): Promise<GhosttyCore>;
++    /**
++     * Create a `GhosttyCore` on an instance from `loadGhosttyWasm`. Every export
++     * takes the terminal's own pointer, so cores may share one instance (and its
++     * memory); a trap in that instance reaches every core on it.
++     */
++    static fromWasm(wasm: GhosttyWasm, options?: Omit<GhosttyOptions, "wasmPath">): GhosttyCore;
+     init(cols: number, rows: number): void;
+     resize(cols: number, rows: number): void;
+     getColorOverrides(): TerminalColorOverrides;
+diff --git a/dist/ghostty-core.js b/dist/ghostty-core.js
+index 2e30ac72215a6b67042ed46ad32bb684aeda425d..3d236712f9d2317c1ad4005650fe27ba72f416ad 100644
+--- a/dist/ghostty-core.js
++++ b/dist/ghostty-core.js
+@@ -127,6 +127,14 @@ export class GhosttyCore {
+         const wasm = await loadGhosttyWasm(options.wasmPath);
+         return new GhosttyCore(wasm, options);
+     }
++    /**
++     * Create a `GhosttyCore` on an instance from `loadGhosttyWasm`. Every export
++     * takes the terminal's own pointer, so cores may share one instance (and its
++     * memory); a trap in that instance reaches every core on it.
++     */
++    static fromWasm(wasm, options = {}) {
++        return new GhosttyCore(wasm, options);
++    }
+     // -- Lifecycle --
+     init(cols, rows) {
+         if (this._disposed)
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index fddb2070f5eb1f4347fccd2f1b91c200a7d561a8..01c609338da33ffad804cde313c277f111a58951 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,3 +1,5 @@
+ export { GhosttyCore, MAX_IMAGE_BYTES } from "./ghostty-core.js";
+ export type { GhosttyOptions } from "./ghostty-core.js";
++export { loadGhosttyWasm } from "./wasm-bindings.js";
++export type { GhosttyWasm } from "./wasm-bindings.js";
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/index.js b/dist/index.js
+index 15813d3dac55364a65029cd6b2362490318cb0c7..4d6d47b3d3043fd33ef0675ed2d0a1bc2960b7dc 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,2 +1,3 @@
+ export { GhosttyCore, MAX_IMAGE_BYTES } from "./ghostty-core.js";
++export { loadGhosttyWasm } from "./wasm-bindings.js";
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file

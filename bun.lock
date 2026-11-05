@@ -165,6 +165,7 @@
     },
   },
   "patchedDependencies": {
+    "@wterm/ghostty@0.5.8": "patches/@wterm%2Fghostty@0.5.8.patch",
     "@wterm/dom@0.5.8": "patches/@wterm%2Fdom@0.5.8.patch",
   },
   "packages": {
