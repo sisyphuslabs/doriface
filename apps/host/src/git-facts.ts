@@ -132,6 +132,11 @@ export interface GitFactsPublisher {
   stop(): Promise<void>;
   /** Kills the current tick's child if it has not exited, and returns the pids it killed. */
   kill(): readonly number[];
+  /**
+   * Settles once the tick in flight (if any) is over and its `hc connect` child has exited. The next tick waits on a
+   * timer, so no child of the publisher's runs between this settling and the caller's next step.
+   */
+  settled(): Promise<void>;
 }
 
 /**
@@ -181,10 +186,15 @@ export function publishGitFacts(
       if (!stopped && line !== lastError) log(line);
       lastError = line;
     }
-    if (!stopped) timer = setTimeout(() => void tick(), TICK_MS);
+    if (!stopped) timer = setTimeout(start, TICK_MS);
   };
-  void tick();
+  let running: Promise<void> = Promise.resolve();
+  function start(): void {
+    running = tick();
+  }
+  start();
   return {
+    settled: () => running,
     stop() {
       stopped = true;
       clearTimeout(timer);
