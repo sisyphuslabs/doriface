@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { lookupPairSlot, PairLookupError } from "./pair-lookup.ts";
+import { hostIdOf, toBase64Url } from "./wire/index.ts";
 
 interface Call {
   readonly url: string;
@@ -42,5 +43,48 @@ describe("lookupPairSlot", () => {
     const controller = new AbortController();
     await lookupPairSlot({ relayUrl: "https://relay.example", code: "AB3K9XQZ", fetch, signal: controller.signal });
     expect(calls[0]?.signal).toBe(controller.signal);
+  });
+});
+
+async function answer(extra: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const keys = (await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"])) as CryptoKeyPair;
+  const signPub = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
+  return {
+    hostId: await hostIdOf(signPub),
+    signPub: toBase64Url(signPub),
+    noiseStaticPub: toBase64Url(new Uint8Array(32).fill(7)),
+    ...extra,
+  };
+}
+const look = (body: unknown) =>
+  lookupPairSlot({ relayUrl: "https://relay.example", code: "AB3K9XQZ", fetch: async () => Response.json(body) });
+
+describe("lookupPairSlot: the signed form's optional fields (#22)", () => {
+  test("an answer without them reads as before", async () => {
+    const record = await look(await answer({}));
+    expect(record?.expiresAt).toBeUndefined();
+    expect(record?.slotSig).toBeUndefined();
+  });
+
+  test("an answer with both carries them", async () => {
+    const slotSig = new Uint8Array(64).fill(9);
+    const record = await look(await answer({ expiresAt: 1_793_800_000_000, slotSig: toBase64Url(slotSig) }));
+    expect(record?.expiresAt).toBe(1_793_800_000_000);
+    expect(record?.slotSig).toEqual(slotSig);
+  });
+
+  test("one without the other, a short signature or an unsafe expiry is a malformed answer (502)", async () => {
+    const sig = toBase64Url(new Uint8Array(64));
+    for (const extra of [
+      { expiresAt: 1 },
+      { slotSig: sig },
+      { expiresAt: 1, slotSig: toBase64Url(new Uint8Array(63)) },
+      { expiresAt: Number.MAX_SAFE_INTEGER + 2, slotSig: sig },
+      { expiresAt: "1", slotSig: sig },
+      { expiresAt: -1, slotSig: sig },
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- one answer at a time, each its own lookup
+      await expect(look(await answer(extra))).rejects.toMatchObject({ name: "PairLookupError", status: 502 });
+    }
   });
 });

@@ -2,6 +2,7 @@ import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
 import { Kbd } from "./kbd.tsx";
+import { wrapAnywhere } from "./overlay.ts";
 
 export const TooltipProvider = BaseTooltip.Provider;
 
@@ -25,6 +26,10 @@ export function Tooltip({ label, keys, side = "bottom", children, className, def
           <BaseTooltip.Popup
             className={cn(
               "flex items-center gap-2 rounded-sm border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-overlay",
+              // A real name stays on one line as before (a 31-character Korean one is 352 px); a longer label wraps at
+              // 28rem, or sooner where the viewport leaves less room.
+              "max-w-[min(28rem,var(--available-width))]",
+              wrapAnywhere,
               "origin-(--transform-origin) transition-[opacity,transform] duration-(--duration-micro)",
               "data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:opacity-0",
               className,

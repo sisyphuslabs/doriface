@@ -27,6 +27,7 @@ import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useMachineOrder } from "./use-machine-order.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
+import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
@@ -45,6 +46,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (name === ORDER_DOC && machine === null) heardOrder.current(version);
   }, []);
   const fed = useTerminals(connection, onDoc);
+  useResumeEnds(connection);
   const {
     entries: listed,
     terminals,

@@ -1,0 +1,258 @@
+import type { Locator, Page } from "@playwright/test";
+import { coreSize, gridSize } from "./core-size.ts";
+import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { hcOn } from "./machine-switch.ts";
+import { key, keysBar, openPhoneTerminal, PHONE } from "./phone-key-bar.ts";
+
+// The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
+test.use({ serviceWorkers: "block" });
+
+const LINES = 3000;
+
+const bar = (terminal: Locator) => terminal.locator("xpath=..").locator("[data-terminal-scrollbar]");
+const jump = (terminal: Locator) => terminal.locator("xpath=..").getByRole("button", { name: /^Jump to bottom/ });
+
+interface Measure {
+  readonly scrollTop: number;
+  readonly max: number;
+  readonly rowHeight: number;
+  readonly rows: number;
+  /** Rows above the screen: the last one is reached at `max`, which padding leaves short of a whole row. */
+  readonly scrollback: number;
+  readonly track: { readonly top: number; readonly height: number; readonly left: number; readonly right: number };
+  readonly thumb: { readonly top: number; readonly height: number; readonly left: number; readonly right: number };
+  readonly pane: { readonly right: number; readonly bottom: number };
+}
+
+const NO_BOX = { top: Number.NaN, height: Number.NaN, left: Number.NaN, right: Number.NaN };
+const boxOf = (rect: { top: number; height: number; left: number; right: number } | null) =>
+  rect === null ? NO_BOX : { top: rect.top, height: rect.height, left: rect.left, right: rect.right };
+
+/** The scroll element as the page lays it out, and where the bar and its thumb are drawn over it. */
+async function measure(terminal: Locator): Promise<Measure> {
+  const read = await terminal.evaluate((element) => {
+    const grid = element.querySelectorAll(".term-row:not(.term-scrollback-row)");
+    const rowHeight = grid[0]?.getBoundingClientRect().height ?? 0;
+    const lane = element.parentElement?.querySelector("[data-terminal-scrollbar]")?.getBoundingClientRect() ?? null;
+    const thumb = element.parentElement?.querySelector("[data-scrollbar-thumb]")?.getBoundingClientRect() ?? null;
+    const pane = element.getBoundingClientRect();
+    const max = element.scrollHeight - element.clientHeight;
+    return {
+      scrollTop: element.scrollTop,
+      max,
+      rowHeight,
+      rows: grid.length,
+      lane: lane === null ? null : lane.toJSON(),
+      thumb: thumb === null ? null : thumb.toJSON(),
+      pane: { right: pane.right, bottom: pane.bottom },
+    };
+  });
+  return {
+    scrollTop: read.scrollTop,
+    max: read.max,
+    rowHeight: read.rowHeight,
+    rows: read.rows,
+    scrollback: Math.ceil(read.max / read.rowHeight - 0.001),
+    track: boxOf(read.lane),
+    thumb: boxOf(read.thumb),
+    pane: read.pane,
+  };
+}
+
+/** The thumb the bar should draw for the view as it is, as herdr-app sizes it: within one cell of the drawn one. */
+function expectThumbMatches(m: Measure): void {
+  const total = m.scrollback + m.rows;
+  const length = Math.max((m.track.height * m.rows) / total, m.rowHeight);
+  const offset = m.max - m.scrollTop < 5 ? m.scrollback : m.scrollTop / m.rowHeight;
+  const top = m.track.top + (offset / m.scrollback) * (m.track.height - length);
+  expect(m.track.height).toBeCloseTo(m.rows * m.rowHeight, 0);
+  expect(Math.abs(m.thumb.height - length)).toBeLessThanOrEqual(m.rowHeight);
+  expect(Math.abs(m.thumb.top - top)).toBeLessThanOrEqual(m.rowHeight);
+}
+
+/** The scrollTop a thumb top (relative to the track) lands on, row by row, as the drag should put it. */
+function scrollTopForThumbTop(m: Measure, top: number): number {
+  const travel = m.track.height - m.thumb.height;
+  const row = Math.round((Math.min(Math.max(top, 0), travel) / travel) * m.scrollback);
+  return row >= m.scrollback ? m.max : row * m.rowHeight;
+}
+
+async function fill(page: Page, terminal: Locator): Promise<void> {
+  await terminal.getByRole("textbox").focus();
+  await page.keyboard.type(`seq 1 ${LINES}`);
+  await page.keyboard.press("Enter");
+  const last = terminal
+    .locator(".term-row:not(.term-scrollback-row)")
+    .filter({ hasText: new RegExp(`^${LINES}\\s*$`) });
+  await expect(last).toHaveCount(1, { timeout: 20_000 });
+}
+
+/** Two controls that float over the same corner draw apart, so each takes its own taps. */
+async function expectApart(a: Locator, b: Locator): Promise<void> {
+  const [one, two] = [await a.boundingBox(), await b.boundingBox()];
+  if (one === null || two === null) throw new Error("a control has no box");
+  const overlaps =
+    one.x < two.x + two.width && two.x < one.x + one.width && one.y < two.y + two.height && two.y < one.y + one.height;
+  expect(overlaps).toBe(false);
+}
+
+const scrollTo = (terminal: Locator, top: number) =>
+  terminal.evaluate((element, to) => {
+    element.scrollTop = to;
+  }, top);
+
+test("at 1440 the scrollbar overlays the padding without reflow, matches the view, and drags and jumps exactly", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  await expect(bar(terminal)).toHaveCount(0);
+  const before = { pty: coreSize(address), grid: await gridSize(terminal) };
+
+  await fill(page, terminal);
+  // Scrollback appeared: the grid and the pty keep their size, so nothing reflowed.
+  await expect(bar(terminal)).toBeVisible();
+  expect(await gridSize(terminal)).toBe(before.grid);
+  expect(coreSize(address)).toBe(before.pty);
+  // No native scrollbar takes a gutter beside ours: on a platform with classic scrollbars it would cost columns.
+  expect(
+    await terminal.evaluate((element) =>
+      element instanceof HTMLElement ? element.offsetWidth - element.clientWidth : -1,
+    ),
+  ).toBe(0);
+
+  // At the bottom: the thumb ends the track, there is nothing to jump to, and the bar sits in the right padding.
+  let m = await measure(terminal);
+  expectThumbMatches(m);
+  expect(m.thumb.top + m.thumb.height).toBeCloseTo(m.track.top + m.track.height, 0);
+  expect(m.track.right).toBeCloseTo(m.pane.right, 0);
+  expect(m.thumb.right - m.thumb.left).toBeCloseTo(4, 0);
+  await expect(jump(terminal)).toHaveCount(0);
+
+  // The scroll-to-top key: the thumb goes to the top, and the jump button shows, with no new output yet.
+  await page.keyboard.press("Shift+Home");
+  await expect.poll(async () => (await measure(terminal)).scrollTop).toBe(0);
+  m = await measure(terminal);
+  expectThumbMatches(m);
+  await expect(jump(terminal)).toBeVisible();
+  await expect(jump(terminal)).not.toHaveAttribute("data-unread");
+
+  // Output while scrolled up keeps the view where it is and marks the button.
+  hcOn("host", ["send", address, "echo fresh-output"]);
+  await expect(jump(terminal)).toHaveAttribute("data-unread", "");
+  await expect(jump(terminal)).toHaveAccessibleName("Jump to bottom, new output below");
+  expect((await measure(terminal)).scrollTop).toBe(0);
+
+  // Dragging the thumb 120 px down lands on the row that thumb top stands for.
+  m = await measure(terminal);
+  const grabX = (m.thumb.left + m.thumb.right) / 2;
+  const grabY = m.thumb.top + m.thumb.height / 2;
+  await page.mouse.move(grabX, grabY);
+  await page.mouse.down();
+  await page.mouse.move(grabX, grabY + 120, { steps: 6 });
+  await page.mouse.up();
+  const dragged = scrollTopForThumbTop(m, m.thumb.top - m.track.top + 120);
+  await expect.poll(async () => Math.abs((await measure(terminal)).scrollTop - dragged)).toBeLessThan(1);
+  expectThumbMatches(await measure(terminal));
+
+  // A click on the track below the thumb centres the thumb there.
+  m = await measure(terminal);
+  const clickY = m.track.top + m.track.height * 0.75;
+  await page.mouse.click((m.track.left + m.track.right) / 2, clickY);
+  const clicked = scrollTopForThumbTop(m, clickY - m.track.top - m.thumb.height / 2);
+  await expect.poll(async () => Math.abs((await measure(terminal)).scrollTop - clicked)).toBeLessThan(1);
+  // The bar starts no selection and leaves the keyboard with the terminal.
+  await expect(terminal.getByRole("textbox")).toBeFocused();
+
+  // The jump button goes back to the live bottom and is gone; output is followed again.
+  await jump(terminal).click();
+  await expect.poll(async () => (await measure(terminal)).max - (await measure(terminal)).scrollTop).toBeLessThan(5);
+  await expect(jump(terminal)).toHaveCount(0);
+  await expect(terminal.getByRole("textbox")).toBeFocused();
+  hcOn("host", ["send", address, "echo followed-output"]);
+  await expect(
+    terminal.locator(".term-row:not(.term-scrollback-row)").filter({ hasText: /^followed-output/ }),
+  ).toHaveCount(1);
+  m = await measure(terminal);
+  expect(m.max - m.scrollTop).toBeLessThan(5);
+
+  // Typing anywhere in the scrollback goes back to the bottom.
+  await scrollTo(terminal, 0);
+  await expect(jump(terminal)).toBeVisible();
+  await page.keyboard.type("x");
+  await expect.poll(async () => (await measure(terminal)).max - (await measure(terminal)).scrollTop).toBeLessThan(5);
+  await page.keyboard.press("Backspace");
+
+  // The alternate screen has no scrollback to show: no bar, no button. Back on the main screen both return.
+  await page.keyboard.type(String.raw`printf '\033[?1049h'`);
+  await page.keyboard.press("Enter");
+  await expect(bar(terminal)).toHaveCount(0);
+  await scrollTo(terminal, 0);
+  await expect(jump(terminal)).toHaveCount(0);
+  await page.keyboard.type(String.raw`printf '\033[?1049l'`);
+  await page.keyboard.press("Enter");
+  await expect(bar(terminal)).toBeVisible();
+
+  // Under five columns the bar is hidden; given its width back, it shows again.
+  await terminal.locator("xpath=..").evaluate((wrapper) => {
+    wrapper.style.maxWidth = "40px";
+  });
+  await expect(bar(terminal)).toHaveCount(0);
+  await terminal.locator("xpath=..").evaluate((wrapper) => {
+    wrapper.style.maxWidth = "";
+  });
+  await expect(bar(terminal)).toBeVisible();
+});
+
+test.describe("on a phone", () => {
+  test.use(PHONE);
+
+  test("at 390 the bar and the jump button work, and the button sits above the key bar", async ({ page }) => {
+    const terminal = await openPhoneTerminal(page);
+    const address = (await terminal.getAttribute("data-terminal")) ?? "";
+    const before = { pty: coreSize(address), grid: await gridSize(terminal) };
+    await fill(page, terminal);
+    await expect(keysBar(page)).toBeVisible();
+    await expect(bar(terminal)).toBeVisible();
+    expect(await gridSize(terminal)).toBe(before.grid);
+    expect(coreSize(address)).toBe(before.pty);
+    expectThumbMatches(await measure(terminal));
+
+    // A swipe up into the scrollback, as a finger scrolls it.
+    await scrollTo(terminal, 0);
+    await expect(jump(terminal)).toBeVisible();
+    expectThumbMatches(await measure(terminal));
+    const button = await jump(terminal).boundingBox();
+    const keys = await keysBar(page).boundingBox();
+    if (button === null || keys === null) throw new Error("no box for the jump button or the key bar");
+    expect(button.y + button.height).toBeLessThanOrEqual(keys.y);
+    expect(button.width).toBeGreaterThanOrEqual(44);
+    expect(button.height).toBeGreaterThanOrEqual(44);
+
+    // A key from the key bar is typed input too: it goes back to the bottom.
+    await key(page, "Arrow keys").click();
+    await key(page, "Return").click();
+    await expect.poll(async () => (await measure(terminal)).max - (await measure(terminal)).scrollTop).toBeLessThan(5);
+
+    // With the arrow pad open over the keys bar, the button moves up above it, still tappable.
+    await scrollTo(terminal, 0);
+    await expect(jump(terminal)).toBeVisible();
+    await expectApart(jump(terminal), page.getByRole("group", { name: "Arrow keys" }));
+    hcOn("host", ["send", address, "echo fresh-output"]);
+    await expect(jump(terminal)).toHaveAttribute("data-unread", "");
+    await jump(terminal).tap();
+    await expect.poll(async () => (await measure(terminal)).max - (await measure(terminal)).scrollTop).toBeLessThan(5);
+    await expect(jump(terminal)).toHaveCount(0);
+
+    // With the soft keyboard down only the round keyboard button floats there, and the jump button stays clear of it.
+    await key(page, "Hide keyboard").click();
+    await expect(keysBar(page)).toBeHidden();
+    await scrollTo(terminal, 0);
+    await expect(jump(terminal)).toBeVisible();
+    await expectApart(jump(terminal), key(page, "Show keyboard"));
+    await jump(terminal).tap();
+    await expect(jump(terminal)).toHaveCount(0);
+  });
+});

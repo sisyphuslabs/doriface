@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Dag } from "../src/view/dag.ts";
-import { Engine, ViewCache, viewOf } from "../src/view/engine.ts";
+import { Engine, ViewCache, viewOf, viewOfRecords } from "../src/view/engine.ts";
 import { bigMesh } from "./fixtures/big-mesh.ts";
 import { randomDag } from "./fixtures/random-dag.ts";
 import { ack, admit, found, name, revoke, withChainNumbers } from "./fixtures/records.ts";
@@ -8,9 +8,15 @@ import { SCENARIOS, stored } from "./fixtures/scenarios-all.ts";
 import { signScenario } from "./fixtures/signed.ts";
 import { SEEDS, same, sameEverywhere, shape } from "./oracle/differential.ts";
 import { viewOf as legacyViewOf } from "./oracle/legacy/engine.ts";
+import { naiveView } from "./oracle/naive.ts";
 import { attack, honestHistory, pick, rng } from "./sim/world.ts";
 
 const SLOW = 120_000;
+
+const sorted = (keys: Iterable<string>): string[] => [...keys].toSorted();
+/** The part of a view the naive oracle also computes: members, revoked and Noise keys, order-free. */
+const lite = (v: { members: Iterable<string>; revoked: Iterable<string>; noise: Iterable<[string, string]> }): string =>
+  JSON.stringify([sorted(v.members), sorted(v.revoked), [...v.noise].toSorted()]);
 
 describe("M-14: the incremental viewOf is byte-identical to the previous engine (the oracle)", () => {
   test(
@@ -39,6 +45,29 @@ describe("M-14: the incremental viewOf is byte-identical to the previous engine 
         const r = rng(seed + 1000);
         for (let i = 0; i < 12; i++) expect(sameEverywhere(randomDag(r, 12 + Math.floor(r.next() * 40)))).toBe(true);
       }
+    },
+    SLOW,
+  );
+
+  test(
+    "arbitrary DAGs whose admits and rekeys reuse other subjects' Noise keys: engine, legacy and naive agree (#90 R1)",
+    () => {
+      let twins = 0;
+      for (const seed of SEEDS) {
+        const r = rng(seed + 2000);
+        for (let i = 0; i < 60; i++) {
+          const records = randomDag(r, 8 + Math.floor(r.next() * 8));
+          const subjects = new Map<string, Set<string>>();
+          for (const x of records)
+            if (x.card !== undefined && x.subject !== undefined)
+              subjects.set(x.card.noise, (subjects.get(x.card.noise) ?? new Set()).add(x.subject));
+          if ([...subjects.values()].some((named) => named.size > 1)) twins += 1;
+          expect(sameEverywhere(records)).toBe(true);
+          expect(lite(viewOfRecords(records))).toBe(lite(naiveView(records)));
+        }
+      }
+      // The generator reaches R1: some cases name one Noise key for two subjects.
+      expect(twins).toBeGreaterThan(0);
     },
     SLOW,
   );
