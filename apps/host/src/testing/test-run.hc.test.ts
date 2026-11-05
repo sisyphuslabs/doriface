@@ -31,7 +31,7 @@ test("bun run test's runner fails a run whose tests pass but leave a core, and s
     ]);
     const output = stdout + stderr;
     expect(output).toContain("1 pass");
-    expect(output).toContain("herdr-core outlived the test run (now stopped): 1");
+    expect(output).toContain("processes outlived the test run (now stopped): 1");
     expect(code).toBe(1);
     expect(await refused(join(dir, "c.sock"))).toBe(true);
   } finally {
