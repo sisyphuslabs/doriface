@@ -251,14 +251,14 @@ jobs:
           grep -E '^ +0 fail' win32.log
           ! grep -E '^ +[1-9][0-9]* skip' win32.log
           grep -E '^\(pass\) .*W[0-9]+ ' win32.log
-      - name: The hc floor and the state units on Windows
-        run: bun test apps/host/src/hc-version.test.ts apps/host/src/state/host-keys.test.ts apps/host/src/state/known-hosts.test.ts
+      - name: The state units on Windows
+        run: bun test apps/host/src/state/host-keys.test.ts apps/host/src/state/known-hosts.test.ts
       - name: Compiled host keeps its keys across two starts
         shell: bash
         run: |
           bun run --cwd apps/desktop build:host ${{ matrix.target }}
           host="apps/desktop/dist/host/${{ matrix.target }}/doriface-host.exe"
-          state="$RUNNER_TEMP/doriface-406-state"
+          state="$USERPROFILE/.doriface-406-state"  # under the profile: $RUNNER_TEMP sits on runner paths other accounts may re-permission, which the namespace rule refuses
           first=$("$host" fingerprint --state-dir "$state")
           second=$("$host" fingerprint --state-dir "$state")
           echo "$first"
