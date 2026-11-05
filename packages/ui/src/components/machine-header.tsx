@@ -61,7 +61,10 @@ export function MachineHeader({
         data-machine-header={name}
         aria-current={selected ? "true" : undefined}
         aria-disabled={onOpen === undefined || undefined}
-        {...(rail ? { "aria-label": `${name}, ${state}`, title: `${name}, ${state}` } : {})}
+        {...(rail ? { "aria-label": `${name}, ${state}` } : {})}
+        // The state label gives way first and can end in an ellipsis: the header's title reads it whole (#576), as the
+        // rail's does. The name keeps its own title, so a row's one titled span stays its name.
+        title={`${name}, ${state}`}
         onClick={() => onOpen?.()}
         className={cn(
           "flex h-full min-w-0 flex-1 items-center gap-2 rounded-md text-left text-xs font-medium text-muted-foreground outline-none",
