@@ -151,31 +151,35 @@ export function publishGitFacts(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastError: string | undefined;
   const tick = async (): Promise<void> => {
-    const current = link(core);
-    child = current;
-    childOpen = true;
-    exited = new Promise<void>((resolve) =>
-      current.onClose(() => {
-        childOpen = false;
-        resolve();
-      }),
-    );
+    if (stopped) return;
     try {
-      const connection = await HcConnection.open(current);
+      // Inside the try: a spawn that fails (hc gone, its directory removed) is logged like any other failed tick.
+      const current = link(core);
+      child = current;
+      childOpen = true;
+      exited = new Promise<void>((resolve) =>
+        current.onClose(() => {
+          childOpen = false;
+          resolve();
+        }),
+      );
       try {
-        const listed = await connection.call("terminal.list", {});
-        await writeGitFacts(connection, await collectGitFacts(dirsOf(listed.terminals), run));
-        lastError = undefined;
+        const connection = await HcConnection.open(current);
+        try {
+          const listed = await connection.call("terminal.list", {});
+          await writeGitFacts(connection, await collectGitFacts(dirsOf(listed.terminals), run));
+          lastError = undefined;
+        } finally {
+          connection.close();
+        }
       } finally {
-        connection.close();
+        current.close();
+        await exited;
       }
     } catch (error) {
       const line = `host: cannot write the git facts on its core: ${String(error)}`;
       if (!stopped && line !== lastError) log(line);
       lastError = line;
-    } finally {
-      current.close();
-      await exited;
     }
     if (!stopped) timer = setTimeout(() => void tick(), TICK_MS);
   };

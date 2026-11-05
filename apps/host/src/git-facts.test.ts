@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectGitFacts, dirsOf, parseStatus, readGitFacts, writeGitFacts } from "./git-facts.ts";
+import { collectGitFacts, dirsOf, parseStatus, publishGitFacts, readGitFacts, writeGitFacts } from "./git-facts.ts";
 
 const root = mkdtempSync(join(tmpdir(), "git-facts-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -186,5 +186,25 @@ describe("writeGitFacts", () => {
     const { connection, sets } = core(null, 1);
     expect(await writeGitFacts(connection, doc)).toBe("written");
     expect(sets.map((set) => set.version)).toEqual([1, 2]);
+  });
+});
+
+describe("publishGitFacts", () => {
+  test("a link that cannot be spawned is logged once, not thrown, and stop ends the ticks", async () => {
+    const logged: string[] = [];
+    let spawns = 0;
+    const publisher = publishGitFacts(
+      { hc: "/nonexistent/hc" },
+      (line) => logged.push(line),
+      () => {
+        spawns += 1;
+        throw new Error("ENOENT: no such file or directory, posix_spawn '/nonexistent/hc'");
+      },
+    );
+    await publisher.stop();
+    expect(spawns).toBe(1);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain("cannot write the git facts on its core");
+    expect(publisher.kill()).toEqual([]);
   });
 });
