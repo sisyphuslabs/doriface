@@ -9,18 +9,19 @@ import {
   TabBar,
   type WorkspaceTab,
 } from "@doriface/ui";
-import { Columns2, Folder, Monitor, PanelLeft, Rows2 } from "lucide-react";
+import { Bot, Columns2, Folder, Monitor, PanelLeft, Rows2, SquareTerminal, Terminal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
-import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { DictateButton } from "../voice/dictate-button.tsx";
 import { useDictation } from "../voice/use-dictation.ts";
 import { VoiceDock } from "../voice/voice-dock.tsx";
-import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
+import { agentStatus, machineOf, programKind, type Session, spaceName, tabTitle, terminalTitle } from "./model.ts";
+import { NewTabMenu } from "./new-tab-menu.tsx";
 import { NoTerminal } from "./no-terminal.tsx";
 import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
 import { panelId, SplitPanes } from "./split-panes.tsx";
+import { RenameDialog } from "./rename-dialog.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
@@ -37,22 +38,33 @@ import type { TerminalEnd } from "../terminal/terminal-end.ts";
 /** A tab's glyph: the state that most needs the person among its panes, as the sidebar sections rank them. */
 const URGENCY: readonly AgentStatus[] = ["blocked", "done", "working", "idle", "unknown"];
 
-function tabEntry(tab: LayoutTab, byAddress: ReadonlyMap<string, Session>, focused: string | null): WorkspaceTab {
+/** herdr-app's program icons for what a tab runs: an agent, a shell, or another program (its `defaults/icons`). */
+const PROGRAM_ICON = {
+  agent: <Bot aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />,
+  shell: <Terminal aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />,
+  program: <SquareTerminal aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />,
+};
+
+/**
+ * A tab as herdr-app's strip draws it: its name, else its place in its space (1, 2, ...), with the icon of its agent,
+ * else of its first pane's program, and the state that most needs the person among its panes. No machine label: the bar
+ * shows one space's tabs, and a space is one machine's (#404, #478).
+ */
+function tabEntry(tab: LayoutTab, position: number, byAddress: ReadonlyMap<string, Session>): WorkspaceTab {
   const shown = tab.panes.flatMap((pane) => {
     const terminal = pane.address === null ? undefined : byAddress.get(pane.address);
-    return terminal === undefined ? [] : [{ pane: pane.id, terminal }];
+    return terminal === undefined ? [] : [terminal];
   });
-  // Like Ghostty's, an unnamed tab takes its title from the pane in focus.
-  const named = shown.find((entry) => entry.pane === focused) ?? shown[0];
-  const statuses = new Set(shown.map((entry) => agentStatus(entry.terminal)));
+  const kinds = shown.map(programKind);
+  const kind = kinds.includes("agent") ? "agent" : kinds[0];
+  const statuses = new Set(shown.map(agentStatus));
   const status = URGENCY.find((each) => statuses.has(each));
-  const machine = tab.machine ?? undefined;
   return {
     id: tab.key,
-    title: tab.name !== "" ? tab.name : named === undefined ? "Terminal" : terminalTitle(named.terminal),
+    title: tabTitle(tab.name, position),
     controls: panelId(tab.key),
+    ...(kind === undefined ? {} : { icon: PROGRAM_ICON[kind] }),
     ...(status === undefined ? {} : { status }),
-    ...(machine === undefined ? {} : { machine }),
   };
 }
 
@@ -69,6 +81,9 @@ export interface DesktopShellProps {
   readonly loaded: boolean;
   readonly layout: Layout;
   readonly onNew: () => void;
+  /** Starts an hc template (an agent) as a new tab, from the New tab menu. */
+  readonly onNewAgent: (template: string) => void;
+  readonly onNewSpace: () => void;
   readonly onSplit: (axis: Axis, target?: PaneTarget) => void;
   readonly onCloseTab: (key: string) => void;
   readonly onClosePane: (address: string) => void;
@@ -86,6 +101,8 @@ export function DesktopShell(props: DesktopShellProps) {
     loaded,
     layout,
     onNew,
+    onNewAgent,
+    onNewSpace,
     onSplit,
     onCloseTab,
     onClosePane,
@@ -98,7 +115,6 @@ export function DesktopShell(props: DesktopShellProps) {
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
-  const tabKeys = useTabSelectKeys();
   const moveLeftKeys = useActionKeys("tab.move:left");
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
@@ -117,6 +133,17 @@ export function DesktopShell(props: DesktopShellProps) {
   }, []);
   const showsEnded = (terminal: { readonly address: string; readonly pid?: number | null }): boolean =>
     endedViews.has(viewKey(terminal.address, terminal.pid ?? null));
+  // The tab whose Rename question is open, and how its write went.
+  const [renaming, setRenaming] = useState<{ key: string; busy: boolean; error: string | null } | null>(null);
+  const { renameTab } = layout;
+  const submitRename = (key: string, name: string): void => {
+    setRenaming({ key, busy: true, error: null });
+    renameTab(key, name.trim()).then(
+      () => setRenaming(null),
+      (cause: unknown) =>
+        setRenaming({ key, busy: false, error: cause instanceof Error ? cause.message : String(cause) }),
+    );
+  };
   useAppActions({
     terminals,
     layout,
@@ -124,6 +151,7 @@ export function DesktopShell(props: DesktopShellProps) {
     onSplit,
     onCloseTab,
     onClosePane,
+    onRenameTab: (key) => setRenaming({ key, busy: false, error: null }),
     onToggleSidebar: () => setSidebar((shown) => !shown),
     onFocusSidebar: focusSidebar,
     onSession,
@@ -137,12 +165,12 @@ export function DesktopShell(props: DesktopShellProps) {
     focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
-  const tabList: WorkspaceTab[] = layout.tabs.map((tab, position) => {
-    const entry = tabEntry(tab, byAddress, tab.key === layout.active?.key ? (layout.focused?.id ?? null) : null);
-    // tab.select:N selects layout.tabs[N - 1], so the hint is read by the same position.
-    const shortcut = tabKeys[position];
-    return shortcut === undefined ? entry : { ...entry, shortcut };
-  });
+  const tabList: WorkspaceTab[] = layout.shown.map((tab, position) => tabEntry(tab, position, byAddress));
+  const renamed = renaming === null ? undefined : layout.tabs.find((tab) => tab.key === renaming.key);
+  const renamedTitle =
+    renamed === undefined || renamed.name !== ""
+      ? (renamed?.name ?? "tab")
+      : `tab ${tabList.find((tab) => tab.id === renamed.key)?.title ?? ""}`.trim();
   const focusedMachine =
     (focusedAddress === null ? undefined : machineOf(focusedAddress)) ?? connection.hello.core.name;
   const focusedTerminal = focusedAddress === null ? undefined : byAddress.get(focusedAddress);
@@ -213,6 +241,16 @@ export function DesktopShell(props: DesktopShellProps) {
           onSelect={layout.selectTab}
           onClose={onCloseTab}
           onNew={onNew}
+          newMenu={
+            <NewTabMenu
+              connection={connection}
+              newTabKeys={newTabKeys}
+              onNew={onNew}
+              onAgent={onNewAgent}
+              onSpace={onNewSpace}
+            />
+          }
+          onRename={(key) => setRenaming({ key, busy: false, error: null })}
           onMove={layout.moveTab}
           moveKeys={{
             ...(moveLeftKeys === undefined ? {} : { left: moveLeftKeys }),
@@ -239,6 +277,18 @@ export function DesktopShell(props: DesktopShellProps) {
             </>
           }
         />
+        {renaming === null || renamed === undefined ? null : (
+          <RenameDialog
+            key={renaming.key}
+            title={renamedTitle}
+            value={renamed.name}
+            busy={renaming.busy}
+            error={renaming.error}
+            description="Every device shows the new name. Leave it empty to call the tab by its number again."
+            onRename={(name) => submitRename(renaming.key, name)}
+            onCancel={() => setRenaming(null)}
+          />
+        )}
         {layout.tabs.length > 0 ? null : nothingOpen ? (
           <NoTerminal onNew={onNew} />
         ) : (

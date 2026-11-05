@@ -54,6 +54,46 @@ export function seedLayout(tabs: readonly SeedTab[], folder = "/tmp", on?: strin
   );
 }
 
+export interface SeedSpace {
+  readonly id: string;
+  readonly name: string;
+  readonly folder: string;
+  /** One tab per terminal: on this core its address, on an added machine (`on`) its local one there (`tN`). */
+  readonly tabs: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly terminal: string;
+    /** More terminals split beside the first, in one row. */
+    readonly beside?: readonly string[];
+  }[];
+}
+
+/** Saves these spaces, each tab one pane, as the core's layout or (`on`) as its added machine's (#404). */
+export function seedSpaces(spaces: readonly SeedSpace[], on?: string): void {
+  setCoreDoc(
+    LAYOUT_DOC,
+    {
+      spaces: spaces.map((space) => ({
+        folder: space.folder,
+        id: space.id,
+        name: space.name,
+        tabs: space.tabs.map((tab) => ({
+          id: tab.id,
+          name: tab.name,
+          root: {
+            children: [tab.terminal, ...(tab.beside ?? [])].map((terminal, at) =>
+              treeNode({ pane: at === 0 ? `p-${tab.id}` : `p-${tab.id}-${at}`, terminal }),
+            ),
+            id: tab.id,
+            type: "row",
+          },
+        })),
+      })),
+    },
+    on,
+  );
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const listOf = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);

@@ -5,12 +5,12 @@ import { openFour, order, rearranged, tabs } from "./tab-strip.ts";
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 
-const TITLE = "The tab order was not saved";
+const TITLE = "The tab selection was not saved";
 
 /** How many times that toast has been put up since the page loaded; a toast closes on its own, so it is counted. */
 const timesSaid = (page: Page) => page.evaluate(() => Reflect.get(window, "notSavedCount") as number);
 
-test("a storage that refuses this screen's view says the tab order was not saved, once, and the tabs still move", async ({
+test("a storage that refuses this screen's view says its tab selection was not saved, once, and the tabs still move", async ({
   page,
 }) => {
   // Every write of this screen's view is refused, as a full or denied storage refuses it; other settings still save.
@@ -47,6 +47,7 @@ test("a storage that refuses this screen's view says the tab order was not saved
   await page.keyboard.press(mac ? "Meta+Shift+ArrowRight" : "Control+Shift+PageDown");
   await expect(tabs(page).nth(1)).toBeFocused();
   expect(await order(page)).toEqual(rearranged(before, [1, 0, 2, 3]));
-  // Every move wrote the view again and was refused again; a write that keeps failing is said once, not per move.
+  // The move itself is the document's (#404); the selection and focus it leaves wrote the view again and were refused
+  // again, and a write that keeps failing is said once, not per change.
   expect(await timesSaid(page)).toBe(1);
 });

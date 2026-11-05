@@ -1,4 +1,3 @@
-import type { Terminal } from "@doriface/protocol";
 import {
   IconButton,
   MachineHeader,
@@ -13,11 +12,9 @@ import {
 } from "@doriface/ui";
 import { Ellipsis, Pencil, Plus } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useGitFactsOf } from "./git-facts.ts";
 import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
 import { stateLabel, type MachineEntry } from "./machines.ts";
-import { firstInSpace, spaceId, toSpaces } from "./model.ts";
 import { MachinesListError } from "./machines-list-error.tsx";
 import { useConnectionNotice } from "./reconnect-status.tsx";
 import { RetryButton } from "./retry-button.tsx";
@@ -26,11 +23,11 @@ import { useSpaceRenaming } from "./space-rename-context.ts";
 import { machineGroups } from "./sidebar-model.ts";
 import { useCollapsed, useSpaceColors } from "./sidebar-prefs.ts";
 import { useMachineReorder } from "./use-machine-reorder.tsx";
+import { useSpaceSelection } from "./space-selection.ts";
 import { useMachinesContext } from "./use-machines.ts";
 
 export interface SpacesGroupProps {
-  readonly terminals: readonly Terminal[];
-  readonly active: string | null;
+  /** Opens a machine's first terminal, from its header. */
   readonly onOpen: (address: string) => void;
   readonly rail?: boolean;
 }
@@ -85,10 +82,10 @@ function NewSpaceThere({ disabled, onClick }: { readonly disabled: boolean; read
  * The spaces. With one machine they are one list whose header starts a new space; once more than one machine is
  * known, each machine is a list headed by its row (state, terminal count, New space there), in the machines' order.
  */
-export function SpacesGroup({ terminals, active, onOpen, rail = false }: SpacesGroupProps) {
+export function SpacesGroup({ onOpen, rail = false }: SpacesGroupProps) {
   const machines = useMachinesContext();
   if (!machines.machinesListed) return <SpacesLoading rail={rail} />;
-  return <SpacesLists terminals={terminals} active={active} onOpen={onOpen} rail={rail} machines={machines} />;
+  return <SpacesLists onOpen={onOpen} rail={rail} machines={machines} />;
 }
 
 /** Holds the spaces' place, labeled, until the first machine.list answer: one row, where the first machine row goes. */
@@ -107,25 +104,17 @@ function SpacesLoading({ rail }: { readonly rail: boolean }) {
 }
 
 function SpacesLists({
-  terminals,
-  active,
   onOpen,
   rail,
   machines,
 }: SpacesGroupProps & { readonly rail: boolean; readonly machines: ReturnType<typeof useMachinesContext> }) {
-  const gitOf = useGitFactsOf();
-  const spaces = useMemo(() => toSpaces(terminals, gitOf), [terminals, gitOf]);
+  // The layout documents' spaces (#404): picking one shows it on the tab it showed last.
+  const { spaces, selected, select } = useSpaceSelection();
   const colors = useSpaceColors(useMemo(() => spaces.map((space) => space.id), [spaces]));
   const colored = spaces.map((space): Space => {
     const color = colors[space.id];
     return color === undefined ? space : { ...space, color };
   });
-  const activeTerminal = terminals.find((terminal) => terminal.address === active);
-  const activeSpace = activeTerminal === undefined ? undefined : spaceId(activeTerminal);
-  const openSpace = (id: string): void => {
-    const address = firstInSpace(terminals, id);
-    if (address !== undefined) onOpen(address);
-  };
   const [editing, setEditing] = useState<string | null>(null);
   const rows = (list: readonly Space[], grouped: boolean) =>
     list.map((space) => {
@@ -135,8 +124,8 @@ function SpacesLists({
         <SpaceRow
           key={space.id}
           space={space}
-          selected={space.id === activeSpace}
-          onSelect={openSpace}
+          selected={space.id === selected}
+          onSelect={select}
           rail={rail}
           hideMachine={grouped}
         />

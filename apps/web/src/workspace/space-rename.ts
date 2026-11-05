@@ -1,52 +1,69 @@
 import type { Terminal } from "@doriface/protocol";
-import { spaceId } from "./model.ts";
+import { docSpaces, renameSpace as renamedIn } from "@doriface/protocol/layout";
+import { spaceKey } from "../layout/view.ts";
+import { type ListedSpace, SPACE_LABEL } from "./model.ts";
 import { isGone, type SessionCalls } from "./session-actions.ts";
+import type { MachineLayout } from "./use-layout-docs.ts";
+
+/** The layout holding listed space `id` (a `spaceKey`), and that space's id in its document. */
+function placeOf(
+  layouts: readonly MachineLayout[],
+  id: string,
+): { readonly layout: MachineLayout; readonly space: string } | undefined {
+  for (const layout of layouts) {
+    const space =
+      layout.doc === null
+        ? undefined
+        : docSpaces(layout.doc).find((each) => spaceKey(layout.machineId, each.id) === id);
+    if (space !== undefined) return { layout, space: space.id };
+  }
+  return undefined;
+}
+
+/** Why space `id` cannot be renamed now: its layout takes no edits (or it is gone); null when it can. */
+export function renameRefusal(layouts: readonly MachineLayout[], id: string): string | null {
+  const place = placeOf(layouts, id);
+  if (place === undefined) return "This space is no longer in the layout.";
+  const { readOnly } = place.layout;
+  return readOnly === null ? null : `The layout cannot take changes now: ${readOnly}`;
+}
 
 /**
- * The label that puts a terminal in a space (spaceName reads it first). hc has no space of its own, so a space's name
- * is this label on each of its terminals: a rename writes it on all of them, and every client of the host, the relayed
- * ones included, reads it back from hc's terminal list.
+ * Why `name` cannot become space `id`'s name, or null when it can: a blank name, or one another space of the same
+ * machine is shown under. Its own name is fine (nothing changes).
  */
-export const SPACE_LABEL = "space";
-
-const membersOf = (terminals: readonly Terminal[], id: string): Terminal[] =>
-  terminals.filter((terminal) => terminal.state === "live" && spaceId(terminal) === id);
-
-/** The id `terminal`'s space has once it carries `name` as its space label. */
-const renamedId = (terminal: Terminal, name: string): string =>
-  spaceId({ ...terminal, labels: { ...terminal.labels, [SPACE_LABEL]: name } });
-
-/** Why `name` cannot become space `id`'s name, or null when it can; its own name is fine (nothing changes). */
-export function spaceNameProblem(terminals: readonly Terminal[], id: string, name: string): string | null {
+export function spaceNameProblem(spaces: readonly ListedSpace[], id: string, name: string): string | null {
   const wanted = name.trim();
   if (wanted === "") return "A space needs a name.";
-  const member = membersOf(terminals, id)[0];
-  if (member === undefined) return "This space has no running terminal left to rename.";
-  const target = renamedId(member, wanted);
-  // Another space already labelled so on this machine: the two would become one for good, as nothing tells their
-  // terminals apart afterwards. A folder space whose directory ends the same way stays its own row (#397).
-  const taken =
-    target !== id && terminals.some((terminal) => terminal.state === "live" && spaceId(terminal) === target);
+  const machine = spaces.find((space) => space.id === id)?.machine;
+  const taken = spaces.some((space) => space.id !== id && space.machine === machine && space.name === wanted);
   return taken ? `Another space on this machine is already called ${wanted}.` : null;
 }
 
 /**
- * Names space `id` `name` (trimmed) in hc: the space label on every live terminal of it. A terminal removed meanwhile is
- * no failure; any other refusal is thrown once every call has settled. Returns the space's id under its new name.
+ * Names space `id` `name` (trimmed) as herdr-app does: the space's `name` in its machine's layout document, which every
+ * client of the host reads, relayed ones included. Its live terminals get the same `space` label in hc, so one that
+ * leaves every tab is adopted back into it; a terminal removed meanwhile is no failure. Rejects with why it was not
+ * written: a layout that takes no edits, a refused document write, or a refused label once every call has settled.
  */
 export async function renameSpace(
   calls: Pick<SessionCalls, "label">,
+  layouts: readonly MachineLayout[],
+  spaces: readonly ListedSpace[],
   terminals: readonly Terminal[],
   id: string,
   name: string,
-): Promise<string> {
+): Promise<void> {
   const wanted = name.trim();
-  const members = membersOf(terminals, id);
+  const refusal = renameRefusal(layouts, id);
+  const place = placeOf(layouts, id);
+  if (refusal !== null || place === undefined) throw new Error(refusal ?? "This space is no longer in the layout.");
+  await place.layout.edit((doc) => (doc === null ? null : renamedIn(doc, place.space, wanted)));
+  const addresses = new Set(spaces.find((space) => space.id === id)?.addresses ?? []);
+  const members = terminals.filter((terminal) => terminal.state === "live" && addresses.has(terminal.address));
   const outcomes = await Promise.allSettled(
     members.map((terminal) => calls.label({ terminal: terminal.address, labels: { [SPACE_LABEL]: wanted } })),
   );
   const failed = outcomes.find((outcome) => outcome.status === "rejected" && !isGone(outcome.reason));
   if (failed?.status === "rejected") throw failed.reason;
-  const first = members[0];
-  return first === undefined ? id : renamedId(first, wanted);
 }

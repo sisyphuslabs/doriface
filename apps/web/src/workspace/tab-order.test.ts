@@ -1,7 +1,5 @@
 import { expect, test } from "bun:test";
-import { moveTabTo, orderTabs } from "./tab-order.ts";
-
-const tab = (key: string) => ({ key });
+import { moveTabTo } from "./tab-order.ts";
 
 test("moving a tab changes only the order, and an index past either end changes nothing", () => {
   const three = ["a", "b", "c"];
@@ -27,10 +25,4 @@ test("a move that changes nothing is not said: the tab left the strip in the sam
   expect(moveTabTo(["a", "b"], said, "a", 0).said).toBe(said);
 
   expect(moveTabTo(["a", "b"], said, "a", 1)).toEqual({ order: ["b", "a"], said: { key: "a", count: 4 } });
-});
-
-test("the strip keeps the order this screen placed, and a tab opened later joins at the end", () => {
-  const tabs = [tab("a"), tab("b"), tab("c"), tab("d")];
-  expect(orderTabs(tabs, ["c", "gone", "a"]).map((each) => each.key)).toEqual(["c", "a", "b", "d"]);
-  expect(orderTabs(tabs, []).map((each) => each.key)).toEqual(["a", "b", "c", "d"]);
 });

@@ -1,5 +1,7 @@
-import type { Terminal } from "@doriface/protocol";
+import type { JsonObject, Terminal } from "@doriface/protocol";
+import { docSpaces, panesOf, tabsOf } from "@doriface/protocol/layout";
 import type { Agent, AgentStatus, Space } from "@doriface/ui";
+import { spaceKey } from "../layout/view.ts";
 import { type GitFactsOf, shownGit } from "./git-facts.ts";
 import { TITLE_LABEL } from "./session-actions.ts";
 
@@ -53,6 +55,16 @@ const programName = (path: string): string =>
   (path.split(/[/\\]/).at(-1) ?? path).replace(/^-+/, "").replace(/\.exe$/i, "");
 
 /**
+ * What runs in a terminal, as herdr-app's tab strip draws its icon: an agent (one that reports its state over OSC 7501),
+ * a shell at its prompt, or another program in front of the shell.
+ */
+export function programKind(terminal: Session): "agent" | "shell" | "program" {
+  if (terminal.status?.state !== undefined) return "agent";
+  const front = terminal.foreground?.argv[0] ?? terminal.foreground?.name ?? terminal.argv[0] ?? "";
+  return SHELLS.has(programName(front)) ? "shell" : "program";
+}
+
+/**
  * Whether closing would stop a program at work, as herdr-app's `busy` reads it: an agent in its turn, or a program in
  * front of the shell. A shell at its prompt and an agent between turns are not.
  */
@@ -80,6 +92,14 @@ export function terminalTitle(terminal: Terminal): string {
   return terminal.foreground?.name ?? terminal.argv[0] ?? terminal.address;
 }
 
+/**
+ * A tab's title as herdr-app's strip reads it (#466 ruling A): its own name, else its place in its space counted from 1.
+ * It does not follow the pane in focus; the desktop strip and the phone's header both read it.
+ */
+export function tabTitle(name: string, position: number): string {
+  return name !== "" ? name : String(position + 1);
+}
+
 export function machineOf(address: string): string | undefined {
   const slash = address.indexOf("/");
   return slash === -1 ? undefined : address.slice(0, slash);
@@ -95,22 +115,18 @@ function basename(path: string): string {
   return path.split("/").findLast((part) => part !== "") ?? "/";
 }
 
+/**
+ * The hc label that names a terminal's space. A loose terminal carrying it is adopted into the space of that name, and a
+ * rename writes it on the space's live terminals too, so hc and the layout document agree (#395, #404).
+ */
+export const SPACE_LABEL = "space";
+
 /** A space is the `space` label, else the working directory's last segment. */
 export function spaceName(terminal: Terminal): string {
-  return terminal.labels["space"] ?? basename(terminal.foreground?.cwd ?? terminal.cwd);
+  return terminal.labels[SPACE_LABEL] ?? basename(terminal.foreground?.cwd ?? terminal.cwd);
 }
 
 const spaceDir = (terminal: Terminal): string => terminal.foreground?.cwd ?? terminal.cwd;
-
-/**
- * Which space a terminal is in: its machine's id and its `space` label, else its whole working directory, so a name used
- * on two machines, or by two directories with the same last segment, is two spaces (#397). Selection, list keys and
- * opening a space all compare this id, never the name alone.
- */
-export function spaceId(terminal: Terminal): string {
-  const label = terminal.labels["space"];
-  return `${machineId(terminal.address)}/${label === undefined ? `dir:${spaceDir(terminal)}` : `space:${label}`}`;
-}
 
 /** The parent directory's name, to tell apart two spaces whose directories end the same way; the whole path at the root. */
 function parentName(path: string): string {
@@ -174,61 +190,142 @@ const remoteRank = (machine: string | undefined): number => (machine === undefin
 /** Names in the order a person reads them: numbers by value, so box9 comes before box10. */
 export const byName = new Intl.Collator(undefined, { numeric: true });
 
-/** One space per machine and name: this machine's first, then each machine's in name order. */
-export function toSpaces(terminals: readonly Terminal[], gitOf?: GitFactsOf): Space[] {
-  const groups = new Map<
-    string,
-    { name: string; machine: string | undefined; dir: string; labeled: boolean; statuses: Set<AgentStatus> }
-  >();
-  for (const terminal of terminals) {
-    if (terminal.state !== "live") continue;
-    const machine = machineOf(terminal.address);
-    const key = spaceId(terminal);
-    // A space's directory is its first tab's, the one its name comes from when no label names it.
-    const dir = spaceDir(terminal);
-    const labeled = terminal.labels["space"] !== undefined;
-    const group = groups.get(key) ?? {
-      name: spaceName(terminal),
-      machine,
-      dir,
-      labeled,
-      statuses: new Set<AgentStatus>(),
-    };
-    group.statuses.add(agentStatus(terminal));
-    groups.set(key, group);
-  }
-  const ordered = [...groups].toSorted(
-    ([, a], [, b]) => remoteRank(a.machine) - remoteRank(b.machine) || byName.compare(a.machine ?? "", b.machine ?? ""),
+/** One machine's layout document as the spaces list reads it. */
+export interface SpacesSource {
+  readonly machine: string | null;
+  readonly machineId: string | null;
+  readonly doc: JsonObject | null;
+}
+
+/** A space of a layout document, with the terminals its tabs show (live or not), in tab order. */
+/** `dir`: where the space is, its folder, else its first live terminal's directory; empty when neither is known. */
+export type ListedSpace = Space & {
+  readonly addresses: readonly string[];
+  /** Each tab once, in tab order, with its panes' addresses (live or not), so a split tab counts as one. */
+  readonly tabPanes: readonly (readonly string[])[];
+  /** Each tab's own name, as saved (empty when unnamed), in the order of `tabPanes`. */
+  readonly tabNames: readonly string[];
+  readonly dir: string;
+};
+
+/**
+ * The spaces as herdr-app lists them (#404): every space of every machine's layout document, this machine's first, then
+ * each machine's in name order, each machine's in its document's order. A space is keyed by `spaceKey` and counts its
+ * tabs; it is named as saved, else after its folder, else after where its first live terminal is, and two of one machine
+ * that would read the same are told apart by the parent directory, as toSpaces does (#397).
+ */
+export function layoutSpaces(
+  sources: readonly SpacesSource[],
+  terminals: readonly Session[],
+  gitOf?: GitFactsOf,
+): ListedSpace[] {
+  const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
+  const ordered = sources.toSorted(
+    (a, b) =>
+      remoteRank(a.machine ?? undefined) - remoteRank(b.machine ?? undefined) ||
+      byName.compare(a.machine ?? "", b.machine ?? ""),
   );
-  return ordered.map(([id, group]) => {
-    const attention = ATTENTION.find((status) => group.statuses.has(status));
-    const tabs = terminals.filter((t) => t.state === "live" && spaceId(t) === id).length;
-    const twin = ordered.some(
-      ([other, peer]) => other !== id && peer.machine === group.machine && peer.name === group.name,
+  const entries = ordered.flatMap((source) => {
+    const { doc } = source;
+    if (doc === null) return [];
+    const tabs = tabsOf(doc);
+    return docSpaces(doc).map((space) => {
+      const own = tabs.filter((tab) => tab.space === space.id);
+      const tabNames = own.map((tab) => tab.name);
+      const tabPanes = own.map((tab) =>
+        panesOf(tab.root).flatMap((pane) =>
+          pane.terminal === null
+            ? []
+            : [source.machine === null ? pane.terminal : `${source.machine}/${pane.terminal}`],
+        ),
+      );
+      const addresses = tabPanes.flat();
+      const live = addresses.flatMap((address) => {
+        const terminal = byAddress.get(address);
+        return terminal?.state === "live" ? [terminal] : [];
+      });
+      const first = live[0];
+      const dir = space.folder !== "" ? space.folder : first === undefined ? "" : spaceDir(first);
+      return {
+        key: spaceKey(source.machineId, space.id),
+        machine: source.machine ?? undefined,
+        name: space.name !== "" ? space.name : dir === "" ? "Space" : basename(dir),
+        labeled: space.name !== "",
+        dir,
+        tabs: space.tabs.length,
+        addresses,
+        tabPanes,
+        tabNames,
+        statuses: new Set(live.map(agentStatus)),
+      };
+    });
+  });
+  return entries.map((entry) => {
+    const twin = entries.some(
+      (other) => other.key !== entry.key && other.machine === entry.machine && other.name === entry.name,
     );
-    const name = twin && !group.labeled ? `${group.name} · ${parentName(group.dir)}` : group.name;
-    const space: Space = { id, name, tabs };
-    if (group.machine !== undefined) Object.assign(space, { machine: group.machine });
+    const name = twin && !entry.labeled && entry.dir !== "" ? `${entry.name} · ${parentName(entry.dir)}` : entry.name;
+    const space: ListedSpace = {
+      id: entry.key,
+      name,
+      tabs: entry.tabs,
+      addresses: entry.addresses,
+      tabPanes: entry.tabPanes,
+      tabNames: entry.tabNames,
+      dir: entry.dir,
+    };
+    if (entry.machine !== undefined) Object.assign(space, { machine: entry.machine });
+    const attention = ATTENTION.find((status) => entry.statuses.has(status));
     if (attention !== undefined) Object.assign(space, { attention });
-    const git = shownGit(gitOf?.(group.machine, group.dir));
+    const git = entry.dir === "" ? undefined : shownGit(gitOf?.(entry.machine, entry.dir));
     if (git !== undefined) Object.assign(space, { git });
     return space;
   });
 }
 
-/** A tab's place among the live tabs of its space, counted from 1 in feed order, as the space row counts them. */
+/** A tab's place among its space's tabs that show a live terminal, counted from 1 in tab order; a split tab is one. */
 export interface TabPosition {
   readonly index: number;
   readonly count: number;
 }
 
-/** Where a terminal sits in its space; none for one that is finished or not in the feed. */
-export function tabPosition(terminals: readonly Terminal[], address: string): TabPosition | undefined {
-  const terminal = terminals.find((t) => t.address === address && t.state === "live");
-  if (terminal === undefined) return undefined;
-  const space = spaceId(terminal);
-  const tabs = terminals.filter((t) => t.state === "live" && spaceId(t) === space);
-  return { index: tabs.indexOf(terminal) + 1, count: tabs.length };
+/**
+ * The live terminals each tab of a space shows, in tab order; a tab with none is left out. The phone's sheet lists one
+ * row per entry, the one its first live pane stands for.
+ */
+export function liveTabs(space: ListedSpace, terminals: readonly Terminal[]): readonly (readonly string[])[] {
+  const liveAt = new Set(terminals.filter((t) => t.state === "live").map((t) => t.address));
+  return space.tabPanes
+    .map((panes) => panes.filter((address) => liveAt.has(address)))
+    .filter((panes) => panes.length > 0);
+}
+
+/** A tab of a space that shows a live terminal: its title as the strip reads it, and its live panes in order. */
+export interface LiveTab {
+  readonly title: string;
+  readonly panes: readonly string[];
+}
+
+/** The tabs of a space that show a live terminal, in tab order, each titled as the strip titles it (tabTitle). */
+export function titledTabs(space: ListedSpace, terminals: readonly Terminal[]): readonly LiveTab[] {
+  const liveAt = new Set(terminals.filter((t) => t.state === "live").map((t) => t.address));
+  return space.tabPanes.flatMap((panes, at) => {
+    const live = panes.filter((address) => liveAt.has(address));
+    return live.length === 0 ? [] : [{ title: tabTitle(space.tabNames[at] ?? "", at), panes: live }];
+  });
+}
+
+/** Where a terminal sits in the listed space whose tabs show it; none when it is finished or in no space's tab. */
+export function tabPosition(
+  spaces: readonly ListedSpace[],
+  terminals: readonly Terminal[],
+  address: string,
+): TabPosition | undefined {
+  const space = spaces.find((each) => each.addresses.includes(address));
+  if (space === undefined) return undefined;
+  const live = liveTabs(space, terminals);
+  const index = live.findIndex((panes) => panes.includes(address));
+  return index === -1 ? undefined : { index: index + 1, count: live.length };
 }
 
 export interface AgentCounts {
@@ -246,9 +343,4 @@ export function agentCounts(terminals: readonly Session[]): AgentCounts {
     if (status === "done" || status === "working" || status === "idle") counts[status] += 1;
   }
   return counts;
-}
-
-/** The first live terminal of a space, to open when the space is picked. */
-export function firstInSpace(terminals: readonly Terminal[], id: string): string | undefined {
-  return terminals.find((t) => t.state === "live" && spaceId(t) === id)?.address;
 }

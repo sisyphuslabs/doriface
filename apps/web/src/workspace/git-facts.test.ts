@@ -1,7 +1,7 @@
-import type { GitFacts, Terminal } from "@doriface/protocol";
+import type { GitFacts, JsonObject, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import { shownGit } from "./git-facts.ts";
-import { toSpaces } from "./model.ts";
+import { layoutSpaces } from "./model.ts";
 
 const clean: GitFacts = { branch: "main", detached: false, onDefault: true, ahead: 0, behind: 0, dirty: false };
 
@@ -36,16 +36,36 @@ const terminal = (address: string, space: string, cwd: string, foreground?: stri
     ...(foreground === undefined ? {} : { foreground: { cwd: foreground, argv: [], name: "sh", pid: 1 } }),
   }) as unknown as Terminal;
 
-describe("toSpaces with git facts", () => {
-  test("a space's facts are its first tab's directory's, on its own machine", () => {
+/** A layout document of one tab per space, each tab one terminal pane (a local address). */
+const docOf = (spaces: readonly { id: string; folder: string; terminal: string }[]): JsonObject => ({
+  spaces: spaces.map((space) => ({
+    id: space.id,
+    name: "",
+    folder: space.folder,
+    tabs: [
+      {
+        id: `${space.id}-t`,
+        name: "",
+        root: {
+          id: `${space.id}-t`,
+          type: "row",
+          children: [{ id: `${space.id}-p`, type: "block", content: { terminal: space.terminal } }],
+        },
+      },
+    ],
+  })),
+});
+
+describe("layout spaces with git facts (#404)", () => {
+  test("a space's facts are its folder's, else its first live terminal's directory, on its own machine", () => {
     const asked: [string | undefined, string][] = [];
     const facts = { ...clean, branch: "feat/x", onDefault: false };
-    const spaces = toSpaces(
+    const spaces = layoutSpaces(
       [
-        terminal("t1", "api", "/w/api", "/w/api/src"),
-        terminal("t2", "api", "/w/other"),
-        terminal("box/t3", "docs", "/srv/docs"),
+        { machine: null, machineId: null, doc: docOf([{ id: "api", folder: "", terminal: "t1" }]) },
+        { machine: "box", machineId: "id-box", doc: docOf([{ id: "docs", folder: "/srv/docs", terminal: "t3" }]) },
       ],
+      [terminal("t1", "api", "/w/api", "/w/api/src"), terminal("box/t3", "docs", "/srv/docs")],
       (machine, dir) => {
         asked.push([machine, dir]);
         return dir === "/w/api/src" ? facts : undefined;
@@ -55,7 +75,7 @@ describe("toSpaces with git facts", () => {
       [undefined, "/w/api/src"],
       ["box", "/srv/docs"],
     ]);
-    expect(spaces.find((space) => space.name === "api")?.git?.branch).toBe("feat/x");
-    expect(spaces.find((space) => space.name === "docs")?.git).toBeUndefined();
+    expect(spaces.find((space) => space.machine === undefined)?.git?.branch).toBe("feat/x");
+    expect(spaces.find((space) => space.machine === "box")?.git).toBeUndefined();
   });
 });

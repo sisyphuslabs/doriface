@@ -13,6 +13,7 @@ import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
 import { PaneSwitcher } from "./phone-pane-switcher.tsx";
+import { PhoneTabSwitcher, useSpaceTabs } from "./phone-tab-switcher.tsx";
 import {
   DIRECTION_PAD_CLEARANCE,
   KEYBOARD_BUTTON_CLEARANCE,
@@ -30,6 +31,8 @@ export interface PhoneTerminalProps {
   readonly terminals: readonly Session[];
   /** The terminals of the tab that shows this one, in its panes' order; one when that tab is not split. */
   readonly panes: readonly string[];
+  /** Its tab as the strip reads it (its name, else its number); null when it is in no tab. */
+  readonly tabTitle: string | null;
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
   /** Where this terminal registers its dictation for the shell's palette row and bound key; null while it takes none. */
@@ -37,7 +40,8 @@ export interface PhoneTerminalProps {
 }
 
 /** One session full screen on a phone, its terminal kept clear of the soft keyboard and the keys bar riding on it. */
-export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, onBack, dictate }: PhoneTerminalProps) {
+export function PhoneTerminal(props: PhoneTerminalProps) {
+  const { connection, terminal, terminals, panes, tabTitle, onOpen, onBack, dictate } = props;
   const port = useRef<TerminalPort | null>(null);
   const onPort = useCallback((next: TerminalPort | null) => {
     port.current = next;
@@ -75,9 +79,21 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
   const keysOpen = !ended && !dictating && (keyboard.up || menu || (mouseOnly && keysShown));
+  // The tabs bar takes the bottom while nothing rides there: the keys bar, with the soft keyboard, and dictation do.
+  const tabs = useSpaceTabs(terminals, terminal.address);
+  const tabsBar = !keysOpen && !dictating && tabs.some((tab) => tab.includes(terminal.address));
   // The terminal's jump button stays clear of what floats over its bottom right: the keyboard button, or the arrow pad.
+  // Over the tabs bar the keyboard button floats beside the bar, not over the terminal.
   const keysControls =
-    offline || ended || dictating ? null : !keysOpen ? KEYBOARD_BUTTON_CLEARANCE : pad ? DIRECTION_PAD_CLEARANCE : null;
+    offline || ended || dictating
+      ? null
+      : !keysOpen
+        ? tabsBar
+          ? null
+          : KEYBOARD_BUTTON_CLEARANCE
+        : pad
+          ? DIRECTION_PAD_CLEARANCE
+          : null;
 
   return (
     // isolate: the keys float above the terminal (z-10) but stay under a dialog and its backdrop, which portal to the body.
@@ -85,8 +101,8 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
       <PhoneHeader
         terminal={terminal}
         terminals={terminals}
+        tabTitle={tabTitle}
         onBack={onBack}
-        onOpen={onOpen}
         action={offline || ended ? null : <DictateButton voice={voice} target={title} ref={mic} />}
       />
       <ConnectionLine />
@@ -119,6 +135,15 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
           />
         )}
       </div>
+      {tabsBar ? (
+        <PhoneTabSwitcher
+          terminals={terminals}
+          tabs={tabs}
+          active={terminal.address}
+          title={tabTitle ?? title}
+          onOpen={onOpen}
+        />
+      ) : null}
       {dictating ? (
         // Dictation takes the keys' place, riding on the soft keyboard when it is up; the transcript is typed past the
         // sticky modifiers, as written.

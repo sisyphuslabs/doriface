@@ -2,12 +2,14 @@ import { expect, laidOutBox, test } from "./fixtures.ts";
 import { devices, type Locator, type Page } from "@playwright/test";
 import { rowEdges, rows, visibleCharacters } from "./sidebar-measure.ts";
 import {
+  clearMachineLayout,
   KOREAN_SPACE,
   KOREAN_TITLE,
   LONG_MACHINE,
   machineConnected,
   renameMachine,
   SEEDS,
+  seedLayouts,
   SHARED_SPACE,
   start,
   stop,
@@ -36,8 +38,11 @@ test.beforeAll(async () => {
   await machineConnected(LONG_MACHINE);
   addresses = SEEDS.map((seed) => start(seed, LONG_MACHINE));
 });
+// The page fixture starts each test with no layout on this core, so the seeds' spaces are saved again once it has.
+test.beforeEach(({ page: _cleared }) => seedLayouts(addresses, LONG_MACHINE));
 test.afterAll(() => {
   try {
+    clearMachineLayout(LONG_MACHINE);
     stop(addresses);
   } finally {
     restore();

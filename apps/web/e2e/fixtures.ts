@@ -87,11 +87,12 @@ export async function openNewTerminal(page: Page): Promise<Locator> {
   const known = new Set(
     await page.locator("[data-terminal]").evaluateAll((els) => els.map((el) => el.getAttribute("data-terminal"))),
   );
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click();
+  await pressNewTab(
+    page
+      .getByRole("button", { name: "New tab" })
+      .or(page.getByRole("button", { name: "New terminal" }))
+      .first(),
+  );
   await count.grown();
   // The focus moves to the new terminal a moment after it registers; until then the old pane is focused.
   await expect
@@ -142,4 +143,18 @@ export async function laidOutBox(locator: Locator): Promise<Box> {
   const box = await locator.boundingBox();
   if (box === null) throw new Error(`${String(locator)} lost its box right after it was laid out`);
   return box;
+}
+
+/**
+ * Presses a New tab button for a new terminal. The desktop strip's opens herdr-app's new menu (#466 item 7), whose
+ * Terminal item starts it; the phone header's starts it at once.
+ */
+export async function pressNewTab(button: Locator, options: { readonly timeout?: number } = {}): Promise<void> {
+  await button.click(options);
+  if ((await button.getAttribute("aria-haspopup")) === "menu") {
+    await button
+      .page()
+      .getByRole("menuitem", { name: /^Terminal/ })
+      .click(options);
+  }
 }

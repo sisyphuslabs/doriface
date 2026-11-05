@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 import { agentRow, endAgent, startShell } from "./agents.ts";
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn } from "./machine-switch.ts";
-import { domOrder, dragPast, openFour, tabs } from "./tab-strip.ts";
+import { domOrder, dragPast, openFour, tabOf, tabs } from "./tab-strip.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -112,26 +112,26 @@ test("the first screen does not animate in: nothing arrives on load, and a later
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
 test("a kept tab on an added machine does not arrive late on the way back from Settings while machine.list is slow", async ({
   page,
 }) => {
-  startShell("machine", "faraway");
-  startShell("host", "nearby");
+  const faraway = startShell("machine", "faraway");
+  const nearby = startShell("host", "nearby");
   const socket = await routeHcSocket(page);
   await page.goto("/");
   // A local tab beside the remote one: the local tab shows at once, the remote one only once machine.list names its
   // machine (its tab is kept by machine id). Each is opened from its own agent row: New tab opens on the focused pane's
   // machine, and the tab the workspace opens on its own at load can be the remote one, so it cannot make the local tab.
-  const strip = page.getByRole("tablist", { name: "Tabs" });
   await agentRow(page, "nearby", false).click({ timeout: 20_000 });
-  const localTab = strip.getByRole("tab", { name: /nearby/ });
+  // A tab reads its number, as herdr-app's: each is found by the terminal its panel shows, then kept by its panel id.
+  const localTab = await tabOf(page, nearby);
   await expect(localTab).toBeVisible({ timeout: 20_000 });
   await agentRow(page, "faraway", true).click({ timeout: 20_000 });
-  const remoteTab = strip.getByRole("tab", { name: /faraway/ });
+  const remoteTab = await tabOf(page, `${MACHINE_NAME}/${faraway}`);
   await expect(remoteTab).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await watchArrivals(page);
@@ -147,10 +147,12 @@ test("a kept tab on an added machine does not arrive late on the way back from S
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
-  // New tab opens on the focused pane's machine: focus a local tab, so the control opens nothing on the added machine.
-  await localTab.click();
+  // New tab opens on the focused pane's machine: focus the local terminal, so the control opens nothing on the added
+  // machine. Its tab is in this machine's space, which the strip does not show beside the remote one (#404).
+  await agentRow(page, "nearby", false).click();
+  await expect(localTab).toHaveAttribute("aria-selected", "true");
   await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", /^[^/]+$/);
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
@@ -168,7 +170,7 @@ test("coming back from Settings is not an arrival: the workspace returns without
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await twoFrames(page);
   expect(await arrivals(page)).toEqual([]);
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
@@ -197,7 +199,7 @@ test("moving a tab is not an arrival: a drag, a keyboard move and a menu move st
   await twoFrames(page);
   // A drag slides the neighbours (`translate`); an arrival is the opacity and transform from @starting-style.
   expect((await arrivals(page)).filter((entry) => !entry.endsWith(":translate"))).toEqual([]);
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   await expect.poll(() => arrivals(page)).toContain("div:opacity");
 });
 
@@ -222,7 +224,7 @@ test("a new tab scales and fades in, and settles at rest", async ({ page }) => {
   const count = await page.getByRole("tab").count();
   const newest = `[role="tablist"] > div:nth-of-type(${count + 1})`;
   const frames = sample(page, newest);
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   const seen = await frames;
   expect(seen.length).toBeGreaterThan(0);
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
@@ -240,7 +242,7 @@ test("under reduced motion a new tab only fades: no frame is transformed", async
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   const count = await page.getByRole("tab").count();
   const frames = sample(page, `[role="tablist"] > div:nth-of-type(${count + 1})`);
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   const seen = await frames;
   expect(Math.min(...seen.map((frame) => frame.opacity))).toBeLessThan(0.5);
   expect(seen.every((frame) => frame.transform === "none")).toBe(true);

@@ -26,7 +26,9 @@ test("a session on a machine that just dropped shows the didn't-open screen, and
   const socket = await routeHcSocket(page);
   await page.goto("/");
   await expect(agentRow(page, "fin", true)).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name: /fin/ })).toHaveCount(0);
+  await expect(page.locator(`[role="tabpanel"]:not([hidden]) [data-terminal="${MACHINE_NAME}/${remote}"]`)).toHaveCount(
+    0,
+  );
   // The page keeps its last machine.list (connected), so the pane tries to attach instead of showing the machine offline.
   const release = socket.hold("machine.list");
   switchTo("drop");

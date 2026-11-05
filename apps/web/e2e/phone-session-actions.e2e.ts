@@ -36,7 +36,8 @@ test("on a phone the open terminal's header renames its session", async ({ page 
   await dialog.getByRole("textbox", { name: "Name" }).fill("phone-rename-check");
   await page.keyboard.press("Enter");
   await expect(dialog).toBeHidden();
-  await expect(header(page).getByRole("heading", { name: "phone-rename-check" })).toBeVisible();
+  // The heading reads the tab, not the session (#466 ruling A); the session's own controls carry its new name.
+  await expect(header(page).getByRole("button", { name: "Session actions for phone-rename-check" })).toBeVisible();
 
   await header(page).getByRole("button", { name: "Back to agents" }).click();
   await expect(page.getByText("phone-rename-check").first()).toBeVisible();
@@ -50,7 +51,6 @@ test("on a phone the open terminal's header ends its session and returns to the 
     .getByRole("textbox", { name: "Name" })
     .fill("phone-end-check");
   await page.keyboard.press("Enter");
-  await expect(header(page).getByRole("heading", { name: "phone-end-check" })).toBeVisible();
   await expect(header(page).getByRole("button", { name: "Session actions for phone-end-check" })).toBeVisible();
 
   await sessionAction(page, "End session…");

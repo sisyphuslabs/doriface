@@ -43,12 +43,14 @@ function hcRun(...argv: string[]): string {
 
 // By tag, not role: an open dialog marks the page behind it aria-hidden, which a role query would read as absent.
 const agentsList = (page: Page) => page.locator("h1", { hasText: /^Agents$/ });
-const screenTitle = (page: Page) => page.locator("header h1");
+/** The open session: the header reads its tab (#466 ruling A), so the session is named by its own actions button. */
+const screenOf = (page: Page, name: string) =>
+  page.getByRole("banner").getByRole("button", { name: `Session actions for ${name}`, exact: true });
 
 /** On the phone page: opens `name`, asks End, and has these calls of it leave the page but not reach the core yet. */
 async function endHolding(phone: Page, link: HcSocket, name: string, ...methods: string[]): Promise<() => void> {
   await phone.getByText(name).first().click();
-  await expect(screenTitle(phone)).toHaveText(name);
+  await expect(screenOf(phone, name)).toBeVisible();
   await phone
     .getByRole("banner")
     .getByRole("button", { name: /^Session actions for / })
@@ -89,7 +91,8 @@ test("a session ended on a phone is removed even when the page closes as soon as
   if (address === null) throw new Error("the new terminal has no address");
   const name = `end-on-phone-${address}`;
   hc("label", address, `herdr.name=${name}`);
-  await expect(page.getByRole("tab", { name })).toBeVisible({ timeout: 15_000 });
+  // A tab reads its number, as herdr-app's; the session's name shows on its actions.
+  await expect(page.getByRole("button", { name: `Session actions for ${name}` })).toBeVisible({ timeout: 15_000 });
 
   // The phone: a second page of the same browser, narrow, so it shows the phone navigation.
   const phone = await page.context().newPage();
@@ -103,7 +106,7 @@ test("a session ended on a phone is removed even when the page closes as soon as
   await phone.close();
 
   await expect.poll(() => onCore(address), { timeout: 10_000, message: `${address} still on the core` }).toBe(false);
-  await expect(page.getByRole("tab", { name })).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.locator(`[role="tabpanel"] [data-terminal="${address}"]`)).toHaveCount(0, { timeout: 10_000 });
   await expect(page.getByText("This terminal didn't open")).toHaveCount(0);
 });
 
@@ -128,7 +131,7 @@ test("a session renamed and ended on a phone is removed even when the page close
     .getByRole("textbox", { name: "Name" })
     .fill(name);
   await page.keyboard.press("Enter");
-  await expect(screenTitle(page)).toHaveText(name);
+  await expect(screenOf(page, name)).toBeVisible();
   await actions.click();
   await page.getByRole("menuitem", { name: "End session…" }).click();
   // The kill's answer has not come back when the page closes, as over a slow relay: the answer is held, never released.

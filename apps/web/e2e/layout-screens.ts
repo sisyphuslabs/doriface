@@ -120,17 +120,18 @@ export const SCREENS: readonly Screen[] = [
       // Every seeded terminal open as a tab, written to the layout documents before the page loads, the way another
       // device would have left them: opening each by a click mounts a terminal and writes the document on a page that
       // can be starved for seconds. The layout host starts its terminals in order on a fresh core (runSeeds), so they
-      // are t1, t2, ... there and on its added machine; the tab titles below check that.
+      // are t1, t2, ... there and on its added machine. An unnamed tab reads its number, not its terminal's name (#466
+      // ruling A), and has no tooltip, so the long names are left to the sidebar.
       const local = LAYOUT_TERMINALS.map((_, index) => layoutTab(`tb-${index + 1}`, `t${index + 1}`));
       setCoreDoc(LAYOUT_DOC, layoutDoc(local), undefined, "layout");
       setCoreDoc(LAYOUT_DOC, layoutDoc([layoutTab("tb-remote", "t1")]), LAYOUT_MACHINE, "layout");
       await workspace(page, false);
+      // The strip shows one space's tabs (#404): this machine's, every one of its terminals; the added machine's tab is
+      // in a space of its own.
       const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-      const titles = [...LAYOUT_TERMINALS.map(({ title }) => title), "remote-terraform-plan-runner-001"];
-      await expect(tabs).toHaveCount(titles.length, { timeout: 20_000 });
-      const shown = await tabs.allTextContents();
-      expect(titles.filter((title) => !shown.some((text) => text.includes(title)))).toEqual([]);
-      await row(page, "remote-terraform-plan-runner-001").click();
+      await expect(tabs).toHaveCount(LAYOUT_TERMINALS.length, { timeout: 20_000 });
+      await expect(tabs).toHaveText(LAYOUT_TERMINALS.map((_, index) => new RegExp(`^${index + 1}(?!\\d)`)));
+      await tabs.last().click();
       await page.getByRole("button", { name: "Split right" }).click();
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
     },

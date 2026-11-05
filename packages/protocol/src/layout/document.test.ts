@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../json.ts";
-import { editTab, readDocument, tabsOf } from "./document.ts";
+import { addTab, docSpaces, editTab, moveTab, readDocument, renameSpace, renameTab, tabsOf } from "./document.ts";
 import { panesOf, splitPane, terminalBlock, removePane } from "./tree.ts";
 
 // Written by herdr-app 0.1.12 against hc 0.1.17: ⌘D ⌘⇧D ⌘D ⌘⇧D in one tab, a second tab split down then beside a
@@ -164,5 +164,77 @@ describe("the herdr-app document", () => {
 
   test("a document never written reads as empty", () => {
     expect(readDocument(null)).toEqual({ kind: "empty" });
+  });
+});
+
+const tab = (id: string): JsonObject => ({ id, name: "", root: { children: [], id, type: "row" } });
+const order = (doc: JsonObject | null) => (doc === null ? null : docSpaces(doc).map((space) => [space.id, space.tabs]));
+
+describe("spaces and their tabs' order (#404)", () => {
+  const two: JsonObject = {
+    spaces: [
+      { folder: "/a", id: "spc-a", name: "alpha", tabs: [tab("a1"), tab("a2"), tab("a3")] },
+      { folder: "/b", id: "spc-b", name: "", tabs: [tab("b1")] },
+    ],
+  };
+
+  test("a space is read with its name, folder and tabs in order", () => {
+    expect(docSpaces(two)).toEqual([
+      { id: "spc-a", name: "alpha", folder: "/a", tabs: ["a1", "a2", "a3"] },
+      { id: "spc-b", name: "", folder: "/b", tabs: ["b1"] },
+    ]);
+  });
+
+  test("a tab goes right after the one named, last when that one is gone, and a new space takes its name", () => {
+    expect(order(addTab(two, { id: "spc-a", folder: "" }, tab("n"), "a1"))).toEqual([
+      ["spc-a", ["a1", "n", "a2", "a3"]],
+      ["spc-b", ["b1"]],
+    ]);
+    expect(order(addTab(two, { id: "spc-a", folder: "" }, tab("n"), "gone"))?.[0]).toEqual([
+      "spc-a",
+      ["a1", "a2", "a3", "n"],
+    ]);
+    const made = addTab(two, { id: "spc-h", folder: "", name: "Home" }, tab("h1"));
+    expect(docSpaces(made).at(-1)).toEqual({ id: "spc-h", name: "Home", folder: "", tabs: ["h1"] });
+  });
+
+  test("a move reorders only its own space's tabs, clamps, and writes nothing when it changes nothing", () => {
+    expect(order(moveTab(two, "a3", 0))).toEqual([
+      ["spc-a", ["a3", "a1", "a2"]],
+      ["spc-b", ["b1"]],
+    ]);
+    expect(order(moveTab(two, "a1", 9))?.[0]).toEqual(["spc-a", ["a2", "a3", "a1"]]);
+    expect([moveTab(two, "a2", 1), moveTab(two, "b1", 3), moveTab(two, "gone", 0)]).toEqual([null, null, null]);
+  });
+
+  test("a rename sets only that space's name, keeps its other fields, and writes nothing when it changes nothing", () => {
+    const [alpha, beta] = docSpaces(two).map((each) => ({ folder: each.folder, id: each.id, name: each.name }));
+    const kept: JsonObject = {
+      spaces: [
+        { ...alpha, extra: 1, tabs: [] },
+        { ...beta, tabs: [tab("b1")] },
+      ],
+    };
+    const renamed = renameSpace(kept, "spc-b", "beta");
+    const spaces = renamed?.["spaces"];
+    expect(Array.isArray(spaces) ? spaces : null).toEqual([
+      { folder: "/a", id: "spc-a", name: "alpha", extra: 1, tabs: [] },
+      { folder: "/b", id: "spc-b", name: "beta", tabs: [tab("b1")] },
+    ]);
+    expect(Array.isArray(spaces) ? spaces[0] : null).toBe(Array.isArray(kept["spaces"]) ? kept["spaces"][0] : null);
+    expect([renameSpace(two, "spc-a", "alpha"), renameSpace(two, "gone", "x")]).toEqual([null, null]);
+  });
+
+  test("a tab rename sets only that tab's name, keeps the other tabs as read, and writes nothing when it changes nothing", () => {
+    const renamed = renameTab(two, "a2", "fix login");
+    expect(renamed === null ? null : tabsOf(renamed).map((each) => [each.id, each.name])).toEqual([
+      ["a1", ""],
+      ["a2", "fix login"],
+      ["a3", ""],
+      ["b1", ""],
+    ]);
+    const spaces = renamed?.["spaces"];
+    expect(Array.isArray(spaces) ? spaces[1] : null).toBe(Array.isArray(two["spaces"]) ? two["spaces"][1] : null);
+    expect([renameTab(two, "a1", ""), renameTab(two, "gone", "x")]).toEqual([null, null]);
   });
 });
