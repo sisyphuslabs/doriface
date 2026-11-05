@@ -17,8 +17,21 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..86a22e9e75ad6795a9276dc9f033346c
      }
      handleCompositionEnd(e) {
          this.composing = false;
+diff --git a/dist/renderer.d.ts b/dist/renderer.d.ts
+index 208021ab4fefce3dda7da7f337850a59113cc514..b6c3f70309d5e78e15d656d09f406f268b869f8b 100644
+--- a/dist/renderer.d.ts
++++ b/dist/renderer.d.ts
+@@ -95,6 +95,8 @@ export declare class Renderer {
+     /** Turns the color canvas off so block cells keep their own colored spans. */
+     setCanvasSuspended(suspended: boolean): void;
+     requestSetup(): void;
++    /** Sizes each wide glyph's font by `scale(text)`, or not at all for null; every row is rebuilt. */
++    setWideGlyphScale(scale: ((text: string) => number) | null): void;
+     /** Re-read indexed colors in live and retained rows without rebuilding the grid. */
+     invalidateColors(): void;
+     /** Replaces decorations only, preserving native text selection. */
 diff --git a/dist/renderer.js b/dist/renderer.js
-index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae35453c12 100644
+index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c14988a6410fc 100644
 --- a/dist/renderer.js
 +++ b/dist/renderer.js
 @@ -157,8 +157,42 @@ function cellSpanPart(className, style, text) {
@@ -94,7 +107,19 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae
              else
                  parts.push(content);
          };
-@@ -818,7 +858,7 @@ export class Renderer {
+@@ -746,7 +786,10 @@ export class Renderer {
+                 }
+                 const ch = cell.chars ?? (cp >= 32 ? String.fromCodePoint(cp) : " ");
+                 recordText(ch, col, 2);
+-                const style = buildCellStyle(cell);
++                // The host may size a wide glyph's font so its advance fits the
++                // two cells, as a terminal sizes a fallback face to the grid.
++                const scale = this.wideGlyphScale?.(ch) ?? 1;
++                const style = buildCellStyle(cell) + (scale === 1 ? "" : `font-size:${scale}em;`);
+                 const cursor = cursorCol >= col && cursorCol < col + 2;
+                 const cls = cursor ? "term-wide term-cursor" : "term-wide";
+                 appendStyledSpan(cls, cursor ? cursorCellStyle(style) : style, ch, cellLinkKey, cellLinkUri);
+@@ -818,7 +861,7 @@ export class Renderer {
          flushRun(this.cols);
          flushCanvasRun();
          if (outputLinkKey)
@@ -103,7 +128,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae
          this.updateRowParts(rowEl, parts);
          this.rowText.set(rowEl, content);
          if (canvasTop)
-@@ -871,9 +911,9 @@ export class Renderer {
+@@ -871,9 +914,9 @@ export class Renderer {
          }
          const retained = start + parts.length - newEnd;
          const replaced = Math.max(oldEnd - start, newEnd - start);
@@ -115,7 +140,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae
          }
          else {
              // Replace only the changed middle, retaining the native text nodes and
-@@ -882,12 +922,12 @@ export class Renderer {
+@@ -882,12 +925,12 @@ export class Renderer {
              range.setStart(row, start);
              range.setEnd(row, oldEnd);
              range.deleteContents();
@@ -134,11 +159,47 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..6284b6e68d87d1bbc9ae19a21ee449ae
          }
          this.rowParts.set(row, parts);
      }
+@@ -1286,6 +1329,11 @@ export class Renderer {
+     requestSetup() {
+         this.needsSetup = true;
+     }
++    /** Sizes each wide glyph's font by `scale(text)`, or not at all for null; every row is rebuilt. */
++    setWideGlyphScale(scale) {
++        this.wideGlyphScale = scale;
++        this.colorsChanged = true;
++    }
+     /** Re-read indexed colors in live and retained rows without rebuilding the grid. */
+     invalidateColors() {
+         this.colorsChanged = true;
+diff --git a/dist/wterm.d.ts b/dist/wterm.d.ts
+index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..f982b8bd9a948bf815b53937ea8d9e3c50ab2ffd 100644
+--- a/dist/wterm.d.ts
++++ b/dist/wterm.d.ts
+@@ -115,6 +115,11 @@ export declare class WTerm {
+      * Pass `null` to drop them and answer color queries from the page's CSS again.
+      */
+     setThemeColors(colors: TerminalThemeColors | null): void;
++    /**
++     * Size each wide (two-cell) glyph's font by `scale(text)`, so its advance
++     * fits the two cells; null draws every wide glyph at the terminal's size.
++     */
++    setWideGlyphScale(scale: ((text: string) => number) | null): void;
+     write(data: string | Uint8Array): void;
+     /**
+      * Hands the core the theme colors the page's CSS resolves to, unless the
 diff --git a/dist/wterm.js b/dist/wterm.js
-index 848e1c3f7880842c4439541fc4565ff4a42c0201..4a169079bd6e4b88fce9fbb07150e4bcb51e90e5 100644
+index 848e1c3f7880842c4439541fc4565ff4a42c0201..43c7ce919fed9fc315992efe4a55e42128921593 100644
 --- a/dist/wterm.js
 +++ b/dist/wterm.js
-@@ -407,7 +407,6 @@ export class WTerm {
+@@ -372,6 +372,7 @@ export class WTerm {
+                 maxImageWidth: this.maxImageWidth,
+                 maxImageHeight: this.maxImageHeight,
+             });
++            this.renderer.setWideGlyphScale(this._wideGlyphScale ?? null);
+             this.renderer.setup(this.cols, this.rows);
+             this.input = new InputHandler(this.element, (data, preserveScroll = false) => this._deliverInput(data, preserveScroll), () => this.bridge, () => this._charWidth > 0 && this._rowHeight > 0
+                 ? { charWidth: this._charWidth, rowHeight: this._rowHeight }
+@@ -407,7 +408,6 @@ export class WTerm {
              if (!this.autoResize) {
                  this._lockHeight();
              }
@@ -146,3 +207,23 @@ index 848e1c3f7880842c4439541fc4565ff4a42c0201..4a169079bd6e4b88fce9fbb07150e4bc
              this._initialRender();
              this._registerWebMCP();
              if (this.cols !== initialCols || this.rows !== initialRows)
+@@ -445,6 +445,19 @@ export class WTerm {
+         }
+         this.element.scrollTop = target;
+     }
++    /**
++     * Size each wide (two-cell) glyph's font by `scale(text)`, so its advance
++     * fits the two cells; null draws every wide glyph at the terminal's size.
++     */
++    setWideGlyphScale(scale) {
++        if (this._destroyed)
++            return;
++        this._wideGlyphScale = scale;
++        if (!this.renderer)
++            return;
++        this.renderer.setWideGlyphScale(scale);
++        this._scheduleRender();
++    }
+     /**
+      * Apply host colors without writing terminal input or restarting the session.
+      * Pass `null` to drop them and answer color queries from the page's CSS again.
