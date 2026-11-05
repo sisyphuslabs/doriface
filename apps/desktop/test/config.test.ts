@@ -87,7 +87,14 @@ describe("content security policy", () => {
     for (const name of ["object-src", "frame-src", "frame-ancestors", "base-uri", "form-action"]) {
       expect(csp.get(name)).toEqual(["'none'"]);
     }
-    expect(csp.get("connect-src")).toEqual(["'self'", "ws:", "wss:", "http://127.0.0.1:*", "http://localhost:*"]);
+    expect(csp.get("connect-src")).toEqual([
+      "'self'",
+      "ws:",
+      "wss:",
+      "http://127.0.0.1:*",
+      "http://localhost:*",
+      "https://relay-doriface.omo.dev",
+    ]);
     expect([...csp.values()].flat()).not.toContain("'unsafe-eval'");
     expect([...csp.values()].flat()).not.toContain("'unsafe-inline'");
   });
