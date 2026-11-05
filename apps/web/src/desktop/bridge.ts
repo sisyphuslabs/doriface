@@ -13,6 +13,8 @@ export interface HostStartFailure {
   readonly message: string;
   readonly path?: string;
   readonly address?: string;
+  /** For `hc-binary-missing`: the folders the shell searched for hc after PATH, on this platform. */
+  readonly searched?: readonly string[];
   readonly details: string;
 }
 
@@ -41,6 +43,9 @@ function failureOf(value: unknown): HostStartFailure | undefined {
   const details: unknown = Reflect.get(failure, "details");
   const path = optionalString(failure, "path");
   const address = optionalString(failure, "address");
+  const searched: unknown = Reflect.get(failure, "searched");
+  const folders =
+    Array.isArray(searched) && searched.every((dir): dir is string => typeof dir === "string") ? searched : undefined;
   if (typeof code !== "string" || typeof message !== "string" || typeof details !== "string") return undefined;
   if (path === null || address === null) return undefined;
   return {
@@ -49,6 +54,7 @@ function failureOf(value: unknown): HostStartFailure | undefined {
     details,
     ...(path === undefined ? {} : { path }),
     ...(address === undefined ? {} : { address }),
+    ...(folders === undefined ? {} : { searched: folders }),
   };
 }
 

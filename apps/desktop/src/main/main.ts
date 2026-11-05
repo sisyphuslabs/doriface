@@ -10,7 +10,7 @@ import { launchBackground, secureWebPreferences, windowOptions } from "../config
 import { Channel, parsePlatform } from "../shared/bridge.ts";
 import { openDeepLink, routeDeepLinksTo, takePairingLink } from "./deep-link.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
-import { findHc, hostCommand, type HostContext } from "./host-command.ts";
+import { findHc, hostCommand, type HostContext, usualHcDirs } from "./host-command.ts";
 import { registerIpc } from "./ipc.ts";
 import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
@@ -134,6 +134,7 @@ function ready(): void {
   const localHost = new LocalHost({
     command: hostCommand(context),
     hc: () => findHc(context),
+    searched: () => usualHcDirs(context),
     env: process.env,
     log: (line) => console.log(line),
   });

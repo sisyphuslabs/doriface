@@ -1,7 +1,10 @@
 import type { LocalHostFailure } from "../shared/bridge.ts";
 
-/** doriface-host's `startup-error` line (apps/host/src/startup-error.ts): this prefix, then one JSON object. */
-const STARTUP_ERROR_PREFIX = "doriface-host startup-error ";
+/**
+ * doriface-host's `startup-error` line (apps/host/src/startup-error.ts): this prefix, then one JSON object. Kept as a
+ * copy so the Electron main bundle does not take in the host; test/host-failure.test.ts pins it to the host's.
+ */
+export const STARTUP_ERROR_PREFIX = "doriface-host startup-error ";
 /** Where doriface-host's usage text begins; it is printed only for a command line it refused, and is never shown. */
 const USAGE_START = /^usage: doriface-host\b/;
 

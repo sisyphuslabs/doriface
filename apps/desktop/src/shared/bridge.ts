@@ -46,6 +46,8 @@ export interface LocalHostFailure {
   readonly message: string;
   readonly path?: string;
   readonly address?: string;
+  /** For `hc-binary-missing`: the folders searched for hc after PATH, on this platform. */
+  readonly searched?: readonly string[];
   /** The host's own output, for a Details disclosure; never its usage text. */
   readonly details: string;
 }
