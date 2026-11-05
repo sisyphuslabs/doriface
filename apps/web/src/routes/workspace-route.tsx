@@ -9,7 +9,7 @@ import { startFailure, startThisComputer } from "../desktop/local-host.ts";
 import { FirstRun } from "../pair/first-run.tsx";
 import { HostStartNotice } from "../pair/host-start-notice.tsx";
 import { useOnline } from "../pwa/use-online.ts";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 const Workspace = lazy(() => import("../workspace/workspace.tsx").then((module) => ({ default: module.Workspace })));
 
@@ -35,6 +35,8 @@ function HostStartFailed({ failure }: { readonly failure: HostStartFailure }) {
 /** The workspace once connected (and while it reconnects); otherwise what is happening and the next step. */
 export function WorkspaceRoute() {
   const state = useConnection();
+  // Back at the workspace (from Settings, say) while a reconnect waits out its back-off: try now, not up to 10 s on (#403).
+  useEffect(() => connectionStore.retryNow(), []);
   const online = useOnline();
   // A link to this computer needs no network, so a lost network is never its cause (as in reconnect-status.tsx).
   const offline = !online && !staysOnThisComputer(connectionStore.settings);

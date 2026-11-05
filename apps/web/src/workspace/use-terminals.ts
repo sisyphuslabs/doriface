@@ -18,6 +18,13 @@ export function machineCount(list: Pick<ListResult, "machines">): number {
 
 const EMPTY: TerminalsState = { terminals: [], loaded: false, machines: 0, error: null };
 
+/**
+ * What each connection last showed. While the page reconnects, the workspace stays on the connection that dropped, and
+ * one that mounts again then (Settings and back) starts from this: that connection can no longer answer, so without it
+ * the list stayed empty and every pane waited until a reconnect landed (#403).
+ */
+const lastShown = new WeakMap<HcConnection, TerminalsState>();
+
 /** A core document changed: which machine's (null for this core's), its name and its new version. */
 export type DocHeard = (machine: string | null, name: string, version: number) => void;
 
@@ -26,7 +33,9 @@ export type DocHeard = (machine: string | null, name: string, version: number) =
  * `doc` events, handed to `onDoc`.
  */
 export function useTerminals(connection: HcConnection | null, onDoc?: DocHeard): TerminalsState {
-  const [state, setState] = useState<TerminalsState>(EMPTY);
+  const [state, setState] = useState<TerminalsState>(() =>
+    connection === null ? EMPTY : (lastShown.get(connection) ?? EMPTY),
+  );
   const docHeard = useRef(onDoc);
   docHeard.current = onDoc;
 
@@ -35,11 +44,16 @@ export function useTerminals(connection: HcConnection | null, onDoc?: DocHeard):
       setState(EMPTY);
       return undefined;
     }
+    // A connection that already dropped has nothing new to say: keep what it last showed until the next one answers.
+    if (connection.closed) return undefined;
     let map: TerminalMap = new Map();
     let machines = 0;
     let disposed = false;
     const publish = (): void => {
-      if (!disposed) setState({ terminals: [...map.values()], loaded: true, machines, error: null });
+      if (disposed) return;
+      const shown: TerminalsState = { terminals: [...map.values()], loaded: true, machines, error: null };
+      lastShown.set(connection, shown);
+      setState(shown);
     };
     const fail = (cause: unknown): void => {
       if (!disposed) setState((prev) => ({ ...prev, error: String(cause) }));

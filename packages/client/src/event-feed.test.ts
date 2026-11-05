@@ -10,7 +10,7 @@ import {
 import { HcConnection, type SubscribeOptions } from "./connection.ts";
 import { HcProtocolError } from "./errors.ts";
 import type { EventFeed, FeedClose } from "./event-feed.ts";
-import { FakeCore } from "./testing/fake-core.ts";
+import { FakeCore, refusingLink } from "./testing/fake-core.ts";
 import { bytes, FINISHED_EVENT, HELLO_REPLY_LINE, SIZE_EVENT, SUBSCRIBE_REPLY, withId } from "./testing/fixtures.ts";
 
 const CHANNEL = 1;
@@ -172,5 +172,21 @@ describe("EventFeed", () => {
     const linkGone = next<FeedClose>((resolve) => dropped.feed.onClose(resolve));
     dropped.core.hangUp();
     expect((await linkGone).reason).toBe("connection_closed");
+  });
+
+  test("closing the feed once its socket went away (sends throw, no close yet) does not throw, and the connection ends (#403)", async () => {
+    const core = new FakeCore();
+    const { link, refuse } = refusingLink(core);
+    const opening = HcConnection.open(link);
+    await core.waitHello();
+    core.push(`${HELLO_REPLY_LINE}\n`);
+    const connection = await opening;
+    const subscribing = connection.subscribe({}, { heartbeatTimeoutMs: 0 });
+    const request = await core.waitRequest("events.subscribe");
+    core.pushFrame(0, 0, withId(SUBSCRIBE_REPLY, Number(request.id)));
+    const feed = await subscribing;
+    refuse();
+    expect(() => feed.close()).not.toThrow();
+    expect(connection.closed).toBe(true);
   });
 });
