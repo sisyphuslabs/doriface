@@ -32,21 +32,26 @@ export interface SeedTab {
   readonly root: readonly Tree[];
 }
 
-export function seedLayout(tabs: readonly SeedTab[], folder = "/tmp"): void {
-  setCoreDoc(LAYOUT_DOC, {
-    spaces: [
-      {
-        folder,
-        id: "spc-e2e",
-        name: "",
-        tabs: tabs.map((tab) => ({
-          id: tab.id,
-          name: tab.name ?? "",
-          root: { children: tab.root.map(treeNode), id: tab.id, type: "row" },
-        })),
-      },
-    ],
-  });
+/** Saves these tabs as the core's layout, or (`on`) as its added machine's. */
+export function seedLayout(tabs: readonly SeedTab[], folder = "/tmp", on?: string): void {
+  setCoreDoc(
+    LAYOUT_DOC,
+    {
+      spaces: [
+        {
+          folder,
+          id: "spc-e2e",
+          name: "",
+          tabs: tabs.map((tab) => ({
+            id: tab.id,
+            name: tab.name ?? "",
+            root: { children: tab.root.map(treeNode), id: tab.id, type: "row" },
+          })),
+        },
+      ],
+    },
+    on,
+  );
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
