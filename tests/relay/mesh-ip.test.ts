@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { untilGone } from "./support/mesh/gone.ts";
 import { type Mesh, startMesh, TEARDOWN_MS } from "./support/mesh/mesh.ts";
+import { timeRecovery } from "./support/mesh/recovery.ts";
 import { RESTART_BUDGET_MS } from "./support/mesh/relay-front.ts";
 import { scenario } from "./support/mesh/present.ts";
 import { statusOf } from "./support/mesh/status.ts";
@@ -138,13 +139,10 @@ scenario("E-IP (any number of hosts behind one address, #119)", ["join", "revoke
       const from = markOf(hosts);
       const stopped = performance.now();
       await relay.restart();
-      const answered = performance.now();
-      await untilConnected(hosts, REMAINING, RECOVER_MS, from);
-      const back = performance.now();
       console.log(
-        `E-IP restart: the relay answered ${Math.round(answered - stopped)} ms after its stop began; ` +
-          `every line was back ${Math.round(back - answered)} ms after that`,
+        `E-IP restart: the relay answered ${Math.round(performance.now() - stopped)} ms after its stop began`,
       );
+      await timeRecovery("E-IP restart", () => untilConnected(hosts, REMAINING, RECOVER_MS, from));
       expectNoRateLimit(hosts, from);
       await expectFullBudgets(hosts, REMAINING);
     },
