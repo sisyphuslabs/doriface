@@ -1,5 +1,5 @@
 import { afterAll } from "bun:test";
-import { stopLeftoverCores } from "./hc-session.ts";
+import { stopLeftoverCoresNamed } from "./hc-session.ts";
 import { recordLeft, RUN_DIR } from "./run-cores.ts";
 
 // Preloaded by bunfig.toml, so it runs once every test file has: a scratch herdr core still serving then would
@@ -7,7 +7,7 @@ import { recordLeft, RUN_DIR } from "./run-cores.ts";
 // suite leaves running, for the runner to wait for and stop (see recordLeft).
 afterAll(async () => {
   try {
-    const leftover = await stopLeftoverCores();
+    const leftover = await stopLeftoverCoresNamed();
     if (leftover.length > 0) {
       throw new Error(`herdr-core outlived the test that started it (now stopped): ${leftover.join(", ")}`);
     }
