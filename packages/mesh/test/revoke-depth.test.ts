@@ -6,11 +6,12 @@ import { naiveView } from "./oracle/naive.ts";
 
 /**
  * A founds and admits K and B; A revokes K and B acks it, so K's concurrent first mint Z1 is defeated. On that branch
- * K's mints admit each other `depth` deep, and the mint `window` back is revoked so the branch stays within 12 members,
- * by the newest mint or by K itself; then the last mint revokes the founder. Its revoke's lineage walk must reach the
- * defeated Z1 at any depth. When K prunes, no earlier revoke has walked the chain, so the walk is one fresh pass.
+ * K's mints admit each other `depth` deep, and once `window + batch` mints are live one revoke prunes the oldest `batch`
+ * of them, so the branch stays within 12 members (A, K, B and at most 9 mints), by the newest mint or by K itself; then
+ * the last mint revokes the founder. Its revoke's lineage walk must reach the defeated Z1 at any depth. When K prunes,
+ * no earlier revoke has walked the chain, so the walk is one fresh pass.
  */
-function mintChain(depth: number, pruner: "mint" | "minter", window = 8): Rec[] {
+function mintChain(depth: number, pruner: "mint" | "minter", window = 8, batch = 1): Rec[] {
   const out: Draft[] = [
     found("F", "A"),
     admit("aK", "A", "K", ["F"]),
@@ -20,12 +21,15 @@ function mintChain(depth: number, pruner: "mint" | "minter", window = 8): Rec[] 
   ];
   let last = "aB";
   let by = "K";
+  let pruned = 0;
   for (let i = 1; i <= depth; i++) {
     out.push(admit(`m${i}`, by, `Z${i}`, [last]));
     last = `m${i}`;
     by = `Z${i}`;
-    if (i > window) {
-      out.push(revoke(`r${i}`, pruner === "mint" ? by : "K", [`Z${i - window}`], [last]));
+    if (i - pruned >= window + batch) {
+      const subjects = Array.from({ length: batch }, (_, j) => `Z${pruned + j + 1}`);
+      pruned += batch;
+      out.push(revoke(`r${i}`, pruner === "mint" ? by : "K", subjects, [last]));
       last = `r${i}`;
     }
   }
@@ -44,7 +48,10 @@ describe("contract: the revoke lineage walk goes all the way to the founding rec
   }
 
   test("the oracle agrees past the old 64-hop bound", () => {
-    const records = mintChain(65, "minter");
+    // The oracle evaluates every past and meet of the chain, so its work grows much faster than the record count. Five
+    // mints pruned per revoke make the same 65-hop walk in 83 records instead of 128: 0.27 s of CPU instead of 0.64 s.
+    const records = mintChain(65, "minter", 4, 5);
+    expect(records.filter((rec) => rec.type === "admit" && rec.id.startsWith("m"))).toHaveLength(65);
     const oracle = naiveView(records);
     expect([oracle.eff.includes("x"), oracle.members, oracle.revoked]).toEqual([false, ["A", "B"], ["K"]]);
   });

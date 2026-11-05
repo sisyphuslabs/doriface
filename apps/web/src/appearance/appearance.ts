@@ -2,6 +2,7 @@ import { themeVariables } from "@doriface/ui";
 import { useSyncExternalStore } from "react";
 import { themeChoices } from "./choices.ts";
 import { activeThemeId, parseAppearance, type Appearance } from "./stored.ts";
+import { guardedLocalStorage } from "../storage/guarded.ts";
 
 export { themeChoices } from "./choices.ts";
 export type { Appearance, AppearanceMode, Density } from "./stored.ts";
@@ -13,7 +14,7 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 function load(): Appearance {
   let stored: unknown;
   try {
-    stored = JSON.parse(localStorage.getItem(KEY) ?? "null");
+    stored = JSON.parse(guardedLocalStorage().getItem(KEY) ?? "null");
   } catch {
     stored = null;
   }
@@ -55,7 +56,7 @@ class AppearanceStore {
   };
   update(patch: Partial<Appearance>): void {
     this.#value = { ...this.#value, ...patch };
-    localStorage.setItem(KEY, JSON.stringify(this.#value));
+    guardedLocalStorage().setItem(KEY, JSON.stringify(this.#value));
     applyAppearance(this.#value);
     for (const listener of this.#listeners) listener();
   }

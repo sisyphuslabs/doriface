@@ -12,5 +12,63 @@
     "typescript/consistent-type-imports": "error",
     "import/no-cycle": "error"
   },
-  "ignorePatterns": ["**/dist/**", "**/types/**", "**/.wrangler/**", ".relay/**"]
+  "ignorePatterns": ["**/dist/**", "**/types/**", "**/.wrangler/**", ".relay/**"],
+  "overrides": [
+    {
+      "files": ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "localStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          },
+          {
+            "name": "sessionStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          }
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "globalThis",
+            "property": "localStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          },
+          {
+            "object": "globalThis",
+            "property": "sessionStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          },
+          {
+            "object": "window",
+            "property": "localStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          },
+          {
+            "object": "window",
+            "property": "sessionStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          },
+          {
+            "object": "self",
+            "property": "localStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          },
+          {
+            "object": "self",
+            "property": "sessionStorage",
+            "message": "Use apps/web/src/storage/guarded.ts (guardedLocalStorage, guardedSessionStorage, or browserStorage to see a refusal): direct storage access throws when storage is refused (#551)."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/src/storage/**", "apps/web/src/**/*.test.ts", "apps/web/src/**/*.test.tsx"],
+      "rules": {
+        "no-restricted-globals": "off",
+        "no-restricted-properties": "off"
+      }
+    }
+  ]
 }

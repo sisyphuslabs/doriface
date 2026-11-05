@@ -1,4 +1,5 @@
 import { isJsonObject } from "@doriface/protocol";
+import { browserStorage, guardedLocalStorage } from "../storage/guarded.ts";
 
 /**
  * What this screen looks at, kept out of the shared document as herdr-app keeps its `view.json` (`src/mirror.rs`
@@ -24,7 +25,7 @@ function strings(value: unknown): Record<string, string> {
   );
 }
 
-export function loadView(core: string, storage: Pick<Storage, "getItem"> = localStorage): View {
+export function loadView(core: string, storage: Pick<Storage, "getItem"> = guardedLocalStorage()): View {
   let parsed: unknown;
   try {
     parsed = JSON.parse(storage.getItem(storageKey(core)) ?? "null");
@@ -45,7 +46,11 @@ export function loadView(core: string, storage: Pick<Storage, "getItem"> = local
  * Saves this screen's view; null once it is saved, else why the storage refused it (full or denied). A refusal never
  * throws: the view lives on in memory, and only the next reload loses the selection and focus.
  */
-export function saveView(core: string, view: View, storage: Pick<Storage, "setItem"> = localStorage): string | null {
+export function saveView(
+  core: string,
+  view: View,
+  storage: Pick<Storage, "setItem"> = browserStorage("localStorage"),
+): string | null {
   try {
     storage.setItem(storageKey(core), JSON.stringify(view));
     return null;
