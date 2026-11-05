@@ -69,16 +69,30 @@ export function encodeResize(channel: number, cols: number, rows: number): Uint8
  * Incremental decoder for a byte stream of frames. Chunk boundaries may fall anywhere,
  * including inside a header. Payloads that arrive whole inside one chunk are returned
  * as zero-copy views of that chunk.
+ *
+ * The bytes of an unfinished frame are held as the chunks they came in and joined once,
+ * when the frame is whole: a frame of n bytes arriving in k chunks costs O(n), not the
+ * O(n * k) of joining on every chunk (#481: an 8 MiB reply in 64 KiB records).
  */
 export class FrameDecoder {
-  #pending: Uint8Array = EMPTY;
+  #held: Uint8Array[] = [];
+  #heldBytes = 0;
+  /** The held bytes needed before the next frame can be read: its header, then its whole frame. */
+  #needed = HEADER_BYTES;
 
   push(chunk: Uint8Array): Frame[] {
     let buf = chunk;
-    if (this.#pending.byteLength > 0) {
-      buf = new Uint8Array(this.#pending.byteLength + chunk.byteLength);
-      buf.set(this.#pending, 0);
-      buf.set(chunk, this.#pending.byteLength);
+    if (this.#heldBytes > 0) {
+      // A copy, as before: the caller may reuse its buffer once push returns.
+      this.#held.push(chunk.slice());
+      this.#heldBytes += chunk.byteLength;
+      if (this.#heldBytes < this.#needed) return [];
+      buf = new Uint8Array(this.#heldBytes);
+      let at = 0;
+      for (const part of this.#held) {
+        buf.set(part, at);
+        at += part.byteLength;
+      }
     }
     const frames: Frame[] = [];
     const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -89,7 +103,10 @@ export class FrameDecoder {
         throw new FrameError(`frame length ${len} exceeds ${MAX_PAYLOAD_BYTES}`);
       }
       const end = offset + HEADER_BYTES + len;
-      if (end > buf.byteLength) break;
+      if (end > buf.byteLength) {
+        this.#needed = HEADER_BYTES + len;
+        break;
+      }
       frames.push({
         channel: view.getUint32(offset, true),
         kind: view.getUint8(offset + 4),
@@ -97,12 +114,15 @@ export class FrameDecoder {
       });
       offset = end;
     }
-    this.#pending = offset === buf.byteLength ? EMPTY : buf.slice(offset);
+    const rest = buf.byteLength - offset;
+    if (rest < HEADER_BYTES) this.#needed = HEADER_BYTES;
+    this.#held = rest === 0 ? [] : [buf.slice(offset)];
+    this.#heldBytes = rest;
     return frames;
   }
 
   get bufferedBytes(): number {
-    return this.#pending.byteLength;
+    return this.#heldBytes;
   }
 }
 
