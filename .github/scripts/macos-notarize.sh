@@ -63,5 +63,14 @@ while :; do
 done
 echo "Notarization accepted for $name"
 
-xcrun stapler staple "$target"
-xcrun stapler validate "$target"
+# The ticket of a just-accepted submission can take a while to reach Apple's ticket service, and stapler then fails
+# with error 68 or a dropped connection; retry it rather than fail an accepted build.
+for attempt in $(seq 1 12); do
+  if xcrun stapler staple "$target"; then
+    xcrun stapler validate "$target"
+    exit 0
+  fi
+  echo "stapling $name failed (attempt $attempt of 12), retrying in 30s"
+  sleep 30
+done
+fail "could not staple the notarization ticket to $name ($id)"
