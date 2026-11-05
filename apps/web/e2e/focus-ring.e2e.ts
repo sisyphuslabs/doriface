@@ -88,5 +88,12 @@ for (const colorScheme of ["light", "dark"] as const) {
       await ringOnTab(page, page.getByRole("button", { name: "Import keybinds…" }));
       await ringOnTab(page, page.getByRole("button", { name: "Export" }));
     });
+
+    // Tab reaches only the value field: the - and + buttons stay out of the tab order (arrow keys step the value).
+    test("a number stepper's value field Tab reaches draws a focus ring", async ({ page }) => {
+      await page.goto("/settings");
+      await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Terminal" }).click();
+      await ringOnTab(page, page.getByRole("textbox", { name: "font-size", exact: true }));
+    });
   });
 }
