@@ -93,6 +93,57 @@ describe("FaceScales", () => {
     expect(scales.scaleOf("\u{300C}")).toBe(scales.scaleOf("\u{6C34}"));
   });
 
+  test("a block split across two fallback faces fits the wider face: 测 试 简 体 stay inside their two cells (#252)", () => {
+    // As on a Linux host with NanumSquare and Noto Sans CJK SC: NanumSquare draws 水 and Hangul at 0.948 em, Noto draws
+    // the simplified-only forms NanumSquare lacks at 1 em, and Chromium rounds every advance to a whole pixel.
+    const SIZE = 17.33;
+    const CELL = 10.43;
+    const second = new Set("测试简体这込终汉应该填满两个");
+    const em = (text: string) => (second.has(text) ? 1 : 0.948);
+    const measure: Measure = (text, _family, scale) => {
+      if ((text.codePointAt(0) ?? 0) < 0x80)
+        return { width: CELL * scale, ...ASCII_INK, actualBoundingBoxAscent: 16, actualBoundingBoxDescent: 4.5 };
+      const width = Math.round(em(text) * SIZE * scale);
+      return {
+        width,
+        actualBoundingBoxLeft: 0,
+        actualBoundingBoxRight: width,
+        actualBoundingBoxAscent: 14,
+        actualBoundingBoxDescent: 2,
+      };
+    };
+    const scales = new FaceScales(measure, DEFAULT, DEFAULT);
+    for (const glyph of "测试简体") {
+      expect(measure(glyph, DEFAULT, scales.scaleOf(glyph)).width, glyph).toBeLessThanOrEqual(2 * CELL);
+    }
+    // The face that draws the block's common sample stays inside too, and Hangul keeps the size it had.
+    expect(measure("\u{6C34}", DEFAULT, scales.scaleOf("\u{6C34}")).width).toBeLessThanOrEqual(2 * CELL);
+    const hangul = scales.scaleOf("\u{D55C}");
+    expect(measure("\u{D55C}", DEFAULT, hangul).width).toBe(20);
+  });
+
+  test("a sample no face has, drawn as a one-cell box, does not hold the block to its own size", () => {
+    const SIZE = 17.33;
+    const CELL = 10.43;
+    const second = new Set("\u{8FD9}\u{6D4B}");
+    const measure: Measure = (text, _family, scale) => {
+      if ((text.codePointAt(0) ?? 0) < 0x80)
+        return { width: CELL * scale, ...ASCII_INK, actualBoundingBoxAscent: 16, actualBoundingBoxDescent: 4.5 };
+      // \u8FBC has no face on this host: its missing-glyph box is one cell wide at any size.
+      const width = text === "\u{8FBC}" ? CELL * scale : Math.round((second.has(text) ? 1 : 0.948) * SIZE * scale);
+      return {
+        width,
+        actualBoundingBoxLeft: 0,
+        actualBoundingBoxRight: width,
+        actualBoundingBoxAscent: 14,
+        actualBoundingBoxDescent: 2,
+      };
+    };
+    const scale = new FaceScales(measure, DEFAULT, DEFAULT).scaleOf("\u{6D4B}");
+    expect(scale).toBeGreaterThan(1);
+    expect(measure("\u{6D4B}", DEFAULT, scale).width).toBeLessThanOrEqual(2 * CELL);
+  });
+
   test.each([
     ["an emoji", "\u{1F600}"],
     ["an emoji inside a CJK block", "\u{3297}\u{FE0F}"],

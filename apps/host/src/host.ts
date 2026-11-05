@@ -8,6 +8,7 @@ import { LiveSessions } from "./e2ee/sessions.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
+import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { listenError, StartupError } from "./startup-error.ts";
 import { type StartedPart, stopStarted } from "./stop-started.ts";
 import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
@@ -55,6 +56,8 @@ export interface HostOptions {
   /** For tests: origins of a private push service the host may post web push notices to, besides the browsers' own. */
   readonly pushTestOrigins?: readonly string[] | undefined;
   readonly log: (line: string) => void;
+  /** The OS this host reports on its core (`process.platform` unless a test names another). */
+  readonly platform?: string;
 }
 
 export interface E2eeEndpoint {
@@ -153,6 +156,15 @@ async function serve(
     () => ends.stop(),
     () => ends.kill().map((pid) => `hc connect pid ${pid}`),
   );
+  // The host's OS goes on its core once a client opens a pipe, as the end sweeper starts: every hc call starts its
+  // session's core when none runs, and a host that no one uses must not start one (#306).
+  const core = { hc: options.hc, session: options.session, env: options.env };
+  let info: HostInfoPublisher | undefined;
+  started(
+    "host info",
+    () => info?.stop(),
+    () => (info?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
+  );
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -163,6 +175,7 @@ async function serve(
     directIdleMs: options.directIdleMs,
     openPipe: () => {
       void ends.ensure();
+      info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
@@ -245,6 +258,7 @@ async function serve(
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
+        .then(() => info?.stop())
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => undefined);

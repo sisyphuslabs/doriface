@@ -2,9 +2,12 @@
 // that count the core's terminals never see another worker's. The playwright runner is Node, so this uses child_process.
 import { type ChildProcess, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { E2E_LAYOUT_PORT, E2E_SLOT, E2E_WEB_PORT, hostEnvOf, hostPortOf } from "./config.ts";
-import { readSavedEnv } from "./saved-env.ts";
+import { coresLeftUnder } from "./core-processes.ts";
+import { readSavedEnv, readSavedEnvIfWhole } from "./saved-env.ts";
+import { beginWorker, endWorker, WHERE } from "./terminal-guard.ts";
+import { record } from "./terminal-ledger.ts";
 
 const HOST_SCRIPT = fileURLToPath(new URL("./host.ts", import.meta.url));
 /** Setup seeds the core and adds a machine (a second core) before /healthz answers. */
@@ -34,8 +37,10 @@ async function healthy(
       (r) => r.ok,
       () => false,
     );
-    // Another process can answer on this port (a second checkout's host): ready means the host saved here is this child.
-    if (ok && existsSync(envFile) && readSavedEnv(envFile).pid === child.pid) return;
+    // Another process can answer on this port (a second checkout's host): ready means the host saved here is this child,
+    // and that it has finished seeding its core and adding its machine.
+    const saved = ok ? readSavedEnvIfWhole(envFile) : undefined;
+    if (saved !== undefined && saved.pid === child.pid && saved.ready === true) return;
     if (Date.now() > deadline)
       throw new Error(
         `the e2e host for ${url} was not ready within ${READY_WITHIN_MS} ms (answered by another process: ${ok})`,
@@ -61,7 +66,7 @@ const alive = (pid: number): boolean => {
  * deletes its saved environment as it exits; until then its pid there is the one to wait out.
  */
 async function previousGone(envFile: string): Promise<void> {
-  const pid = existsSync(envFile) ? readSavedEnv(envFile).pid : undefined;
+  const pid = readSavedEnvIfWhole(envFile)?.pid;
   if (pid === undefined) return;
   const deadline = Date.now() + READY_WITHIN_MS;
   while (alive(pid)) {
@@ -95,8 +100,23 @@ export async function startWorkerHost(): Promise<() => Promise<void>> {
   const child = spawn("bun", [HOST_SCRIPT], { env, stdio: ["ignore", "inherit", "inherit"] });
   const exited = exitOf(child);
   await healthy(url, hostEnvOf(port), child, exited);
+  const dir = dirname(readSavedEnv(hostEnvOf(port)).env["XDG_STATE_HOME"] ?? "");
+  // Before any hook runs: the first file's beforeAll terminals are then told apart from what the host started with.
+  beginWorker();
   return async () => {
+    // The worker's last terminal check reads this host's core, so it runs first; a leak it finds fails once the host
+    // has stopped. Then no hc process the host started may still run (#226).
+    const failures: string[] = [];
+    try {
+      endWorker();
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
     child.kill("SIGTERM");
     await exited;
+    const left = await coresLeftUnder(dir);
+    record({ kind: "cores", where: WHERE, left });
+    if (left.length > 0) failures.push(`hc processes left by the e2e host (${WHERE}):\n  ${left.join("\n  ")}`);
+    if (failures.length > 0) throw new Error(failures.join("\n"));
   };
 }

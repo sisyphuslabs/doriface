@@ -1,6 +1,8 @@
 // Arbitrary record DAGs for the differential fuzz: any signer writes any record type with prev drawn from the whole
 // past, and some counters are wrong on purpose (reused, skipped, zero, fractional), so the structure rules (own chain,
 // pred, forks) see equivocations and gaps the honest generators never make. Duplicate prev entries appear too.
+// Admits and rekeys sometimes name another subject's Noise key (`<subject>-key`, the default card key), so twins of a
+// member's key (#90, R1) reach every engine.
 
 import type { Rec } from "../../src/view/dag.ts";
 import { pick, type Rng } from "../sim/world.ts";
@@ -10,13 +12,16 @@ const KEYS = ["A", "B", "C", "D", "E", "G"];
 
 function draftOf(r: Rng, id: string, by: string, prev: readonly string[]): Draft {
   const roll = r.next();
-  if (roll < 0.25) return admit(id, by, pick(r, KEYS), prev, r.next() < 0.2 ? `${id}-key` : undefined);
+  if (roll < 0.25) {
+    const key = r.next();
+    return admit(id, by, pick(r, KEYS), prev, key < 0.2 ? `${id}-key` : key < 0.4 ? `${pick(r, KEYS)}-key` : undefined);
+  }
   if (roll < 0.45) {
     const subjects = KEYS.filter(() => r.next() < 0.3);
     return revoke(id, by, subjects.length > 0 ? subjects : [pick(r, KEYS)], prev);
   }
   if (roll < 0.6) return name(id, by, pick(r, KEYS), prev, `${id}-name`);
-  if (roll < 0.7) return rekey(id, by, prev, `${id}-noise`);
+  if (roll < 0.7) return rekey(id, by, prev, r.next() < 0.4 ? `${pick(r, KEYS)}-key` : `${id}-noise`);
   return ack(id, by, prev);
 }
 

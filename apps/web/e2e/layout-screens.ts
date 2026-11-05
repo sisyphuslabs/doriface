@@ -113,7 +113,7 @@ export const SCREENS: readonly Screen[] = [
         Promise.resolve(),
       );
       await row(page, "remote-terraform-plan-runner-001").click();
-      await page.getByRole("button", { name: "Split" }).click();
+      await page.getByRole("button", { name: "Split right" }).click();
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
     },
   },

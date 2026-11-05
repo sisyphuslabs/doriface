@@ -1,8 +1,11 @@
 import type { HcConnection } from "@doriface/client";
 import { useToastManager } from "@doriface/ui";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
+import { LAYOUT_DOC } from "@doriface/protocol/layout";
+import { closesTab, type TerminalEnd } from "../terminal/terminal-end.ts";
+import { CloseTabDialog } from "./close-tab-dialog.tsx";
 import { AddMachineDialog } from "./add-machine-dialog.tsx";
 import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
@@ -18,8 +21,12 @@ import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
-import { useTabs, type Tabs } from "./use-tabs.ts";
-import { useTerminals } from "./use-terminals.ts";
+import { useLayout } from "./use-layout.ts";
+import { afterEnd } from "./session-actions.ts";
+import { useDeadPanes } from "./use-dead-panes.ts";
+import { useLayoutDocs } from "./use-layout-docs.ts";
+import { useTerminals, type DocHeard } from "./use-terminals.ts";
+import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
@@ -30,9 +37,24 @@ export interface WorkspaceProps {
 
 /** The live terminals of one core: the desktop shell from `md` up, the phone navigation below. */
 export function Workspace({ connection }: WorkspaceProps) {
-  const fed = useTerminals(connection);
+  // The feed comes before the machine list the layout documents need, so its doc events reach them through a ref.
+  const heardLayout = useRef<(machine: string | null, version: number) => void>(() => undefined);
+  const onDoc = useCallback<DocHeard>((machine, name, version) => {
+    if (name === LAYOUT_DOC) heardLayout.current(machine, version);
+  }, []);
+  const fed = useTerminals(connection, onDoc);
+  useResumeEnds(connection);
   const { entries, terminals, refresh, listError, views, retry, listed } = useMachines(connection, fed.terminals);
-  const tabs = useTabs(connection.hello.core.id, fed.loaded ? terminals : null, views, listed);
+  const { layouts, heard } = useLayoutDocs(connection, views);
+  heardLayout.current = heard;
+  const toasts = useToastManager();
+  const failed = useCallback(
+    (message: string) => toasts.add({ type: "error", title: "The layout was not saved", description: message }),
+    [toasts],
+  );
+  const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
+  const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed, told, listed > 0);
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, layout.dropPane);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
@@ -47,20 +69,33 @@ export function Workspace({ connection }: WorkspaceProps) {
     setPalette((shown) => !shown);
     return true;
   });
-  const { select } = tabs;
+  const { openTerminal: openInLayout } = layout;
   const opened = useCallback(
     (address: string): void => {
-      select(address);
+      openInLayout(address);
       showOnPhone(address);
     },
-    [select, showOnPhone],
+    [openInLayout, showOnPhone],
   );
+  const [closingTab, setClosingTab] = useState<string | null>(null);
   const runs = useMachineRuns(connection, opened, refresh);
-  const inView = narrow ? phoneOpen : tabs.active;
-  const newTerminal = (): void => {
-    const active = terminals.find((terminal) => terminal.address === inView);
-    runs.start(runParamsFor(active));
+  const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
+  const inViewTerminal = terminals.find((terminal) => terminal.address === inView);
+  const newTerminal = (): void => runs.start(runParamsFor(inViewTerminal));
+  const splitRight = (): void => runs.start(runParamsFor(inViewTerminal), (address) => layout.split("row", address));
+  const closeTab = (key: string): void => {
+    const tab = layout.tabs.find((each) => each.key === key);
+    const shown = tab?.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
+    const [only] = shown;
+    if (shown.length === 1 && only !== undefined) setAsk({ kind: "close", address: only });
+    else if (shown.length > 1) setClosingTab(key);
+    else layout.closeTab(key);
   };
+  const onEnd = (address: string, end: TerminalEnd): void => {
+    // An End of this session drops its pane only once it has removed the terminal (see afterEnd).
+    if (closesTab(end)) afterEnd(address, () => layout.dropPane(address));
+  };
+  const closing = layout.tabs.find((tab) => tab.key === closingTab);
   usePushPresence(inView);
   useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
   const onPalette = (): void => setPalette(true);
@@ -69,10 +104,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     setAsk({ kind: verb, address: inView });
     return true;
   };
-  // Closing a tab of a live session asks keep or end; the dialog drops the tab itself once the session is gone.
-  const desktopTabs: Tabs = { ...tabs, close: (address) => setAsk({ kind: "close", address }) };
   const done = useCallback(() => setAsk(null), []);
-  const toasts = useToastManager();
   const pin = useCallback<PinTerminal>(
     (address, pinned) => {
       const labels = { [PIN_LABEL]: pinned ? "1" : "" };
@@ -111,8 +143,12 @@ export function Workspace({ connection }: WorkspaceProps) {
               connection={connection}
               terminals={terminals}
               loaded={fed.loaded}
-              tabs={desktopTabs}
+              layout={layout}
               onNew={() => newTerminal()}
+              onSplit={splitRight}
+              onCloseTab={closeTab}
+              onClosePane={(address) => setAsk({ kind: "close", address })}
+              onEnd={onEnd}
               onPalette={onPalette}
               onSession={onSession}
             />
@@ -121,13 +157,25 @@ export function Workspace({ connection }: WorkspaceProps) {
       </PinContext>
       <PromptAnswerBanner />
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
-      <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={tabs.drop} />
+      <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={layout.dropPane} />
+      {closing === undefined ? null : (
+        <CloseTabDialog
+          connection={connection}
+          terminals={terminals}
+          tab={closing}
+          onKeep={() => layout.closeTab(closing.key)}
+          onDone={() => setClosingTab(null)}
+        />
+      )}
       {palette ? (
         <Palette
           terminals={terminals}
           host={connection.hello.core.name}
           route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
-          actions={availableActions(narrow ? "phone" : "desktop", tabs, inView !== null)}
+          actions={availableActions(narrow ? "phone" : "desktop", inView !== null, layout.active?.readOnly ?? null, {
+            keys: layout.tabs.map((tab) => tab.key),
+            active: layout.active?.key ?? null,
+          })}
           onOpenTerminal={opened}
           onClose={() => setPalette(false)}
         />

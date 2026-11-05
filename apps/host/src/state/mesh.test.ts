@@ -69,6 +69,26 @@ describe("H-2: the authorize index", () => {
     expect(evaluations).toBe(1);
     expect(store.authorizeIndex()?.generation).toBe(fileOf(dir).generation);
   });
+
+  test("an index written before it named the keys that contest a key (#90) is rebuilt at start", () => {
+    const dir = scratch();
+    const [founder, member] = [machine("founder"), machine("member")];
+    const mesh = new MeshFixture(dir, founder);
+    mesh.admit(founder, member);
+    const path = join(dir, "mesh.json");
+    const written = JSON.parse(readFileSync(path, "utf8")) as { index: Record<string, unknown> };
+    delete written.index["named"];
+    writePrivateJson(path, written);
+    const store = new MeshStore(dir, { log: () => {} });
+    expect(() => store.authorizeIndex()).toThrow("stale");
+    store.ensureIndex();
+    expect(store.authorizeIndex()?.member(noiseOf(member))?.signPub).toBe(signPubOf(member));
+    expect(
+      fileOf(dir)
+        .index?.named.map((entry) => entry.signPub)
+        .toSorted(),
+    ).toEqual([signPubOf(founder), signPubOf(member)].toSorted());
+  });
 });
 
 describe("H-3: counter discipline", () => {
