@@ -23,6 +23,8 @@ export interface PaneProps {
   readonly onSplit: (axis: Axis) => void;
   readonly onZoom: () => void;
   readonly onClose: () => void;
+  /** The view showed that its program had already ended when it attached: there is no terminal left to type into. */
+  readonly onEnded: (address: string, pid: number | null) => void;
   /** The view's input path, for input from outside the pane (dictation); null once the view unmounts. */
   readonly onPort: (port: TerminalPort | null) => void;
   /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
@@ -82,8 +84,21 @@ function PaneButtons({
  * frames panes only once a tab is split, since the tab can name only one of them.
  */
 export function Pane(props: PaneProps) {
-  const { connection, terminal, focused, split, zoomed, onFocus, onEnd, onPort, dock, onSplit, onZoom, onClose } =
-    props;
+  const {
+    connection,
+    terminal,
+    focused,
+    split,
+    zoomed,
+    onFocus,
+    onEnd,
+    onEnded,
+    onPort,
+    dock,
+    onSplit,
+    onZoom,
+    onClose,
+  } = props;
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   return (
@@ -123,6 +138,7 @@ export function Pane(props: PaneProps) {
           focused={focused}
           label={`${title} output`}
           onEnd={onEnd}
+          onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
           onPort={onPort}
         />
       )}
