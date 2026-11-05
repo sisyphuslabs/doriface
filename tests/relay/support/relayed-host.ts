@@ -8,15 +8,30 @@ import {
   secureLink,
 } from "@doriface/crypto";
 import { deviceIdOf, DeviceStore, type Host, startHost } from "@doriface/host";
-import { connectRelayClient, type CreateSocket, pairSlotOf } from "@doriface/relay-client";
+import { connectRelayClient, type CreateSocket, PAIR_SLOT_REPLY_TIMEOUT_MS, pairSlotOf } from "@doriface/relay-client";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requestControl } from "../../../apps/host/src/control.ts";
-import { createHcSession, type HcSession } from "../../../apps/host/src/testing/hc-session.ts";
+import { createHcSession, type HcSession, stopLeftoverCores } from "../../../apps/host/src/testing/hc-session.ts";
 import { RecordingLink, type Tap, taps, tappedHc } from "./byte-tap.ts";
 import { socketFrom, testIp } from "./probe.ts";
-import { type LocalRelay, startLocalRelay } from "./relay-dev.ts";
+import { type LocalRelay, RELAY_STOP_MS, startLocalRelay } from "./relay-dev.ts";
+
+/**
+ * The host's stop: it releases its pairing slot and waits for the relay's reply (PAIR_SLOT_REPLY_TIMEOUT_MS) before
+ * closing its uplink, so a relay that does not answer holds it that long (measured 10.02 s against a stopped relay). With
+ * an answering relay it took at most 0.66 s under induced load (~158, 20 stops); 2 s covers that part.
+ */
+export const HOST_STOP_MS = PAIR_SLOT_REPLY_TIMEOUT_MS + 2_000;
+/** The hc core's stop, which has no escalation of its own: at most 0.49 s in the same 20 stops. */
+export const CORE_STOP_MS = 2_000;
+/**
+ * A relayed host's whole stop: the host, its core and its relay in turn (the relay bounded by its own SIGKILL path,
+ * RELAY_STOP_MS; measured at most 8.1 s), then 1 s for the scratch (at most 50 ms). Measured in total at most 8.4 s with
+ * an answering relay; a relay that answers nothing costs the host's slot release and the relay's SIGKILL path in full.
+ */
+export const RELAYED_STOP_MS = HOST_STOP_MS + CORE_STOP_MS + RELAY_STOP_MS + 1_000;
 import { rethrowAfter, settleAll } from "./settle.ts";
 import { within } from "./watch.ts";
 
@@ -91,6 +106,13 @@ export async function startRelayedHost(prefix: string, options: RelayedHostOptio
   const teardown = [
     () => host?.stop(),
     () => session?.dispose(),
+    // The core runs outside every process group of this test (hc starts it as a daemon, or launchd does on macOS), so
+    // the relay's leftover check never sees it; whether its socket still serves does, on every platform.
+    async () => {
+      const left = session === undefined ? [] : await stopLeftoverCores([session]);
+      if (left.length > 0)
+        throw new Error(`hc core outlived the relayed host's stop (now stopped): ${left.join(", ")}`);
+    },
     () => relay?.stop(),
     () => rmSync(scratch, { recursive: true, force: true }),
   ];

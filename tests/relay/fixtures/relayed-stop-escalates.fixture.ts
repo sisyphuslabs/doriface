@@ -1,14 +1,14 @@
 import { afterAll, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { liveDescendants, liveWithEnvironment } from "../support/processes.ts";
-import { type RelayedHost, startRelayedHost } from "../support/relayed-host.ts";
+import { type RelayedHost, startRelayedHost, RELAYED_STOP_MS } from "../support/relayed-host.ts";
 
 // Not a *.test.ts: relayed-host.test.ts runs it by path. It stops a relayed host the way the relay test files do, from
 // an afterAll, with the relay's processes below wrangler stopped (SIGSTOP), so the relay part of the stop has to
 // escalate to SIGKILL: the longest stop a relayed host's teardown allows.
 let relayed: RelayedHost | undefined;
 
-afterAll(() => relayed?.stop());
+afterAll(() => relayed?.stop(), RELAYED_STOP_MS);
 
 const parentOf = (pid: number): number => {
   const ps = Bun.spawnSync(["ps", "-o", "ppid=", "-p", String(pid)], { stdout: "pipe" });
