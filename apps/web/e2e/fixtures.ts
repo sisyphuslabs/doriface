@@ -80,7 +80,10 @@ export async function terminalCount(
 export async function openNewTerminal(page: Page): Promise<Locator> {
   const count = await terminalCount(page);
   const focused = page.locator('[data-focused="true"] [data-terminal]');
-  if (count.before > 0) await expect(focused).toBeVisible({ timeout: 15_000 });
+  // Running terminals show a focused pane, unless every tab was closed with Keep running and the workspace is empty (#354).
+  if (count.before > 0) {
+    await expect(focused.or(page.getByText("No terminal open"))).toBeVisible({ timeout: 15_000 });
+  }
   const known = new Set(
     await page.locator("[data-terminal]").evaluateAll((els) => els.map((el) => el.getAttribute("data-terminal"))),
   );
