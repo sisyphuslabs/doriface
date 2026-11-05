@@ -190,6 +190,18 @@ test("input typed for a terminal whose view does not open in time is reported as
   await askNewTab(page, previous, "keys");
   await page.keyboard.type(LINE, { delay: 40 });
   await expect.poll(answered, { timeout: 15_000 }).toBeGreaterThan(answersBefore);
+  // The route has seen the answer, but the page may not have handled it yet: the budget timer is armed only once it
+  // has. A MessageChannel task posted now runs after the answer's WebSocket message task and the promise chain it
+  // settles, so the clock is run only after the timer exists.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const channel = new MessageChannel();
+        channel.port1.addEventListener("message", () => resolve(), { once: true });
+        channel.port1.start();
+        channel.port2.postMessage(null);
+      }),
+  );
   await page.clock.runFor(16_000);
   await expect(page.getByText("What you typed was not sent")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/took too long/)).toBeVisible();
