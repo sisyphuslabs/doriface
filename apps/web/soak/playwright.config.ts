@@ -21,7 +21,14 @@ export default defineConfig({
   reporter: "list",
   outputDir: process.env["SOAK_OUTPUT_DIR"] ?? "soak-results",
   // Chromium's own user agent: a preset would claim one OS everywhere, and the app reads the OS from it.
-  use: { browserName: "chromium", baseURL: `http://127.0.0.1:${PORT}`, trace: "off", screenshot: "only-on-failure" },
+  use: {
+    browserName: "chromium",
+    baseURL: `http://127.0.0.1:${PORT}`,
+    trace: "off",
+    screenshot: "only-on-failure",
+    // SOAK_CHROMIUM_ARGS: extra Chromium switches, to compare a client with and without one.
+    launchOptions: { args: (process.env["SOAK_CHROMIUM_ARGS"] ?? "").split(" ").filter(Boolean) },
+  },
   webServer: {
     command: PREBUILT === undefined ? `bunx --bun vite build --outDir ${OUT} --emptyOutDir && ${PREVIEW}` : PREVIEW,
     cwd: join(import.meta.dirname, ".."),

@@ -35,6 +35,19 @@ interface Probe {
 }
 
 function trackSockets(): void {
+  // Whether the page counts as visible, and how many animation frames it has drawn: the terminal draws only on frames.
+  const visibility: { readonly at: number; readonly state: string }[] = [{ at: 0, state: document.visibilityState }];
+  Object.defineProperty(window, "__soakVisibility", { value: visibility });
+  document.addEventListener("visibilitychange", () =>
+    visibility.push({ at: performance.now(), state: document.visibilityState }),
+  );
+  let frames = 0;
+  const tick = (): void => {
+    frames += 1;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  Object.defineProperty(window, "__soakFrames", { get: () => frames });
   const events: SocketEvent[] = [];
   Object.defineProperty(window, "__soakSockets", { value: events });
   const Native = window.WebSocket;
@@ -189,7 +202,9 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
   const startedAt = await page.evaluate(() => performance.now());
   const deadline = Date.now() + MINUTES * 60_000;
   const echoes: number[] = [];
-  const timeline: [number, number | null][] = [];
+  /** Per sample: seconds into the soak, echo ms (null when lost), page visible (1/0), animation frames since the last sample. */
+  const timeline: [number, number | null, number, number][] = [];
+  let framesBefore = 0;
   const bursts: number[] = [];
   let lost = 0;
   let burstsLost = 0;
@@ -208,8 +223,14 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
     await arm(page, token);
     await page.keyboard.type(token);
     const ms = await settle(page, ECHO_TIMEOUT_MS);
-    const at = Math.round(((await page.evaluate(() => performance.now())) - startedAt) / 1000);
-    timeline.push([at, ms === undefined ? null : Math.round(ms * 10) / 10]);
+    const now = await page.evaluate(() => ({
+      at: performance.now(),
+      visible: document.visibilityState === "visible" ? 1 : 0,
+      frames: Reflect.get(window, "__soakFrames") as number,
+    }));
+    const at = Math.round((now.at - startedAt) / 1000);
+    timeline.push([at, ms === undefined ? null : Math.round(ms * 10) / 10, now.visible, now.frames - framesBefore]);
+    framesBefore = now.frames;
     if (ms === undefined) {
       lost += 1;
       await note(`echo of ${token} lost`);
@@ -261,6 +282,10 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
       opensDuringSoak: opens.map(({ kind, at }) => ({ kind, atS: Math.round((at - startedAt) / 1000) })),
       closes,
     },
+    visibility: (
+      await page.evaluate(() => Reflect.get(window, "__soakVisibility") as { at: number; state: string }[])
+    ).map(({ at, state }) => ({ state, atS: Math.round((at - startedAt) / 1000) })),
+    launchArgs: process.env["SOAK_CHROMIUM_ARGS"] ?? "",
     reconnects: opens.filter((event) => event.kind.startsWith("/v1/client/")).length,
     pageErrors,
     consoleErrors: { count: consoleErrors.length, first: consoleErrors.slice(0, 20) },

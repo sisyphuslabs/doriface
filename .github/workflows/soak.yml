@@ -1,9 +1,10 @@
 name: Relay soak
 
 # #403: a Windows and a macOS client, each Chromium running the web app, paired with one host on a macOS runner through
-# the production relay, soaking at the same time: keystroke echo latency, output bursts, relay socket closes, reconnects
-# and page errors. Run by hand (Actions > Relay soak > Run workflow), or push a soak/* branch to run it for 30 minutes on
-# that branch's code; the table lands in the run summary.
+# the production relay, soaking at the same time, plus a second Windows client with Chromium's native window occlusion
+# off: keystroke echo latency, output bursts, relay socket closes, reconnects, page errors, page visibility and frames
+# drawn. Run by hand (Actions > Relay soak > Run workflow), or push a soak/* branch to run it for 30 minutes on that
+# branch's code; the table lands in the run summary.
 #
 # The runners meet only through this run's artifacts, which anyone can download on a public repository: each client
 # publishes a public key, and the host answers with its single-use pairing link sealed to that key (apps/web/soak/seal.ts).
@@ -74,34 +75,38 @@ jobs:
           cat "$RUNNER_TEMP/host.log"
           grep -q "relay: connected" "$RUNNER_TEMP/host.log"
       - name: Pair the Windows client
-        run: bash apps/web/soak/host-pair.sh windows
+        if: always()
+        run: bash apps/web/soak/host-pair.sh windows 0
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: soak-link-windows
           path: ${{ runner.temp }}/soak-link-windows.json
           retention-days: 1
-      - name: Wait for the Windows client to pair
-        run: |
-          for _ in $(seq 1 600); do
-            [ "$(grep -c 'paired device' "$RUNNER_TEMP/host.log")" -ge 1 ] && exit 0
-            sleep 1
-          done
-          echo "::error::the Windows client did not pair within 10 minutes"
-          exit 1
       - name: Pair the macOS client
         if: always()
-        run: bash apps/web/soak/host-pair.sh macos
+        run: bash apps/web/soak/host-pair.sh macos 1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: soak-link-macos
           path: ${{ runner.temp }}/soak-link-macos.json
           retention-days: 1
-      - name: Keep the host up until both clients are done
+      - name: Pair the second Windows (occlusion off) client
+        if: always()
+        run: bash apps/web/soak/host-pair.sh windows-occlusion-off 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-link-windows-occlusion-off
+          path: ${{ runner.temp }}/soak-link-windows-occlusion-off.json
+          retention-days: 1
+      - name: Keep the host up until every client is done
         if: always()
         run: |
-          bun apps/web/soak/artifact.ts soak-done-windows "$RUNNER_TEMP/done" 6000 &
-          bun apps/web/soak/artifact.ts soak-done-macos "$RUNNER_TEMP/done" 6000 &
+          for client in windows macos windows-occlusion-off; do
+            bun apps/web/soak/artifact.ts "soak-done-$client" "$RUNNER_TEMP/done" 6000 &
+          done
           wait
       - name: Host log
         if: always()
@@ -115,6 +120,11 @@ jobs:
         include:
           - { name: windows, runner: windows-latest, label: Windows x64 Chromium }
           - { name: macos, runner: macos-15, label: macOS arm64 Chromium }
+          # The same Windows client with Chromium's native window occlusion off: a hidden window draws no frames (#403).
+          - name: windows-occlusion-off
+            runner: windows-latest
+            label: Windows x64 Chromium, occlusion off
+            args: --disable-features=CalculateNativeWinOcclusion
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 130
     defaults:
@@ -153,6 +163,7 @@ jobs:
         working-directory: apps/web
         env:
           SOAK_CLIENT: ${{ matrix.label }}
+          SOAK_CHROMIUM_ARGS: ${{ matrix.args }}
           SOAK_PREBUILT: ${{ runner.temp }}/web-dist
           SOAK_OUTPUT_DIR: ${{ runner.temp }}/playwright
         run: |
