@@ -35,7 +35,8 @@ const geometry = (terminal: Locator): Promise<Geometry> =>
       Math.round(
         parseFloat(rowStyle.fontSize) * parseFloat(style.getPropertyValue("--term-line-height")) * devicePixelRatio,
       ) / devicePixelRatio;
-    const lineHeight = Math.round(nativeLineHeight * 64) / 64;
+    // An explicitly sized CSS block truncates to LayoutUnit (1/64px), including a 2/3px native pixel at DPR 1.5.
+    const lineHeight = Math.floor(nativeLineHeight * 64) / 64;
     let transformedAncestors = 0;
     for (let node: Element | null = element; node !== null; node = node.parentElement) {
       if (getComputedStyle(node).transform !== "none") transformedAncestors += 1;
@@ -76,13 +77,14 @@ function expectFontMetrics(measured: Geometry): void {
  */
 async function settledAt(terminal: Locator, fontSize: string): Promise<Geometry> {
   const address = (await terminal.getAttribute("data-terminal")) ?? "";
-  const settled = async (): Promise<boolean> => {
+  const settled = async (): Promise<true | string> => {
     const measured = await geometry(terminal);
     return (
-      measured.fontSize === fontSize &&
-      Math.abs(measured.cellMinusAdvance) < 0.05 &&
-      measured.rowMinusLineHeight === 0 &&
-      coreSize(address) === `${measured.rows} ${measured.cols}`
+      (measured.fontSize === fontSize &&
+        Math.abs(measured.cellMinusAdvance) < 0.05 &&
+        measured.rowMinusLineHeight === 0 &&
+        coreSize(address) === `${measured.rows} ${measured.cols}`) ||
+      JSON.stringify({ measured, expectedFontSize: fontSize, core: coreSize(address) })
     );
   };
   await expect.poll(settled, { timeout: 15_000 }).toBe(true);
