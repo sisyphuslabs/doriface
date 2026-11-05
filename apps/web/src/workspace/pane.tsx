@@ -16,6 +16,8 @@ export interface PaneProps {
   readonly connection: HcConnection;
   readonly terminal: Session;
   readonly focused: boolean;
+  /** This screen asked for this pane: its terminal takes the keyboard as it starts (#332). */
+  readonly claimed: boolean;
   /** True when the tab holds more than one pane: unfocused-split-opacity dims only those, and each gets a header. */
   readonly split: boolean;
   readonly onFocus: () => void;
@@ -89,6 +91,7 @@ export function Pane(props: PaneProps) {
     connection,
     terminal,
     focused,
+    claimed,
     split,
     zoomed,
     onFocus,
@@ -140,6 +143,7 @@ export function Pane(props: PaneProps) {
             pid={terminal.pid ?? null}
             live={terminal.state === "live"}
             focused={focused}
+            claimed={claimed}
             label={`${title} output`}
             onEnd={onEnd}
             onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
