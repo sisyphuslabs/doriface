@@ -51,6 +51,7 @@ export const ACTIONS: readonly ActionDef[] = [
   app("layout.focus:sidebar", "Move focus between the terminal and the sidebar"),
   app("session.rename", "Rename session…"),
   app("session.end", "End session…"),
+  app("space.rename", "Rename space…"),
   // No default chord (#194): any free one would collide with a terminal program; it is bound in Settings > Keybindings.
   app("voice.dictate", "Dictate"),
   app("app.palette", "Command palette", "toggle_command_palette"),

@@ -1,10 +1,10 @@
 /** What an open modal leaves behind it: a Base UI dialog or alert dialog marks the rest of the page aria-hidden. */
 const BEHIND_MODAL = '[aria-hidden="true"], [inert]';
 /**
- * Layers that hold the keyboard while open: dialogs and alert dialogs (the palette is a dialog too), and menus, which
- * Base UI opens without hiding the page.
+ * Layers that hold the keyboard while open: dialogs and alert dialogs (the palette is a dialog too), menus, which
+ * Base UI opens without hiding the page, and a field edited in place (`data-holds-keyboard`, a space's name).
  */
-const LAYERS = '[role="dialog"], [role="alertdialog"], [role="menu"]';
+const LAYERS = '[role="dialog"], [role="alertdialog"], [role="menu"], [data-holds-keyboard]';
 
 /**
  * Whether a terminal may move keyboard focus into itself on its own: as its renderer starts, its stream attaches, its

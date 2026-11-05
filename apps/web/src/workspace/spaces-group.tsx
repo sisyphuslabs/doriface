@@ -1,13 +1,26 @@
 import type { Terminal } from "@doriface/protocol";
-import { IconButton, MachineHeader, Notice, SidebarSection, SpaceRow, cn, type Space } from "@doriface/ui";
-import { Plus } from "lucide-react";
-import { useMemo, useRef } from "react";
+import {
+  IconButton,
+  MachineHeader,
+  Menu,
+  MenuItem,
+  Notice,
+  RowWithActions,
+  SidebarSection,
+  SpaceRow,
+  cn,
+  type Space,
+} from "@doriface/ui";
+import { Ellipsis, Pencil, Plus } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { useGitFactsOf } from "./git-facts.ts";
 import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
 import { stateLabel, type MachineEntry } from "./machines.ts";
 import { firstInSpace, spaceId, toSpaces } from "./model.ts";
 import { RetryButton } from "./retry-button.tsx";
+import { SpaceNameInput } from "./space-name-input.tsx";
+import { useSpaceRenaming } from "./space-rename-context.ts";
 import { machineGroups } from "./sidebar-model.ts";
 import { useCollapsed, useSpaceColors } from "./sidebar-prefs.ts";
 import { useMachineReorder } from "./use-machine-reorder.tsx";
@@ -33,6 +46,18 @@ function MachineNotice({ name }: { readonly name: string }) {
       {cause.detail}
       <RetryButton size="sm" className="mt-2 flex" onRetry={() => retry(name)} />
     </Notice>
+  );
+}
+
+/** A space row's "..." menu: Rename space asks for the new name; a double-click on the row edits it in place. */
+function SpaceActions({ space }: { readonly space: Space }) {
+  const renaming = useSpaceRenaming();
+  return (
+    <Menu align="end" trigger={<IconButton label={`More for ${space.name}`} icon={<Ellipsis />} className="size-6" />}>
+      <MenuItem icon={<Pencil />} onClick={() => renaming.ask(space.id)}>
+        Rename space…
+      </MenuItem>
+    </Menu>
   );
 }
 
@@ -99,17 +124,28 @@ function SpacesLists({
     const address = firstInSpace(terminals, id);
     if (address !== undefined) onOpen(address);
   };
+  const [editing, setEditing] = useState<string | null>(null);
   const rows = (list: readonly Space[], grouped: boolean) =>
-    list.map((space) => (
-      <SpaceRow
-        key={space.id}
-        space={space}
-        selected={space.id === activeSpace}
-        onSelect={openSpace}
-        rail={rail}
-        hideMachine={grouped}
-      />
-    ));
+    list.map((space) => {
+      if (!rail && space.id === editing)
+        return <SpaceNameInput key={space.id} space={space} onClose={() => setEditing(null)} />;
+      const row = (
+        <SpaceRow
+          key={space.id}
+          space={space}
+          selected={space.id === activeSpace}
+          onSelect={openSpace}
+          rail={rail}
+          hideMachine={grouped}
+        />
+      );
+      if (rail) return row;
+      return (
+        <div key={space.id} onDoubleClick={() => setEditing(space.id)}>
+          <RowWithActions row={row} actions={<SpaceActions space={space} />} />
+        </div>
+      );
+    });
   const grouped = machineGroups(machines.entries, colored);
   // The icon rail has no room for a drag handle or a menu; the full sidebar reorders.
   const list = useRef<HTMLDivElement>(null);
