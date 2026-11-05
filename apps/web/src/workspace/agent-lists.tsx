@@ -1,5 +1,6 @@
 import type { Terminal } from "@doriface/protocol";
 import { AgentsGroup } from "./agents-group.tsx";
+import { SidebarSplit } from "./sidebar-split.tsx";
 import { useMachinesContext } from "./use-machines.ts";
 import { SpacesGroup } from "./spaces-group.tsx";
 
@@ -13,7 +14,7 @@ export interface AgentListsProps {
   readonly heading?: boolean;
 }
 
-/** The agents first, then the spaces (under their machines once there are more), on the desktop sidebar and the phone. */
+/** The phone's one list: the agents its screen is titled for, then the spaces (under their machines once there are more). */
 export function AgentLists({ terminals, active, onOpen, rail = false, heading = true }: AgentListsProps) {
   // Nothing until the terminal list is in: the agents then draw in their final place, and the spaces (or their loading
   // row) below them, so nothing already drawn moves.
@@ -24,5 +25,33 @@ export function AgentLists({ terminals, active, onOpen, rail = false, heading = 
       <AgentsGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} heading={heading} />
       <SpacesGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
     </div>
+  );
+}
+
+/** The desktop sidebar's lists as herdr-app lays them out: Spaces on top, Agents docked at the bottom, a divider between. */
+export function SidebarLists({ terminals, active, onOpen, rail = false }: Omit<AgentListsProps, "heading">) {
+  const { terminalsLoaded } = useMachinesContext();
+  const pad = "px-2 pb-3";
+  return (
+    <SidebarSplit
+      spaces={
+        terminalsLoaded ? (
+          <div className={pad}>
+            <SpacesGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
+          </div>
+        ) : (
+          <div aria-busy="true" className={pad} />
+        )
+      }
+      agents={
+        terminalsLoaded ? (
+          <div className={pad}>
+            <AgentsGroup terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
+          </div>
+        ) : (
+          <div aria-busy="true" className={pad} />
+        )
+      }
+    />
   );
 }

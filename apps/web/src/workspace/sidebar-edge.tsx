@@ -1,6 +1,6 @@
 import { cn } from "@doriface/ui";
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { dragTo, MAX_SIDEBAR_WIDTH, RAIL_BELOW, type Layout } from "./layout.ts";
+import { DEFAULT_SIDEBAR_WIDTH, dragTo, MAX_SIDEBAR_WIDTH, RAIL_BELOW, type Layout } from "./layout.ts";
 
 const STEP = 16;
 
@@ -16,7 +16,7 @@ export interface SidebarEdgeProps {
 
 /**
  * The sidebar's right edge: drag it narrower than 160 px for the icon rail, or back out for the full sidebar. As a
- * window splitter it takes the keyboard too: arrows step 16 px, Enter turns the rail on or off.
+ * window splitter it takes the keyboard too: arrows step 16 px, Enter turns the rail on or off. A double-click resets it.
  */
 export function SidebarEdge({ width, rail, railWidth, onChange, onDragging }: SidebarEdgeProps) {
   const start = useRef<number | null>(null);
@@ -61,6 +61,7 @@ export function SidebarEdge({ width, rail, railWidth, onChange, onDragging }: Si
       onPointerMove={onPointerMove}
       onPointerUp={end}
       onPointerCancel={end}
+      onDoubleClick={() => onChange({ rail: false, sidebarWidth: DEFAULT_SIDEBAR_WIDTH })}
       onKeyDown={onKeyDown}
       className={cn(
         "absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none outline-none",

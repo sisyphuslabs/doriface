@@ -4,7 +4,7 @@ import { rememberStop, rovingTarget, syncStops } from "./roving.ts";
 const MODIFIED = (event: KeyboardEvent): boolean => event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
 
 /** Wraps the sidebar lists so each is one Tab stop with arrow-key movement inside, as rows come and go. */
-export function RovingLists({ children }: { readonly children: ReactNode }) {
+export function RovingLists({ children, className }: { readonly children: ReactNode; readonly className?: string }) {
   const root = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const element = root.current;
@@ -27,7 +27,13 @@ export function RovingLists({ children }: { readonly children: ReactNode }) {
     next.focus();
   };
   return (
-    <div ref={root} data-roving-lists onKeyDown={onKeyDown} onFocus={(event) => rememberStop(event.target)}>
+    <div
+      ref={root}
+      data-roving-lists
+      className={className}
+      onKeyDown={onKeyDown}
+      onFocus={(event) => rememberStop(event.target)}
+    >
       {children}
     </div>
   );

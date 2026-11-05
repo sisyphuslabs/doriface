@@ -72,6 +72,28 @@ describe("spaces", () => {
   });
 });
 
+describe("same-named spaces on one machine (#397)", () => {
+  test("two directories ending the same way are two spaces, told apart by their parent, each selecting only itself", () => {
+    const home = terminal({ address: "t1", cwd: "/Users/yeongyu" });
+    const other = terminal({ address: "t2", cwd: "/Volumes/data/yeongyu" });
+    const spaces = toSpaces([home, other]);
+    expect(spaces.map((space) => space.name)).toEqual(["yeongyu · Users", "yeongyu · data"]);
+    for (const active of [home, other]) {
+      const selected = spaces.filter((space) => space.id === spaceId(active));
+      expect(selected).toHaveLength(1);
+      expect(firstInSpace([home, other], selected[0]?.id ?? "")).toBe(active.address);
+    }
+  });
+
+  test("a space label still gathers terminals from any directory, and an unshared name gets no suffix", () => {
+    const spaces = toSpaces([
+      terminal({ address: "t1", cwd: "/a/x", labels: { space: "api" } }),
+      terminal({ address: "t2", cwd: "/b/y", labels: { space: "api" } }),
+    ]);
+    expect(spaces.map((space) => [space.name, space.tabs])).toEqual([["api", 2]]);
+  });
+});
+
 describe("tabPosition", () => {
   const terminals = [
     terminal({ address: "t1", cwd: "/home/me/api" }),

@@ -63,6 +63,8 @@
   --color-status-idle-text: var(--status-idle-text);
   --color-status-unknown: var(--status-unknown);
   --color-status-unknown-text: var(--status-unknown-text);
+  /* A machine that is reachable now: herdr-app's green dot on its header. */
+  --color-online: var(--avatar-green);
   --color-avatar-teal: var(--avatar-teal);
   --color-avatar-orange: var(--avatar-orange);
   --color-avatar-blue: var(--avatar-blue);
