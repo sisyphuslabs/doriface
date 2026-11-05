@@ -560,8 +560,10 @@ jobs:
       - name: The app carries the version and starts
         shell: pwsh
         run: |
+          # Windows keeps a four-part numeric version, so 0.1.1-rc.2 is recorded as 0.1.1.0.
+          $expected = "$(($env:VERSION -split "-")[0]).0"
           $product = (Get-Item $env:APP_EXE).VersionInfo.ProductVersion
-          if ($product -ne $env:VERSION) { Write-Error "the app says $product, expected $env:VERSION"; exit 1 }
+          if ($product -ne $expected) { Write-Error "the app says $product, expected $expected (for $env:VERSION)"; exit 1 }
           # Chromium prints this line once its browser process is up; wait for it, bounded, then check it still runs.
           $log = Join-Path $env:RUNNER_TEMP "launch.log"
           $proc = Start-Process -FilePath $env:APP_EXE -ArgumentList "--remote-debugging-port=0", "--enable-logging=stderr" `
