@@ -106,6 +106,21 @@ export function zoomDesktopWindow(step: ZoomStep, scope: object = globalThis): b
   return true;
 }
 
+/**
+ * Opens a link a terminal printed: in the desktop app, in the system browser through the shell (never in the app
+ * window); in a browser, in a new tab with no opener. `href` is already one that may open (`openableLink`).
+ */
+export function openTerminalLink(href: string, scope: object = globalThis): void {
+  const open = bridgeMethod("openLink", scope);
+  if (open !== null) {
+    const opened = open(href);
+    if (opened instanceof Promise) opened.catch((error: unknown) => console.error(`open link: ${String(error)}`));
+    return;
+  }
+  const view: unknown = Reflect.get(scope, "open");
+  if (typeof view === "function") Reflect.apply(view, scope, [href, "_blank", "noopener,noreferrer"]);
+}
+
 /** Hands the page background to the desktop shell, which paints the window with it now and at the next launch. */
 export function setDesktopBackground(color: string, scope: object = globalThis): void {
   const painted = bridgeMethod("setWindowBackground", scope)?.(color);
@@ -121,6 +136,22 @@ export function onDesktopPairingLink(open: (fragment: string) => void, scope: ob
   )?.((fragment: unknown) => {
     if (typeof fragment === "string") open(fragment);
   });
+}
+
+/** Runs each action a desktop menu item asks for, as its key would; does nothing outside the desktop app. */
+export function onDesktopRunAction(run: (action: string) => void, scope: object = globalThis): void {
+  bridgeMethod(
+    "onRunAction",
+    scope,
+  )?.((action: unknown) => {
+    if (typeof action === "string") run(action);
+  });
+}
+
+/** Tells the desktop menu the keymap's trigger for each action it lists, so its shortcuts follow the person's keys. */
+export function setDesktopMenuKeys(keys: Readonly<Record<string, string>>, scope: object = globalThis): void {
+  const shown = bridgeMethod("setMenuKeys", scope)?.(keys);
+  if (shown instanceof Promise) shown.catch((error: unknown) => console.error(`menu shortcuts: ${String(error)}`));
 }
 
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {

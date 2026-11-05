@@ -1,0 +1,172 @@
+import type { Page } from "@playwright/test";
+import { getCoreDoc, setCoreDoc } from "./core-doc.ts";
+import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { MACHINE_NAME } from "./machine.ts";
+import { machineRow } from "./machine-switch.ts";
+import { domOrder, selectedIndex, tabs } from "./tab-strip.ts";
+
+const ORDER_DOC = "doriface";
+// Each machine heads its own spaces: its header row is the handle, and the whole group (header and spaces) moves.
+const rows = (page: Page) => page.locator("[data-machine-row]");
+const rowOf = (page: Page, name: string) =>
+  page.locator("[data-machine-row]", { has: page.getByRole("button", { name: new RegExp(`^${name}\\b`) }) });
+const groupOf = (page: Page, name: string) => page.locator("[data-drag-id]", { has: rowOf(page, name) });
+const status = (page: Page) =>
+  page.getByRole("heading", { name: "Spaces" }).locator("xpath=ancestor::section").getByRole("status");
+
+const order = (page: Page) =>
+  rows(page).evaluateAll((els) => els.map((el) => el.querySelector("span[title]")?.getAttribute("title")));
+
+async function openWorkspace(page: Page): Promise<string> {
+  await page.goto("/");
+  await expect(machineRow(page)).toContainText("connected", { timeout: 30_000 });
+  const local = await rows(page).first().locator("span[title]").getAttribute("title");
+  if (local === null) throw new Error("no local machine row");
+  await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
+  return local;
+}
+
+/** How far up `name`'s group must go for its centre to pass `above`'s: a group lands past a neighbour once it does. */
+async function pastCentre(page: Page, name: string, above: string): Promise<number> {
+  const [moving, other] = [await groupOf(page, name).boundingBox(), await groupOf(page, above).boundingBox()];
+  if (moving === null || other === null) throw new Error(`no box for ${name} or ${above}`);
+  return other.y + other.height / 2 - (moving.y + moving.height / 2) - 8;
+}
+
+/** Presses a row and moves it by `dy` in small steps, as a hand would; `drop` lets go. */
+async function dragRow(page: Page, name: string, dy: number, drop = true): Promise<void> {
+  const box = await rowOf(page, name).boundingBox();
+  if (box === null) throw new Error(`no box for ${name}`);
+  const x = box.x + box.width / 3;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + Math.sign(dy) * 6, { steps: 2 });
+  await expect(groupOf(page, name)).toHaveAttribute("data-dragging", "");
+  await page.mouse.move(x, y + dy, { steps: 8 });
+  if (drop) await page.mouse.up();
+}
+
+test.use({ serviceWorkers: "block" });
+test.beforeEach(() => setCoreDoc(ORDER_DOC, null));
+
+test.describe("machine order", () => {
+  test("a row dragged above another lands there, is announced, and keeps its place after a reload", async ({
+    page,
+  }) => {
+    const local = await openWorkspace(page);
+    await dragRow(page, MACHINE_NAME, await pastCentre(page, MACHINE_NAME, local));
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await expect(status(page)).toHaveText(new RegExp(`^Moved ${MACHINE_NAME} to position 1 of 2`));
+    await expect(page.locator("[data-drag-id][data-dragging]")).toHaveCount(0);
+    await expect.poll(() => getCoreDoc(ORDER_DOC)).toMatchObject({ machine_order: expect.any(Array) });
+    await page.reload();
+    await expect(machineRow(page)).toContainText("connected", { timeout: 30_000 });
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+  });
+
+  test("under reduced motion the neighbours stay put and the landing line is drawn over the lifted row", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const local = await openWorkspace(page);
+    const before = await rowOf(page, local).boundingBox();
+    await dragRow(page, MACHINE_NAME, await pastCentre(page, MACHINE_NAME, local), false);
+    const caret = page.locator("[data-row-drop-caret]");
+    await expect(caret).toBeVisible();
+    expect(await rowOf(page, local).boundingBox()).toEqual(before);
+    // The row is lifted past the top of the list, over the line: the line must still be the topmost thing there.
+    // Hit testing follows paint order but skips `pointer-events: none`, so the line takes hits only for this probe.
+    const topmost = await caret.evaluate((line) => {
+      const box = line.getBoundingClientRect();
+      line.style.pointerEvents = "auto";
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      line.style.pointerEvents = "";
+      return hit === line;
+    });
+    expect(topmost).toBe(true);
+    await page.mouse.up();
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+  });
+
+  test("a drag that Escape cancels leaves the order as it was and writes nothing", async ({ page }) => {
+    const local = await openWorkspace(page);
+    await dragRow(page, MACHINE_NAME, -40, false);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await expect(page.locator("[data-drag-id][data-dragging]")).toHaveCount(0);
+    await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
+    expect(getCoreDoc(ORDER_DOC)).toBeNull();
+  });
+
+  test("the move keys move the focused row, focus stays on it, and the order survives a reload", async ({ page }) => {
+    const local = await openWorkspace(page);
+    const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
+    const [up, down] = mac
+      ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"]
+      : ["Control+Shift+PageUp", "Control+Shift+PageDown"];
+    const button = machineRow(page);
+    await button.focus();
+    await page.keyboard.press(up);
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await expect(button).toBeFocused();
+    await expect(status(page)).toHaveText(new RegExp(`^Moved ${MACHINE_NAME} to position 1 of 2`));
+    await page.keyboard.press(down);
+    await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
+    await expect(button).toBeFocused();
+    await page.keyboard.press(up);
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await page.reload();
+    await expect(machineRow(page)).toContainText("connected", { timeout: 30_000 });
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+  });
+
+  test("with tabs that could move, the move keys on a focused row move the machine, never a tab", async ({ page }) => {
+    const local = await openWorkspace(page);
+    // The newest tab is selected and sits last, so the tab strip's own move-left would take the key if it could.
+    await openNewTerminal(page);
+    if ((await tabs(page).count()) < 2) await openNewTerminal(page);
+    expect(await selectedIndex(page)).toBeGreaterThan(0);
+    const strip = await domOrder(page);
+    const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
+    const button = machineRow(page);
+    await button.focus();
+    await page.keyboard.press(mac ? "Meta+Shift+ArrowLeft" : "Control+Shift+PageUp");
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await expect(button).toBeFocused();
+    expect(await domOrder(page)).toEqual(strip);
+  });
+
+  test("the row menu moves a machine down and up, and offers no move past either end", async ({ page }) => {
+    const local = await openWorkspace(page);
+    await rowOf(page, local).click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("menuitem", { name: "Move down" }).click();
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await rowOf(page, local).click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
+    await page.getByRole("menuitem", { name: "Move up" }).click();
+    await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
+  });
+
+  test("an order another client writes reaches the open page live, and never pulls focus back to a moved row", async ({
+    page,
+  }) => {
+    const local = await openWorkspace(page);
+    await rowOf(page, local).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Move down" }).click();
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    // A closing menu hands focus back to its row once its exit ends; focus is moved away only after that.
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    const written = getCoreDoc(ORDER_DOC);
+    if (typeof written !== "object" || written === null || !("machine_order" in written)) throw new Error("no order");
+    const ids = written.machine_order;
+    if (!Array.isArray(ids)) throw new Error("not a list");
+    const elsewhere = page.getByRole("button", { name: "Add machine" });
+    await elsewhere.focus();
+    await expect(elsewhere).toBeFocused();
+    setCoreDoc(ORDER_DOC, { machine_order: ids.toReversed(), kept: { by: "another client" } });
+    await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
+    await expect(elsewhere).toBeFocused();
+  });
+});

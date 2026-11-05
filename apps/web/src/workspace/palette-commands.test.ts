@@ -18,7 +18,7 @@ const terminal = (fields: Partial<Terminal>): Terminal => ({
 });
 
 const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
-  actions: availableActions(shell, { open: ["t1", "t2"], active: null }, false),
+  actions: availableActions(shell, false),
   terminals,
   host: "studio",
   route: "relay",
@@ -26,9 +26,9 @@ const source = (terminals: readonly Terminal[], shell: Shell = "desktop") => ({
   keymap: resolveKeymap("mac", new Map()),
 });
 
-const split = (open: readonly string[]) =>
-  paletteCommands({ ...source([]), actions: availableActions("desktop", { open, active: null }, false) }).find(
-    (command) => command.id === "pane.split",
+const split = (inView: boolean, readOnly: string | null = null) =>
+  paletteCommands({ ...source([]), actions: availableActions("desktop", inView, readOnly) }).find(
+    (command) => command.id === "pane.split:right",
   );
 
 describe("paletteCommands", () => {
@@ -65,9 +65,10 @@ describe("paletteCommands", () => {
     expect(labels).toEqual(["New tab", "Larger terminal text", "Smaller terminal text", "studio", "Open settings"]);
   });
 
-  test("split is listed as unavailable, with the reason, until there are two tabs to split", () => {
-    expect(split(["t1"])?.disabled).toBe(true);
-    expect(split(["t1", "t2"])?.disabled).toBeUndefined();
+  test("split is listed as unavailable, with the reason, until a terminal whose layout takes edits is in view", () => {
+    expect([split(false)?.disabled, split(false)?.hint]).toEqual([true, "No terminal to split"]);
+    expect(split(true, "the layout is loading")?.hint).toBe("the layout is loading");
+    expect(split(true)?.disabled).toBeUndefined();
   });
 
   test("each row kind parses to its choice", () => {

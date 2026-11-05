@@ -2,8 +2,6 @@
 import { E2E_LAYOUT_MACHINE_DIR } from "./config.ts";
 import type { MachineSpec, Seed } from "./machine.ts";
 
-/** The layout core's id, fixed so a spec can restore saved tabs for it before the first page load. */
-export const LAYOUT_CORE_ID = "1a7e0c0ffee0000000000000000000a1";
 export const LAYOUT_CORE = "개발팀 공용 빌드 서버 · 아주 긴 호스트 이름을 가진 워크스테이션 studio-workstation-long";
 /** hc caps machine names at 32 characters of a-z 0-9 - _ . */
 export const LAYOUT_MACHINE = "remote-build-machine-number-0001";

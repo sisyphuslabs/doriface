@@ -2,7 +2,8 @@ import type { Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import { availableActions, type Shell } from "./shell-actions.ts";
 import { desktopActions, phoneActions } from "./use-app-actions.ts";
-import type { Tabs } from "./use-tabs.ts";
+import type { LayoutTab } from "./layout-model.ts";
+import type { Layout } from "./use-layout.ts";
 
 const terminal = (address: string): Terminal => ({
   address,
@@ -15,26 +16,50 @@ const terminal = (address: string): Terminal => ({
   screen: "exact",
   state: "live",
 });
-const tabs: Tabs = {
-  open: ["t1", "t2"],
+const noop = (): void => undefined;
+const pane = { id: "p1", address: "t1", mod: null };
+const tab: LayoutTab = {
+  key: "tb1",
+  id: "tb1",
+  space: "spc1",
+  machine: null,
+  name: "",
+  root: { children: [{ content: { terminal: "t1" }, id: "p1", type: "block" }], id: "tb1", type: "row" },
+  panes: [pane],
+  readOnly: null,
+  transient: false,
+};
+const layout: Layout = {
+  tabs: [tab],
+  active: tab,
+  focused: pane,
+  zoomed: null,
+  selectTab: noop,
+  focusPane: noop,
+  openTerminal: noop,
+  split: noop,
+  dropPane: noop,
+  closeTab: noop,
+  go: () => false,
+  bumped: null,
+  fresh: null,
+  resize: () => Promise.resolve(true),
+  resizeFocused: () => false,
+  equalize: () => true,
+  toggleZoom: () => true,
+  moveTab: noop,
   restored: true,
-  active: "t1",
-  split: null,
-  select: () => undefined,
-  close: () => undefined,
-  drop: () => undefined,
-  toggleSplit: () => undefined,
-  focus: () => undefined,
-  move: () => undefined,
   lastMove: null,
 };
-const noop = (): void => undefined;
 const handlers = {
   desktop: desktopActions(
     {
       terminals: [terminal("t1"), terminal("t2")],
-      tabs,
+      layout,
       onNew: noop,
+      onSplit: noop,
+      onCloseTab: noop,
+      onClosePane: noop,
       onToggleSidebar: noop,
       onFocusSidebar: noop,
       onSession: () => true,
@@ -52,7 +77,7 @@ const handlers = {
 
 describe("every palette row runs something", () => {
   test.each(["desktop", "phone"] as const)("%s: its handler takes every action its palette lists", (shell) => {
-    const unhandled = availableActions(shell, tabs, true)
+    const unhandled = availableActions(shell, true)
       .map((action) => action.id)
       .filter((id) => !handlers[shell](id));
     expect(unhandled).toEqual([]);
@@ -60,12 +85,24 @@ describe("every palette row runs something", () => {
 });
 
 const sessionRows = (shell: Shell, inView: boolean) =>
-  availableActions(shell, tabs, inView).filter(({ id }) => id.startsWith("session."));
+  availableActions(shell, inView).filter(({ id }) => id.startsWith("session."));
 
 const moves = (active: string) =>
-  availableActions("desktop", { ...tabs, active }, true)
+  availableActions("desktop", true, null, { keys: ["t1", "t2"], active })
     .map(({ id }) => id)
     .filter((id) => id.startsWith("tab.move:"));
+
+const stripTab = (key: string): LayoutTab => ({
+  key,
+  id: key,
+  space: "s",
+  machine: null,
+  name: "",
+  root: { children: [], id: key, type: "row" },
+  panes: [],
+  readOnly: null,
+  transient: false,
+});
 
 describe("moving a tab", () => {
   test("the palette offers only the moves the active tab can make", () => {
@@ -79,8 +116,16 @@ describe("moving a tab", () => {
       desktopActions(
         {
           terminals: [terminal("t1"), terminal("t2"), terminal("t3")],
-          tabs: { ...tabs, open: ["t1", "t2", "t3"], active: "t1", move: (address, to) => calls.push([address, to]) },
+          layout: {
+            ...layout,
+            tabs: ["t1", "t2", "t3"].map(stripTab),
+            active: stripTab("t1"),
+            moveTab: (key, to) => calls.push([key, to]),
+          },
           onNew: noop,
+          onSplit: noop,
+          onCloseTab: noop,
+          onClosePane: noop,
           onToggleSidebar: noop,
           onFocusSidebar: noop,
           onSession: () => true,
@@ -117,8 +162,7 @@ describe("dictation (#194)", () => {
   test.each(["desktop", "phone"] as const)(
     "%s: Dictate is a palette row with a session in view, and left out without",
     (shell) => {
-      const dictate = (inView: boolean) =>
-        availableActions(shell, tabs, inView).filter(({ id }) => id === "voice.dictate");
+      const dictate = (inView: boolean) => availableActions(shell, inView).filter(({ id }) => id === "voice.dictate");
       expect(dictate(true)).toEqual([{ id: "voice.dictate" }]);
       expect(dictate(false)).toEqual([]);
     },
@@ -130,8 +174,11 @@ describe("dictation (#194)", () => {
       desktopActions(
         {
           terminals: [],
-          tabs,
+          layout,
           onNew: noop,
+          onSplit: noop,
+          onCloseTab: noop,
+          onClosePane: noop,
           onToggleSidebar: noop,
           onFocusSidebar: noop,
           onSession: () => true,

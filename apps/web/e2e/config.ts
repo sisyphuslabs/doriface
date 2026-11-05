@@ -25,6 +25,8 @@ export const E2E_HOST_ENV = hostEnvOf(E2E_HOST_PORT);
 export const E2E_WEB_PORT = port("E2E_WEB_PORT", 4173);
 /** A second e2e host whose names, titles and paths are long, Korean or unbroken, for the layout spec. */
 export const E2E_LAYOUT_PORT = port("E2E_LAYOUT_PORT", 7798);
+/** The layout spec's core environment, so each spec starts with no tabs saved there either. */
+export const E2E_LAYOUT_ENV = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-host.json`);
 export const E2E_LAYOUT_MACHINE_DIR = join(tmpdir(), `doriface-web-e2e-${E2E_LAYOUT_PORT}-machine`);
 /**
  * The test push services the e2e hosts may post web push notices to (`--push-test-origin`): any port on loopback,

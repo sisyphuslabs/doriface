@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { endOwnTerminals } from "./own-terminals.ts";
+
+endOwnTerminals();
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -27,26 +30,21 @@ test("focus stays inside the open palette and returns to the terminal that opene
   await expect(opener).toBeFocused();
 });
 
-test("the palette offers Split as the toolbar does, and runs the same action", async ({ page }) => {
+test("the palette offers Split right as the toolbar does, and runs the same action", async ({ page }) => {
   await page.goto("/");
-  await terminalCount(page);
-  const split = page.getByRole("button", { name: "Split", exact: true });
-  const row = page.getByRole("option", { name: /^Split or unsplit/ });
-  if ((await page.locator("[data-terminal]").count()) > 1) throw new Error("the e2e host starts with one tab at most");
+  await openNewTerminal(page);
+  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+  const before = await tabs.count();
+  const row = page.getByRole("option", { name: /^Split right/ });
 
   await page.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(row).toBeVisible();
-  await expect(row).toHaveAttribute("aria-disabled", "true");
-  await expect(split).toBeDisabled();
-  await page.keyboard.press("Escape");
-
-  await openNewTerminal(page);
-  await openNewTerminal(page);
-  await page.keyboard.press("ControlOrMeta+Shift+KeyP");
   await expect(row).not.toHaveAttribute("aria-disabled", "true");
   await row.click();
   await expect(dialog(page)).toBeHidden();
-  await expect(split).toHaveAttribute("aria-pressed", "true");
+  // The new pane joins the tab in view: the strip keeps its tabs, the tab shows two panes.
+  await expect(page.locator("[data-terminal]:visible")).toHaveCount(2, { timeout: 15_000 });
+  await expect(tabs).toHaveCount(before);
 });
 
 for (const [width, height] of [

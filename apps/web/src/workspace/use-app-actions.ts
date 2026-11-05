@@ -5,12 +5,20 @@ import { terminalConfigStore } from "../ghostty/config-store.ts";
 import { single, withValues, withoutKey, type TerminalConfig } from "../ghostty/config.ts";
 import { KEY_BY_NAME } from "../ghostty/keys.ts";
 import { useActionHandler, type ActionHandler } from "../keys/dispatcher.ts";
-import type { Tabs } from "./use-tabs.ts";
+import type { Direction } from "../layout/neighbor.ts";
+import type { Axis } from "@doriface/protocol/layout";
+import type { Layout, PaneTarget } from "./use-layout.ts";
 
 export interface AppActionTargets {
   readonly terminals: readonly Terminal[];
-  readonly tabs: Tabs;
+  readonly layout: Layout;
   readonly onNew: () => void;
+  /** Starts a terminal beside the focused pane: to its right along a row, below it along a column. */
+  readonly onSplit: (axis: Axis, target?: PaneTarget) => void;
+  /** Closes a tab, asking first whether its sessions keep running. */
+  readonly onCloseTab: (key: string) => void;
+  /** Closes the focused pane, asking first whether its session keeps running. */
+  readonly onClosePane: (address: string) => void;
   readonly onToggleSidebar: () => void;
   /** Moves focus from the terminal to the sidebar, or back. */
   readonly onFocusSidebar: () => void;
@@ -108,58 +116,87 @@ export function useAppActions(targets: AppActionTargets): void {
 }
 
 /** Moves a tab one place; at an end of the strip the key is left to the terminal, as with nothing to select. */
-function moveTab(tabs: Tabs, address: string | null, side: string): boolean {
-  const from = address === null ? -1 : tabs.open.indexOf(address);
+function moveTab(layout: Layout, key: string | null, side: string): boolean {
+  const keys = layout.tabs.map((tab) => tab.key);
+  const from = key === null ? -1 : keys.indexOf(key);
   const to = from + (side === "left" ? -1 : 1);
-  if (address === null || from === -1 || to < 0 || to >= tabs.open.length) return false;
-  tabs.move(address, to);
+  if (key === null || from === -1 || to < 0 || to >= keys.length) return false;
+  layout.moveTab(key, to);
   return true;
 }
 
-function selectTab(tabs: Tabs, address: string | null): boolean {
-  // Nothing to do leaves the key to the terminal (alt+up in a shell with one tab open).
-  if (address === null || !shouldSelect(address, tabs.active)) return false;
-  tabs.select(address);
+function selectTab(layout: Layout, key: string | null): boolean {
+  // Nothing to do leaves the key to the terminal (ctrl+tab in a shell with one tab open).
+  if (key === null || !shouldSelect(key, layout.active?.key ?? null)) return false;
+  layout.selectTab(key);
+  return true;
+}
+
+const isDirection = (value: string): value is Direction =>
+  value === "left" || value === "right" || value === "up" || value === "down";
+
+function openAgent(layout: Layout, address: string | null): boolean {
+  if (address === null || !shouldSelect(address, layout.focused?.address ?? null)) return false;
+  layout.openTerminal(address);
   return true;
 }
 
 export function desktopActions(
-  { terminals, tabs, onNew, onToggleSidebar, onFocusSidebar, onSession, onDictate, focusedTab }: AppActionTargets,
+  {
+    terminals,
+    layout,
+    onNew,
+    onSplit,
+    onCloseTab,
+    onClosePane,
+    onToggleSidebar,
+    onFocusSidebar,
+    onSession,
+    onDictate,
+    focusedTab,
+  }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
   return (action) => {
     const live = terminals.filter((terminal) => terminal.state === "live").map((terminal) => terminal.address);
+    const keys = layout.tabs.map((tab) => tab.key);
+    const active = layout.active?.key ?? null;
+    const focused = layout.focused?.address ?? null;
     const [verb, argument = ""] = action.split(":");
     switch (verb) {
       case "tab.new":
         onNew();
         return true;
       case "tab.close":
-        return tabs.active === null ? false : (tabs.close(tabs.active), true);
+        return active === null ? false : (onCloseTab(active), true);
       case "tab.next":
-        return selectTab(tabs, neighbour(tabs.open, tabs.active, 1));
+        return selectTab(layout, neighbour(keys, active, 1));
       case "tab.prev":
-        return selectTab(tabs, neighbour(tabs.open, tabs.active, -1));
+        return selectTab(layout, neighbour(keys, active, -1));
       case "tab.select":
-        return selectTab(tabs, tabs.open[Number(argument) - 1] ?? null);
+        return selectTab(layout, keys[Number(argument) - 1] ?? null);
       case "tab.last":
-        return selectTab(tabs, tabs.open.at(-1) ?? null);
+        return selectTab(layout, keys.at(-1) ?? null);
       case "tab.move":
-        return moveTab(tabs, focusedTab?.() ?? tabs.active, argument);
+        return moveTab(layout, focusedTab?.() ?? active, argument);
       case "pane.split":
-        return tabs.open.length < 2 ? false : (tabs.toggleSplit(), true);
-      case "pane.close":
-        return tabs.split === null ? false : (tabs.toggleSplit(), true);
-      case "pane.go":
-        if (tabs.split === null) return false;
-        // The split shows the active tab on the left and the split tab on the right.
-        if (argument === "left" && tabs.active !== null) tabs.focus(tabs.active);
-        else tabs.focus(tabs.split);
+        if (focused === null || (argument !== "right" && argument !== "down")) return false;
+        onSplit(argument === "right" ? "row" : "column");
         return true;
+      case "pane.go":
+        return isDirection(argument) && layout.go(argument);
+      case "pane.resize":
+        return isDirection(argument) && layout.resizeFocused(argument);
+      case "pane.equalize":
+        return layout.equalize();
+      case "pane.zoom":
+        return layout.toggleZoom();
+      case "pane.close":
+        return focused === null ? false : (onClosePane(focused), true);
       case "agent.next":
-        return selectTab(tabs, neighbour(live, tabs.active, 1));
+        return openAgent(layout, neighbour(live, focused, 1));
       case "agent.prev":
-        return selectTab(tabs, neighbour(live, tabs.active, -1));
+        return openAgent(layout, neighbour(live, focused, -1));
       case "layout.toggle":
         onToggleSidebar();
         return true;

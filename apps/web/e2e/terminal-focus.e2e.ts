@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
-import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { endOwnTerminals } from "./own-terminals.ts";
+
+endOwnTerminals();
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -126,53 +129,25 @@ test.describe("with clipboard access", () => {
   });
 });
 
-test("clicking Split moves keyboard focus into the new pane, and clicking it again back to the terminal", async ({
+test("clicking Split right puts keyboard focus in the new pane beside the first, where typing lands", async ({
   page,
 }) => {
   await page.goto("/");
-  // A worker's core outlives its tests, and the page opens the core's first live terminal (an earlier test's, whose
-  // shell may hold that test's unsent keys) as a tab. Split pairs the focused tab with the first other open tab, so
-  // that inherited tab is closed (its terminal keeps running) and the panes are this test's own two terminals.
-  const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-  const { before } = await terminalCount(page);
-  await expect(tabs).toHaveCount(before > 0 ? 1 : 0);
-  await openNewTerminal(page);
   const first = await openNewTerminal(page);
   const firstAddress = await first.getAttribute("data-terminal");
-  if (before > 0) {
-    await tabs.first().click();
-    await page
-      .getByRole("tab", { selected: true })
-      .locator("xpath=..")
-      .getByRole("button", { name: /^Close / })
-      .click();
-    const ask = page.getByRole("dialog", { name: /^Close .+\?$/ });
-    await ask.getByRole("button", { name: "Keep running" }).click();
-    await expect(tabs).toHaveCount(2);
-    await expect(first).toBeVisible();
-  }
-  const split = page.getByRole("button", { name: "Split" });
 
-  await split.click();
-  await expect(split).toHaveAttribute("aria-pressed", "true");
-  const shown = page.locator("[data-terminal]:visible");
-  await expect(shown).toHaveCount(2);
-  const other = (await shown.evaluateAll((els) => els.map((el) => el.getAttribute("data-terminal")))).find(
-    (address) => address !== firstAddress,
-  );
-  await expect.poll(() => focusedAddress(page)).toBe(other);
-
-  await split.click();
-  await expect(split).toHaveAttribute("aria-pressed", "false");
-  const remaining = page.locator("[data-terminal]:visible");
-  await expect(remaining).toHaveCount(1);
-  const address = await remaining.getAttribute("data-terminal");
-  await expect.poll(() => focusedAddress(page)).toBe(address);
-  // Enter typed here must reach the shell, not press Split again.
-  await page.keyboard.type("echo unsplit-$((3+4))");
+  await page.getByRole("button", { name: "Split right" }).click();
+  await expect(page.locator("[data-terminal]:visible")).toHaveCount(2, { timeout: 15_000 });
+  await expect.poll(() => focusedAddress(page), { timeout: 15_000 }).not.toBe(firstAddress);
+  const address = await focusedAddress(page);
+  if (address === null) throw new Error("keyboard focus is in no terminal after the split");
+  const created = page.locator(`[data-terminal="${address}"]`);
+  await expect(created).toContainText("$", { timeout: 15_000 });
+  // Enter typed here must reach the new shell, not press Split right again.
+  await page.keyboard.type("echo split-$((3+4))");
   await page.keyboard.press("Enter");
-  await expect(remaining).toContainText("unsplit-7", { timeout: 15_000 });
-  await expect(split).toHaveAttribute("aria-pressed", "false");
+  await expect(created).toContainText("split-7", { timeout: 15_000 });
+  await expect(first).not.toContainText("split-7");
 });
 
 test("closing the palette with its shortcut or by running an action gives focus back to the terminal", async ({

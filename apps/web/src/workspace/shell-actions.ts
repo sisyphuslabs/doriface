@@ -1,5 +1,3 @@
-import type { Tabs } from "./use-tabs.ts";
-
 export type Shell = "desktop" | "phone";
 
 /** An app action the palette lists; `unavailable` says why it cannot run right now. */
@@ -8,11 +6,19 @@ export interface ShellAction {
   readonly unavailable?: string;
 }
 
-/** The app actions each shell's palette may offer; that shell's handler takes every one of them. */
+/**
+ * The app actions each shell's palette may offer; that shell's handler takes every one of them. Resize is not offered:
+ * one step moves a line a twentieth, so it is left to its keys, the divider's own keys and the Shell menu.
+ */
 const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
   desktop: [
     "tab.new",
-    "pane.split",
+    "pane.split:right",
+    "pane.split:down",
+    "pane.close",
+    "pane.equalize",
+    "pane.zoom",
+    "tab.close",
     "tab.move:left",
     "tab.move:right",
     "session.rename",
@@ -29,18 +35,25 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
 /** Actions on the session in view: rename, end, and dictating into it. */
 const SESSION_ACTIONS = new Set(["session.rename", "session.end", "voice.dictate"]);
 
-type ActionTabs = Pick<Tabs, "open" | "active">;
-
-/** Whether the active tab has a neighbour on that side to move past. */
-function canMove(id: string, { open, active }: ActionTabs): boolean {
-  const at = active === null ? -1 : open.indexOf(active);
-  if (at === -1) return false;
-  return id === "tab.move:left" ? at > 0 : at < open.length - 1;
+/** The strip's tab keys in order, and the selected tab's: what moving a tab is measured against. */
+export interface Strip {
+  readonly keys: readonly string[];
+  readonly active: string | null;
 }
 
-/** Splitting needs two open tabs; until then it is listed as unavailable, with the reason. */
-function unavailable(id: string, tabs: ActionTabs): string | undefined {
-  return id === "pane.split" && tabs.open.length < 2 ? "Needs two tabs" : undefined;
+const NO_STRIP: Strip = { keys: [], active: null };
+
+/** Whether the active tab has a neighbour on that side to move past. */
+function canMove(id: string, { keys, active }: Strip): boolean {
+  const at = active === null ? -1 : keys.indexOf(active);
+  if (at === -1) return false;
+  return id === "tab.move:left" ? at > 0 : at < keys.length - 1;
+}
+
+/** Splitting needs a terminal in view whose layout takes edits; until then it is listed as unavailable, with why. */
+function unavailable(id: string, inView: boolean, readOnly: string | null): string | undefined {
+  if (!id.startsWith("pane.split:")) return undefined;
+  return inView ? (readOnly ?? undefined) : "No terminal to split";
 }
 
 /**
@@ -48,12 +61,17 @@ function unavailable(id: string, tabs: ActionTabs): string | undefined {
  * are left out, as a palette leaves out commands that do not apply, and so is moving the active tab past an end of the
  * strip; Split is listed as unavailable until it can run.
  */
-export function availableActions(shell: Shell, tabs: ActionTabs, inView: boolean): readonly ShellAction[] {
+export function availableActions(
+  shell: Shell,
+  inView: boolean,
+  readOnly: string | null = null,
+  strip: Strip = NO_STRIP,
+): readonly ShellAction[] {
   return SHELL_ACTIONS[shell]
     .filter((id) => inView || !SESSION_ACTIONS.has(id))
-    .filter((id) => !id.startsWith("tab.move:") || canMove(id, tabs))
+    .filter((id) => !id.startsWith("tab.move:") || canMove(id, strip))
     .map((id) => {
-      const reason = unavailable(id, tabs);
+      const reason = unavailable(id, inView, readOnly);
       return reason === undefined ? { id } : { id, unavailable: reason };
     });
 }

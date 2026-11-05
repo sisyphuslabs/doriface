@@ -5,6 +5,7 @@ import { PAIRING_SETTINGS } from "./capture-relay.ts";
 import { SHOTS, type Start, type Width } from "./capture-shots.ts";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { test } from "./fixtures.ts";
+import { clearLayouts } from "./layout-doc.ts";
 
 const OUT = join(import.meta.dirname, "../../../docs/design/app");
 const BROKEN_STORAGE = `IDBFactory.prototype.open = () => { throw new DOMException("IndexedDB is not available here", "InvalidStateError"); };`;
@@ -33,6 +34,7 @@ for (const width of ["1440", "390"] as const) {
     for (const shot of SHOTS.filter((entry) => entry.only === undefined || entry.only === width)) {
       test(`${shot.name} ${width} ${theme}`, async ({ browser }) => {
         const { defaultBrowserType: _browser, ...use } = { defaultBrowserType: "chromium", ...contextFor(width) };
+        clearLayouts();
         const context = await browser.newContext({ ...use, colorScheme: theme === "day" ? "light" : "dark" });
         await context.addInitScript(
           ([chosen, stored]) => {

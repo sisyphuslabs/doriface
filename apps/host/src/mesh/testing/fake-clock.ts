@@ -50,6 +50,47 @@ export class FakeClock implements Clock {
     return this.#fireUntil(end);
   }
 
+  /**
+   * `advance` for a subject driven by timers alone: it settles before time moves and after each timer that fires, but
+   * not once more when nothing fired, since time moving on runs nothing by itself. Saves 25 event-loop turns per quiet
+   * step (#316).
+   */
+  async advanceTimers(ms: number): Promise<void> {
+    await settle();
+    return this.#fireTimers(this.#now + ms);
+  }
+
+  /**
+   * `until` for a subject driven by timers alone: it goes from timer to timer instead of stepping through quiet virtual
+   * time, so it spends event-loop turns on the timers that fire, not on every `stepMs` slice. A test whose state also
+   * moves by promise chains that outlast one `settle()` (a sync session across hosts) must keep `until` (#316).
+   */
+  async untilTimers(done: () => boolean, limitMs: number, start = this.#now): Promise<number> {
+    await settle();
+    if (done()) return this.#now - start;
+    const next = this.#due(start + limitMs);
+    if (next === undefined) throw new Error(`not reached within ${limitMs} ms of virtual time`);
+    await this.#fireTimers(next.at);
+    return this.untilTimers(done, limitMs, start);
+  }
+
+  async #fireTimers(end: number): Promise<void> {
+    const next = this.#due(end);
+    if (next === undefined) {
+      this.#now = end;
+      return;
+    }
+    this.#timers = this.#timers.filter((timer) => timer !== next);
+    this.#now = next.at;
+    next.run();
+    await settle();
+    return this.#fireTimers(end);
+  }
+
+  #due(end: number): Timer | undefined {
+    return this.#timers.filter((timer) => timer.at <= end).toSorted((a, b) => a.at - b.at || a.seq - b.seq)[0];
+  }
+
   /** Advances in steps until `done()` holds, and returns the virtual time it took; throws past `limitMs`. */
   async until(done: () => boolean, limitMs: number, stepMs = 250, start = this.#now): Promise<number> {
     await settle();
