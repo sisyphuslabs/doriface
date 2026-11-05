@@ -1,3 +1,4 @@
+import { pressNewTab } from "./fixtures.ts";
 import { type ChildProcess, spawn } from "node:child_process";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -73,7 +74,8 @@ async function pairAndOpen(page: Page, newTab: (page: Page) => Locator): Promise
     .getByRole("link", { name: "Open terminals" })
     .or(page.getByRole("button", { name: "Open terminals" }))
     .click();
-  await newTab(page).click({ timeout: 60_000 });
+  // "+" opens the new-item menu since #548; pressNewTab picks its Terminal item (the phone header's starts one at once).
+  await pressNewTab(newTab(page), { timeout: 60_000 });
   const terminal = page.locator("[data-terminal]").last();
   await expect(terminal).toContainText("$", { timeout: 30_000 });
   return terminal;

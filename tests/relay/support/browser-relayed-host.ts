@@ -1,6 +1,6 @@
 /**
  * A relayed host for a browser test: the local relay (wrangler dev), an hc core and a doriface-host on its uplink.
- * Prints one JSON line, `{"link": ...}`, the pairing link for the web origin given as the first argument, then runs
+ * Prints one JSON line, `{"link": ..., "relayUrl": ...}`, the pairing link for the web origin given as the first argument, then runs
  * until it is sent SIGTERM or its stdin closes, and stops everything it started.
  *
  *   bun tests/relay/support/browser-relayed-host.ts http://127.0.0.1:4173
@@ -21,7 +21,7 @@ process.stdin.on("end", () => done.resolve());
 process.stdin.resume();
 try {
   const { url } = await host.pairingOffer();
-  console.log(JSON.stringify({ link: url.replace(/^https:\/\/web\.example/, webOrigin) }));
+  console.log(JSON.stringify({ link: url.replace(/^https:\/\/web\.example/, webOrigin), relayUrl: host.relayUrl }));
   await done.promise;
 } finally {
   await host.stop();

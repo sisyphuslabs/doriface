@@ -3,7 +3,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { E2E_WEB_PORT } from "./config.ts";
-import { expect, test } from "./fixtures.ts";
+import { expect, pressNewTab, test } from "./fixtures.ts";
+import { routeRelaySockets } from "./relay-route.ts";
 import { expectImageBelow, graphics, lines, png, RED, show, SIZE, BLUE } from "./terminal-images.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -16,6 +17,7 @@ test.skip(!existsSync(join(RELAY_DIR, "package.json")), "needs the private relay
 
 let driver: ChildProcess | undefined;
 let link = "";
+let relayUrl = "";
 
 test.beforeAll(async () => {
   test.setTimeout(180_000);
@@ -39,6 +41,7 @@ test.beforeAll(async () => {
     const parsed: unknown = JSON.parse(line);
     if (typeof parsed === "object" && parsed !== null && "link" in parsed && typeof parsed.link === "string") {
       link = parsed.link;
+      if ("relayUrl" in parsed && typeof parsed.relayUrl === "string") relayUrl = parsed.relayUrl;
       break;
     }
   }
@@ -56,6 +59,8 @@ test.afterAll(async () => {
 test("over a relay, a Kitty PNG and raw RGBA are drawn at their cells, and stay there through scrolling and a resize", async ({
   page,
 }) => {
+  // Pairing dials the link's relay; the workspace then dials the production one, as every release build does (#452).
+  await routeRelaySockets(page, relayUrl);
   await page.goto(link);
   await page.getByRole("button", { name: "They match" }).click({ timeout: 30_000 });
   await expect(page.getByRole("status").getByText("Paired")).toBeVisible({ timeout: 30_000 });
@@ -64,11 +69,14 @@ test("over a relay, a Kitty PNG and raw RGBA are drawn at their cells, and stay 
     .toBe("relay");
   await page.getByRole("link", { name: "Open terminals" }).click();
   // The relayed host's own core, not the e2e worker's: open a terminal on it and wait for its prompt.
-  await page
-    .getByRole("button", { name: "New terminal" })
-    .or(page.getByRole("button", { name: "New tab" }))
-    .first()
-    .click({ timeout: 30_000 });
+  // "+" opens the new-item menu since #548; pressNewTab picks its Terminal item.
+  await pressNewTab(
+    page
+      .getByRole("button", { name: "New terminal" })
+      .or(page.getByRole("button", { name: "New tab" }))
+      .first(),
+    { timeout: 30_000 },
+  );
   const terminal = page.locator('[data-focused="true"] [data-terminal]');
   await expect(terminal).toContainText("$", { timeout: 30_000 });
 
