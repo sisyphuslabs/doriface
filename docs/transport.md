@@ -168,7 +168,8 @@ Relay passes (v1.6) are optional for a stand-in: one that ignores `?pass=1` and 
 ## Direct path
 
 - The host also serves `GET /v1/e2ee` (WebSocket) on its LAN listener, speaking the same record layer without the relay header. Because every byte is authenticated, this endpoint may bind non-loopback. The plaintext `/v1/hc` stays loopback-only. It accepts session kinds `0x01` and `0x03`; it closes kind `0x02` (typed-code pairing, which needs the relay's budget) with 4401 without answering.
-- Clients try direct (when a LAN URL is known and reachable within 300 ms) and the relay in parallel. The relay is the default; once a direct session's handshake completes, it is preferred. The session swap reattaches terminals with `resumed: true`.
+- A client may try direct (when a LAN URL is known and reachable within 300 ms) and the relay in parallel. The relay is the default; once a direct session's handshake completes, it is preferred. The session swap reattaches terminals with `resumed: true`.
+- No shipped client dials the direct path yet: the web, PWA and desktop clients reach every remote host through the relay, and the Direct address setting is hidden (#458).
 
 ## Mesh
 
