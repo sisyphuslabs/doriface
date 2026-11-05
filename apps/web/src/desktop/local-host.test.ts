@@ -4,6 +4,7 @@ import {
   closeDesktopWindow,
   desktopBridge,
   desktopHcChooser,
+  desktopHcInstaller,
   HostStartError,
   type HostStartFailure,
   onDesktopNavigate,
@@ -129,6 +130,29 @@ describe("desktop local host", () => {
     expect(await choose?.()).toBe("/opt/hc");
     const odd = desktopHcChooser({ doriface: { chooseHc: async () => 7 } });
     expect(await odd?.()).toBeNull();
+  });
+
+  test("Install herdr-core is offered only by a shell that has it; its phases and answer are read as strings", async () => {
+    expect(desktopHcInstaller({})).toBeNull();
+    expect(desktopHcInstaller({ doriface: { chooseHc: async () => null } })).toBeNull();
+    const phases: string[] = [];
+    const install = desktopHcInstaller({
+      doriface: {
+        installHc: async (onPhase: (phase: unknown) => void) => {
+          onPhase("download");
+          onPhase(7);
+          return { installed: { version: "0.1.18", path: "/h/.local/bin/herdr-core" } };
+        },
+      },
+    });
+    expect(await install?.((phase) => phases.push(phase))).toEqual({ version: "0.1.18" });
+    expect(phases).toEqual(["download"]);
+    const failed = desktopHcInstaller({
+      doriface: { installHc: async () => ({ failed: { phase: "verify", message: "checksum mismatch" } }) },
+    });
+    expect(await failed?.(noop)).toEqual({ error: "checksum mismatch" });
+    const odd = desktopHcInstaller({ doriface: { installHc: async () => 7 } });
+    expect(await odd?.(noop)).toEqual({ error: "the desktop app gave no answer" });
   });
 
   test("the shell's navigations reach the app only as app paths, and only through a bridge that offers them", () => {
