@@ -1,13 +1,15 @@
 /**
  * The Win32 calls behind private state on Windows (#406, design revision 3 section 1), through `bun:ffi`: only
- * kernel32 and advapi32, both part of Windows. Handles travel as u64 BigInts so INVALID_HANDLE_VALUE compares exactly;
- * every buffer Windows allocates is released with LocalFree, and every failed call throws with GetLastError.
+ * kernel32, advapi32 and ntdll, all part of Windows. Handles travel as u64 BigInts; every buffer Windows allocates is
+ * released with LocalFree. Opens go through NtCreateFile, whose status is the call's own result (#464); the other failed
+ * calls throw with GetLastError.
  */
 import { dlopen, ptr, read, toArrayBuffer } from "bun:ffi";
+import { ntPath, ntRequest, type OpenOptions, openRetrying, Win32Error } from "./nt-open.ts";
+
+export { type OpenOptions, Win32Error } from "./nt-open.ts";
 
 export type Handle = bigint;
-
-const INVALID_HANDLE_VALUE = 0xffff_ffff_ffff_ffffn;
 
 export const GENERIC_READ = 0x8000_0000;
 export const GENERIC_WRITE = 0x4000_0000;
@@ -44,7 +46,6 @@ const pointer = "ptr" as const;
 
 function load() {
   const kernel32 = dlopen("kernel32.dll", {
-    CreateFileW: { args: [pointer, u32, u32, pointer, u32, u32, u64], returns: u64 },
     CreateDirectoryW: { args: [pointer, pointer], returns: i32 },
     ReadFile: { args: [u64, pointer, u32, pointer, pointer], returns: i32 },
     WriteFile: { args: [u64, pointer, u32, pointer, pointer], returns: i32 },
@@ -70,22 +71,19 @@ function load() {
     GetSecurityDescriptorDacl: { args: [u64, pointer, pointer, pointer], returns: i32 },
     GetSecurityDescriptorOwner: { args: [u64, pointer, pointer], returns: i32 },
   });
-  return { k: kernel32.symbols, a: advapi32.symbols };
+  // NtCreateFile returns its own NTSTATUS: the reason an open failed is never read from a later call (#464).
+  const ntdll = dlopen("ntdll.dll", {
+    NtCreateFile: {
+      args: [pointer, u32, pointer, pointer, pointer, u32, u32, u32, u32, pointer, u32],
+      returns: u32,
+    },
+    RtlNtStatusToDosError: { args: [u32], returns: u32 },
+  });
+  return { k: kernel32.symbols, a: advapi32.symbols, n: ntdll.symbols };
 }
 
 let symbols: ReturnType<typeof load> | undefined;
 const api = (): ReturnType<typeof load> => (symbols ??= load());
-
-export class Win32Error extends Error {
-  override readonly name = "Win32Error";
-  readonly call: string;
-  readonly code: number;
-  constructor(call: string, code: number) {
-    super(`${call} failed (Windows error ${String(code)})`);
-    this.call = call;
-    this.code = code;
-  }
-}
 
 const fail = (call: string): never => {
   throw new Win32Error(call, api().k.GetLastError());
@@ -173,38 +171,50 @@ export function descriptorFromSddl(sddl: string): bigint {
 
 export const freeDescriptor = (descriptor: bigint): void => localFree(descriptor);
 
-export interface OpenOptions {
-  readonly access: number;
-  readonly share: number;
-  readonly disposition: number;
-  readonly flags: number;
-  /** For CREATE_NEW: the exact descriptor the new object is created with. */
-  readonly descriptor?: bigint;
-}
+const OBJ_CASE_INSENSITIVE = 0x40;
 
-/** CreateFileW. Throws Win32Error (with `code`) on failure; never returns INVALID_HANDLE_VALUE. */
+/**
+ * Opens or creates `path` as CreateFileW would, through NtCreateFile so a failure carries its own status: a file another
+ * process holds without sharing is waited for (bounded), and every other failure throws a Win32Error with the true code.
+ */
 export function openFile(path: string, options: OpenOptions): Handle {
-  const name = wide(path);
-  let attributes: Uint8Array | null = null;
-  if (options.descriptor !== undefined) {
-    // SECURITY_ATTRIBUTES on 64-bit Windows: DWORD nLength, 4 bytes of padding, LPVOID descriptor, BOOL inherit.
-    attributes = new Uint8Array(24);
-    const view = new DataView(attributes.buffer);
-    view.setUint32(0, 24, true);
-    view.setBigUint64(8, options.descriptor, true);
-    view.setInt32(16, 0, true);
-  }
-  const handle = api().k.CreateFileW(
-    ptr(name),
-    options.access,
-    options.share,
-    attributes === null ? null : ptr(attributes),
-    options.disposition,
-    options.flags,
-    0n,
+  const request = ntRequest(options);
+  const name = Buffer.from(ntPath(path), "utf16le");
+  // UNICODE_STRING: USHORT Length, USHORT MaximumLength, 4 bytes of padding, PWSTR Buffer.
+  const unicode = new Uint8Array(16);
+  const unicodeView = new DataView(unicode.buffer);
+  unicodeView.setUint16(0, name.byteLength, true);
+  unicodeView.setUint16(2, name.byteLength, true);
+  unicodeView.setBigUint64(8, BigInt(ptr(name)), true);
+  // OBJECT_ATTRIBUTES on 64-bit Windows: Length, RootDirectory, ObjectName, Attributes, SecurityDescriptor, QoS.
+  const attributes = new Uint8Array(48);
+  const view = new DataView(attributes.buffer);
+  view.setUint32(0, 48, true);
+  view.setBigUint64(16, BigInt(ptr(unicode)), true);
+  view.setUint32(24, OBJ_CASE_INSENSITIVE, true);
+  view.setBigUint64(32, options.descriptor ?? 0n, true);
+  const status = new Uint8Array(16);
+  const out = new BigUint64Array(1);
+  return openRetrying(
+    () => ({
+      status: api().n.NtCreateFile(
+        ptr(out),
+        request.access,
+        ptr(attributes),
+        ptr(status),
+        null,
+        request.attributes,
+        request.share,
+        request.disposition,
+        request.createOptions,
+        null,
+        0,
+      ),
+      handle: out[0] ?? 0n,
+    }),
+    (code) => api().n.RtlNtStatusToDosError(code),
+    (ms) => Bun.sleepSync(ms),
   );
-  if (handle === INVALID_HANDLE_VALUE) fail("CreateFileW");
-  return handle;
 }
 
 /** CreateDirectoryW with an exact descriptor; false when the folder already exists. */
