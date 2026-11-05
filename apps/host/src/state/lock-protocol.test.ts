@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ beforeEach(() => {
   steps = new LockSteps(dir);
 });
 afterEach(async () => {
+  mock.restore();
   await steps.stop();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -26,6 +28,14 @@ const lockDir = () => join(dir, "state.lock");
 /** The lock directory's entries and the content of each generation. */
 const entries = () =>
   Object.fromEntries(readdirSync(lockDir()).map((name) => [name, readFileSync(join(lockDir(), name), "utf8")]));
+/** The same, without the temp files: the generations alone. */
+const generations = () => Object.fromEntries(Object.entries(entries()).filter(([name]) => !name.endsWith(".tmp")));
+
+/** From now on every file write fails as on a full disk. */
+const diskFull = () =>
+  spyOn(fs, "writeFileSync").mockImplementation(() => {
+    throw Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+  });
 
 /** Lets `worker` go step by step, expecting it to stop at each of `expected` in turn. */
 async function goThrough(worker: StepWorker, expected: readonly string[]): Promise<void> {
@@ -73,7 +83,7 @@ describe("state lock generations (#23)", () => {
     expect(await e.go()).toBe("published 6");
     expect(await d.go()).toBe("waiting 6");
     expect(await e.go()).toBe("acquired 6");
-    expect(Object.keys(entries())).toEqual(["6"]);
+    expect(Object.keys(generations())).toEqual(["6"]);
     expect(await e.go()).toBe("released 7");
     expect(await e.go()).toBe("done");
     expect(await d.go()).toBe("observed 7");
@@ -111,11 +121,36 @@ describe("state lock generations (#23)", () => {
       const [first, ...rest] = reached;
       expect(await a.next()).toBe(first);
       await goThrough(a, rest);
+      // Released means the free generation is out and this one still exists, so nothing ever sees no highest one.
+      if (first === "observed 0" && rest.at(-1) === "released 2") {
+        expect(generations()).toEqual({ "1": expect.stringMatching(/^\d+ /), "2": "free" });
+      }
       await a.kill();
       expect(withStateLock(dir, () => "ran", 2000)).toBe("ran");
       expect(Object.values(entries())).toEqual(["free"]);
     });
   }
+
+  test("a write that fails while the lock is held (a full disk) neither replaces fn's result nor keeps the next one out", () => {
+    expect(
+      withStateLock(dir, () => {
+        diskFull();
+        return "ran";
+      }),
+    ).toBe("ran");
+    mock.restore();
+    expect(withStateLock(dir, () => "next", 100)).toBe("next");
+    expect(Object.values(entries())).toEqual(["free"]);
+  });
+
+  test("a write that fails before the lock is taken throws without holding it", () => {
+    expect(withStateLock(dir, () => "ran")).toBe("ran");
+    diskFull();
+    expect(() => withStateLock(dir, () => "never")).toThrow("ENOSPC");
+    mock.restore();
+    expect(generations()).toEqual({ "2": "free" });
+    expect(withStateLock(dir, () => "next", 100)).toBe("next");
+  });
 
   test("a temp file left by a process that died publishing is swept; a live process's is not", () => {
     mkdirSync(lockDir());

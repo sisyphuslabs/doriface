@@ -56,15 +56,33 @@ function isHeld(path: string, content: string): boolean {
   return pidIsLive(Number(content.split(" ")[0]));
 }
 
-function tryAcquire(path: string, content: string): boolean {
+/** Writes `content` to a new temp file beside `path`, named with this pid so a sweep keeps it while this process lives. */
+function writeTemporary(path: string, content: string): string {
   const temporary = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  writeFileSync(temporary, content, { mode: 0o600, flag: "wx" });
+  try {
+    writeFileSync(temporary, content, { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
+  return temporary;
+}
+
+/** Publishes the written `temporary` as `path`; false if `path` exists. */
+function publish(temporary: string, path: string): boolean {
   try {
     linkSync(temporary, path);
     return true;
   } catch (error) {
     if (errorCode(error) === "EEXIST") return false;
     throw error;
+  }
+}
+
+function tryAcquire(path: string, content: string): boolean {
+  const temporary = writeTemporary(path, content);
+  try {
+    return publish(temporary, path);
   } finally {
     rmSync(temporary, { force: true });
   }
@@ -74,8 +92,9 @@ function tryAcquire(path: string, content: string): boolean {
  * Removes the stale v0.1.0 lock file whose content was `observed`, if it is still that file, the way v0.1.0 breaks it, so
  * a v0.1.0 process racing the upgrade is serialized with this one. Returns false while another breaker is at it.
  * Breakers take `state.lock.break` first; a guard whose breaker died is removed unserialized, which is #23: a breaker
- * crashing inside that window with three more processes racing it could let two breakers in at once. Only a v0.1.0
- * process can then be the second holder, since the generations below never live in this file.
+ * crashing inside that window with three more processes racing it could let two breakers in at once. A fixed process
+ * breaking here can be one of those two holders, but the other is then a v0.1.0 process, since the generations below
+ * never live in this file.
  */
 function breakStaleLock(path: string, observed: string): boolean {
   const guard = `${path}.break`;
@@ -178,6 +197,9 @@ function attempt(dir: string, content: string, step: LockStepHook): number | "wa
  * process can publish over a live holder. A process that dies at any step leaves at most a dead highest generation,
  * which the next one publishes over, and leftovers the next holder sweeps. See #23.
  *
+ * The free generation a release publishes is written before the lock is taken, so a release only links and unlinks:
+ * a write that fails (a full disk) can never leave this process's generation, naming a live pid, the highest one.
+ *
  * `step` is called at each step of the protocol; tests use it to stop a process there.
  */
 export function withStateLock<T>(
@@ -189,18 +211,30 @@ export function withStateLock<T>(
   const dir = join(stateDir, "state.lock");
   const content = `${process.pid} ${crypto.randomUUID()}`;
   const deadline = Date.now() + timeoutMs;
-  let mine: number | "wait" | "retry";
-  for (;;) {
-    mine = ensureLockDir(dir) ? attempt(dir, content, step) : "wait";
-    if (typeof mine === "number") break;
-    if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${dir})`);
-    if (mine === "wait") Bun.sleepSync(RETRY_MS);
+  let free: string | undefined;
+  try {
+    for (;;) {
+      let mine: number | "wait" | "retry" = "wait";
+      if (ensureLockDir(dir)) {
+        free ??= writeTemporary(join(dir, FREE), FREE);
+        mine = attempt(dir, content, step);
+        if (typeof mine === "number") return hold(dir, mine, free, fn, step);
+      }
+      if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${dir})`);
+      if (mine === "wait") Bun.sleepSync(RETRY_MS);
+    }
+  } finally {
+    if (free !== undefined) rmSync(free, { force: true });
   }
+}
+
+/** Runs `fn` holding generation `mine`, then releases it: links the written `free` as the next one, removes `mine`. */
+function hold<T>(dir: string, mine: number, free: string, fn: () => T, step: LockStepHook): T {
   step("acquired", mine);
   try {
     return fn();
   } finally {
-    tryAcquire(join(dir, String(mine + 1)), FREE);
+    publish(free, join(dir, String(mine + 1)));
     step("released", mine + 1);
     rmSync(join(dir, String(mine)), { force: true });
   }
