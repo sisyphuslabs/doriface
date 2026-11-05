@@ -1,7 +1,7 @@
 import { Popover as BasePopover } from "@base-ui/react/popover";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
-import { overlaySurface } from "./overlay.ts";
+import { fitsViewportWidth, overlaySurface } from "./overlay.ts";
 
 export interface PopoverProps {
   readonly trigger: ReactElement;
@@ -32,7 +32,7 @@ export function Popover({
           side={side}
           sideOffset={8}
         >
-          <BasePopover.Popup className={cn(overlaySurface, "w-72 p-3", className)}>
+          <BasePopover.Popup className={cn(overlaySurface, "w-72 p-3", fitsViewportWidth, className)}>
             {title === undefined ? null : (
               <BasePopover.Title className="mb-1.5 text-sm font-semibold">{title}</BasePopover.Title>
             )}

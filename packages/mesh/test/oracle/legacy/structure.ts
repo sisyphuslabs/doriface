@@ -5,6 +5,12 @@ import { isAdmission, type Rec, subjectsOf } from "./dag.ts";
 import type { Engine } from "./engine.ts";
 import type { EngineView } from "./membership.ts";
 
+/** Whether the card's Noise key is the current Noise key of a member other than `subject` (a twin, #90). */
+function twin(r: Rec, before: EngineView | undefined): boolean {
+  const noise = r.card?.noise;
+  return (before?.members ?? []).some((k) => k !== r.subject && before?.noise.get(k) === noise);
+}
+
 /** type_ok(x, view(past(x))). */
 function typeOk(e: Engine, r: Rec, before: EngineView | undefined): boolean {
   const members = before?.members ?? [];
@@ -13,12 +19,12 @@ function typeOk(e: Engine, r: Rec, before: EngineView | undefined): boolean {
       return false;
     case "admit": {
       const subject = r.subject ?? "";
-      return !members.includes(subject) || r.card?.noise === before?.noise.get(subject);
+      return (!members.includes(subject) || r.card?.noise === before?.noise.get(subject)) && !twin(r, before);
     }
     case "name":
       return members.includes(r.subject ?? "");
     case "rekey":
-      return r.by === r.subject;
+      return r.by === r.subject && !twin(r, before);
     case "revoke": {
       const subjects = subjectsOf(r);
       const known = new Set(

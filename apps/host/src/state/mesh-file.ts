@@ -1,5 +1,5 @@
 import type { Signed } from "@doriface/mesh";
-import type { IndexData, MemberEntry, RevokedEntry } from "../mesh/authorize-index.ts";
+import type { IndexData, MemberEntry, NamingEntry, RevokedEntry } from "../mesh/authorize-index.ts";
 import { isRecord } from "./files.ts";
 
 export const MESH_FILE = "mesh.json";
@@ -50,6 +50,12 @@ function revokedEntry(value: unknown): RevokedEntry | undefined {
     : undefined;
 }
 
+function namingEntry(value: unknown): NamingEntry | undefined {
+  if (!isRecord(value)) return undefined;
+  const { signPub, keys } = value;
+  return typeof signPub === "string" && strings(keys) ? { signPub, keys } : undefined;
+}
+
 function all<T>(value: unknown, item: (entry: unknown) => T | undefined): readonly T[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const items = value.map(item);
@@ -63,8 +69,11 @@ function indexData(value: unknown): IndexData | undefined {
   const overCap = all(value["overCap"], memberEntry);
   const revoked = all(value["revoked"], revokedEntry);
   const superseded = value["superseded"];
+  // An index written before `named` existed is missing it: the host rebuilds it at start (MeshStore.ensureIndex).
+  const named = all(value["named"], namingEntry);
   if (members === undefined || overCap === undefined || revoked === undefined || !strings(superseded)) return undefined;
-  return { generation: Number(value["generation"]), members, overCap, revoked, superseded };
+  if (named === undefined) return undefined;
+  return { generation: Number(value["generation"]), members, overCap, revoked, superseded, named };
 }
 
 const objectOr = (value: unknown): Readonly<Record<string, unknown>> => (isRecord(value) ? value : {});
