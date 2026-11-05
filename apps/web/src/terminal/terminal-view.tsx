@@ -23,6 +23,8 @@ import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
+import { wideGlyphScaler } from "./face-scales.ts";
+import { GlyphWarmup } from "./glyph-warmup.ts";
 
 /** Typed text, or the bytes a bound key sends. */
 export type TerminalInput = string | Uint8Array;
@@ -131,6 +133,17 @@ export function TerminalView(props: TerminalViewProps) {
   useTerminalPort(handle, send, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
   useWideGlyphScale(wt, config);
+  // Wide characters in the output are laid out in idle time, so scrolling back to them is not the first time (#286).
+  const warmup = useRef<GlyphWarmup | null>(null);
+  useEffect(() => {
+    if (wt === null) return undefined;
+    const made = new GlyphWarmup(wt.element, () => wideGlyphScaler(wt.element));
+    warmup.current = made;
+    return () => {
+      made.stop();
+      if (warmup.current === made) warmup.current = null;
+    };
+  }, [wt]);
   useTerminalActions(wt, send, focused);
   useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);
@@ -232,6 +245,7 @@ export function TerminalView(props: TerminalViewProps) {
           const resets = new CursorResets();
           attached.onData((bytes) => {
             handle.current?.write(bytes);
+            warmup.current?.note(bytes);
             attached.consumed(bytes.byteLength);
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
             if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
