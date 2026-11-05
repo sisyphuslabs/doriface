@@ -18,13 +18,13 @@ const MIB = 1024 * 1024;
  */
 export const BULK_CALL_MS = 30_000;
 /**
- * The bound for the 8 MiB frame test (both calls and their checks). With #481's fixes at load5 113-123: whole round
- * trips 5.6-13.6 s (traced, n=20) and 16.3 s for the test itself. Worst case with about 3x margin.
+ * The bound for the 8 MiB frame test (both calls and their checks). With #481's fixes at load5 97-123: whole round
+ * trips 5.6-13.6 s (traced, n=20), and the test itself 8.5-22.6 s over 20 runs. Worst case with about 3x margin.
  */
-export const BULK_FRAME_TEST_MS = 50_000;
+export const BULK_FRAME_TEST_MS = 68_000;
 /**
  * The bound for 6 MiB up and 20 MiB down at once. With #481's fixes at load5 113-123 (traced, n=20): 5.0-14.6 s
- * (median 7.0-9.1 s); the test itself 10.0 s. Worst case with about 3x margin; the screen wait leaves 5 s for setup.
+ * (median 7.0-9.1 s); the test itself 3.1-11.4 s over 20 runs. Worst case with about 3x margin; the screen wait leaves 5 s for setup.
  */
 export const BULK_BOTH_TEST_MS = 45_000;
 let relayed: RelayedHost | undefined;
