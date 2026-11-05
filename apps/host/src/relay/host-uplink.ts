@@ -5,6 +5,7 @@ import {
   type RelayProofs,
   LinkClosedError,
   type SessionLink,
+  type SessionRefusal,
   Uplink,
   type UplinkState,
 } from "@doriface/relay-client";
@@ -34,6 +35,11 @@ const FINAL_REASONS: Readonly<Record<number, string>> = {
   4409: "another doriface-host with this identity took over the uplink",
 };
 
+const REFUSALS: Readonly<Record<SessionRefusal["reason"], string>> = {
+  pending_cap: "8 sessions were already waiting for the host's answer",
+  active_cap: "32 sessions were already active",
+};
+
 /** The host's authenticated uplink to the relay; it also registers typed-code pairing slots over that uplink. */
 export class HostUplink implements PairingSlotRegistrar {
   readonly #options: HostUplinkOptions;
@@ -45,12 +51,20 @@ export class HostUplink implements PairingSlotRegistrar {
   }
 
   async start(handlers: UplinkHandlers): Promise<void> {
-    const { relayUrl, identity, createSocket, proofs } = this.#options;
+    const { relayUrl, identity, createSocket, proofs, log } = this.#options;
+    // One line per kind of refusal and uplink connection: a relay that floods OPENs cannot flood the log as well.
+    let told = new Set<SessionRefusal["reason"]>();
     this.#uplink = await Uplink.start({
       relayUrl,
       signer: ed25519Signer(identity.sign.secretKey),
       onSession: handlers.onSession,
+      onRefused: ({ sessionId, reason }) => {
+        if (told.has(reason)) return;
+        told.add(reason);
+        log(`relay: refused session ${sessionId} with 4429: ${REFUSALS[reason]} (the relay should not have opened it)`);
+      },
       onState: (state) => {
+        if (state.state === "answered") told = new Set();
         this.#report(state);
         if (state.state === "answered") handlers.onConnected();
         if (state.state === "waiting") handlers.onDropped?.();
