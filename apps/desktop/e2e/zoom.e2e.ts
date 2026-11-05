@@ -93,6 +93,7 @@ const drawn = (page: Page) =>
       dpr: devicePixelRatio,
       cssWidth: innerWidth,
       cellDevicePx: parseFloat(getComputedStyle(element).getPropertyValue("--term-cell-width")) * devicePixelRatio,
+      fontPx: parseFloat(rowStyle.fontSize),
       fontSize: getComputedStyle(element).getPropertyValue("--term-font-size").trim(),
       // Against the font's own advance, which no layout or transform can distort.
       cellMinusAdvance:
@@ -117,14 +118,16 @@ async function coreGrid(page: Page): Promise<string> {
 type Drawn = Awaited<ReturnType<typeof drawn>>;
 
 /**
- * The focused terminal once its grid is whole: its cell width is the font's own advance and the core holds the grid it
- * renders. wterm swaps the grid's row elements a frame before it redraws their text, so one read can pair a new row count
+ * The focused terminal once its grid is whole: its cell width is the font's own advance rounded to device pixels, as
+ * Ghostty rounds it (within half a device pixel and one 1/64 px layout unit; a window zoom moves it far more), and the
+ * core holds the grid it renders. wterm swaps the grid's row elements a frame before it redraws their text, so one read can pair a new row count
  * with an old column count.
  */
 async function settled(page: Page, ready: (now: Drawn) => boolean = () => true): Promise<Drawn> {
   const whole = async (): Promise<boolean> => {
     const now = await drawn(page);
-    return ready(now) && Math.abs(now.cellMinusAdvance) < 0.05 && (await coreGrid(page)) === now.grid;
+    const native = Math.abs(now.cellMinusAdvance) <= 0.5 / now.dpr + 1 / 64;
+    return ready(now) && native && (await coreGrid(page)) === now.grid;
   };
   await expect.poll(whole, { timeout: 15_000 }).toBe(true);
   return drawn(page);
@@ -142,8 +145,15 @@ async function step(page: Page, press: () => Promise<void>, from: Drawn, delta: 
   expect(now.dpr).toBe(from.dpr);
   expect(now.cssWidth).toBe(from.cssWidth);
   expect(now.transformedAncestors).toBe(0);
-  if (delta > 0) expect(now.cellDevicePx).toBeGreaterThan(from.cellDevicePx);
-  else expect(now.cellDevicePx).toBeLessThan(from.cellDevicePx);
+  // The text itself changes size every step; the cell, rounded to device pixels as Ghostty rounds it, can stay put for
+  // one point (12 and 13 points both round JetBrains Mono's advance to 10 px at DPR 1) but never moves the other way.
+  if (delta > 0) {
+    expect(now.fontPx).toBeGreaterThan(from.fontPx);
+    expect(now.cellDevicePx).toBeGreaterThanOrEqual(from.cellDevicePx);
+  } else {
+    expect(now.fontPx).toBeLessThan(from.fontPx);
+    expect(now.cellDevicePx).toBeLessThanOrEqual(from.cellDevicePx);
+  }
   expect(await chrome(page)).toEqual(header);
   return now;
 }
@@ -167,7 +177,10 @@ test("Cmd/Ctrl + = / - / 0 size the terminal text, not the window", async () => 
   const bigger = await step(page, () => page.keyboard.press("ControlOrMeta+Equal"), before, 1);
   const smaller = await step(page, () => page.keyboard.press("ControlOrMeta+Minus"), bigger, -1);
   const smallest = await step(page, () => page.keyboard.press("ControlOrMeta+Minus"), smaller, -1);
-  expect(smallest.cols).toBeGreaterThan(before.cols);
+  // The grid refits to the text size: a point up fits fewer columns; a point down never fits fewer (at DPR 1, 12 and 13
+  // points share a 10 px cell, so it can fit the same).
+  expect(bigger.cols).toBeLessThan(before.cols);
+  expect(smallest.cols).toBeGreaterThanOrEqual(before.cols);
 
   await page.keyboard.press("ControlOrMeta+0");
   const reset = await settled(page, (now) => now.grid === before.grid);

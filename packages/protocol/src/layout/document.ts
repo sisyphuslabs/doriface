@@ -140,6 +140,22 @@ export function renameSpace(doc: JsonObject, spaceId: string, name: string): Jso
 }
 
 /**
+ * The document with tab `tabId` named `name`, as herdr-app's `tab.rename` sets the tab's `name` ("": unnamed again); null
+ * when the tab is gone or already has that name, so nothing is written. Every other tab and the tab's own fields stay.
+ */
+export function renameTab(doc: JsonObject, tabId: string, name: string): JsonObject | null {
+  const spaces = spacesOf(doc);
+  const at = spaces.findIndex((space) => tabsIn(space).some((tab) => text(tab["id"]) === tabId));
+  const space = spaces[at];
+  if (space === undefined) return null;
+  const tabs = tabsIn(space);
+  const index = tabs.findIndex((tab) => text(tab["id"]) === tabId);
+  const tab = tabs[index];
+  if (tab === undefined || text(tab["name"]) === name) return null;
+  return { ...doc, spaces: spaces.with(at, { ...space, tabs: tabs.with(index, { ...tab, name }) }) };
+}
+
+/**
  * The document with a tab moved to index `to` among its own space's tabs (clamped), the others keeping their order; null
  * when the tab is gone or already there, so nothing is written.
  */

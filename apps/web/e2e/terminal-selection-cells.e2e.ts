@@ -110,6 +110,14 @@ test("a selection over a mixed Korean and ASCII line paints exactly its cells, c
   await expect(row.locator(".term-wide")).toHaveCount(5);
 
   expect(await selectAcross(row)).toBe("b \uAC00\uB098\uB2E4 cd \uD55C\uAE00");
+  // Only where the selection paints is measured: glyphs are drawn over it, as Ghostty draws them, and a Hangul syllable
+  // fitted to its two cells reaches the row's top and bottom pixel lines, so the text is made transparent for the image.
+  // Selected text is drawn in its ::selection colour, so that is made transparent too.
+  await page.addStyleTag({
+    content: [".term-row", ".term-row *", ".term-row::selection", ".term-row *::selection"]
+      .map((rule) => `${rule} { color: transparent !important; -webkit-text-fill-color: transparent !important; }`)
+      .join("\n"),
+  });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
   const cell = await terminal.evaluate((element) =>

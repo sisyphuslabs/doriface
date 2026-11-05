@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../json.ts";
-import { addTab, docSpaces, editTab, moveTab, readDocument, renameSpace, tabsOf } from "./document.ts";
+import { addTab, docSpaces, editTab, moveTab, readDocument, renameSpace, renameTab, tabsOf } from "./document.ts";
 import { panesOf, splitPane, terminalBlock, removePane } from "./tree.ts";
 
 // Written by herdr-app 0.1.12 against hc 0.1.17: ⌘D ⌘⇧D ⌘D ⌘⇧D in one tab, a second tab split down then beside a
@@ -223,5 +223,18 @@ describe("spaces and their tabs' order (#404)", () => {
     ]);
     expect(Array.isArray(spaces) ? spaces[0] : null).toBe(Array.isArray(kept["spaces"]) ? kept["spaces"][0] : null);
     expect([renameSpace(two, "spc-a", "alpha"), renameSpace(two, "gone", "x")]).toEqual([null, null]);
+  });
+
+  test("a tab rename sets only that tab's name, keeps the other tabs as read, and writes nothing when it changes nothing", () => {
+    const renamed = renameTab(two, "a2", "fix login");
+    expect(renamed === null ? null : tabsOf(renamed).map((each) => [each.id, each.name])).toEqual([
+      ["a1", ""],
+      ["a2", "fix login"],
+      ["a3", ""],
+      ["b1", ""],
+    ]);
+    const spaces = renamed?.["spaces"];
+    expect(Array.isArray(spaces) ? spaces[1] : null).toBe(Array.isArray(two["spaces"]) ? two["spaces"][1] : null);
+    expect([renameTab(two, "a1", ""), renameTab(two, "gone", "x")]).toEqual([null, null]);
   });
 });

@@ -181,7 +181,14 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (shownTab !== undefined && shownPane !== undefined) splits.shown(shownTab, shownPane);
   }, [splits, shownTab, shownPane]);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
-  const newTerminal = (): void => runs.start(runParamsFor(terminals.find((terminal) => terminal.address === inView)));
+  // A new tab goes to the selected space (openTerminal), so it starts where that space is when no terminal is in focus.
+  const newTerminal = (): void =>
+    runs.start(
+      runParamsFor(
+        terminals.find((terminal) => terminal.address === inView),
+        spaces.find((space) => space.id === layout.active?.spaceKey),
+      ),
+    );
   const split = (axis: Axis, target?: PaneTarget): void => {
     const from =
       target === undefined

@@ -180,7 +180,8 @@ export interface SpacesSource {
 }
 
 /** A space of a layout document, with the terminals its tabs show (live or not), in tab order. */
-export type ListedSpace = Space & { readonly addresses: readonly string[] };
+/** `dir`: where the space is, its folder, else its first live terminal's directory; empty when neither is known. */
+export type ListedSpace = Space & { readonly addresses: readonly string[]; readonly dir: string };
 
 /**
  * The spaces as herdr-app lists them (#404): every space of every machine's layout document, this machine's first, then
@@ -235,7 +236,7 @@ export function layoutSpaces(
       (other) => other.key !== entry.key && other.machine === entry.machine && other.name === entry.name,
     );
     const name = twin && !entry.labeled && entry.dir !== "" ? `${entry.name} · ${parentName(entry.dir)}` : entry.name;
-    const space: ListedSpace = { id: entry.key, name, tabs: entry.tabs, addresses: entry.addresses };
+    const space: ListedSpace = { id: entry.key, name, tabs: entry.tabs, addresses: entry.addresses, dir: entry.dir };
     if (entry.machine !== undefined) Object.assign(space, { machine: entry.machine });
     const attention = ATTENTION.find((status) => entry.statuses.has(status));
     if (attention !== undefined) Object.assign(space, { attention });

@@ -3,6 +3,8 @@ import { useId, useState } from "react";
 
 export interface RenameDialogProps {
   readonly title: string;
+  /** The name the field starts with, when that is not `title` (a tab shown by its program's title has no name). */
+  readonly value?: string;
   readonly busy: boolean;
   readonly error: string | null;
   readonly description?: string;
@@ -12,6 +14,7 @@ export interface RenameDialogProps {
 
 export function RenameDialog({
   title,
+  value = title,
   busy,
   error,
   description = "Every device shows the new name. Leave it empty to show the program's own title again.",
@@ -19,7 +22,7 @@ export function RenameDialog({
   onCancel,
 }: RenameDialogProps) {
   const id = useId();
-  const [name, setName] = useState(title);
+  const [name, setName] = useState(value);
   return (
     <Dialog
       open
