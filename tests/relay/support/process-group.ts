@@ -4,6 +4,8 @@ import { rm } from "node:fs/promises";
 
 const TERM_GRACE_MS = 5_000;
 const KILL_GRACE_MS = 2_000;
+/** The longest `stopProcessGroup` waits before it gives up: the SIGTERM grace, then the SIGKILL grace. */
+export const STOP_BOUND_MS = TERM_GRACE_MS + KILL_GRACE_MS;
 const POLL_MS = 25;
 const INTERRUPTS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
