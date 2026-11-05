@@ -289,6 +289,9 @@ const alive = (pid: number): boolean => {
   }
 };
 
+/** `HcConnection`'s default handshake deadline: the wait a stop must not sit out. */
+const HANDSHAKE_TIMEOUT_MS = 10_000;
+
 describe("the write of a host's OS", () => {
   test("starts no hc connect until a client opens a pipe, and stop reaps the write's child", async () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-silent-"));
@@ -329,6 +332,49 @@ describe("the write of a host's OS", () => {
       client.socket.close();
       await host.stop();
       expect(pids.filter(alive)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("stop does not wait out a handshake the core never answers", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-silent-stop-"));
+    // The same hc that never answers the hello: every connect of this host is still waiting for its reply when the
+    // host is told to stop. Stopping must end those handshakes, not sit out their deadline (10 s each).
+    const hc = join(dir, "hc");
+    writeFileSync(
+      hc,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/.pid-$$" && mv "${dir}/.pid-$$" "${dir}/connect-$$.pid"\nwhile read -r line; do :; done\n`,
+      { mode: 0o755 },
+    );
+    const connects = () => readdirSync(dir).filter((name) => name.startsWith("connect-"));
+    const token = generateToken();
+    try {
+      const host = await startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        token,
+        hc,
+        platform: "darwin",
+        log: () => {},
+      });
+      const both = new Promise<void>((resolve) => {
+        const watcher = watch(dir, () => {
+          if (connects().length < 2) return;
+          watcher.close();
+          resolve();
+        });
+      });
+      const client = await openWsClient(host.url, token);
+      await both;
+      client.socket.close();
+      const started = performance.now();
+      await host.stop();
+      const took = performance.now() - started;
+      const pids = connects().map((name) => Number(readFileSync(join(dir, name), "utf8")));
+      for (const pid of pids) expect(pid).toBeGreaterThan(0);
+      expect(pids.filter(alive)).toEqual([]);
+      // Well under one handshake deadline: what is left is closing the children, not waiting for a reply.
+      expect(took).toBeLessThan(HANDSHAKE_TIMEOUT_MS / 2);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
