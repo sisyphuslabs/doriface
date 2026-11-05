@@ -74,4 +74,16 @@ describe("stopStarted", () => {
       "startup: the gateway failed after the deadline: Error: closed too late",
     ]);
   });
+
+  test("after the deadline, a part whose stop settles at once is not reported", async () => {
+    const logs: string[] = [];
+    const stopped: string[] = [];
+    const parts: StartedPart[] = [
+      { name: "gateway", stop: async () => void stopped.push("gateway") },
+      { name: "main listener", stop: () => Promise.resolve(stopped.push("main listener")) },
+    ];
+    await stopStarted(parts, (line) => logs.push(line), { expired: Promise.resolve() });
+    expect(stopped).toEqual(["main listener", "gateway"]);
+    expect(logs).toEqual([]);
+  });
 });
