@@ -160,6 +160,24 @@ export function setDesktopMenuKeys(keys: Readonly<Record<string, string>>, scope
   if (shown instanceof Promise) shown.catch((error: unknown) => console.error(`menu shortcuts: ${String(error)}`));
 }
 
+/** Runs `ready` with the version of each release the desktop app staged; does nothing outside the desktop app. */
+export function onDesktopUpdateReady(ready: (version: string) => void, scope: object = globalThis): void {
+  bridgeMethod(
+    "onUpdateReady",
+    scope,
+  )?.((update: unknown) => {
+    const version = typeof update === "object" && update !== null ? Reflect.get(update, "version") : undefined;
+    if (typeof version === "string") ready(version);
+  });
+}
+
+/** Asks the desktop app to quit and install its staged release (Restart to update). */
+export function installDesktopUpdate(scope: object = globalThis): void {
+  const installing = bridgeMethod("installUpdate", scope)?.();
+  if (installing instanceof Promise)
+    installing.catch((error: unknown) => console.error(`install update: ${String(error)}`));
+}
+
 export function desktopBridge(scope: object = globalThis): DesktopBridge | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
   if (typeof bridge !== "object" || bridge === null) return null;
