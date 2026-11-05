@@ -5,6 +5,7 @@ import {
   buildTabs,
   keepMounts,
   keepTransient,
+  layoutIds,
   looseKey,
   newMounts,
   TRANSIENT,
@@ -42,8 +43,21 @@ test("the first live terminal shown alone is kept when a new tab opens, on this 
   expect(keepTransient(tab, "build-box/t1", true)).toBe("apart");
   expect(keepTransient(tab, "t2", false)).toBe("apart");
   expect(keepTransient(tab, "t1", true)).toBeNull();
-  const loose: LayoutTab | null = tab === null ? null : { ...tab, key: looseKey("t1") };
+  const loose: LayoutTab | null = tab === null ? null : { ...tab, key: looseKey("t1", layoutIds([here])) };
   expect(keepTransient(loose, "build-box/t1", true)).toBeNull();
+});
+
+test("an added machine's loose tab keeps its key when the machine is renamed, so it stays the tab in view (#459)", () => {
+  const box = (name: string): MachineLayout => ({
+    ...here,
+    machine: name,
+    machineId: "id-box",
+    readOnly: "the layout is loading",
+  });
+  const [before] = buildTabs([here, box("build-box")], [], ["build-box/t1"]);
+  const [after] = buildTabs([here, box("build-renamed")], [], ["build-renamed/t1"]);
+  expect(after?.key).toBe(before?.key ?? "");
+  expect(after?.panes.map((pane) => pane.address)).toEqual(["build-renamed/t1"]);
 });
 
 test("a live terminal is shown alone only while the core has no layout; a layout whose tabs were all closed shows none (#354)", () => {

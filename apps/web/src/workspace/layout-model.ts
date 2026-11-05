@@ -2,6 +2,7 @@ import type { Terminal } from "@doriface/protocol";
 import { type Node, panesOf, tabsOf, terminalBlock } from "@doriface/protocol/layout";
 import { tabKey, type View } from "../layout/view.ts";
 import { machineOf } from "./model.ts";
+import { type MachineIds, tabKey as terminalKey } from "./tab-keys.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
 
 export interface LayoutPane {
@@ -82,7 +83,16 @@ export function keepMounts(tabs: readonly LayoutTab[], mounts: Mounts): LayoutTa
 
 export const TRANSIENT = "transient";
 const LOOSE = "loose:";
-export const looseKey = (address: string): string => `${LOOSE}${address}`;
+/** hc's permanent machine ids by the names the layouts give the machines now, both ways. */
+export function layoutIds(layouts: readonly MachineLayout[]): MachineIds {
+  const named = layouts.flatMap((layout) =>
+    layout.machine === null || layout.machineId === null ? [] : [[layout.machine, layout.machineId] as const],
+  );
+  return { byName: new Map(named), byId: new Map(named.map(([name, id]) => [id, name])) };
+}
+
+/** A loose tab's key, from what its terminal is remembered by (tab-keys.ts): a machine rename keeps it (#459). */
+export const looseKey = (address: string, ids: MachineIds): string => `${LOOSE}${terminalKey(address, ids)}`;
 
 export const qualify = (local: string, machine: string | null): string =>
   machine === null ? local : `${machine}/${local}`;
@@ -111,12 +121,12 @@ function docTabs(layout: MachineLayout): LayoutTab[] {
   }));
 }
 
-function looseTab(address: string, layouts: readonly MachineLayout[]): LayoutTab {
+function looseTab(address: string, layouts: readonly MachineLayout[], ids: MachineIds): LayoutTab {
   const machine = machineOf(address) ?? null;
   const owner = layouts.find((layout) => layout.machine === machine);
   return {
-    key: looseKey(address),
-    id: looseKey(address),
+    key: looseKey(address, ids),
+    id: looseKey(address, ids),
     space: "",
     machine,
     name: "",
@@ -141,12 +151,13 @@ export function buildTabs(
 ): LayoutTab[] {
   const tabs = layouts.flatMap(docTabs);
   const shown = new Set(tabs.flatMap((tab) => tab.panes.map((pane) => pane.address)));
-  const extra = loose.filter((address) => !shown.has(address)).map((address) => looseTab(address, layouts));
+  const ids = layoutIds(layouts);
+  const extra = loose.filter((address) => !shown.has(address)).map((address) => looseTab(address, layouts, ids));
   if (tabs.length + extra.length > 0) return [...tabs, ...extra];
   const local = layouts.find((layout) => layout.machine === null);
   const first = terminals.find((terminal) => terminal.state === "live");
   if (local === undefined || !local.loaded || local.doc !== null || first === undefined) return [];
-  return [{ ...looseTab(first.address, layouts), key: TRANSIENT, id: TRANSIENT }];
+  return [{ ...looseTab(first.address, layouts, ids), key: TRANSIENT, id: TRANSIENT }];
 }
 
 export interface Picked {
