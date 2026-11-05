@@ -41,6 +41,7 @@ import {
   currentUserSid,
   resolveSidAlias,
 } from "./native.ts";
+import { pidIsLive } from "../lock.ts";
 import { checkNamespace, type ChainFolder } from "./namespace.ts";
 import { parseSddl, SddlError } from "./sddl.ts";
 
@@ -58,7 +59,7 @@ export const PRIVATE_STATE_FILES = [
 ] as const;
 
 /** The temporary files this host's writers leave only when a crash interrupts them. */
-const TEMPORARY = /\.\d+\.[0-9a-f-]+\.tmp$/;
+const TEMPORARY = /\.(\d+)\.[0-9a-f-]+\.tmp$/;
 
 export class PrivateStateRefused extends Error {
   override readonly name = "PrivateStateRefused";
@@ -172,7 +173,10 @@ export function openPrivateStateDir(requested: string): string {
     else if (folderCustody.verdict !== "private") problems.push(refusal(dir, folderCustody));
     const names = new Set<string>(PRIVATE_STATE_FILES);
     for (const name of readdirSync(dir)) {
-      const temporary = TEMPORARY.test(name);
+      const writer = TEMPORARY.exec(name)?.[1];
+      const temporary = writer !== undefined;
+      // A live process's temporary file is mid-write and the state lock sweeps its own: neither is debris to remove.
+      if (temporary && (name.startsWith("state.lock.") || pidIsLive(Number(writer)))) continue;
       if (!names.has(name) && !temporary) continue;
       const path = join(dir, name);
       const custody = withHandle(openFile(path, { ...folderOptions, flags: FILE_FLAG_OPEN_REPARSE_POINT }), custodyOf);

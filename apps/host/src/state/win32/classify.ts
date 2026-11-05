@@ -31,8 +31,12 @@ const grantsRead = (ace: Ace): boolean => (ace.mask & (READ_DATA | GENERIC_READ 
 export function classifyCustody(descriptor: Descriptor, user: string): Custody {
   const { dacl } = descriptor;
   if (dacl === undefined) return { verdict: "exposed", principals: ["Everyone (no access control list)"] };
-  if (descriptor.owner !== user)
+  // An elevated administrator's process creates objects owned by BUILTIN\Administrators, as a v0.1.0 host run that
+  // way did: the same trusted custodian branch (a) already accepts, so the repair takes ownership for the user.
+  const adminOwned = descriptor.owner === ADMINISTRATORS_SID;
+  if (descriptor.owner !== user && !adminOwned) {
     return { verdict: "unsupported", reason: `owned by ${descriptor.owner}, not this user` };
+  }
   if (dacl.length === 0) return { verdict: "unsupported", reason: "its access list is empty, so it is unusable" };
   const allows = dacl.filter((ace) => ace.type === "A" && appliesToObject(ace));
   const special = allows.find((ace) => ace.sid === OWNER_RIGHTS_SID || ace.sid === CREATOR_OWNER_SID);
@@ -48,6 +52,6 @@ export function classifyCustody(descriptor: Descriptor, user: string): Custody {
     return { verdict: "unsupported", reason: "it does not let this user read it" };
   }
   const inherited = dacl.some((ace) => ace.flags.includes("ID"));
-  if (others.length > 0 || !descriptor.protected || inherited) return { verdict: "repairable" };
+  if (adminOwned || others.length > 0 || !descriptor.protected || inherited) return { verdict: "repairable" };
   return { verdict: "private" };
 }

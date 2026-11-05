@@ -115,7 +115,7 @@ function holderContent(): string {
 }
 
 /** Whether `pid` may still be running. Anything that is not a valid pid counts as running. */
-function pidIsLive(pid: number): boolean {
+export function pidIsLive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return true;
   try {
     process.kill(pid, 0);

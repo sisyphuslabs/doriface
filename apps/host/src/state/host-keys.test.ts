@@ -11,11 +11,15 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("host keys", () => {
-  test.each(["644", "640", "604"])("a keys file with mode %s is refused, not loaded", (mode) => {
-    const created = loadHostIdentity(dir);
-    chmodSync(join(dir, "host-keys.json"), Number.parseInt(mode, 8));
-    expect(() => loadHostIdentity(dir)).toThrow("readable by other users");
-    chmodSync(join(dir, "host-keys.json"), 0o600);
-    expect(loadHostIdentity(dir).hostId).toBe(created.hostId);
-  });
+  // POSIX mode bits; on Windows the same refusal is the ACL check (private-state.windows.test.ts W3).
+  test.skipIf(process.platform === "win32").each(["644", "640", "604"])(
+    "a keys file with mode %s is refused, not loaded",
+    (mode) => {
+      const created = loadHostIdentity(dir);
+      chmodSync(join(dir, "host-keys.json"), Number.parseInt(mode, 8));
+      expect(() => loadHostIdentity(dir)).toThrow("readable by other users");
+      chmodSync(join(dir, "host-keys.json"), 0o600);
+      expect(loadHostIdentity(dir).hostId).toBe(created.hostId);
+    },
+  );
 });

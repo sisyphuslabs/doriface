@@ -14,11 +14,11 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 describe("this machine's device key", () => {
   test("is generated once, kept owner-only, and loads the same afterwards", () => {
     const first = loadDeviceKey(dir);
-    expect(statSync(join(dir, "device-key.json")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(dir, "device-key.json")).mode & 0o777).toBe(0o600);
     expect(loadDeviceKey(dir)).toEqual(first);
   });
 
-  test("a key file others can read is refused, not used", () => {
+  test.skipIf(process.platform === "win32")("a key file others can read is refused, not used", () => {
     loadDeviceKey(dir);
     chmodSync(join(dir, "device-key.json"), 0o644);
     expect(() => loadDeviceKey(dir)).toThrow("readable by other users");
@@ -33,7 +33,7 @@ describe("KnownHosts", () => {
     const reloaded = new KnownHosts(dir);
     expect(reloaded.get(host.hostId)).toEqual(host);
     expect(reloaded.get("b".repeat(26))).toBeUndefined();
-    expect(statSync(join(dir, "known-hosts.json")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(dir, "known-hosts.json")).mode & 0o777).toBe(0o600);
   });
 
   test("pairing the same host again replaces its record", () => {
