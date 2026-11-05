@@ -15,6 +15,8 @@ export function tappedHc(dir: string, realHc: string): string {
 }
 
 export interface Tap {
+  /** The tapped `hc connect`'s pid, which names its files. */
+  readonly pid: string;
   readonly read: Uint8Array;
   readonly wrote: Uint8Array;
 }
@@ -24,13 +26,19 @@ export function taps(dir: string): Tap[] {
   const file = (name: string): Uint8Array => {
     try {
       return new Uint8Array(readFileSync(join(folder, name)));
-    } catch {
-      return new Uint8Array(0);
+    } catch (error) {
+      // A side that has not written yet has no file; any other read error is a broken tap, not an empty one.
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return new Uint8Array(0);
+      throw error;
     }
   };
   const pids = new Set(readdirSync(folder).map((name) => name.split(".")[0] ?? ""));
-  return [...pids].map((pid) => ({ read: file(`${pid}.in`), wrote: file(`${pid}.out`) }));
+  return [...pids].map((pid) => ({ pid, read: file(`${pid}.in`), wrote: file(`${pid}.out`) }));
 }
+
+/** Where what the client received first differs from what hc wrote: hc's bytes are the expected ones. */
+export const replyDifference = (tap: Tap, received: Uint8Array): string | undefined =>
+  firstDifference(tap.wrote, received);
 
 /** The tap of the connection that sent `sent`: the one whose input shares the longest prefix with it. */
 export function tapFor(all: readonly Tap[], sent: Uint8Array): Tap | undefined {
