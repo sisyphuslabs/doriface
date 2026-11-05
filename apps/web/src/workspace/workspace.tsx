@@ -89,7 +89,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     told,
     machineReads > 0,
   );
-  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, layout.dropPane);
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, layout.dropPane);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
