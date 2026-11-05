@@ -29,12 +29,26 @@ export const DEFAULT_SETTINGS: ConnectionSettings = {
 
 const KEY = "doriface.connection";
 
+/** Whether this is a dev build (vite dev): only a dev build may name another relay or switch to the loopback gateway. */
+export const DEV_BUILD: boolean = import.meta.env.DEV === true;
+
+/** The settings a build may use: a release build always reaches the production relay, whatever relay was saved. */
+export function lockRelay(settings: ConnectionSettings, devBuild: boolean = DEV_BUILD): ConnectionSettings {
+  return devBuild || settings.relayUrl === DEFAULT_RELAY_URL ? settings : { ...settings, relayUrl: DEFAULT_RELAY_URL };
+}
+
 function text(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
 }
 
-/** Reads stored settings; anything malformed falls back field by field to the defaults. */
-export function loadSettings(storage: Storage = localStorage): ConnectionSettings {
+/**
+ * Reads stored settings; anything malformed falls back field by field to the defaults, and a release build drops a saved
+ * custom relay address.
+ */
+export function loadSettings(
+  storage: Storage = localStorage,
+  { devBuild = DEV_BUILD }: { readonly devBuild?: boolean } = {},
+): ConnectionSettings {
   let parsed: unknown;
   try {
     parsed = JSON.parse(storage.getItem(KEY) ?? "null");
@@ -44,15 +58,18 @@ export function loadSettings(storage: Storage = localStorage): ConnectionSetting
   if (typeof parsed !== "object" || parsed === null) return DEFAULT_SETTINGS;
   const get = (key: string): unknown => (Object.hasOwn(parsed, key) ? Reflect.get(parsed, key) : undefined);
   const d = DEFAULT_SETTINGS;
-  return {
-    mode: get("mode") === "loopback" ? "loopback" : "relay",
-    relayUrl: text(get("relayUrl"), d.relayUrl),
-    directUrl: text(get("directUrl"), d.directUrl),
-    hostId: text(get("hostId"), d.hostId),
-    hostKey: text(get("hostKey"), d.hostKey),
-    loopbackUrl: text(get("loopbackUrl"), d.loopbackUrl),
-    token: text(get("token"), d.token),
-  };
+  return lockRelay(
+    {
+      mode: get("mode") === "loopback" ? "loopback" : "relay",
+      relayUrl: text(get("relayUrl"), d.relayUrl),
+      directUrl: text(get("directUrl"), d.directUrl),
+      hostId: text(get("hostId"), d.hostId),
+      hostKey: text(get("hostKey"), d.hostKey),
+      loopbackUrl: text(get("loopbackUrl"), d.loopbackUrl),
+      token: text(get("token"), d.token),
+    },
+    devBuild,
+  );
 }
 
 export function saveSettings(settings: ConnectionSettings, storage: Storage = localStorage): void {
