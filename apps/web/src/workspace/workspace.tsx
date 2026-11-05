@@ -23,7 +23,7 @@ import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
-import { findTerminal } from "./layout-model.ts";
+import { findTerminal, type LayoutTab } from "./layout-model.ts";
 import { useLayout, type PaneTarget } from "./use-layout.ts";
 import { chainedSplit, SplitChain } from "./split-chain.ts";
 import { afterEnd } from "./session-actions.ts";
@@ -207,8 +207,12 @@ export function Workspace({ connection }: WorkspaceProps) {
       (address, pane, made) => layout.split(axis, address, { tab: tab.key, pane }, made),
     );
   };
+  // A space's last tab takes the space with it, as herdr-app's tab.close: that always asks first (CloseTabDialog).
+  const lastOfSpace = (tab: LayoutTab | undefined): boolean =>
+    tab !== undefined && !tab.transient && layout.tabs.filter((each) => each.spaceKey === tab.spaceKey).length === 1;
   const closeTab = (key: string): void => {
     const tab = layout.tabs.find((each) => each.key === key);
+    if (lastOfSpace(tab)) return setClosingTab(key);
     const shown = tab?.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
     const [only] = shown;
     if (shown.length === 1 && only !== undefined) setAsk({ kind: "close", address: only });
@@ -218,6 +222,12 @@ export function Workspace({ connection }: WorkspaceProps) {
   const onEnd = (address: string, end: TerminalEnd): void => {
     // An End of this session drops its pane only once it has removed the terminal (see afterEnd).
     if (closesTab(end)) afterEnd(address, () => dropEnded(address));
+  };
+  // A tab's only pane closes as its tab, as herdr-app's pane.close does.
+  const closePane = (address: string): void => {
+    const found = findTerminal(layout.tabs, address);
+    if (found !== null && found.tab.panes.length === 1) closeTab(found.tab.key);
+    else setAsk({ kind: "close", address });
   };
   const closing = layout.tabs.find((tab) => tab.key === closingTab);
   const phoneTab = phoneOpen === null ? null : findTerminal(layout.tabs, phoneOpen);
@@ -312,7 +322,7 @@ export function Workspace({ connection }: WorkspaceProps) {
                     onNew={() => newTerminal()}
                     onSplit={split}
                     onCloseTab={closeTab}
-                    onClosePane={(address) => setAsk({ kind: "close", address })}
+                    onClosePane={closePane}
                     onEnd={onEnd}
                     onPalette={onPalette}
                     onSession={onSession}
@@ -346,6 +356,9 @@ export function Workspace({ connection }: WorkspaceProps) {
               connection={connection}
               terminals={terminals}
               tab={closing}
+              {...(lastOfSpace(closing)
+                ? { space: { name: spaces.find((space) => space.id === closing.spaceKey)?.name ?? "Space" } }
+                : {})}
               onClosed={() => layout.closeTab(closing.key)}
               onDone={() => setClosingTab(null)}
             />

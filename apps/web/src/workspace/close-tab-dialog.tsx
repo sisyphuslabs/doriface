@@ -12,22 +12,28 @@ export interface CloseTabDialogProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Terminal[];
   readonly tab: LayoutTab;
+  /** The space whose last tab this is: closing it closes the space, as herdr-app's `tab.close`, and always asks first. */
+  readonly space?: { readonly name: string };
   /** Takes the tab out of the layout once its sessions have ended. */
   readonly onClosed: () => void;
   readonly onDone: () => void;
 }
 
+const counted = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
+
 /**
- * Closing a tab of several panes ends all of their programs, as in herdr-app and Ghostty. It asks once first only as
+ * Closing a space's last tab closes the space, as herdr-app's `space.close` asks: "Close space?", naming its tabs and
+ * terminals, and Close ends them. Closing a tab of several panes ends all of their programs, as in herdr-app and Ghostty. It asks once first only as
  * confirm-close-surface says (while one of them runs a program, by default); otherwise it shows only if an End fails.
  */
-export function CloseTabDialog({ connection, terminals, tab, onClosed, onDone }: CloseTabDialogProps) {
+export function CloseTabDialog({ connection, terminals, tab, space, onClosed, onDone }: CloseTabDialogProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const shown = new Set(tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])));
   const live = terminals.filter((terminal) => shown.has(terminal.address) && terminal.state === "live");
   const count = live.length;
-  const quiet = !asksBeforeClosing(single(useTerminalConfig(), "confirm-close-surface"), live);
+  const asks = asksBeforeClosing(single(useTerminalConfig(), "confirm-close-surface"), live);
+  const quiet = space === undefined && !asks;
   const end = async (): Promise<void> => {
     setBusy(true);
     const calls = sessionCalls(connection);
@@ -43,7 +49,7 @@ export function CloseTabDialog({ connection, terminals, tab, onClosed, onDone }:
   };
   const endedQuietly = useRef(false);
   useEffect(() => {
-    if (count === 0) {
+    if (count === 0 && space === undefined) {
       onClosed();
       onDone();
       return;
@@ -52,15 +58,21 @@ export function CloseTabDialog({ connection, terminals, tab, onClosed, onDone }:
     endedQuietly.current = true;
     void end();
   });
-  if (count === 0 || (quiet && error === null)) return null;
+  if ((count === 0 && space === undefined) || (quiet && error === null)) return null;
   return (
     <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onDone();
       }}
-      title="Close this tab?"
-      description={count === 1 ? "The running program will end." : `Its ${count} sessions will end.`}
+      title={space === undefined ? "Close this tab?" : "Close space?"}
+      description={
+        space !== undefined
+          ? `${space.name} \u2014 ${counted(1, "tab")}, ${counted(shown.size, "terminal")}`
+          : count === 1
+            ? "The running program will end."
+            : `Its ${count} sessions will end.`
+      }
       actions={
         <>
           <Button variant="ghost" onClick={onDone}>
