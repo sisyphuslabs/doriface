@@ -17,6 +17,10 @@ const bridge: DorifaceBridge = {
     const opened: unknown = await ipcRenderer.invoke(Channel.openExternal, url);
     return opened === true;
   },
+  async openLink(url) {
+    const opened: unknown = await ipcRenderer.invoke(Channel.openLink, url);
+    return opened === true;
+  },
   async startLocalHost() {
     const answer: unknown = await ipcRenderer.invoke(Channel.startLocalHost);
     if (isLocalHostStartFailed(answer)) return { failure: answer.failure };

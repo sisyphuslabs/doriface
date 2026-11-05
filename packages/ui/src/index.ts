@@ -51,6 +51,9 @@ export { skipMenuHandler } from "./components/menu.tsx";
 export {
   ContextMenu,
   Menu,
+  MenuCaption,
+  PointMenu,
+  type PointMenuProps,
   MenuItem,
   MenuRadioGroup,
   MenuRadioItem,
