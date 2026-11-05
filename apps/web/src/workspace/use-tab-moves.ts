@@ -21,8 +21,13 @@ export function useTabMoves(
       const layout = tab === undefined || tab.transient ? undefined : layoutOf(tab.machine);
       if (tab === undefined || layout === undefined || layout.readOnly !== null) return;
       const keys = shown.current.map((each) => each.key);
-      setLastMove((said) => moveTabTo(keys, said, key, to).said);
-      void layout.edit((doc) => (doc === null ? null : moveDocTab(doc, tab.id, to)));
+      // Said once the document has the new order, so the strip reads the tab's new place, not the one it left.
+      void layout
+        .edit((doc) => (doc === null ? null : moveDocTab(doc, tab.id, to)))
+        .then((moved) => {
+          if (moved) setLastMove((said) => moveTabTo(keys, said, key, to).said);
+          return moved;
+        });
     },
     [layoutOf],
   );
