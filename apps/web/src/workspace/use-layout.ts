@@ -48,6 +48,11 @@ export interface Layout extends PaneMoves {
   readonly closeTab: (key: string) => void;
   /** The pane this screen split off last, which grows in from the pane it came from. */
   readonly fresh: string | null;
+  /**
+   * The pane this screen last asked for (opened, split, focused, picked its tab): its terminal takes the keyboard as it
+   * starts. A pane only another device's layout edit brought or moved here is not one (#332).
+   */
+  readonly claimed: string | null;
   /** Moves a tab so it ends at index `to` of `tabs`; panes and focus stay as they are. */
   readonly moveTab: (key: string, to: number) => void;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
@@ -97,6 +102,7 @@ export function useLayout(
 ): Layout {
   const [view, setView] = useState<View>(() => loadView(core));
   const [fresh, setFresh] = useState<string | null>(null);
+  const [claimed, setClaimed] = useState<string | null>(null);
   // Read through a ref: the toast it raises re-renders the workspace, which must not count as another write.
   const tellUnsaved = useRef(unsaved);
   tellUnsaved.current = unsaved;
@@ -135,6 +141,7 @@ export function useLayout(
   // Panes focused per tab, oldest first, as herdr-app's `before`: moving focus prefers the pane left last.
   const history = useRef(new Map<string, string[]>());
   const show = useCallback((key: string, pane: string | null): void => {
+    if (pane !== null) setClaimed(pane);
     if (pane !== null) {
       const visited = (history.current.get(key) ?? []).filter((id) => id !== pane);
       history.current.set(key, [...visited, pane].slice(-HISTORY));
@@ -299,6 +306,7 @@ export function useLayout(
     dropPane,
     closeTab,
     fresh,
+    claimed,
     ...moves,
     moveTab,
     lastMove,

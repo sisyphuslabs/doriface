@@ -43,6 +43,7 @@ const layout: Layout = {
   go: () => false,
   bumped: null,
   fresh: null,
+  claimed: null,
   resize: () => Promise.resolve(true),
   resizeFocused: () => false,
   equalize: () => true,
