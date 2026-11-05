@@ -129,6 +129,24 @@ describe("the host's relay uplink", () => {
     expect(await ackReaching(relay.sentToHost)).toBe(relay.sentToHost);
   });
 
+  test("refuses an OPEN past the contract's 8 pending sessions with CLOSE 4429, and an open session keeps working", async () => {
+    const open = await dial(relay.open(21), phone);
+    const bytes = reader(open);
+    open.send(HELLO);
+    await bytes.line();
+    // Eight sessions that never get the host's first DATA are the pending cap; an honest relay would not open a ninth.
+    const pending = Array.from({ length: 8 }, (_, index) => relay.open(30 + index));
+    const extra = relay.open(38);
+    try {
+      expect(await extra.closed).toBe(CloseCode.RateLimited);
+      open.send(rpcFrame(1, "terminal.list"));
+      expect((await bytes.frame()).byteLength).toBeGreaterThan(9);
+    } finally {
+      for (const link of [...pending, extra]) link.close();
+      open.close();
+    }
+  }, 20_000);
+
   test("refuses an unpaired device with a CLOSE 4401 the relay passes to the client", async () => {
     const link = relay.open(13);
     expect(await refusal(dial(link, generateX25519()))).toBe(CloseCode.UnknownDevice);

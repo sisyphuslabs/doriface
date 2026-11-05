@@ -216,6 +216,49 @@ describe("a startup that fails after the push feed started", () => {
   });
 });
 
+describe("a startup that fails while the push feed's hc connect ignores EOF and TERM", () => {
+  test("the unwind kills that child by its pid, so the startup-error exit leaves none behind", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-hung-"));
+    const session = `dh-hung-${crypto.randomUUID().slice(0, 8)}`;
+    // An hc whose connect never exits on its own: closing its stdin and SIGTERM both leave it running.
+    const hc = join(dir, "hc");
+    writeFileSync(
+      hc,
+      '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\ntrap \'\' TERM HUP\nwhile :; do sleep 1; done\n',
+      { mode: 0o755 },
+    );
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir, { mode: 0o700 });
+    new SubscriptionStore(stateDir).put(
+      LOOPBACK_OWNER,
+      { endpoint: "https://fcm.googleapis.com/fcm/send/hung", p256dh: "B".repeat(87), auth: "C".repeat(22) },
+      DEFAULT_PUSH_PREFS,
+    );
+    mkdirSync(join(stateDir, "host.sock"));
+    writeFileSync(join(stateDir, "host.sock", "keep"), "");
+    try {
+      const args = ["--listen", "127.0.0.1:0", "--hc", hc, "--session", session, "--state-dir", stateDir, "--no-relay"];
+      // A file, not a pipe: a child left alive would hold a stderr pipe open, and reading it would never end.
+      const errors = join(dir, "stderr.txt");
+      const proc = Bun.spawn([process.execPath, CLI, ...args], { stdout: "ignore", stderr: Bun.file(errors) });
+      const status = await proc.exited;
+      const stderr = await Bun.file(errors).text();
+      const report = stderr
+        .split("\n")
+        .map(parseStartupErrorLine)
+        .find((line) => line !== undefined);
+      expect(status).toBe(3);
+      expect(report?.code).toBe("startup-failed");
+      expect(stderr).toContain("killed hc connect pid");
+      expect(stderr.toLowerCase()).not.toContain("unhandled");
+      expect(hcConnectPids(session)).toEqual([]);
+    } finally {
+      for (const pid of hcConnectPids(session)) process.kill(pid, "SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 const alive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
