@@ -15,9 +15,12 @@ import {
   CREDIT_QUERY,
   decodeMux,
   encodeAuthAnswer,
+  encodeClose,
   encodePairSlotClear,
   encodePairSlotRequest,
   hostIdOf,
+  MAX_ACTIVE_SESSIONS,
+  MAX_PENDING_SESSIONS,
   MuxError,
   MuxType,
   PING_INTERVAL_MS,
@@ -32,6 +35,16 @@ export type UplinkState =
   | { readonly state: "waiting"; readonly code: number; readonly retryInMs: number }
   | { readonly state: "stopped"; readonly code: number };
 
+/**
+ * A session the uplink refused with CLOSE 4429 because a contract cap was full: an OPEN while 8 sessions wait for the
+ * host's first DATA (`pending_cap`), or a first DATA while 32 sessions are active (`active_cap`). The host enforces the
+ * caps so that a relay that ignores them cannot make it allocate sessions without bound.
+ */
+export interface SessionRefusal {
+  readonly sessionId: number;
+  readonly reason: "pending_cap" | "active_cap";
+}
+
 export interface UplinkOptions {
   /** e.g. `https://relay-doriface.omo.dev`. */
   readonly relayUrl: string;
@@ -39,6 +52,8 @@ export interface UplinkOptions {
   /** Called for every client session the relay opens; the link ends when the client leaves or the uplink drops. */
   readonly onSession: (session: SessionLink) => void;
   readonly onState?: (state: UplinkState) => void;
+  /** Called for every session refused over the session caps; the refused session allocates nothing. */
+  readonly onRefused?: (refusal: SessionRefusal) => void;
   readonly createSocket?: CreateSocket;
   readonly random?: () => number;
   readonly pingIntervalMs?: number;
@@ -222,6 +237,10 @@ export class Uplink {
     if (frame.type === MuxType.Close) return session?.ended(frame.code);
     if (session !== undefined)
       return closeSocket(ws, CloseCode.ProtocolError, `session ${frame.sessionId} is already open`);
+    if (this.#sessions.size - this.#active() >= MAX_PENDING_SESSIONS) {
+      ws.send(encodeClose(frame.sessionId, CloseCode.RateLimited));
+      return this.#options.onRefused?.({ sessionId: frame.sessionId, reason: "pending_cap" });
+    }
     const link = new SessionLink(frame.sessionId, frame.pairSlot, {
       sendFrame: (out) => {
         if (!isOpen(ws)) return false;
@@ -229,9 +248,21 @@ export class Uplink {
         return true;
       },
       release: (sessionId) => this.#sessions.delete(sessionId),
+      answer: (sessionId) => {
+        if (this.#active() < MAX_ACTIVE_SESSIONS) return true;
+        this.#options.onRefused?.({ sessionId, reason: "active_cap" });
+        return false;
+      },
     });
     this.#sessions.set(frame.sessionId, link);
     this.#options.onSession(link);
+  }
+
+  /** Sessions the host has sent DATA on; the rest are pending (contract "Session admission"). */
+  #active(): number {
+    let active = 0;
+    for (const session of this.#sessions.values()) if (session.answered) active += 1;
+    return active;
   }
 
   #lost(ws: WebSocket, code: number): void {
