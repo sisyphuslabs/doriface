@@ -5,6 +5,7 @@ import { arrange, type Rect } from "../layout/rects.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { LayoutPane, LayoutTab } from "./layout-model.ts";
 import type { Session } from "./model.ts";
+import type { PaneSends } from "./pane-sends.ts";
 import { Pane } from "./pane.tsx";
 import { PaneDivider } from "./pane-divider.tsx";
 import { linePosition } from "./line-position.ts";
@@ -43,6 +44,9 @@ export interface SplitPanesProps {
   readonly onEnd: (address: string, end: TerminalEnd) => void;
   readonly onSplit: (axis: Axis, target: PaneTarget) => void;
   readonly onClose: (address: string) => void;
+  readonly sends: PaneSends;
+  /** Docked under the focused pane of the tab in view only. */
+  readonly dock: ReactNode;
 }
 
 /** The axis of the row or column a pane sits in: a fresh pane grows out of its neighbour along it. */
@@ -93,7 +97,8 @@ function shownPreview(preview: Preview | null, tabs: readonly LayoutTab[]): Prev
 
 const HIDDEN: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
-export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSplit, onClose }: SplitPanesProps) {
+export function SplitPanes(props: SplitPanesProps) {
+  const { connection, terminals, layout, titles, onEnd, sends, dock, onSplit, onClose } = props;
   const [ref, box] = useBoxSize();
   const [held, setPreview] = useState<Preview | null>(null);
   const preview = shownPreview(held, layout.tabs);
@@ -149,6 +154,8 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onSpl
                         layout.toggleZoom();
                       }}
                       onClose={() => (pane.address === null ? undefined : onClose(pane.address))}
+                      sends={sends}
+                      dock={selected && layout.focused?.id === pane.id ? dock : null}
                     />
                   </PaneFrame>
                 );
@@ -199,10 +206,13 @@ interface PaneSlotProps {
   readonly onSplit: (axis: Axis) => void;
   readonly onZoom: () => void;
   readonly onClose: () => void;
+  readonly sends: PaneSends;
+  readonly dock: ReactNode;
 }
 
 function PaneSlot(props: PaneSlotProps) {
-  const { connection, tab, pane, terminal, focused, zoomed, onFocus, onEnd, onSplit, onZoom, onClose } = props;
+  const { connection, tab, pane, terminal, focused, zoomed, onFocus, onEnd, sends, dock, onSplit, onZoom, onClose } =
+    props;
   if (terminal !== undefined) {
     return (
       <Pane
@@ -216,6 +226,8 @@ function PaneSlot(props: PaneSlotProps) {
         onSplit={onSplit}
         onZoom={onZoom}
         onClose={onClose}
+        onPort={sends.onPort(terminal.address)}
+        dock={dock}
       />
     );
   }

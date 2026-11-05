@@ -1,6 +1,6 @@
 import type { MachineView, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { machineEntries, machineKey, onlyThisMachine, orderMachines, showMachines } from "./machines.ts";
+import { machineEntries, machineKey, onlyThisMachine, orderMachines } from "./machines.ts";
 import { machineId, toSpaces } from "./model.ts";
 
 const terminal = (address: string, fields: Partial<Terminal> = {}): Terminal => ({
@@ -64,15 +64,10 @@ describe("machineEntries", () => {
   });
 });
 
-describe("showMachines", () => {
-  test("the section shows with only this machine too, which is where the person learns how to add one", () => {
-    const onlyThis = machineEntries("studio", [], []);
-    const withOne = machineEntries("studio", [view("boxb", "connected")], []);
-    expect(showMachines(onlyThis, undefined)).toBe(true);
-    expect(onlyThisMachine(onlyThis)).toBe(true);
-    expect(showMachines(withOne, undefined)).toBe(true);
-    expect(onlyThisMachine(withOne)).toBe(false);
-    expect(showMachines([], "connection is closed")).toBe(true);
+describe("onlyThisMachine", () => {
+  test("true with only this machine, false once one is added", () => {
+    expect(onlyThisMachine(machineEntries("studio", [], []))).toBe(true);
+    expect(onlyThisMachine(machineEntries("studio", [view("boxb", "connected")], []))).toBe(false);
   });
 });
 

@@ -4,18 +4,24 @@ import {
   closeDesktopWindow,
   desktopBridge,
   HostStartError,
+  type HostStartFailure,
   onDesktopNavigate,
   setDesktopBackground,
   zoomDesktopWindow,
 } from "./bridge.ts";
-import { bootConnection, startThisComputer } from "./local-host.ts";
+import { bootConnection, startFailure, startThisComputer } from "./local-host.ts";
 
 const noop = (): void => undefined;
 
 function target(settings: ConnectionSettings) {
   const calls: string[] = [];
+  const failures: HostStartFailure[] = [];
   const state = {
     settings,
+    hostStartFailed(failure: HostStartFailure) {
+      failures.push(failure);
+      calls.push("hostStartFailed");
+    },
     update(next: ConnectionSettings) {
       state.settings = next;
       calls.push("update");
@@ -27,7 +33,7 @@ function target(settings: ConnectionSettings) {
       calls.push("restoring");
     },
   };
-  return { state, calls };
+  return { state, calls, failures };
 }
 
 const bridge = (url: string) => ({ startLocalHost: async () => ({ url, token: "t0k" }) });
@@ -49,6 +55,22 @@ describe("desktop local host", () => {
     await bootConnection(bridge("ws://127.0.0.1:52012/v1/hc"), state);
     expect(calls).toEqual(["restoring", "update"]);
     expect(state.settings.loopbackUrl).toBe("ws://127.0.0.1:52012/v1/hc");
+  });
+
+  test("a saved loopback link whose host does not start at boot reports the typed cause and is never tried", async () => {
+    const failure = { code: "hc-binary-missing", message: "not found", path: "hc", details: "raw output" };
+    const { state, calls, failures } = target({ ...DEFAULT_SETTINGS, mode: "loopback", token: "old" });
+    await bootConnection({ startLocalHost: () => Promise.reject(new HostStartError(failure)) }, state);
+    expect(calls).toEqual(["restoring", "hostStartFailed"]);
+    expect(failures).toEqual([failure]);
+  });
+
+  test("a start that fails without a typed failure is reported as unknown, with its message", () => {
+    expect(startFailure(new Error("spawn failed"))).toEqual({
+      code: "unknown",
+      message: "spawn failed",
+      details: "spawn failed",
+    });
   });
 
   test("a connection chosen while the host is starting is not overwritten", async () => {

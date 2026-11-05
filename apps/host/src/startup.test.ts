@@ -1,10 +1,13 @@
+import { DEFAULT_PUSH_PREFS } from "@doriface/protocol";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
 import { startHost } from "./host.ts";
-import { resolveHcBin } from "./testing/hc-session.ts";
+import { LOOPBACK_OWNER, SubscriptionStore } from "./push/subscriptions.ts";
+import { parseStartupErrorLine } from "./startup-error.ts";
+import { createHcSession, resolveHcBin } from "./testing/hc-session.ts";
 
 const CLI = join(import.meta.dir, "cli.ts");
 /** These tests spawn the CLI; a cold transpiler cache alone can take most of bun's 5 s default. */
@@ -77,6 +80,138 @@ describe("the control socket", () => {
       await expect(start).rejects.toThrow("control socket");
     } finally {
       rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The pids of live `hc connect` children of one hc session, read from full argv. */
+const hcConnectPids = (session: string): number[] =>
+  Bun.spawnSync(["ps", "-axo", "pid=,args="], { stdout: "pipe" })
+    .stdout.toString()
+    .split("\n")
+    .filter((line) => line.includes(" connect ") && line.includes(session))
+    .map((line) => Number.parseInt(line.trim(), 10));
+
+/**
+ * Starts a host on its own hc session with a stored push subscription, so the push feed starts its `hc connect` child
+ * before the listeners and the control socket; `prepare` makes one of those fail (and may name a LAN listener). The
+ * host is started twice: in this process, where a child it leaves stays alive with its parent (the `left` pids, read
+ * as soon as the start rejects), and as the CLI, for its exit status and its startup-error line.
+ */
+async function failedStart(prepare: (stateDir: string) => { readonly lan?: { hostname: string; port: number } }) {
+  const session = createHcSession("dh-unwind");
+  const stateDir = mkdtempSync(join(tmpdir(), "dh-unwind-"));
+  try {
+    new SubscriptionStore(stateDir).put(
+      LOOPBACK_OWNER,
+      { endpoint: "https://fcm.googleapis.com/fcm/send/unwind", p256dh: "B".repeat(87), auth: "C".repeat(22) },
+      DEFAULT_PUSH_PREFS,
+    );
+    const { lan } = prepare(stateDir);
+    const rejected: unknown = await startHost({
+      listen: { hostname: "127.0.0.1", port: 0 },
+      lanListen: lan,
+      token: generateToken(),
+      hc: session.hc,
+      session: session.name,
+      env: session.env,
+      stateDir,
+      log: () => {},
+    }).then(
+      async (host) => {
+        await host.stop();
+        return undefined;
+      },
+      (reason: unknown) => reason,
+    );
+    const left = hcConnectPids(session.name);
+    const args = ["--listen", "127.0.0.1:0", "--hc", session.hc, "--session", session.name, "--state-dir", stateDir];
+    const lanArgs = lan === undefined ? [] : ["--lan-listen", `${lan.hostname}:${lan.port}`];
+    const proc = Bun.spawn([process.execPath, CLI, ...args, ...lanArgs, "--no-relay"], {
+      env: session.env,
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    const stderr = await new Response(proc.stderr).text();
+    const status = await proc.exited;
+    const report = stderr
+      .split("\n")
+      .map(parseStartupErrorLine)
+      .find((line) => line !== undefined);
+    return { rejected, left, status, report, leftAfterExit: hcConnectPids(session.name) };
+  } finally {
+    for (const pid of hcConnectPids(session.name)) process.kill(pid, "SIGTERM");
+    await session.dispose();
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+}
+
+describe("a host whose push feed started", () => {
+  test("stop settles once the feed's hc connect child has exited", async () => {
+    const session = createHcSession("dh-stop");
+    const stateDir = mkdtempSync(join(tmpdir(), "dh-stop-"));
+    try {
+      new SubscriptionStore(stateDir).put(
+        LOOPBACK_OWNER,
+        { endpoint: "https://fcm.googleapis.com/fcm/send/stop", p256dh: "B".repeat(87), auth: "C".repeat(22) },
+        DEFAULT_PUSH_PREFS,
+      );
+      const host = await startHost({
+        listen: { hostname: "127.0.0.1", port: 0 },
+        token: generateToken(),
+        hc: session.hc,
+        session: session.name,
+        env: session.env,
+        stateDir,
+        log: () => {},
+      });
+      // The feed spawns its child while the host starts; read its pid before stopping, since an exited pid is not listed.
+      const pids = hcConnectPids(session.name);
+      expect(pids).toHaveLength(1);
+      await host.stop();
+      const alive = pids.filter((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      expect(alive).toEqual([]);
+    } finally {
+      for (const pid of hcConnectPids(session.name)) process.kill(pid, "SIGTERM");
+      await session.dispose();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a startup that fails after the push feed started", () => {
+  test("a control socket that cannot bind exits non-zero and leaves no hc connect child", async () => {
+    const run = await failedStart((stateDir) => {
+      mkdirSync(join(stateDir, "host.sock"));
+      writeFileSync(join(stateDir, "host.sock", "keep"), "");
+      return {};
+    });
+    expect(String(run.rejected)).toContain("control socket");
+    expect(run.left).toEqual([]);
+    expect(run.status).not.toBe(0);
+    expect(run.report?.code).toBe("startup-failed");
+    expect(run.report?.message).toContain("control socket");
+    expect(run.leftAfterExit).toEqual([]);
+  });
+
+  test("a LAN listener that cannot bind exits non-zero and leaves no hc connect child", async () => {
+    const taken = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+    try {
+      const run = await failedStart(() => ({ lan: { hostname: "127.0.0.1", port: taken.port ?? 0 } }));
+      expect(String(run.rejected)).toContain(String(taken.port));
+      expect(run.left).toEqual([]);
+      expect(run.status).not.toBe(0);
+      expect(run.report?.code).toBe("port-in-use");
+      expect(run.leftAfterExit).toEqual([]);
+    } finally {
+      await taken.stop(true);
     }
   });
 });
