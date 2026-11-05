@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_LAYOUT_PORT, E2E_PUSH_ORIGIN, E2E_TOKEN } from "./config.ts";
-import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
+import { LAYOUT_CORE, LAYOUT_CORE_ID, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
 import { writeSavedEnv } from "./saved-env.ts";
@@ -36,7 +36,10 @@ const coreDir = join(dir, "state", "herdr-core", session);
 mkdirSync(coreDir, { recursive: true });
 writeFileSync(
   join(coreDir, "core.json"),
-  JSON.stringify({ id: crypto.randomUUID().replace(/-/g, ""), name: layout ? LAYOUT_CORE : "studio" }),
+  JSON.stringify({
+    id: layout ? LAYOUT_CORE_ID : crypto.randomUUID().replace(/-/g, ""),
+    name: layout ? LAYOUT_CORE : "studio",
+  }),
 );
 // Saved before the host can answer /healthz, so no spec reads a missing file or one a killed run left behind.
 // Only the main host owns it: the layout host runs beside it and must not overwrite or delete it.

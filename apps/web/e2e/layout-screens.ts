@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK, PAIRING_SETTINGS } from "./capture-relay.ts";
 import { E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
 import { expect } from "./fixtures.ts";
-import { LAYOUT_TERMINALS, UNBROKEN } from "./layout-seed.ts";
+import { LAYOUT_CORE_ID, LAYOUT_MACHINE, LAYOUT_TERMINALS, UNBROKEN } from "./layout-seed.ts";
 
 export const STARTS = {
   layout: {
@@ -106,15 +106,31 @@ export const SCREENS: readonly Screen[] = [
     start: "layout",
     only: "wide",
     open: async (page) => {
-      await workspace(page, false);
-      // Each click opens the next tab, in order.
-      await LAYOUT_TERMINALS.reduce(
-        (opened, { title }) => opened.then(() => row(page, title).click()),
-        Promise.resolve(),
+      // Every seeded terminal open as a tab, the remote one in view beside the first, written before the first load the
+      // way a reload finds them: opening each by a click mounts a terminal on a page that can be starved for seconds.
+      // This is the state a click on every row, then on the remote row, then Split leaves. The layout host starts its
+      // terminals in order on a fresh core (runSeeds), so they are t1, t2, ...; the remote one is its machine's first.
+      const remote = `${LAYOUT_MACHINE}/t1`;
+      await page.addInitScript(
+        ([core, count, remoteKey]) => {
+          const local = Array.from({ length: count }, (_, index) => `local:t${index + 1}`);
+          const tabs = { open: [...local, remoteKey], active: local[0], split: remoteKey };
+          localStorage.setItem("doriface.tabs", JSON.stringify({ [core]: tabs }));
+        },
+        [LAYOUT_CORE_ID, LAYOUT_TERMINALS.length, `name:${remote}`] as const,
       );
-      await row(page, "remote-terraform-plan-runner-001").click();
-      await page.getByRole("button", { name: "Split" }).click();
-      await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
+      await workspace(page, false);
+      const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+      const titles = [...LAYOUT_TERMINALS.map(({ title }) => title), "remote-terraform-plan-runner-001"];
+      await expect(tabs).toHaveCount(titles.length, { timeout: 20_000 });
+      const shown = await tabs.allTextContents();
+      expect(titles.filter((title, index) => !(shown[index] ?? "").includes(title))).toEqual([]);
+      await expect(page.getByRole("button", { name: "Split" })).toHaveAttribute("aria-pressed", "true");
+      const visible = page.locator("[data-terminal]:visible");
+      await expect(visible).toHaveCount(2);
+      expect(
+        (await visible.evaluateAll((all) => all.map((each) => each.getAttribute("data-terminal")))).toSorted(),
+      ).toEqual(["t1", remote].toSorted());
     },
   },
   {
