@@ -2,7 +2,7 @@ import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { useId, useRef, type ReactElement, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
-import { backdropClass, overlaySurface } from "./overlay.ts";
+import { backdropClass, modalLayer, overlaySurface } from "./overlay.ts";
 
 export interface DialogProps {
   readonly title: ReactNode;
@@ -64,6 +64,7 @@ export function Dialog({
         {...(finalFocus === undefined ? {} : { finalFocus })}
         className={cn(
           overlaySurface,
+          modalLayer,
           "fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
           popupClass,
           className,
