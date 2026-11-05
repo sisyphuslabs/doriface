@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 let hc: ReturnType<typeof scratchHcSession> | undefined;
 let profile: string | undefined;
@@ -58,11 +58,7 @@ test("a first launch while the OS reports no network still offers Use this compu
   await expect(pair).toBeDisabled();
   await expect(pair).toHaveAccessibleDescription("Pairing a host needs a network.");
   await use.click();
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click({ timeout: 30_000 });
+  await pressNewTab(page, { timeout: 30_000 });
   const terminal = page.locator('[data-focused="true"] [data-terminal]');
   await expect(terminal).toContainText("$", { timeout: 30_000 });
   await terminal.getByRole("textbox").focus();

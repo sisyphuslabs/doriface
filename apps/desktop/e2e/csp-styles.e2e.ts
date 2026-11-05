@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 test("the workspace keeps style-src strict and still hides Base UI's native scrollbars (#499)", async () => {
   // A cold Electron launch on a loaded Linux runner can take most of the default minute on its own.
@@ -34,11 +34,7 @@ test("the workspace keeps style-src strict and still hides Base UI's native scro
     await page.reload();
     await page.getByRole("button", { name: "Use this computer" }).click({ timeout: 60_000 });
     console.log("stage host");
-    await page
-      .getByRole("button", { name: "New tab" })
-      .or(page.getByRole("button", { name: "New terminal" }))
-      .first()
-      .click({ timeout: 60_000 });
+    await pressNewTab(page, { timeout: 60_000 });
     await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 60_000 });
 
     const viewports = page.locator(".base-ui-disable-scrollbar");
