@@ -119,5 +119,3 @@ export class Signer {
 
 export const headsOfRecords = (records: readonly Signed[]): readonly string[] => headsOf(records);
 export const hashes = (records: readonly Signed[]): readonly string[] => records.map(hashOf);
-export const typeOf = (record: Signed): RecordBody["type"] | undefined => parseRecord(record)?.type;
-export const signerOf = (record: Signed): string | undefined => parseRecord(record)?.by;

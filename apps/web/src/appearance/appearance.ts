@@ -3,10 +3,8 @@ import { useSyncExternalStore } from "react";
 import { themeChoices } from "./choices.ts";
 import { activeThemeId, parseAppearance, type Appearance } from "./stored.ts";
 
-export type { CustomTheme, ThemeChoice } from "./choices.ts";
 export { themeChoices } from "./choices.ts";
 export type { Appearance, AppearanceMode, Density } from "./stored.ts";
-export { activeThemeId } from "./stored.ts";
 
 const KEY = "doriface.appearance";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
