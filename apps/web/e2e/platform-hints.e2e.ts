@@ -1,5 +1,6 @@
 import type { Locator } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { hcOn } from "./machine-switch.ts";
 
 /** Clicks every match, one at a time, until none is left. */
 const removeAll = async (buttons: Locator): Promise<void> => {
@@ -41,10 +42,12 @@ test("off macOS the tab bar and the tab tooltip show Ctrl shortcuts", async ({ p
   await expect(selected).toHaveAttribute("title", /\(Ctrl\+\d\)$/);
   await expect(selected).not.toHaveAttribute("title", /⌘/);
   await expect(terminal).toBeVisible();
-  // The new tab's label passes through interim names before the shell's own ("sh"), and each one changes the tab's
-  // width, which moves New tab. Hovered before the last of them, the button slides out from under the pointer during
-  // the tooltip's open delay and no tooltip opens (#43). Hover once the label is final, so New tab stays put.
-  await expect(selected).toHaveAttribute("title", /^sh \(Ctrl\+\d\)$/, { timeout: 15_000 });
+  // Give the terminal a stable name: /bin/sh reports bash on macOS and sh on Linux. A changing tab width moves
+  // New tab out from under the pointer during the tooltip's open delay (#43).
+  const address = await terminal.getAttribute("data-terminal");
+  if (address === null) throw new Error("the new terminal has no address");
+  hcOn("host", ["label", address, "herdr.name=shortcut-hints"]);
+  await expect(selected).toHaveAttribute("title", /^shortcut-hints \(Ctrl\+\d\)$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "New tab" }).hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "New tab" }).locator("kbd > span");
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "T"]);
