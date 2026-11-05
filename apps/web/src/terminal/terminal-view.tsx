@@ -13,6 +13,7 @@ import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
 import { KittyPngTranscoder } from "./kitty-png.ts";
+import { OutputPacer } from "./output-pacer.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
@@ -67,6 +68,7 @@ export interface TerminalViewProps {
 const HISTORY_LINES = 2_000;
 /** RIS: clears the screen and scrollback before an attach replay draws them again. */
 const FULL_RESET = "\u001bc";
+const encoder = new TextEncoder();
 
 /**
  * Gives a focus event's focus back to the element that had it, unless that sits in a pane no longer focused (focus
@@ -102,6 +104,17 @@ export function TerminalView(props: TerminalViewProps) {
   const stream = useRef<TerminalStream | null>(null);
   // The program's output reaches the core through this: Kitty images sent as PNG are decoded to RGBA on the way.
   const output = useMemo(() => new KittyPngTranscoder((bytes) => handle.current?.write(bytes)), []);
+  // Output is written once a frame and credited only then, so a flood cannot starve clicks and keys (#560).
+  const pacer = useMemo(
+    () =>
+      new OutputPacer((bytes) => {
+        output.push(bytes);
+        warmup.current?.note(bytes);
+        outputShown.current();
+      }),
+    [output],
+  );
+  useEffect(() => () => pacer.drop(), [pacer]);
 
   useEffect(() => {
     let mounted = true;
@@ -198,6 +211,20 @@ export function TerminalView(props: TerminalViewProps) {
     };
   }, [wt]);
   useTerminalActions(wt, typed, focused);
+  // A pane out of view (a hidden tab, a zoomed-away split) is not painted and takes no output until it shows (#560).
+  useEffect(() => {
+    if (wt === null) return undefined;
+    const seen = new IntersectionObserver((entries) => {
+      const visible = entries.at(-1)?.isIntersecting ?? true;
+      pacer.setVisible(visible);
+      wt.setRenderingPaused(!visible);
+    });
+    seen.observe(wt.element);
+    return () => {
+      seen.disconnect();
+      wt.setRenderingPaused(false);
+    };
+  }, [wt, pacer]);
   useFocusAfterSelect(wt);
   useSelectionCells(wt);
   const attachedTo = useRef(connection);
@@ -298,18 +325,20 @@ export function TerminalView(props: TerminalViewProps) {
           if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
           // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
           if (attachedBefore.current) {
+            pacer.drop();
             output.reset();
             handle.current?.write(FULL_RESET);
           }
           attachedBefore.current = true;
           const resets = new CursorResets();
+          const credit = (count: number): void => {
+            if (stream.current === attached) attached.consumed(count);
+          };
           attached.onData((bytes) => {
-            output.push(bytes);
-            warmup.current?.note(bytes);
-            attached.consumed(bytes.byteLength);
-            outputShown.current();
+            pacer.push(bytes, credit);
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
-            if (resets.push(bytes)) output.push(rendererOptions(terminalConfigStore.config).cursorSequence);
+            if (resets.push(bytes))
+              pacer.push(encoder.encode(rendererOptions(terminalConfigStore.config).cursorSequence));
           });
           attached.onClose((close) => {
             if (stream.current === attached) stream.current = null;
