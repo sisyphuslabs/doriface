@@ -9,17 +9,25 @@ export interface HostStartCopy {
 
 export const HERDR_CORE_URL = "https://github.com/herdrdev/herdr-core";
 
+const listOf = (items: readonly string[]): string =>
+  items.length === 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1) ?? ""}`;
+
 const AGAIN = "If it keeps happening, Details shows what the host printed.";
 
 /** The words for a failed start, from its code alone: the host's own output stays behind Details. */
 export function hostStartCopy(failure: HostStartFailure): HostStartCopy {
-  const { path, address } = failure;
+  const { path, address, searched } = failure;
   switch (failure.code) {
     case "hc-binary-missing":
       return path === undefined || !/[\\/]/.test(path)
         ? {
             cause: "herdr-core was not found on this computer.",
-            next: "doriface looks for hc on your PATH and in ~/.local/bin, ~/.cargo/bin, /opt/homebrew/bin and /usr/local/bin. Install herdr-core there, or set HC_BIN to the full path of hc, then retry.",
+            // The folders the shell searched on this platform; a desktop app started from the Dock or Start menu reads no
+            // HC_BIN, so installing into one of them is the step that works.
+            next:
+              searched === undefined || searched.length === 0
+                ? "doriface looks for hc on your PATH. Install herdr-core there, then retry."
+                : `doriface looks for hc on your PATH and in ${listOf(searched)}. Install herdr-core in one of them, then retry.`,
             install: true,
           }
         : {
@@ -49,6 +57,11 @@ export function hostStartCopy(failure: HostStartFailure): HostStartCopy {
       return {
         cause: "Another doriface host is already running on this computer.",
         next: "Quit it (another doriface window, or doriface-host in a terminal), then retry.",
+      };
+    case "host-spawn-failed":
+      return {
+        cause: "doriface could not run its host program.",
+        next: "Reinstall doriface, then retry. If it keeps happening, Details shows why it could not run.",
       };
     case "host-timeout":
       return { cause: "The host took too long to start.", next: `Retry. ${AGAIN}` };
