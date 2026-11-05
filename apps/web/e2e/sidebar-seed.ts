@@ -1,6 +1,7 @@
 // Sidebar fixtures on the e2e cores: a space named alike on this machine and on the added one, a long machine
 // name, and idle sessions with long titles. Each spec seeds what it needs and removes it afterwards.
 import { execFileSync } from "node:child_process";
+import { endAgent } from "./agents.ts";
 import { E2E_HOST_ENV } from "./config.ts";
 import { LAYOUT_DOC, seedSpaces, type SeedSpace } from "./layout-doc.ts";
 import { setCoreDoc } from "./core-doc.ts";
@@ -78,10 +79,7 @@ export function clearMachineLayout(machine: string): void {
 
 /** Ends and removes the sessions a spec started, before the machine gets its usual name back. */
 export function stop(addresses: readonly string[]): void {
-  for (const address of addresses) {
-    hc(["kill", address]);
-    hc(["rm", address]);
-  }
+  for (const address of addresses) endAgent("host", address);
 }
 
 function machineState(name: string): string | undefined {
