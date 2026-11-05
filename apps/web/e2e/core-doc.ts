@@ -35,6 +35,22 @@ function call(core: CoreEnv, method: string, params: unknown): unknown {
   throw new Error(`${method}: no reply`);
 }
 
+/** An added machine's permanent core id, as the e2e host's core lists it (`machine.list`): the id a machine order names. */
+export function machineCore(name: string): string {
+  const listed = call(coreEnv(), "machine.list", {});
+  const machines = typeof listed === "object" && listed !== null && "machines" in listed ? listed.machines : undefined;
+  const found = Array.isArray(machines)
+    ? machines.find(
+        (machine: unknown) =>
+          typeof machine === "object" && machine !== null && "name" in machine && machine.name === name,
+      )
+    : undefined;
+  if (typeof found !== "object" || found === null || !("id" in found) || typeof found.id !== "string") {
+    throw new Error(`machine.list names no machine ${name}`);
+  }
+  return found.id;
+}
+
 /** A document on the e2e host's own core as `doc.get` returns it. */
 export function coreDoc(name: string): unknown {
   return call(coreEnv(), "doc.get", { name });
