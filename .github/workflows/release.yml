@@ -193,10 +193,10 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${apps[0]}"
           spctl -a -vv -t exec "${apps[0]}" 2>&1 | tee "$RUNNER_TEMP/spctl-app.txt"
           grep -q "source=Notarized Developer ID" "$RUNNER_TEMP/spctl-app.txt"
-          xcrun stapler validate "${apps[0]}"
+          bash "$GITHUB_WORKSPACE/.github/scripts/macos-stapler.sh" validate "${apps[0]}"
           spctl -a -vv -t open --context context:primary-signature "${dmgs[0]}" 2>&1 | tee "$RUNNER_TEMP/spctl-dmg.txt"
           grep -q "source=Notarized Developer ID" "$RUNNER_TEMP/spctl-dmg.txt"
-          xcrun stapler validate "${dmgs[0]}"
+          bash "$GITHUB_WORKSPACE/.github/scripts/macos-stapler.sh" validate "${dmgs[0]}"
       - name: Collect ${{ matrix.files }}
         working-directory: apps/desktop/dist/release
         run: |
@@ -432,7 +432,7 @@ jobs:
     name: Smoke macOS arm64 zip and dmg
     needs: [version, release]
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: write
     env:
@@ -441,7 +441,10 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       TAG: ${{ needs.version.outputs.tag }}
     steps:
-      - name: Download the zip from the draft release
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+      - name: Download the zip and dmg from the draft release
         run: |
           mkdir -p "$RUNNER_TEMP/dl"
           cd "$RUNNER_TEMP/dl"
@@ -456,14 +459,14 @@ jobs:
           dmg="doriface-$VERSION-arm64.dmg"
           spctl -a -vv -t open --context context:primary-signature "$dmg" 2>&1 | tee spctl-dmg.txt
           grep -q "source=Notarized Developer ID" spctl-dmg.txt
-          xcrun stapler validate "$dmg"
+          bash "$GITHUB_WORKSPACE/.github/scripts/macos-stapler.sh" validate "$dmg"
       - name: The app is signed and notarized, carries the version and starts
         working-directory: ${{ runner.temp }}/dl/app
         run: |
           codesign --verify --deep --strict --verbose=2 doriface.app
           spctl -a -vv -t exec doriface.app 2>&1 | tee ../spctl-app.txt
           grep -q "source=Notarized Developer ID" ../spctl-app.txt
-          xcrun stapler validate doriface.app
+          bash "$GITHUB_WORKSPACE/.github/scripts/macos-stapler.sh" validate doriface.app
           bundled=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" doriface.app/Contents/Info.plist)
           if [ "$bundled" != "$VERSION" ]; then
             echo "::error::the app says $bundled, expected $VERSION"
