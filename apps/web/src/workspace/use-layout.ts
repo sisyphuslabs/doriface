@@ -22,6 +22,8 @@ import {
   TRANSIENT,
   type LayoutPane,
   type LayoutTab,
+  keepMounts,
+  newMounts,
 } from "./layout-model.ts";
 import { machineOf } from "./model.ts";
 import { usePaneMoves, type PaneMoves } from "./use-pane-moves.ts";
@@ -134,8 +136,9 @@ export function useLayout(
   }, [core, view]);
   // Terminals opened while their machine's layout took no edits; this screen shows them as tabs of its own.
   const [loose, setLoose] = useState<readonly string[]>([]);
+  const mounts = useRef(newMounts());
   const tabs = useMemo(
-    () => orderTabs(buildTabs(layouts, terminals, loose), view.order),
+    () => keepMounts(orderTabs(buildTabs(layouts, terminals, loose), view.order), mounts.current),
     [layouts, terminals, loose, view.order],
   );
   const { active, focused, zoomed } = pick(tabs, view);
