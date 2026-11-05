@@ -1,5 +1,6 @@
 import { isNoticeId } from "@doriface/protocol";
 import { useEffect, useSyncExternalStore } from "react";
+import { noticeBridge } from "./desktop-notices.ts";
 import { pushChannel } from "./push-channel.ts";
 import { allowFromPage, whenVisible } from "./prompt-answer.ts";
 
@@ -10,9 +11,14 @@ export interface PendingNotice {
   readonly allow: boolean;
 }
 
-let pending: PendingNotice | null = null;
+/** A clicked desktop notification names its terminal itself: no host round trip. */
+interface ClickedTerminal {
+  readonly terminal: string;
+}
+
+let pending: PendingNotice | ClickedTerminal | null = null;
 const listeners = new Set<() => void>();
-const set = (next: PendingNotice | null): void => {
+const set = (next: PendingNotice | ClickedTerminal | null): void => {
   pending = next;
   for (const listener of listeners) listener();
 };
@@ -53,6 +59,14 @@ export function listenForNotices(toWorkspace: () => void): void {
   });
 }
 
+/** A click on a desktop notification opens its pane in the workspace, reached through `toWorkspace`. */
+export function listenForDesktopNotices(toWorkspace: () => void, scope: object = globalThis): void {
+  noticeBridge(scope)?.onClick((terminal) => {
+    if (terminal !== null) set({ terminal });
+    toWorkspace();
+  });
+}
+
 /**
  * Opens the pane a tapped notice is about: the push carried only an id, so the host is asked over the push stream
  * which terminal it was. A notice from another host, or one the host no longer knows, opens nothing more.
@@ -68,6 +82,10 @@ export function useNoticeOpen(hostId: string | undefined, open: (address: string
   useEffect(() => {
     if (notice === null) return;
     set(null);
+    if ("terminal" in notice) {
+      open(notice.terminal);
+      return;
+    }
     if (hostId !== undefined && notice.host !== hostId) return;
     void openNotice(notice, open);
   }, [notice, hostId, open]);
