@@ -13,6 +13,7 @@ import {
 } from "@doriface/ui";
 import { Ellipsis, Pencil, Plus } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useGitFactsOf } from "./git-facts.ts";
 import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
 import { stateLabel, type MachineEntry } from "./machines.ts";
@@ -92,7 +93,8 @@ function SpacesLists({
   rail,
   machines,
 }: SpacesGroupProps & { readonly rail: boolean; readonly machines: ReturnType<typeof useMachinesContext> }) {
-  const spaces = useMemo(() => toSpaces(terminals), [terminals]);
+  const gitOf = useGitFactsOf();
+  const spaces = useMemo(() => toSpaces(terminals, gitOf), [terminals, gitOf]);
   const colors = useSpaceColors(useMemo(() => spaces.map((space) => space.id), [spaces]));
   const colored = spaces.map((space): Space => {
     const color = colors[space.id];

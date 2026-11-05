@@ -17,6 +17,7 @@ import { readThemeColors } from "./theme-colors.ts";
 import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
+import { useSelectionCells } from "./use-selection-cells.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import { Ended } from "./ended.tsx";
@@ -195,6 +196,7 @@ export function TerminalView(props: TerminalViewProps) {
   }, [wt]);
   useTerminalActions(wt, typed, focused);
   useFocusAfterSelect(wt);
+  useSelectionCells(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
   const program = useRef(pid);

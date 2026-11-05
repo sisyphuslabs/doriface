@@ -1,6 +1,6 @@
 import { Input, SegmentedControl, SettingRow } from "@doriface/ui";
 import { useState } from "react";
-import type { ConnectionMode, ConnectionSettings } from "../connection/settings.ts";
+import { type ConnectionMode, type ConnectionSettings, DEFAULT_RELAY_URL, DEV_BUILD } from "../connection/settings.ts";
 import { connectionStore } from "../connection/store.ts";
 
 const MODES = [
@@ -10,7 +10,13 @@ const MODES = [
 
 type TextField = "relayUrl" | "directUrl" | "loopbackUrl" | "token";
 
-/** Relay (end-to-end encrypted, racing a direct LAN path) or the plaintext loopback dev gateway. */
+/** The production relay as people read it: its host name, without the scheme. */
+const RELAY_HOST = new URL(DEFAULT_RELAY_URL).host;
+
+/**
+ * Relay (end-to-end encrypted, racing a direct LAN path) or the plaintext loopback dev gateway. A release build always
+ * reaches the production relay: it shows that relay without a field to change it, and offers no loopback switch.
+ */
 export function ConnectionSection() {
   const [draft, setDraft] = useState<ConnectionSettings>(connectionStore.settings);
   const commit = (next: ConnectionSettings): void => {
@@ -42,6 +48,24 @@ export function ConnectionSection() {
       }
     />
   );
+
+  if (!DEV_BUILD) {
+    return draft.mode === "relay" ? (
+      <>
+        <SettingRow
+          title="Relay"
+          description="Works from anywhere and only forwards encrypted traffic."
+          control={<span className="font-mono text-sm text-muted-foreground">{RELAY_HOST}</span>}
+        />
+        {row("directUrl", "Direct address", "The host on your network; preferred when it answers within 300 ms.")}
+      </>
+    ) : (
+      <>
+        {row("loopbackUrl", "Gateway", "The /v1/hc address doriface-host prints.")}
+        {row("token", "Token", "Printed by doriface-host --print-token.", true)}
+      </>
+    );
+  }
 
   return (
     <>

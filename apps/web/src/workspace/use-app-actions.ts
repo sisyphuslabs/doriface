@@ -180,6 +180,8 @@ export function desktopActions(
         return true;
       case "pane.go":
         return isDirection(argument) && layout.go(argument);
+      case "pane.swap":
+        return isDirection(argument) && layout.swap(argument);
       case "pane.resize":
         return isDirection(argument) && layout.resizeFocused(argument);
       case "pane.equalize":

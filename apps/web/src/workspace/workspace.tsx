@@ -29,6 +29,7 @@ import { chainedSplit, SplitChain } from "./split-chain.ts";
 import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
+import { GitFactsContext, useGitFacts } from "./git-facts.ts";
 import { orderNotSaved } from "./machine-order.ts";
 import { useMachineOrder } from "./use-machine-order.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
@@ -63,6 +64,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     listed: machineReads,
   } = useMachines(connection, fed.terminals);
   const { layouts, heard } = useLayoutDocs(connection, views);
+  const gitOf = useGitFacts(connection, views);
   heardLayout.current = heard;
   const order = useMachineOrder(connection, listed);
   heardOrder.current = order.heard;
@@ -223,75 +225,83 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
   return (
     <MachinesContext value={machines}>
-      <PinContext value={pin}>
-        <SessionContext value={setAsk}>
-          <SpaceRename connection={connection} terminals={terminals} ask={spaceAsk} onAsk={setSpaceAsk}>
-            {narrow ? (
-              <PhoneShell
-                connection={connection}
-                terminals={terminals}
-                open={phoneOpen}
-                panes={phonePanes}
-                onOpen={showOnPhone}
-                onBack={() => setPhoneKey(null)}
-                onNew={() => newTerminal()}
-                onPalette={onPalette}
-                onSession={onSession}
-              />
-            ) : (
-              <DesktopShell
-                connection={connection}
-                terminals={terminals}
-                loaded={fed.loaded}
-                layout={layout}
-                onNew={() => newTerminal()}
-                onSplit={split}
-                onCloseTab={closeTab}
-                onClosePane={(address) => setAsk({ kind: "close", address })}
-                onEnd={onEnd}
-                onPalette={onPalette}
-                onSession={onSession}
-              />
-            )}
-          </SpaceRename>
-        </SessionContext>
-      </PinContext>
-      <PromptAnswerBanner />
-      <textarea
-        ref={typeAhead.catcher}
-        {...CATCHER_ATTRIBUTES}
-        aria-label="New terminal starting: what you type goes to it"
-        tabIndex={-1}
-        className="sr-only"
-        autoCapitalize="off"
-        autoComplete="off"
-        autoCorrect="off"
-        spellCheck={false}
-      />
-      <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
-      <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={layout.dropPane} />
-      {closing === undefined ? null : (
-        <CloseTabDialog
+      <GitFactsContext value={gitOf}>
+        <PinContext value={pin}>
+          <SessionContext value={setAsk}>
+            <SpaceRename connection={connection} terminals={terminals} ask={spaceAsk} onAsk={setSpaceAsk}>
+              {narrow ? (
+                <PhoneShell
+                  connection={connection}
+                  terminals={terminals}
+                  open={phoneOpen}
+                  panes={phonePanes}
+                  onOpen={showOnPhone}
+                  onBack={() => setPhoneKey(null)}
+                  onNew={() => newTerminal()}
+                  onPalette={onPalette}
+                  onSession={onSession}
+                />
+              ) : (
+                <DesktopShell
+                  connection={connection}
+                  terminals={terminals}
+                  loaded={fed.loaded}
+                  layout={layout}
+                  onNew={() => newTerminal()}
+                  onSplit={split}
+                  onCloseTab={closeTab}
+                  onClosePane={(address) => setAsk({ kind: "close", address })}
+                  onEnd={onEnd}
+                  onPalette={onPalette}
+                  onSession={onSession}
+                />
+              )}
+            </SpaceRename>
+          </SessionContext>
+        </PinContext>
+        <PromptAnswerBanner />
+        <textarea
+          ref={typeAhead.catcher}
+          {...CATCHER_ATTRIBUTES}
+          aria-label="New terminal starting: what you type goes to it"
+          tabIndex={-1}
+          className="sr-only"
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
+        <SessionDialogs
           connection={connection}
           terminals={terminals}
-          tab={closing}
-          onKeep={() => layout.closeTab(closing.key)}
-          onDone={() => setClosingTab(null)}
+          ask={ask}
+          onDone={done}
+          onKeep={layout.dropPane}
         />
-      )}
-      {palette ? (
-        <Palette
-          terminals={terminals}
-          host={connection.hello.core.name}
-          route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
-          actions={availableActions(narrow ? "phone" : "desktop", inView !== null, layout.active?.readOnly ?? null, {
-            keys: layout.tabs.map((tab) => tab.key),
-            active: layout.active?.key ?? null,
-          })}
-          onOpenTerminal={opened}
-          onClose={() => setPalette(false)}
-        />
-      ) : null}
+        {closing === undefined ? null : (
+          <CloseTabDialog
+            connection={connection}
+            terminals={terminals}
+            tab={closing}
+            onKeep={() => layout.closeTab(closing.key)}
+            onDone={() => setClosingTab(null)}
+          />
+        )}
+        {palette ? (
+          <Palette
+            terminals={terminals}
+            host={connection.hello.core.name}
+            route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
+            actions={availableActions(narrow ? "phone" : "desktop", inView !== null, layout.active?.readOnly ?? null, {
+              keys: layout.tabs.map((tab) => tab.key),
+              active: layout.active?.key ?? null,
+            })}
+            onOpenTerminal={opened}
+            onClose={() => setPalette(false)}
+          />
+        ) : null}
+      </GitFactsContext>
     </MachinesContext>
   );
 }

@@ -63,6 +63,11 @@ export interface Host {
    * if no client has opened a pipe yet, since that write starts with the first pipe.
    */
   hostInfoSettled(): Promise<void>;
+  /**
+   * Settles once the git-facts tick in flight is over and its `hc connect` child has exited; at once if no client has
+   * opened a pipe yet. Its next tick waits on a timer, so no tick's child runs until the caller yields to timers.
+   */
+  gitFactsSettled(): Promise<void>;
   /** Closes every client and `hc connect` child, then the listener. */
   stop(): Promise<void>;
 }

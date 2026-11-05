@@ -75,7 +75,7 @@ export { SettingRow, type SettingReason, type SettingRowProps } from "./componen
 export { Sheet, SheetPanel, type SheetProps } from "./components/sheet.tsx";
 export { SidebarSection, type SidebarSectionProps } from "./components/sidebar-section.tsx";
 export { Skeleton, type SkeletonProps } from "./components/skeleton.tsx";
-export { SpaceRow, type Space, type SpaceRowProps } from "./components/space-row.tsx";
+export { SpaceRow, type Space, type SpaceGit, type SpaceRowProps } from "./components/space-row.tsx";
 export { AVATAR_COLORS, SpaceAvatar, type AvatarColor, type SpaceAvatarProps } from "./components/space-avatar.tsx";
 export { RowWithActions, type RowWithActionsProps } from "./components/row-actions.tsx";
 export { MachineHeader, type MachineHeaderProps } from "./components/machine-header.tsx";
