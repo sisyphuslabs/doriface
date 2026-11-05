@@ -1,4 +1,5 @@
 import { encodeFrame, FrameKind, RPC_CHANNEL } from "@doriface/protocol";
+import { onTestFinished } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,7 +52,22 @@ interface Scratch {
   readonly session: HcSession;
   readonly dir: string;
   readonly socket: string;
+  /** Where the session was made: the caller's frames, so a core it leaves names the test that made it (#441). */
+  readonly made: string;
+  disposed: boolean;
 }
+
+/** The frames of the code that called createHcSession, outside this file: the test (or helper) that made a session. */
+function madeAt(): string {
+  const frames = (new Error().stack ?? "").split("\n").slice(1);
+  const callers = frames
+    .map((frame) => frame.trim().replace(/^at /, ""))
+    .filter((frame) => frame.includes("/") && !frame.includes("/testing/hc-session.ts"));
+  return callers.slice(0, 3).join(" < ") || "unknown";
+}
+
+/** A leftover session as the guard names it: its name and where it was made. */
+const named = (scratch: Scratch): string => `${scratch.session.name} (made at ${scratch.made})`;
 
 /** Every scratch session this process made, until `stopLeftoverCores` has checked it. */
 const scratches = new Set<Scratch>();
@@ -80,18 +96,46 @@ async function serving(socket: string): Promise<boolean> {
  * the preloaded guard at the end of the run, since one `bun test` process shares this registry across files (#261).
  */
 export async function stopLeftoverCores(only?: Iterable<HcSession>): Promise<string[]> {
+  return (await stopLeftover(only)).map((scratch) => scratch.session.name);
+}
+
+/** As stopLeftoverCores, each named with where its session was made, for the suite's guard. */
+export async function stopLeftoverCoresNamed(): Promise<string[]> {
+  return (await stopLeftover()).map(named);
+}
+
+async function stopLeftover(only?: Iterable<HcSession>): Promise<Scratch[]> {
   const wanted = only === undefined ? undefined : new Set(only);
   const checked = [...scratches].filter((scratch) => wanted === undefined || wanted.has(scratch.session));
   for (const scratch of checked) scratches.delete(scratch);
   const leftover = await Promise.all(
-    checked.map(async ({ session, dir, socket }) => {
-      const alive = await serving(socket);
-      if (alive) await stopCore(session);
-      rmSync(dir, { recursive: true, force: true });
-      return alive ? [session.name] : [];
+    checked.map(async (scratch) => {
+      const alive = await serving(scratch.socket);
+      if (alive) await stopCore(scratch.session);
+      rmSync(scratch.dir, { recursive: true, force: true });
+      return alive ? [scratch] : [];
     }),
   );
   return leftover.flat();
+}
+
+/**
+ * Inside a test, checks the session once the test is over (after its afterEach): a session it disposed whose core
+ * serves again fails that test, named with where the session was made, and the core is stopped; a core that comes back
+ * later still reaches the suite's guard with the same name (#441). Outside a test (beforeAll, a script) nothing is set.
+ */
+function checkAtTestEnd(scratch: Scratch): void {
+  try {
+    onTestFinished(async () => {
+      if (!scratch.disposed || !(await serving(scratch.socket))) return;
+      scratches.delete(scratch);
+      await stopCore(scratch.session);
+      rmSync(scratch.dir, { recursive: true, force: true });
+      throw new Error(`herdr-core outlived the test that started it (now stopped): ${named(scratch)}`);
+    });
+  } catch {
+    // Not in a test: the suite's guard still checks this session at the end.
+  }
 }
 
 /** A scratch hc session: its own core, state dir and socket under $TMPDIR. */
@@ -138,12 +182,15 @@ export function createHcSession(prefix: string): HcSession {
       };
     },
     dispose: async () => {
+      scratch.disposed = true;
       await stopCore(session);
       // A core started again after this one (a dialer reconnecting) makes the dir anew; the session stays registered,
       // so `stopLeftoverCores` still finds that core, stops it and removes the dir again.
       rmSync(dir, { recursive: true, force: true });
     },
   };
-  scratches.add({ session, dir, socket });
+  const scratch: Scratch = { session, dir, socket, made: madeAt(), disposed: false };
+  scratches.add(scratch);
+  checkAtTestEnd(scratch);
   return session;
 }
