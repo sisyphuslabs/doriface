@@ -86,8 +86,34 @@ const drawn = (page: Page) =>
     for (let node: Element | null = element; node !== null; node = node.parentElement) {
       if (getComputedStyle(node).transform !== "none") transformedAncestors += 1;
     }
+    // The grid this element's box fits, measured as wterm fits it: the content box over the cell and row it renders.
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    // oxlint-disable-next-line unicorn/consistent-function-scoping -- evaluate sends this function as source, so its helpers live inside it
+    const px = (value: string): number => parseFloat(value) || 0;
+    const bordersX = px(style.borderLeftWidth) + px(style.borderRightWidth);
+    const bordersY = px(style.borderTopWidth) + px(style.borderBottomWidth);
+    const width =
+      box.width -
+      px(style.paddingLeft) -
+      px(style.paddingRight) -
+      bordersX -
+      Math.max(0, (element as HTMLElement).offsetWidth - element.clientWidth - bordersX);
+    const height =
+      box.height -
+      px(style.paddingTop) -
+      px(style.paddingBottom) -
+      bordersY -
+      Math.max(0, (element as HTMLElement).offsetHeight - element.clientHeight - bordersY);
+    const cellWidth = px(style.getPropertyValue("--term-cell-width"));
+    const rowHeight = rows[0]?.getBoundingClientRect().height ?? 0;
+    const fits =
+      cellWidth > 0 && rowHeight > 0
+        ? `${Math.max(1, Math.floor(height / rowHeight))} ${Math.max(1, Math.floor(width / cellWidth))}`
+        : "unmeasured";
     return {
       grid: `${rows.length} ${rows[rows.length - 1]?.textContent?.length ?? 0}`,
+      fits,
       rows: rows.length,
       cols: rows[rows.length - 1]?.textContent?.length ?? 0,
       dpr: devicePixelRatio,
@@ -121,13 +147,15 @@ type Drawn = Awaited<ReturnType<typeof drawn>>;
  * The focused terminal once its grid is whole: its cell width is the font's own advance rounded to device pixels, as
  * Ghostty rounds it (within half a device pixel and one 1/64 px layout unit; a window zoom moves it far more), and the
  * core holds the grid it renders. wterm swaps the grid's row elements a frame before it redraws their text, so one read can pair a new row count
- * with an old column count.
+ * with an old column count. The grid must also be the one the terminal's box fits: under load the first frame after a
+ * layout change can come seconds late, and until it does the view and the core agree on a grid the box no longer has,
+ * which a step then took as its baseline (#526).
  */
 async function settled(page: Page, ready: (now: Drawn) => boolean = () => true): Promise<Drawn> {
   const whole = async (): Promise<boolean> => {
     const now = await drawn(page);
     const native = Math.abs(now.cellMinusAdvance) <= 0.5 / now.dpr + 1 / 64;
-    return ready(now) && native && (await coreGrid(page)) === now.grid;
+    return ready(now) && native && now.fits === now.grid && (await coreGrid(page)) === now.grid;
   };
   await expect.poll(whole, { timeout: 15_000 }).toBe(true);
   return drawn(page);
