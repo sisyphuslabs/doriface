@@ -60,6 +60,13 @@ describe("is the marked prompt still there", () => {
     expect(checkApproval(mark, waiting, CLAUDE_SECOND_PROMPT_SCREEN)).toBe("changed");
   });
 
+  test.each([
+    ["a new turn", { statusMs: 27_091, turn: 2 }],
+    ["a new status_ms", { statusMs: 41_000, turn: 1 }],
+  ])("changed when the identical dialog is asked again (%s)", (_, at) => {
+    expect(checkApproval(mark, terminalAt("t3", CLAUDE_BLOCKED, at), CLAUDE_PROMPT_SCREEN)).toBe("changed");
+  });
+
   test("still pending when only the cursor row moved", () => {
     const moved = CLAUDE_PROMPT_SCREEN.replace(" ❯ 1. Yes\n", "   1. Yes\n").replace("   2. Yes,", " ❯ 2. Yes,");
     expect(checkApproval(mark, waiting, moved)).toBe("pending");
