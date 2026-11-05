@@ -191,7 +191,12 @@ export interface SpacesSource {
 
 /** A space of a layout document, with the terminals its tabs show (live or not), in tab order. */
 /** `dir`: where the space is, its folder, else its first live terminal's directory; empty when neither is known. */
-export type ListedSpace = Space & { readonly addresses: readonly string[]; readonly dir: string };
+export type ListedSpace = Space & {
+  readonly addresses: readonly string[];
+  /** Each tab once, in tab order, with its panes' addresses (live or not), so a split tab counts as one. */
+  readonly tabPanes: readonly (readonly string[])[];
+  readonly dir: string;
+};
 
 /**
  * The spaces as herdr-app lists them (#404): every space of every machine's layout document, this machine's first, then
@@ -215,14 +220,16 @@ export function layoutSpaces(
     if (doc === null) return [];
     const tabs = tabsOf(doc);
     return docSpaces(doc).map((space) => {
-      const addresses = tabs
+      const tabPanes = tabs
         .filter((tab) => tab.space === space.id)
-        .flatMap((tab) => panesOf(tab.root))
-        .flatMap((pane) =>
-          pane.terminal === null
-            ? []
-            : [source.machine === null ? pane.terminal : `${source.machine}/${pane.terminal}`],
+        .map((tab) =>
+          panesOf(tab.root).flatMap((pane) =>
+            pane.terminal === null
+              ? []
+              : [source.machine === null ? pane.terminal : `${source.machine}/${pane.terminal}`],
+          ),
         );
+      const addresses = tabPanes.flat();
       const live = addresses.flatMap((address) => {
         const terminal = byAddress.get(address);
         return terminal?.state === "live" ? [terminal] : [];
@@ -237,6 +244,7 @@ export function layoutSpaces(
         dir,
         tabs: space.tabs.length,
         addresses,
+        tabPanes,
         statuses: new Set(live.map(agentStatus)),
       };
     });
@@ -246,7 +254,14 @@ export function layoutSpaces(
       (other) => other.key !== entry.key && other.machine === entry.machine && other.name === entry.name,
     );
     const name = twin && !entry.labeled && entry.dir !== "" ? `${entry.name} · ${parentName(entry.dir)}` : entry.name;
-    const space: ListedSpace = { id: entry.key, name, tabs: entry.tabs, addresses: entry.addresses, dir: entry.dir };
+    const space: ListedSpace = {
+      id: entry.key,
+      name,
+      tabs: entry.tabs,
+      addresses: entry.addresses,
+      tabPanes: entry.tabPanes,
+      dir: entry.dir,
+    };
     if (entry.machine !== undefined) Object.assign(space, { machine: entry.machine });
     const attention = ATTENTION.find((status) => entry.statuses.has(status));
     if (attention !== undefined) Object.assign(space, { attention });
@@ -256,10 +271,21 @@ export function layoutSpaces(
   });
 }
 
-/** A tab's place among the live terminals of its space's tabs, counted from 1 in tab order, as the space row counts tabs. */
+/** A tab's place among its space's tabs that show a live terminal, counted from 1 in tab order; a split tab is one. */
 export interface TabPosition {
   readonly index: number;
   readonly count: number;
+}
+
+/**
+ * The live terminals each tab of a space shows, in tab order; a tab with none is left out. The phone's sheet lists one
+ * row per entry, the one its first live pane stands for.
+ */
+export function liveTabs(space: ListedSpace, terminals: readonly Terminal[]): readonly (readonly string[])[] {
+  const liveAt = new Set(terminals.filter((t) => t.state === "live").map((t) => t.address));
+  return space.tabPanes
+    .map((panes) => panes.filter((address) => liveAt.has(address)))
+    .filter((panes) => panes.length > 0);
 }
 
 /** Where a terminal sits in the listed space whose tabs show it; none when it is finished or in no space's tab. */
@@ -268,12 +294,11 @@ export function tabPosition(
   terminals: readonly Terminal[],
   address: string,
 ): TabPosition | undefined {
-  const liveAt = new Set(terminals.filter((t) => t.state === "live").map((t) => t.address));
-  if (!liveAt.has(address)) return undefined;
   const space = spaces.find((each) => each.addresses.includes(address));
   if (space === undefined) return undefined;
-  const live = [...new Set(space.addresses)].filter((each) => liveAt.has(each));
-  return { index: live.indexOf(address) + 1, count: live.length };
+  const live = liveTabs(space, terminals);
+  const index = live.findIndex((panes) => panes.includes(address));
+  return index === -1 ? undefined : { index: index + 1, count: live.length };
 }
 
 export interface AgentCounts {

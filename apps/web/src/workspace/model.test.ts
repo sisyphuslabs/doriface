@@ -5,6 +5,7 @@ import {
   agentStatus,
   asksBeforeClosing,
   groupAgents,
+  liveTabs,
   runsProgram,
   tabPosition,
   terminalTitle,
@@ -145,6 +146,23 @@ describe("tabPosition", () => {
   test("counts the live terminals of its space's tabs, in tab order", () => {
     expect(tabPosition(spaces, terminals, "t1")).toEqual({ index: 1, count: 2 });
     expect(tabPosition(spaces, terminals, "t4")).toEqual({ index: 2, count: 2 });
+  });
+
+  test("a split tab is one tab: every pane has its tab's position and the count does not grow with panes", () => {
+    const many = ["t1", "t2", "t3", "t4", "t5"].map((address) => terminal({ address }));
+    const listed = layoutSpaces(
+      [here(docOf([{ id: "s", folder: "/w", tabs: [["t1"], ["t2", "t3", "t4"], ["t5"]] }]))],
+      many,
+    );
+    expect(["t1", "t2", "t3", "t4", "t5"].map((address) => tabPosition(listed, many, address))).toEqual([
+      { index: 1, count: 3 },
+      { index: 2, count: 3 },
+      { index: 2, count: 3 },
+      { index: 2, count: 3 },
+      { index: 3, count: 3 },
+    ]);
+    const first = listed[0];
+    expect(first === undefined ? [] : liveTabs(first, many)).toEqual([["t1"], ["t2", "t3", "t4"], ["t5"]]);
   });
 
   test("a finished terminal, one in no tab and an unknown one have no position", () => {
