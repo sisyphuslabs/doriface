@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findHc, hostCommand, usualHcDirs, type HostContext } from "../src/main/host-command.ts";
+import { findHc, hostCommand, saveHc, savedHc, usualHcDirs, type HostContext } from "../src/main/host-command.ts";
 
 const context = (overrides: Partial<HostContext>): HostContext => ({
   packaged: false,
@@ -44,6 +44,28 @@ describe("finding hc", () => {
     const unix = [join("/h", ".local", "bin"), join("/h", ".cargo", "bin"), "/opt/homebrew/bin", "/usr/local/bin"];
     expect(usualHcDirs(context({ home: "/h" }))).toEqual(unix);
     expect(usualHcDirs(context({ home: "/h", platform: "win32" }))).toEqual(unix.slice(0, 2));
+  });
+
+  test("an hc chosen in the app comes after HC_BIN and before PATH, and the choice survives a restart", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-chosen-"));
+    try {
+      const local = join(dir, "local");
+      mkdirSync(local);
+      writeFileSync(join(local, "hc"), "#!/bin/sh\n");
+      chmodSync(join(local, "hc"), 0o755);
+      const file = join(dir, "hc.json");
+      expect(savedHc(file, () => {})).toBeUndefined();
+      saveHc(file, "/chosen/hc");
+      expect(savedHc(file, () => {})).toBe("/chosen/hc");
+      const chosen = savedHc(file, () => {});
+      expect(findHc(context({ env: { PATH: local } }), [], chosen)).toBe("/chosen/hc");
+      expect(findHc(context({ env: { HC_BIN: "/pinned/hc", PATH: local } }), [], chosen)).toBe("/pinned/hc");
+      expect(findHc(context({ env: { PATH: local } }), [], undefined)).toBe(join(local, "hc"));
+      writeFileSync(file, JSON.stringify({ path: 7 }));
+      expect(savedHc(file, () => {})).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("HC_BIN wins, then PATH, then the usual install directories", () => {

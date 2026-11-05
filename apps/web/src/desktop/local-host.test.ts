@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type ConnectionSettings } from "../connection/setting
 import {
   closeDesktopWindow,
   desktopBridge,
+  desktopHcChooser,
   HostStartError,
   type HostStartFailure,
   onDesktopNavigate,
@@ -120,6 +121,15 @@ describe("desktop local host", () => {
     );
     expect(error).toBeInstanceOf(HostStartError);
     expect(error instanceof HostStartError ? error.failure : undefined).toEqual(failure);
+  });
+
+  test("Choose hc is offered only by a shell that has it, and only a string answer is a chosen file", async () => {
+    expect(desktopHcChooser({})).toBeNull();
+    expect(desktopHcChooser({ doriface: { startLocalHost: async () => ({}) } })).toBeNull();
+    const choose = desktopHcChooser({ doriface: { chooseHc: async () => "/opt/hc" } });
+    expect(await choose?.()).toBe("/opt/hc");
+    const odd = desktopHcChooser({ doriface: { chooseHc: async () => 7 } });
+    expect(await odd?.()).toBeNull();
   });
 
   test("the shell's navigations reach the app only as app paths, and only through a bridge that offers them", () => {
