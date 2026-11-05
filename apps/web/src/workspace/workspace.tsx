@@ -28,6 +28,7 @@ import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
+import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
@@ -44,6 +45,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (name === LAYOUT_DOC) heardLayout.current(machine, version);
   }, []);
   const fed = useTerminals(connection, onDoc);
+  useResumeEnds(connection);
   const { entries, terminals, refresh, listError, views, retry, listed } = useMachines(connection, fed.terminals);
   const { layouts, heard } = useLayoutDocs(connection, views);
   heardLayout.current = heard;

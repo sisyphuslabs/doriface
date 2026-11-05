@@ -1,6 +1,7 @@
 import type { WTerm } from "@wterm/react";
 import { sendBytes } from "../keys/actions.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
+import { scrollTerminal } from "./terminal-scroll.tsx";
 import type { TerminalInput } from "./terminal-view.tsx";
 
 /** `send` is the view's input path, so bound keys queue through a reconnect in order with typed input. */
@@ -8,7 +9,6 @@ export function useTerminalActions(wt: WTerm | null, send: (data: TerminalInput)
   useActionHandler("terminal", (action) => {
     if (wt === null || !focused) return false;
     if (action.startsWith("send:")) return (send(sendBytes(action)), true);
-    const view = wt.element;
     switch (action) {
       case "terminal.copy": {
         const text = wt.getSelectionText();
@@ -27,17 +27,17 @@ export function useTerminalActions(wt: WTerm | null, send: (data: TerminalInput)
         send("\u000c");
         return true;
       case "terminal.scroll:top":
-        view.scrollTo({ top: 0 });
-        return true;
+        return scrollTerminal(wt, { to: "top" });
       case "terminal.scroll:bottom":
-        view.scrollTo({ top: view.scrollHeight });
-        return true;
+        return scrollTerminal(wt, { to: "bottom" });
       case "terminal.scroll:page_up":
-        view.scrollBy({ top: -view.clientHeight });
-        return true;
+        return scrollTerminal(wt, { pages: -1 });
       case "terminal.scroll:page_down":
-        view.scrollBy({ top: view.clientHeight });
-        return true;
+        return scrollTerminal(wt, { pages: 1 });
+      case "terminal.scroll:line_up":
+        return scrollTerminal(wt, { lines: -1 });
+      case "terminal.scroll:line_down":
+        return scrollTerminal(wt, { lines: 1 });
       case "terminal.prompt:prev":
         return wt.scrollToPrompt(-1);
       case "terminal.prompt:next":

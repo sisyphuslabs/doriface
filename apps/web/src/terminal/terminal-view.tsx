@@ -21,6 +21,7 @@ import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } fro
 import { Ended } from "./ended.tsx";
 import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
+import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } from "./terminal-scroll.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
 
@@ -47,6 +48,8 @@ export interface TerminalViewProps {
   readonly closeLabel?: string;
   /** Once the view shows that its program had ended before it attached: there is no terminal left to type into. */
   readonly onEnded?: () => void;
+  /** A CSS length the jump-to-bottom button keeps above the terminal's bottom, for controls floating over it. */
+  readonly jumpClearance?: string;
 }
 
 const HISTORY_LINES = 2_000;
@@ -67,7 +70,7 @@ function handBack(event: FocusEvent<HTMLElement>): void {
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onPort, onEnd } = props;
-  const { closeLabel = "Close tab", onEnded } = props;
+  const { closeLabel = "Close tab", onEnded, jumpClearance } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -139,10 +142,23 @@ export function TerminalView(props: TerminalViewProps) {
   const send = useCallback((data: TerminalInput): void => {
     if (stream.current?.write(data) !== true) pending.current.push(data);
   }, []);
-  useTerminalPort(handle, send, onPort);
+  // Typed input from outside the renderer (the phone's keys, a bound key, a confirmed paste) scrolls to the bottom, as
+  // wterm already does for keys typed into it.
+  const typed = useCallback(
+    (data: TerminalInput): void => {
+      const instance = handle.current?.instance;
+      if (instance !== null && instance !== undefined) scrollTerminal(instance, { to: "bottom" });
+      send(data);
+    },
+    [send],
+  );
+  const scroll = useTerminalScroll(wt);
+  const outputShown = useRef(scroll.changed);
+  outputShown.current = scroll.changed;
+  useTerminalPort(handle, typed, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
   useWideGlyphScale(wt, config);
-  useTerminalActions(wt, send, focused);
+  useTerminalActions(wt, typed, focused);
   useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
@@ -244,6 +260,7 @@ export function TerminalView(props: TerminalViewProps) {
           attached.onData((bytes) => {
             handle.current?.write(bytes);
             attached.consumed(bytes.byteLength);
+            outputShown.current();
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
             if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
@@ -285,7 +302,8 @@ export function TerminalView(props: TerminalViewProps) {
   if (unopened !== null) return <Unopened why={unopened} className={className} onRetry={() => setUnopened(null)} />;
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
-    <>
+    // The scrollbar and the jump button overlay the terminal: neither takes room from the grid.
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <Terminal
         ref={handle}
         core={core}
@@ -314,14 +332,24 @@ export function TerminalView(props: TerminalViewProps) {
         }}
         onBlur={() => stream.current?.focus(false)}
       />
+      {wt === null ? null : (
+        <>
+          <TerminalScrollbar wt={wt} scroll={scroll} />
+          <JumpToBottom
+            wt={wt}
+            scroll={scroll}
+            {...(jumpClearance === undefined ? {} : { clearance: jumpClearance })}
+          />
+        </>
+      )}
       <PasteDialog
         paste={paste}
         onCancel={() => setPaste(null)}
         onPaste={(text) => {
-          send(text);
+          typed(text);
           setPaste(null);
         }}
       />
-    </>
+    </div>
   );
 }

@@ -56,6 +56,8 @@ export const ACTIONS: readonly ActionDef[] = [
   term("terminal.scroll:bottom", "Scroll to bottom", "scroll_to_bottom"),
   term("terminal.scroll:page_up", "Scroll a page up", "scroll_page_up"),
   term("terminal.scroll:page_down", "Scroll a page down", "scroll_page_down"),
+  term("terminal.scroll:line_up", "Scroll a line up", "scroll_page_lines:-1"),
+  term("terminal.scroll:line_down", "Scroll a line down", "scroll_page_lines:1"),
   term("terminal.prompt:prev", "Previous prompt", "jump_to_prompt:-1"),
   term("terminal.prompt:next", "Next prompt", "jump_to_prompt:1"),
 ];
