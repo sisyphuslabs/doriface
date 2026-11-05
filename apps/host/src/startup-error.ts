@@ -5,6 +5,7 @@
 export type StartupErrorCode =
   | "hc-binary-missing"
   | "hc-version-failed"
+  | "hc-too-old"
   | "port-in-use"
   | "permission-denied"
   | "already-running"
@@ -18,6 +19,8 @@ export const STARTUP_EXIT_CODES: Readonly<Record<StartupErrorCode, number>> = {
   "port-in-use": 6,
   "permission-denied": 7,
   "already-running": 8,
+  // 9 is the state lock's (LOCK_WEDGED_EXIT_CODE).
+  "hc-too-old": 10,
 };
 
 export interface StartupErrorDetail {

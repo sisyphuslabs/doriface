@@ -25,4 +25,11 @@ describe("host start copy", () => {
     expect(copy.next).toBe("doriface looks for hc on your PATH. Install herdr-core there, then retry.");
     expect(copy.next).not.toContain("/opt/homebrew");
   });
+
+  test("an herdr-core older than the host needs asks for an update, with the install link (#406)", () => {
+    const copy = hostStartCopy(failure("hc-too-old", { path: "C:\\tools\\hc.exe" }));
+    expect(copy.cause).toContain("C:\\tools\\hc.exe");
+    expect(copy.next).toContain("0.1.17");
+    expect(copy.install).toBe(true);
+  });
 });

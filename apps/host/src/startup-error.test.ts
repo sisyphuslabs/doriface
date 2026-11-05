@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hcSpawnError } from "./hc-pipe.ts";
@@ -92,6 +92,20 @@ describe("a host that cannot start", () => {
     expect(exit.code).toBe(STARTUP_EXIT_CODES["hc-version-failed"]);
     expect(exit.reports).toEqual([expect.objectContaining({ code: "hc-version-failed", path: other })]);
   });
+
+  test.skipIf(process.platform === "win32")(
+    "V9: with an hc older than 0.1.17 reports hc-too-old (exit 10) before it serves or creates any state (#406)",
+    async () => {
+      const old = join(scratch(), "hc");
+      writeFileSync(old, "#!/bin/sh\necho hc 0.1.16\n", { mode: 0o755 });
+      const stateDir = join(scratch(), "state");
+      const exit = await serve(["--listen", "127.0.0.1:0", "--hc", old, "--state-dir", stateDir]);
+      expect(exit.code).toBe(STARTUP_EXIT_CODES["hc-too-old"]);
+      expect(exit.code).toBe(10);
+      expect(exit.reports).toEqual([expect.objectContaining({ code: "hc-too-old", path: old })]);
+      expect(existsSync(stateDir)).toBe(false);
+    },
+  );
 
   test("on a port another listener holds reports port-in-use with the address", async () => {
     const taken = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });

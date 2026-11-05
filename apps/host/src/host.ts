@@ -4,6 +4,7 @@ import { lanUrlsFor } from "./lan-urls.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
+import { meetsHcFloor, MIN_HC_VERSION } from "./hc-version.ts";
 import { openControl } from "./host-control.ts";
 import { e2eeDeps } from "./host-e2ee.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
@@ -30,6 +31,14 @@ export async function startHost(options: HostOptions): Promise<Host> {
     throw new StartupError("already-running", message, { path: options.stateDir });
   }
   const hcVersion = await readHcVersion(options.hc);
+  // Before anything is served or created: an older hc does not speak this host's protocol generation (#406).
+  if (!meetsHcFloor(hcVersion)) {
+    throw new StartupError(
+      "hc-too-old",
+      `herdr-core ${hcVersion} at ${options.hc} is older than the ${MIN_HC_VERSION} this host needs: update it`,
+      { path: options.hc },
+    );
+  }
   // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
   const parts: StartedPart[] = [];
   try {

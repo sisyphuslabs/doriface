@@ -1,4 +1,5 @@
 import type { Subprocess } from "bun";
+import { parseHcVersionLine } from "./hc-version.ts";
 import type { DataHandler, Link } from "./link.ts";
 import { errnoOf, StartupError } from "./startup-error.ts";
 
@@ -102,7 +103,7 @@ export function hcSpawnError(hc: string, error: unknown): StartupError {
   return new StartupError("startup-failed", `cannot run ${hc}: ${reason}`, { path: hc }, { cause: error });
 }
 
-/** Runs `hc --version` and returns the bare version, e.g. "0.1.17". */
+/** Runs `hc --version` and returns the bare version, e.g. "0.1.17"; output that is not a version is hc-version-failed. */
 export async function readHcVersion(hc: string): Promise<string> {
   let proc: Subprocess<"ignore", "pipe", "pipe">;
   try {
@@ -115,7 +116,7 @@ export async function readHcVersion(hc: string): Promise<string> {
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  const version = /^hc (\S+)/.exec(out.trim())?.[1];
+  const version = parseHcVersionLine(out);
   if (code !== 0 || version === undefined) {
     throw new StartupError("hc-version-failed", `\`${hc} --version\` failed (exit ${code}): ${(out + err).trim()}`, {
       path: hc,
