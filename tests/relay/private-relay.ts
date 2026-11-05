@@ -14,7 +14,7 @@
  */
 import { lstatSync, readdirSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const MANAGED_DIR = resolve(REPO_ROOT, ".relay");
@@ -74,30 +74,35 @@ async function repositoryVariables(): Promise<ReadonlySet<string>> {
   return new Set(listed);
 }
 
+type Env = Record<string, string | undefined>;
+
+// A credential prompt would hang CI and confuse a developer without access; fail instead.
+const NO_PROMPT = { GIT_TERMINAL_PROMPT: "0" };
+
 /**
- * The environment for git in the managed checkout, and nowhere else: the caller's repository variables are dropped
- * (GIT_CONFIG_* stays, since CI's credential helper lives there), GIT_DIR and GIT_WORK_TREE name `.relay` explicitly,
- * and discovery may not climb out of it.
+ * The environment for git in the managed checkout, and nowhere else: the caller's repository variables are dropped,
+ * and GIT_DIR and GIT_WORK_TREE name `.relay` explicitly, so git never discovers a repository on its own.
+ *
+ * GIT_CONFIG_* stays, since CI's credential helper lives there. So does the caller's own git config: a `core.hooksPath`
+ * or `core.fsmonitor` there can run code during the fetch, but only code the caller already runs with the same
+ * privileges in every repository of theirs, so it is not narrowed to the credential helper entry.
  */
-function confinedTo(dir: string, repository: ReadonlySet<string>): Record<string, string | undefined> {
+function confinedTo(dir: string, repository: ReadonlySet<string>): Env {
   const kept = Object.entries(process.env).filter(([name]) => !repository.has(name) || name.startsWith("GIT_CONFIG"));
-  return {
-    ...Object.fromEntries(kept),
-    GIT_DIR: join(dir, ".git"),
-    GIT_WORK_TREE: dir,
-    GIT_CEILING_DIRECTORIES: dirname(dir),
-    // A credential prompt would hang CI and confuse a developer without access; fail instead.
-    GIT_TERMINAL_PROMPT: "0",
-  };
+  return { ...Object.fromEntries(kept), GIT_DIR: join(dir, ".git"), GIT_WORK_TREE: dir, ...NO_PROMPT };
 }
 
-const CREDENTIALS = new Set(["RELAY_READ_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]);
+/** A variable that may carry a credential: any `*TOKEN*`, and git config passed in the environment (`GIT_CONFIG_*`). */
+const isCredential = (name: string): boolean => name.includes("TOKEN") || name.startsWith("GIT_CONFIG_");
 
-/** The environment for the relay's `bun install`: its lifecycle scripts get none of the credentials the fetch used. */
-const withoutCredentials = (env: Record<string, string | undefined>): Record<string, string | undefined> =>
-  Object.fromEntries(Object.entries(env).filter(([name]) => !CREDENTIALS.has(name) && !name.startsWith("GIT_CONFIG_")));
-
-type Env = Record<string, string | undefined>;
+/**
+ * The environment for the relay's `bun install`: none of the caller's repository variables, so its lifecycle scripts'
+ * git finds `.relay` itself, and none of the credentials the fetch used.
+ */
+function installEnv(repository: ReadonlySet<string>): Env {
+  const kept = Object.entries(process.env).filter(([name]) => !repository.has(name) && !isCredential(name));
+  return { ...Object.fromEntries(kept), ...NO_PROMPT };
+}
 
 /** Runs `argv` in `cwd` with stdout passed through; stderr is returned as well as printed. */
 async function run(argv: readonly string[], cwd: string, env: Env): Promise<{ code: number; stderr: string }> {
@@ -143,21 +148,18 @@ function holdsSymlink(dir: string): boolean {
 }
 
 /**
- * True only when `dir/.git` is a real directory that git resolves to itself, with its own store and nothing linked
- * out of it: a symlinked `.relay` or `.git`, a `gitdir:` file, a `commondir` into another repository, or any symlink
- * inside `.git` (an `objects/` or `index` borrowed from another repository, as `git-new-workdir` lays out) would let
- * git write somewhere else. git itself never creates symlinks there.
+ * True only when the real directory `dir` (the caller checked it) holds a `.git` that is a real directory with its own
+ * store and nothing linked out of it: a symlinked `.git`, a `gitdir:` file, a `commondir` into another repository, or
+ * any symlink inside `.git` (an `objects/` or `index` borrowed from another repository, as `git-new-workdir` lays out)
+ * would let git write somewhere else. git itself never creates symlinks there. GIT_DIR is explicit, so git's own idea
+ * of the git dir is always `.git`; only where its store lives (the common dir) can differ.
  */
 async function ownsRepository(dir: string, env: Env): Promise<boolean> {
   const gitDir = join(dir, ".git");
-  if (kindOf(dir) !== "directory" || kindOf(gitDir) !== "directory") return false;
+  if (kindOf(gitDir) !== "directory") return false;
   if (holdsSymlink(gitDir)) return false;
-  const [absolute, common] = await Promise.all([
-    gitOutput(dir, env, ["rev-parse", "--absolute-git-dir"]),
-    gitOutput(dir, env, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
-  ]);
-  const expected = realpathSync(gitDir);
-  return absolute === expected && common === expected;
+  const common = await gitOutput(dir, env, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+  return common === realpathSync(gitDir);
 }
 
 /** Brings the managed checkout to the pinned commit and installs it; returns the relay directory to use. */
@@ -168,13 +170,15 @@ export async function fetchRelay(): Promise<string> {
     return dir;
   }
   const pin = await readPin();
-  const env = confinedTo(dir, await repositoryVariables());
+  const repository = await repositoryVariables();
+  const env = confinedTo(dir, repository);
   // A checkout already at the pin needs no source; a fresh one finds out it has none before `.relay` exists.
   let url: string | undefined;
   if (kindOf(dir) === "missing") {
     url = relaySource();
     await mkdir(dir);
   }
+  // The only check of `.relay` itself: through a symlink, the forced checkout below would land on wherever it points.
   if (kindOf(dir) !== "directory") throw new RelayCheckoutInvalid(dir);
   if (kindOf(join(dir, ".git")) === "missing") await must(["git", "init", "--quiet"], dir, env);
   if (!(await ownsRepository(dir, env))) throw new RelayCheckoutInvalid(dir);
@@ -187,10 +191,7 @@ export async function fetchRelay(): Promise<string> {
   // The checkout is this module's own: discard what `bun install` changes inside the submodule (it marks the vendored
   // host CLI executable), or moving to a new pin would refuse to switch the submodule.
   await must(["git", "submodule", "update", "--init", "--depth", "1", "--force"], dir, env);
-  const installEnv = withoutCredentials(confinedTo(dir, await repositoryVariables()));
-  delete installEnv["GIT_DIR"];
-  delete installEnv["GIT_WORK_TREE"];
-  await must([process.execPath, "install", "--frozen-lockfile"], dir, installEnv);
+  await must([process.execPath, "install", "--frozen-lockfile"], dir, installEnv(repository));
   console.log(`relay: ${pin.rev} in ${dir}`);
   return dir;
 }
