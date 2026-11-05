@@ -65,6 +65,17 @@ describe("resolveKeymap", () => {
   });
 });
 
+/** AltGr+= as Windows reports it: Ctrl and Alt held, AltGraph on, typing `key`. */
+const altGr = (key: string) => ({
+  code: "Equal",
+  key,
+  ctrlKey: true,
+  altKey: true,
+  shiftKey: false,
+  metaKey: false,
+  getModifierState: (state: string) => state === "AltGraph",
+});
+
 describe("triggers", () => {
   test.each([
     ["cmd+shift+T", "shift+super+t"],
@@ -88,6 +99,13 @@ describe("triggers", () => {
     expect(triggerFromEvent({ ...event, code: "ShiftLeft" })).toBeNull();
     expect(triggerFromEvent({ ...event, code: "F12" })).toBe("shift+super+f12");
     expect(triggerFromEvent({ ...event, code: "F13" })).toBeNull();
+  });
+
+  // Windows reports AltGr as Ctrl+Alt: on AZERTY, AltGr+= types `}` and must reach the terminal, not ctrl+alt+= (#403).
+  test("a character typed through AltGr is no trigger, while the same keys without AltGr still are", () => {
+    expect(triggerFromEvent(altGr("}"))).toBeNull();
+    expect(triggerFromEvent({ ...altGr("="), getModifierState: () => false })).toBe("ctrl+alt+=");
+    expect(triggerFromEvent({ ...altGr("}"), metaKey: true })).toBe("ctrl+alt+super+=");
   });
 });
 
