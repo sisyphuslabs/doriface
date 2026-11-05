@@ -9,7 +9,7 @@
 
 An end-to-end encrypted web, PWA and desktop face for [herdr-core](https://github.com/herdrdev/herdr-core).
 
-doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted with Noise and, by default, carried through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
+doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted with Noise and carried through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
 
 | Workspace (night, 1440)                                             | Workspace (day, 1440)                                           |
 | ------------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -17,28 +17,30 @@ doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON
 
 ## Status
 
-| Piece                                        | State                                                                                                                                                                                                                                              |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Host gateway, byte-for-byte `hc` passthrough | works                                                                                                                                                                                                                                              |
-| Web client and installable PWA               | works: through the relay once paired, or on the same machine with "Connect through" set to "Loopback dev" in Settings and the token from `doriface-host --print-token`                                                                             |
-| Desktop app ("Use this computer")            | works: starts the host and `hc` locally and attaches terminals                                                                                                                                                                                     |
-| Terminal rendering with libghostty           | works (Ghostty v1.4.0)                                                                                                                                                                                                                             |
-| End-to-end encryption                        | works: Noise IK / IKpsk2 between every client and host ([#7](https://github.com/sisyphuslabs/doriface/pull/7))                                                                                                                                     |
-| Pairing a device                             | works: an 8-character code protected by CPace, or a one-tap link ([#7](https://github.com/sisyphuslabs/doriface/pull/7))                                                                                                                           |
-| Public relay `relay-doriface.omo.dev`        | deployed: every `hc` method family and bulk traffic, ciphertext only ([#17](https://github.com/sisyphuslabs/doriface/issues/17), [#26](https://github.com/sisyphuslabs/doriface/pull/26), [#28](https://github.com/sisyphuslabs/doriface/pull/28)) |
-| Other machines through the relay             | works: `hc machine add --via 'doriface-host connect <host>'`, one machine per pairing ([#30](https://github.com/sisyphuslabs/doriface/pull/30))                                                                                                    |
+| Piece                                        | State                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Host gateway, byte-for-byte `hc` passthrough | works                                                                                                                                                                                                                                                                                                                          |
+| Web client and installable PWA               | works: through the relay once paired. A development build (`bun run --cwd apps/web dev`) also offers "Loopback dev" in Settings > Connections, with the token from `doriface-host --print-token`; a release build connects through the relay only                                                                              |
+| Desktop app ("Use this computer")            | works: starts the host and `hc` on this computer and attaches terminals, starts the host again if it stops ([#525](https://github.com/sisyphuslabs/doriface/pull/525)), and can install herdr-core from the app, for this user only, when it is missing or too old ([#417](https://github.com/sisyphuslabs/doriface/pull/417)) |
+| Terminal rendering with libghostty           | works (Ghostty v1.4.0)                                                                                                                                                                                                                                                                                                         |
+| End-to-end encryption                        | works: Noise IK / IKpsk2 between every client and host ([#7](https://github.com/sisyphuslabs/doriface/pull/7))                                                                                                                                                                                                                 |
+| Pairing a device                             | works: an 8-character code protected by CPace, or a one-tap link ([#7](https://github.com/sisyphuslabs/doriface/pull/7))                                                                                                                                                                                                       |
+| Public relay `relay-doriface.omo.dev`        | deployed: every `hc` method family and bulk traffic, ciphertext only ([#17](https://github.com/sisyphuslabs/doriface/issues/17), [#26](https://github.com/sisyphuslabs/doriface/pull/26), [#28](https://github.com/sisyphuslabs/doriface/pull/28))                                                                             |
+| Other machines through the relay             | works: `hc machine add --via 'doriface-host connect <host>'`, one machine per pairing ([#30](https://github.com/sisyphuslabs/doriface/pull/30))                                                                                                                                                                                |
 
-This is the state of the [v0.1.0 release](https://github.com/sisyphuslabs/doriface/releases/tag/v0.1.0), which also carries the macOS desktop builds.
+This table describes `dev`. The latest release is [v0.1.1](https://github.com/sisyphuslabs/doriface/releases/tag/v0.1.1).
 
 ## How it fits together
 
 ```
 browser / PWA / desktop ──┐                         ┌── doriface-host ── hc connect ── herdr-core
                           ├─ Noise (end-to-end) ────┤
-     relay-doriface.omo.dev (sees ciphertext only) ─┘   or directly on your LAN
+     relay-doriface.omo.dev (sees ciphertext only) ─┘
 ```
 
-On the same machine the host also serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`, which Settings offers as "Loopback dev".
+Every client reaches a host through the relay. The host also serves the contract's direct path (`/v1/e2ee` on its LAN listener), but no shipped client dials it, and the Direct address setting is hidden ([#458](https://github.com/sisyphuslabs/doriface/issues/458)).
+
+On the same machine the host also serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`. The desktop app talks to its own local host this way, and a development build's Settings offers it as "Loopback dev".
 
 The host never parses what `hc` says; it pipes the stream. The client SDK speaks herdr-core's protocol itself, so a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire format every package is built against is the [transport contract](docs/transport.md).
 
