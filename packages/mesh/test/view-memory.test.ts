@@ -83,6 +83,14 @@ function reachable(classes: readonly string[], ...subjects: unknown[]): Record<s
 
 const MERGES = 256;
 
+/**
+ * The bound for each heap-probe test (two full collections and two debug snapshots around the work it measures). On
+ * agents-seoul-1 at load5 115-142, 20 runs of the single-record test took 1.3-9.0 s (median 3.1 s, p90 5.3 s); dev's
+ * version with plain snapshots took 1.8-7.2 s (median 3.2 s, p90 5.4 s), so bun's 5 s default already failed it about
+ * one run in ten under load. The bound is the worst case measured with about 3x margin.
+ */
+export const HEAP_PROBE_TEST_MS = 30_000;
+
 /** Heap one cold view at the cap may leave in a cache for a names-only mesh: views and history, no per-context statuses. */
 const NAMES_BUDGET_MB = 96;
 /** For the partition shape: a common past per accuser/record pair is n/32 words of bits, not a Set of ids. */
@@ -109,30 +117,38 @@ async function heldMb(shape: string): Promise<number> {
 }
 
 describe("M-14: a ViewCache holds one mesh's history, not one engine per merge", () => {
-  test("single-record merges through one cache leave no per-merge Dag or Engine reachable", () => {
-    const mesh = bigMesh({ records: MERGES, revokes: 4, seed: 3 });
-    const cache = new ViewCache();
-    const held = reachable(["Dag", "Engine"], cache);
-    for (let n = 2; n <= mesh.length; n++) viewOfRecords(mesh.slice(0, n), cache);
-    // The positive control shares the snapshot: two Dags still held must be seen, on top of what the cache keeps.
-    const kept = [new Dag(mesh), new Dag(mesh)];
-    const left = reachable(["Dag", "Engine"], cache, kept);
-    const dags = (left["Dag"] ?? 0) - (held["Dag"] ?? 0);
-    expect(dags).toBeGreaterThanOrEqual(kept.length);
-    expect(dags - kept.length).toBeLessThanOrEqual(1);
-    expect((left["Engine"] ?? 0) - (held["Engine"] ?? 0)).toBeLessThanOrEqual(1);
-  });
+  test(
+    "single-record merges through one cache leave no per-merge Dag or Engine reachable",
+    () => {
+      const mesh = bigMesh({ records: MERGES, revokes: 4, seed: 3 });
+      const cache = new ViewCache();
+      const held = reachable(["Dag", "Engine"], cache);
+      for (let n = 2; n <= mesh.length; n++) viewOfRecords(mesh.slice(0, n), cache);
+      // The positive control shares the snapshot: two Dags still held must be seen, on top of what the cache keeps.
+      const kept = [new Dag(mesh), new Dag(mesh)];
+      const left = reachable(["Dag", "Engine"], cache, kept);
+      const dags = (left["Dag"] ?? 0) - (held["Dag"] ?? 0);
+      expect(dags).toBeGreaterThanOrEqual(kept.length);
+      expect(dags - kept.length).toBeLessThanOrEqual(1);
+      expect((left["Engine"] ?? 0) - (held["Engine"] ?? 0)).toBeLessThanOrEqual(1);
+    },
+    HEAP_PROBE_TEST_MS,
+  );
 
-  test("cache.clear() releases the history and the per-record results it held", () => {
-    const mesh = bigMesh({ records: 64, revokes: 2, seed: 5 });
-    const cache = new ViewCache();
-    viewOfRecords(mesh, cache);
-    const held = reachable(["History", "Shared"], cache);
-    cache.clear();
-    const left = reachable(["History", "Shared"], cache);
-    expect([left["History"], left["Shared"]]).toEqual([(held["History"] ?? 0) - 1, (held["Shared"] ?? 0) - 1]);
-    expect(viewOfRecords(mesh, cache).members).toEqual(viewOfRecords(mesh).members);
-  });
+  test(
+    "cache.clear() releases the history and the per-record results it held",
+    () => {
+      const mesh = bigMesh({ records: 64, revokes: 2, seed: 5 });
+      const cache = new ViewCache();
+      viewOfRecords(mesh, cache);
+      const held = reachable(["History", "Shared"], cache);
+      cache.clear();
+      const left = reachable(["History", "Shared"], cache);
+      expect([left["History"], left["Shared"]]).toEqual([(held["History"] ?? 0) - 1, (held["Shared"] ?? 0) - 1]);
+      expect(viewOfRecords(mesh, cache).members).toEqual(viewOfRecords(mesh).members);
+    },
+    HEAP_PROBE_TEST_MS,
+  );
 
   test(`a cold view of a names-only mesh at the cap keeps under ${NAMES_BUDGET_MB} MB in its cache`, async () => {
     const held = await heldMb("names-only");
