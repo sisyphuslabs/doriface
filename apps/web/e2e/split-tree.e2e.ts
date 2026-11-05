@@ -88,7 +88,7 @@ test("a tab shows its herdr-app split tree, four levels of rows and columns, and
   await showsTheTree();
 });
 
-test("a fresh device focuses a split tab's first pane, and Alt+arrows move focus between its panes", async ({
+test("a fresh device focuses a split tab's first pane, and Ctrl+Alt+arrows move focus between its panes", async ({
   page,
 }) => {
   const [t1, t2, t3] = [shell("left"), shell("top"), shell("bottom")] as const;
@@ -122,9 +122,9 @@ test("a fresh device focuses a split tab's first pane, and Alt+arrows move focus
     [t1, t2, t3].map((address) => expect(paneOf(page, address)).toContainText("$", { timeout: 20_000 })),
   );
   await focusIs(t1);
-  await page.keyboard.press("Alt+ArrowRight");
+  await page.keyboard.press("Control+Alt+ArrowRight");
   await focusIs(t2);
-  await page.keyboard.press("Alt+ArrowLeft");
+  await page.keyboard.press("Control+Alt+ArrowLeft");
   await focusIs(t1);
 });
 

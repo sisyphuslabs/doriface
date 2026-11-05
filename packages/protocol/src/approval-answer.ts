@@ -42,7 +42,8 @@ async function settle(core: ApprovalCore, mark: ApprovalMark, mine: ApprovalReco
 
 /**
  * The claimer's fence, read right before its key press: the prompt's record is still this answer's own `claimed` one,
- * and this client's own clock says the claim is younger than `CLAIM_TTL_MS - FENCE_MARGIN_MS`.
+ * and both this client's own clocks (its monotonic clock and its wall clock, each read only against itself) say the
+ * claim is younger than `CLAIM_TTL_MS - FENCE_MARGIN_MS`.
  */
 async function fenced(
   core: ApprovalCore,
@@ -50,13 +51,17 @@ async function fenced(
   mine: ApprovalRecord,
   clock: ApprovalClock,
   claimedAt: number,
+  wall: () => number,
+  wallClaimedAt: number,
 ) {
   const current = (await readRecords(core, address)).findLast((record) => record.prompt === mine.prompt);
   return (
     current?.client === mine.client &&
     current.attempt === mine.attempt &&
     current.outcome === "claimed" &&
-    clock.now() - claimedAt < CLAIM_TTL_MS - FENCE_MARGIN_MS
+    clock.now() - claimedAt < CLAIM_TTL_MS - FENCE_MARGIN_MS &&
+    // A monotonic clock may stand still while the device sleeps; this device's own wall clock does not.
+    wall() - wallClaimedAt < CLAIM_TTL_MS - FENCE_MARGIN_MS
   );
 }
 
@@ -69,7 +74,8 @@ async function fenced(
  *    in `retake`, from an answer it saw end as `failed`.
  * 2. Re-read the live screen: press only if the marked prompt is still there.
  * 3. Fence: re-read the document; press only if the prompt's record is still this answer's own claim and this client's
- *    clock says the claim is younger than CLAIM_TTL_MS - FENCE_MARGIN_MS. Otherwise nothing is pressed (`failed`).
+ *    monotonic and wall clocks both say the claim is younger than CLAIM_TTL_MS - FENCE_MARGIN_MS (a sleeping page's
+ *    monotonic clock may stand still). Otherwise nothing is pressed (`failed`).
  * 4. Press the agent's own key, then record `sent`. A press that throws is `unknown`: it may have landed, so the prompt
  *    stays held until the screen moves.
  *
@@ -81,6 +87,8 @@ export interface AnswerOptions {
   readonly clock?: ApprovalClock;
   /** The attempt id of this client's own earlier `failed` answer, whose claim it may take over. */
   readonly retake?: string;
+  /** This device's wall clock, read only against itself (default `Date.now`): it keeps running while a page sleeps. */
+  readonly wall?: () => number;
 }
 
 export async function answerApproval(
@@ -94,6 +102,8 @@ export async function answerApproval(
   const clock = options.clock ?? clockOf(core);
   const key = approvalKey(mark);
   const claimedAt = clock.now();
+  const wall = options.wall ?? Date.now;
+  const wallClaimedAt = wall();
   const claim: ApprovalRecord = {
     prompt: key,
     answer,
@@ -103,7 +113,7 @@ export async function answerApproval(
     outcome: "claimed",
   };
   const taken = await update(core, mark.terminal, (records) =>
-    records.some((record) => record.prompt === key && holds(record, clock, options.retake))
+    records.some((record) => record.prompt === key && holds(record, clock, options.retake, who.client))
       ? undefined
       : [...records.filter((record) => record.prompt !== key), claim].map((record) => recordJson(record)),
   );
@@ -116,7 +126,7 @@ export async function answerApproval(
       await settle(core, mark, claim, "stale");
       return { kind: "stale" };
     }
-    press = await fenced(core, mark.terminal, claim, clock, claimedAt);
+    press = await fenced(core, mark.terminal, claim, clock, claimedAt, wall, wallClaimedAt);
   } catch (error) {
     // Nothing was pressed. Release the claim as `failed` if the document is reachable; if it is not, it lapses after
     // CLAIM_TTL_MS of every other client's watch.

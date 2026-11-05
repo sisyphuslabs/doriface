@@ -56,3 +56,23 @@ export function nearest(
   }
   return best?.id ?? null;
 }
+
+export type PaneMove =
+  | { readonly kind: "pass" }
+  | { readonly kind: "bump" }
+  | { readonly kind: "go"; readonly to: string };
+
+/**
+ * What a pane move key does: a lone pane leaves the key to its program (`pass`, as Ghostty does); in a split it goes
+ * to the nearest pane that way, or with none there nudges the focused pane toward that edge (`bump`).
+ */
+export function paneMove(
+  from: string,
+  direction: Direction,
+  panes: ReadonlyMap<string, Rect>,
+  history: readonly string[] = [],
+): PaneMove {
+  if (panes.size < 2 || !panes.has(from)) return { kind: "pass" };
+  const to = nearest(from, direction, panes, history);
+  return to === null ? { kind: "bump" } : { kind: "go", to };
+}

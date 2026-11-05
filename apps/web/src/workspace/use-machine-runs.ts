@@ -6,8 +6,11 @@ import { failureNotice, startTerminal } from "./start-on.ts";
 
 export interface MachineRuns {
   readonly newTerminalOn: (machine: string) => void;
-  /** New terminal with these run parameters, on this machine or the one `on` names; `place` puts it somewhere else than a new tab. */
-  readonly start: (params: TerminalRunParams, place?: (address: string) => void) => void;
+  /**
+   * New terminal with these run parameters, on this machine or the one `on` names; `place` puts it somewhere else than a
+   * new tab, and `failed` runs when it did not start.
+   */
+  readonly start: (params: TerminalRunParams, place?: (address: string) => void, failed?: () => void) => void;
 }
 
 /**
@@ -21,11 +24,12 @@ export function useMachineRuns(
 ): MachineRuns {
   const toasts = useToastManager();
   const start = useCallback(
-    (params: TerminalRunParams, place: (address: string) => void = opened): void => {
+    (params: TerminalRunParams, place: (address: string) => void = opened, failed?: () => void): void => {
       const core = connection.hello.core.name;
       void startTerminal((run) => connection.call("terminal.run", run), params, core).then((started) => {
         if (started.ok) return place(started.address);
         toasts.add({ type: "error", ...failureNotice(started.failure, connection.closed, core) });
+        failed?.();
         return refresh();
       });
     },
