@@ -29,7 +29,7 @@ export function NumberStepper({ label, className, ...props }: NumberStepperProps
         </NumberField.Decrement>
         <NumberField.Input
           aria-label={label}
-          className="h-(--control) w-12 border-x border-border bg-transparent text-center text-base text-foreground outline-none tabular-nums focus-visible:bg-hover"
+          className="h-(--control) w-12 border-x border-border bg-transparent text-center text-base text-foreground outline-none tabular-nums focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring"
         />
         <NumberField.Increment aria-label={`Increase ${label}`} className={stepButton}>
           <Plus />
