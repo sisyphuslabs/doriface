@@ -26,8 +26,9 @@ async function readDarwinHost(page: Page): Promise<void> {
 }
 
 test("the e2e host reports linux on its core, and its key bar has no Command key", async ({ page }) => {
-  expect(coreDoc(HOST_INFO_DOC)).toMatchObject({ value: { v: 1, os: "linux" } });
   await openPhoneTerminal(page);
+  // The host writes its OS once a client opens a pipe (#306): this page's.
+  await expect.poll(() => coreDoc(HOST_INFO_DOC)).toMatchObject({ value: { v: 1, os: "linux" } });
   await expect(key(page, "Control")).toBeVisible();
   await expect(keysBar(page).getByRole("button", { name: "Command", exact: true })).toHaveCount(0);
 });
