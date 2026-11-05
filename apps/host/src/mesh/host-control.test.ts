@@ -6,7 +6,7 @@ import { generateToken } from "../auth.ts";
 import { requestControl } from "../control.ts";
 import { type HostOptions, startHost } from "../host.ts";
 import { meshFixture } from "../testing/mesh-fixture.ts";
-import { resolveHcBin } from "../testing/hc-session.ts";
+import { createHcSession } from "../testing/hc-session.ts";
 import { meshStatus } from "./status.ts";
 
 const NOW = new Date("2026-11-03T12:00:00.000Z");
@@ -14,10 +14,14 @@ const NOW = new Date("2026-11-03T12:00:00.000Z");
 /** Asks a real host's control socket for its mesh status, the way `doriface-host mesh status` does. */
 async function askHost(hook: HostOptions["meshStatus"]): Promise<unknown> {
   const stateDir = mkdtempSync(join(tmpdir(), "dh-meshctl-"));
+  // Its own scratch core: a host on the default session would start the default core on any call to the core.
+  const session = createHcSession("meshctl");
   const host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
     token: generateToken(),
-    hc: resolveHcBin(),
+    hc: session.hc,
+    session: session.name,
+    env: session.env,
     stateDir,
     meshStatus: hook,
     log: () => {},
@@ -26,6 +30,7 @@ async function askHost(hook: HostOptions["meshStatus"]): Promise<unknown> {
     return await requestControl(stateDir, { op: "mesh-status" });
   } finally {
     await host.stop();
+    await session.dispose();
     rmSync(stateDir, { recursive: true, force: true });
   }
 }

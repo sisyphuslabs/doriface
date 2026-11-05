@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { hcSpawnError } from "./hc-pipe.ts";
 import { startHost } from "./host.ts";
 import { parseStartupErrorLine, STARTUP_EXIT_CODES, type StartupErrorReport } from "./startup-error.ts";
-import { resolveHcBin } from "./testing/hc-session.ts";
+import { createHcSession } from "./testing/hc-session.ts";
 
 const CLI = join(import.meta.dir, "cli.ts");
 setDefaultTimeout(30_000);
@@ -26,9 +26,10 @@ interface Exit {
   readonly reports: readonly StartupErrorReport[];
 }
 
-async function serve(args: readonly string[]): Promise<Exit> {
+async function serve(args: readonly string[], env?: Record<string, string | undefined>): Promise<Exit> {
   const stateDir = join(scratch(), "state");
   const proc = Bun.spawn([process.execPath, CLI, "--no-relay", "--state-dir", stateDir, ...args], {
+    ...(env === undefined ? {} : { env }),
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
@@ -94,14 +95,17 @@ describe("a host that cannot start", () => {
 
   test("on a port another listener holds reports port-in-use with the address", async () => {
     const taken = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+    // Its own scratch core: a host on the default session would start the default core on any call to the core.
+    const session = createHcSession("startup-port");
     try {
       const address = `127.0.0.1:${String(taken.port)}`;
-      const exit = await serve(["--listen", address, "--hc", resolveHcBin()]);
+      const exit = await serve(["--listen", address, "--hc", session.hc], { ...session.env });
       expect(exit.code).toBe(STARTUP_EXIT_CODES["port-in-use"]);
       expect(exit.reports).toEqual([expect.objectContaining({ code: "port-in-use", address })]);
       expect(exit.stderr).not.toContain("usage:");
     } finally {
       await taken.stop(true);
+      await session.dispose();
     }
   });
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "../auth.ts";
 import { startHost } from "../host.ts";
-import { resolveHcBin } from "../testing/hc-session.ts";
+import { createHcSession } from "../testing/hc-session.ts";
 import { type LockStep, retireStateLock, withStateLock } from "./lock.ts";
 
 /** How a host from before #270 takes its lock: `state.lock` is a file it creates and reads back. */
@@ -44,11 +44,15 @@ describe("a state lock retired on a clean stop (#297)", () => {
 
   test("a host started and stopped cleanly on a state dir leaves no state.lock", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "dh-lock-host-"));
+    // Its own scratch core: a host on the default session would start the default core on any call to the core.
+    const session = createHcSession("lock-host");
     try {
       const host = await startHost({
         listen: { hostname: "127.0.0.1", port: 0 },
         token: generateToken(),
-        hc: resolveHcBin(),
+        hc: session.hc,
+        session: session.name,
+        env: session.env,
         stateDir,
         log: () => {},
       });
@@ -56,6 +60,7 @@ describe("a state lock retired on a clean stop (#297)", () => {
       expect(existsSync(join(stateDir, "state.lock"))).toBe(false);
       expect(olderReaderTakes(stateDir)).toBe(`${process.pid} older`);
     } finally {
+      await session.dispose();
       rmSync(stateDir, { recursive: true, force: true });
     }
   });
