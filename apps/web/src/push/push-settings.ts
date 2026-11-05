@@ -1,6 +1,5 @@
 import { base64urlDecode } from "@doriface/crypto";
 import { DEFAULT_PUSH_PREFS, type PushHostLine, type PushPrefs } from "@doriface/protocol";
-import { useSyncExternalStore } from "react";
 import { type ConnectionSettings, isConfigured } from "../connection/settings.ts";
 import { connectionStore } from "../connection/store.ts";
 import { pushChannel } from "./push-channel.ts";
@@ -206,8 +205,6 @@ class PushSettings {
 }
 
 export const pushSettings = new PushSettings();
-
-export const usePushSettings = (): PushView => useSyncExternalStore(pushSettings.subscribe, () => pushSettings.view);
 
 /** Keeps the saved push route with the connection: a change of host or token re-registers notifications there. */
 export function followConnection(): void {

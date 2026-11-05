@@ -14,12 +14,10 @@ export const GENERIC_WRITE = 0x4000_0000;
 export const READ_CONTROL = 0x0002_0000;
 export const WRITE_DAC = 0x0004_0000;
 export const WRITE_OWNER = 0x0008_0000;
-export const DELETE = 0x0001_0000;
 export const FILE_SHARE_READ = 0x1;
 export const FILE_SHARE_WRITE = 0x2;
 export const CREATE_NEW = 1;
 export const OPEN_EXISTING = 3;
-export const FILE_ATTRIBUTE_NORMAL = 0x80;
 export const FILE_ATTRIBUTE_REPARSE_POINT = 0x400;
 export const FILE_FLAG_BACKUP_SEMANTICS = 0x0200_0000;
 export const FILE_FLAG_OPEN_REPARSE_POINT = 0x0020_0000;
@@ -53,7 +51,6 @@ function load() {
     FlushFileBuffers: { args: [u64], returns: i32 },
     CloseHandle: { args: [u64], returns: i32 },
     GetFileInformationByHandle: { args: [u64, pointer], returns: i32 },
-    GetFinalPathNameByHandleW: { args: [u64, pointer, u32, u32], returns: u32 },
     MoveFileExW: { args: [pointer, pointer, u32], returns: i32 },
     DeleteFileW: { args: [pointer], returns: i32 },
     GetLastError: { args: [], returns: u32 },
@@ -239,14 +236,6 @@ export function fileFacts(handle: Handle): FileFacts {
     size: view.getUint32(32, true) * 2 ** 32 + view.getUint32(36, true),
     links: view.getUint32(40, true),
   };
-}
-
-/** The handle's final path (`\\?\C:\…` or `\\?\UNC\…`), for binding later operations to the inspected object. */
-export function finalPath(handle: Handle): string {
-  const buffer = new Uint16Array(32_768);
-  const length = api().k.GetFinalPathNameByHandleW(handle, ptr(buffer), buffer.length, 0);
-  if (length === 0 || length >= buffer.length) fail("GetFinalPathNameByHandleW");
-  return Buffer.from(buffer.buffer, 0, length * 2).toString("utf16le");
 }
 
 /** The handle's owner and DACL as SDDL (`O:…D:…`), read through the handle itself. */
