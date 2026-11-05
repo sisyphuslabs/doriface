@@ -3,6 +3,11 @@ import { decodePairSlotAck, PairSlotAckStatus } from "./wire/index.ts";
 
 export type PairSlotResult = "registered" | "taken";
 
+/** The relay acked a PAIR_SLOT request Malformed: for the signed form, a relay older than contract v1.9 (#22). */
+export class PairSlotMalformedError extends Error {
+  override readonly name = "PairSlotMalformedError";
+}
+
 interface Waiter {
   readonly resolvers: PromiseWithResolvers<PairSlotResult>;
   readonly timer: ReturnType<typeof setTimeout>;
@@ -37,7 +42,9 @@ export class PairSlotRequests {
     if (waiter === undefined) return true;
     clearTimeout(waiter.timer);
     if (ack.status === PairSlotAckStatus.Malformed) {
-      waiter.resolvers.reject(new Error(`the relay refused the PAIR_SLOT request for ${ack.slot} as malformed`));
+      waiter.resolvers.reject(
+        new PairSlotMalformedError(`the relay refused the PAIR_SLOT request for ${ack.slot} as malformed`),
+      );
     } else {
       waiter.resolvers.resolve(ack.status === PairSlotAckStatus.Registered ? "registered" : "taken");
     }

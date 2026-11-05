@@ -11,7 +11,7 @@ const noise = new Uint8Array(32).map((_, i) => i + 1);
 const signature = new Uint8Array(64).map((_, i) => 255 - i);
 const payload = (frame: Uint8Array): Uint8Array => frame.subarray(MUX_HEADER_BYTES);
 
-describe("PAIR_SLOT, both forms (#22, contract v1.8)", () => {
+describe("PAIR_SLOT, both forms (#22, contract v1.9)", () => {
   test("the unsigned form is 35 bytes and decodes with no signature", () => {
     const frame = payload(encodePairSlotRequest("AB3", noise));
     expect(frame.byteLength).toBe(35);
