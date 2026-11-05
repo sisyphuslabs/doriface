@@ -10,7 +10,7 @@ const suite = pushSuite();
 
 function asking(name: string): AskingAgent {
   const agent = startAskingAgent(name);
-  suite.later(() => agent.end());
+  suite.endAfterTest(() => agent.end());
   return agent;
 }
 

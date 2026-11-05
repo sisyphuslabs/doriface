@@ -4,13 +4,15 @@ import { E2E_HOST_ENV, E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { clearLayouts } from "./layout-doc.ts";
 import { type HcSocket, routeHcSocket } from "./hc-socket.ts";
 import { readSavedEnv } from "./saved-env.ts";
+import { beginTest, endTest } from "./terminal-guard.ts";
 import { startWorkerHost } from "./worker-host.ts";
 
 /**
  * Every worker runs its own e2e host for as long as it lives (see worker-host.ts). Pages start with loopback dev
- * settings pointing at it, or at `loopbackUrl` when a spec routes another address there.
+ * settings pointing at it, or at `loopbackUrl` when a spec routes another address there. Every test, and every worker
+ * as its host stops, is checked for terminals left on that host's core (terminal-guard.ts).
  */
-export const test = base.extend<{ loopbackUrl: string }, { e2eHost: undefined }>({
+export const test = base.extend<{ loopbackUrl: string; ownTerminals: undefined }, { e2eHost: undefined }>({
   e2eHost: [
     // oxlint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from this pattern; it has none
     async ({}, use) => {
@@ -19,6 +21,16 @@ export const test = base.extend<{ loopbackUrl: string }, { e2eHost: undefined }>
       await stop();
     },
     { scope: "worker", auto: true, timeout: 180_000 },
+  ],
+  // Set up before beforeEach hooks and torn down after afterEach hooks and the test's pages.
+  ownTerminals: [
+    // oxlint-disable-next-line no-empty-pattern -- as above
+    async ({}, use, testInfo) => {
+      const before = beginTest(testInfo);
+      await use(undefined);
+      endTest(testInfo, before);
+    },
+    { auto: true },
   ],
   loopbackUrl: [`ws://127.0.0.1:${E2E_HOST_PORT}/v1/hc`, { option: true }],
   page: async ({ page, loopbackUrl }, use) => {

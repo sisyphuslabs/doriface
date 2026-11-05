@@ -4,6 +4,7 @@ import { Columns2, Maximize2, Minimize2, Rows2, X } from "lucide-react";
 import type { Axis } from "@doriface/protocol/layout";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import type { ReactNode } from "react";
+import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
@@ -110,7 +111,7 @@ export function Pane(props: PaneProps) {
       }}
       data-split={split}
       data-focused={focused}
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card [&_.wterm]:transition-opacity [&_.wterm]:duration-(--duration-micro)"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card [&_.wterm]:transition-opacity [&_.wterm]:duration-(--duration-micro)"
     >
       {split ? (
         <header
@@ -125,23 +126,27 @@ export function Pane(props: PaneProps) {
           <PaneButtons zoomed={zoomed} onSplit={onSplit} onZoom={onZoom} onClose={onClose} />
         </header>
       ) : null}
-      {terminal.offline === true && machine !== undefined ? (
-        <MachineOffline machine={machine} />
-      ) : (
-        // A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh.
-        <TerminalView
-          key={terminal.pid ?? undefined}
-          connection={connection}
-          address={terminal.address}
-          pid={terminal.pid ?? null}
-          live={terminal.state === "live"}
-          focused={focused}
-          label={`${title} output`}
-          onEnd={onEnd}
-          onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
-          onPort={onPort}
-        />
-      )}
+      {/* The terminal's own box: the approval banner pins to its top, under a split pane's header, never over it. */}
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {terminal.offline === true ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
+        {terminal.offline === true && machine !== undefined ? (
+          <MachineOffline machine={machine} />
+        ) : (
+          // A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh.
+          <TerminalView
+            key={terminal.pid ?? undefined}
+            connection={connection}
+            address={terminal.address}
+            pid={terminal.pid ?? null}
+            live={terminal.state === "live"}
+            focused={focused}
+            label={`${title} output`}
+            onEnd={onEnd}
+            onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
+            onPort={onPort}
+          />
+        )}
+      </div>
       {dock}
     </section>
   );
