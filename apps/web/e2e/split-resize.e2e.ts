@@ -278,6 +278,51 @@ test("a pane whose program ends while its layout write is refused stays, says so
   expect(savedTab("tb-pair")).toBe(saved);
 });
 
+/** Two one-pane tabs, `other` first, with the second, `solo`, in view and its pane focused; returns their shells. */
+async function soloInView(page: Page): Promise<{ solo: string; other: string }> {
+  const [other = "", solo = ""] = ["other", "solo"].map(shell);
+  seedLayout([
+    { id: "tb-other", name: "other", root: [{ pane: "p1", terminal: other, weight: 1 }] },
+    { id: "tb-solo", name: "solo", root: [{ pane: "p2", terminal: solo, weight: 1 }] },
+  ]);
+  await page.goto("/");
+  await page.getByRole("tab", { name: /solo/ }).click();
+  await paneOf(page, solo).getByRole("textbox").focus();
+  await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", solo);
+  return { solo, other };
+}
+
+test("the last pane of the tab in view ending while its layout write is refused keeps that tab in view, focused", async ({
+  page,
+}) => {
+  const socket = await routeHcSocket(page);
+  await soloInView(page);
+  const saved = savedTab("tb-solo");
+
+  socket.staleWrites(true);
+  await page.keyboard.type("exit\r");
+  await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  // The tab switch was part of the drop: the refused write puts the tab back in view, with focus on the pane it kept.
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/solo/);
+  const kept = page.getByRole("region", { name: "resize-solo terminal" });
+  await expect(kept.getByRole("heading", { name: "This session ended" })).toBeVisible();
+  await expect(kept).toHaveAttribute("data-focused", "true");
+  expect(savedTab("tb-solo")).toBe(saved);
+});
+
+test("closing the tab in view while its layout write is refused keeps that tab in view", async ({ page }) => {
+  const socket = await routeHcSocket(page);
+  await soloInView(page);
+  const saved = savedTab("tb-solo");
+
+  socket.staleWrites(true);
+  await page.getByRole("button", { name: /^Close .*solo/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
+  await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("tab", { selected: true })).toHaveText(/solo/);
+  expect(savedTab("tb-solo")).toBe(saved);
+});
+
 /** A tab of the given panes side by side, each a shell named for its pane; returns the shells in order. */
 function sideBySide(id: string, names: readonly string[]): string[] {
   const started = names.map(shell);
