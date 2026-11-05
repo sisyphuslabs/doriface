@@ -42,7 +42,7 @@ export function PhoneShell(props: PhoneShellProps) {
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
     return (
-      <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar">
+      <div className="flex h-dvh min-h-0 min-w-0 flex-col bg-sidebar pr-(--safe-right) pl-(--safe-left)">
         <header
           data-titlebar
           className="flex h-12 shrink-0 items-center gap-1 pt-[env(safe-area-inset-top)] pr-4 pl-[var(--titlebar-inset-start,1rem)]"
