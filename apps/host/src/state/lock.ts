@@ -1,5 +1,16 @@
-import { linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 
 export const DEFAULT_LOCK_TIMEOUT_MS = 2000;
 const RETRY_MS = 5;
@@ -234,8 +245,10 @@ function sweep(dir: string, mine: number): void {
  * holds the highest one, or `retry` after losing a race to a process that has moved the lock on.
  */
 function attempt(dir: string, content: string, step: LockStepHook): number | "wait" | "retry" {
-  const top = highest(dir);
-  if (top > 0) {
+  const inDir = highest(dir);
+  // A lock directory made after a retired one numbers its generations above it; the retired one itself holds nothing.
+  const top = Math.max(inDir, floorOf(dir));
+  if (top > 0 && top === inDir) {
     const holder = readLock(join(dir, String(top)));
     if (holder === undefined) return "retry";
     if (holder !== FREE && isHeld(join(dir, String(top)), holder)) {
@@ -283,6 +296,32 @@ export function withStateLock<T>(
   step: LockStepHook = () => {},
   io: ReleaseIo = DEFAULT_RELEASE_IO,
 ): T {
+  return locked(stateDir, fn, timeoutMs, step, io, false);
+}
+
+/**
+ * Takes the state lock and, holding it, retires the lock directory instead of releasing it: renames it to
+ * `state.lock.retired-<generation>-<id>` and removes the older retired ones. A host calls this on a clean stop, so a
+ * state dir nobody holds has no `state.lock` for a host from before #270 to read as a file (#297). The next take makes
+ * a fresh directory whose generations number above the retired one, so the highest generation still never goes back.
+ * If the rename fails, the lock is released as usual.
+ */
+export function retireStateLock(
+  stateDir: string,
+  timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
+  step: LockStepHook = () => {},
+): void {
+  locked(stateDir, () => undefined, timeoutMs, step, DEFAULT_RELEASE_IO, true);
+}
+
+function locked<T>(
+  stateDir: string,
+  fn: () => T,
+  timeoutMs: number,
+  step: LockStepHook,
+  io: ReleaseIo,
+  retire: boolean,
+): T {
   const dir = join(stateDir, "state.lock");
   const content = holderContent();
   const deadline = Date.now() + timeoutMs;
@@ -290,11 +329,20 @@ export function withStateLock<T>(
   try {
     for (;;) {
       let mine: number | "wait" | "retry" = "wait";
-      if (ensureLockDir(dir)) {
-        free ??= writeTemporary(join(dir, FREE), FREE);
-        mine = attempt(dir, content, step);
-        if (typeof mine === "number") return hold(dir, mine, free, fn, step, io);
+      try {
+        if (ensureLockDir(dir)) {
+          // A free generation written in a directory since retired went with it.
+          if (free !== undefined && !existsSync(free)) free = undefined;
+          free ??= writeTemporary(join(dir, FREE), FREE);
+          mine = attempt(dir, content, step);
+        }
+      } catch (error) {
+        // The directory was retired under this take (a host stopped): its written free generation went with it.
+        if (errorCode(error) !== "ENOENT") throw error;
+        free = undefined;
+        mine = "retry";
       }
+      if (typeof mine === "number" && free !== undefined) return hold(dir, mine, free, fn, step, io, retire);
       if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${dir})`);
       if (mine === "wait") Bun.sleepSync(RETRY_MS);
     }
@@ -308,17 +356,29 @@ export function withStateLock<T>(
  * link that fails is tried again up to RELEASE_TRIES times; one that never succeeds leaves `mine` in place (the highest
  * generation must never go back) and is handed to `io.wedged`.
  */
-function hold<T>(dir: string, mine: number, free: string, fn: () => T, step: LockStepHook, io: ReleaseIo): T {
+function hold<T>(
+  dir: string,
+  mine: number,
+  free: string,
+  fn: () => T,
+  step: LockStepHook,
+  io: ReleaseIo,
+  retire: boolean,
+): T {
   step("acquired", mine);
   try {
     return fn();
   } finally {
-    const failure = release(free, join(dir, String(mine + 1)), io.link);
-    if (failure === undefined) {
+    if (retire && retireDir(dir, mine)) {
       step("released", mine + 1);
-      rmSync(join(dir, String(mine)), { force: true });
     } else {
-      io.wedged(failure.error, dir);
+      const failure = release(free, join(dir, String(mine + 1)), io.link);
+      if (failure === undefined) {
+        step("released", mine + 1);
+        rmSync(join(dir, String(mine)), { force: true });
+      } else {
+        io.wedged(failure.error, dir);
+      }
     }
   }
 }
@@ -336,4 +396,36 @@ function release(free: string, next: string, link: ReleaseIo["link"]): { readonl
     }
   }
   return failure;
+}
+
+const RETIRED = /^state\.lock\.retired-([1-9][0-9]{0,14})-/;
+
+/** The newest generation a retired lock directory reached beside `dir`, or 0. */
+function floorOf(dir: string): number {
+  let floor = 0;
+  for (const name of readdirSync(dirname(dir))) {
+    const generation = Number(RETIRED.exec(name)?.[1] ?? 0);
+    if (generation > floor) floor = generation;
+  }
+  return floor;
+}
+
+/** Renames `dir`, held at generation `mine`, out of the way and keeps only the newest retired one; false if it could not. */
+function retireDir(dir: string, mine: number): boolean {
+  const retired = `${dir}.retired-${mine}-${crypto.randomUUID()}`;
+  try {
+    renameSync(dir, retired);
+  } catch {
+    return false;
+  }
+  const parent = dirname(dir);
+  for (const name of readdirSync(parent)) {
+    const generation = Number(RETIRED.exec(name)?.[1] ?? 0);
+    if (generation > 0 && join(parent, name) !== retired && generation <= mine) {
+      rmSync(join(parent, name), { recursive: true, force: true });
+    }
+  }
+  // Only its name matters now (it carries the floor); what was inside is no one's.
+  for (const name of readdirSync(retired)) rmSync(join(retired, name), { recursive: true, force: true });
+  return true;
 }

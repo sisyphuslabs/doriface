@@ -9,6 +9,7 @@ import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
+import { retireStateLock } from "./state/lock.ts";
 import { listenError, StartupError } from "./startup-error.ts";
 import { type StartedPart, stopStarted } from "./stop-started.ts";
 import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
@@ -261,10 +262,20 @@ async function serve(
         .then(() => info?.stop())
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
-        .then(() => undefined);
+        .then(() => retireLock(stateDir, options.log));
       return stopping;
     },
   };
+}
+
+/** Once nothing of a host writes its state, leaves no state.lock for an older host to read as a file (#297). */
+function retireLock(stateDir: string | undefined, log: (line: string) => void): void {
+  if (stateDir === undefined) return;
+  try {
+    retireStateLock(stateDir);
+  } catch (error) {
+    log(`host: cannot retire the state lock: ${String(error)}`);
+  }
 }
 
 /** The control socket is how `devices revoke` closes live sessions, so a host that cannot open it does not start. */
