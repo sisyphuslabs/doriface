@@ -122,6 +122,28 @@ describe("FaceScales", () => {
     expect(measure("\u{D55C}", DEFAULT, hangul).width).toBe(20);
   });
 
+  test("a sample no face has, drawn as a one-cell box, does not hold the block to its own size", () => {
+    const SIZE = 17.33;
+    const CELL = 10.43;
+    const second = new Set("\u{8FD9}\u{6D4B}");
+    const measure: Measure = (text, _family, scale) => {
+      if ((text.codePointAt(0) ?? 0) < 0x80)
+        return { width: CELL * scale, ...ASCII_INK, actualBoundingBoxAscent: 16, actualBoundingBoxDescent: 4.5 };
+      // \u8FBC has no face on this host: its missing-glyph box is one cell wide at any size.
+      const width = text === "\u{8FBC}" ? CELL * scale : Math.round((second.has(text) ? 1 : 0.948) * SIZE * scale);
+      return {
+        width,
+        actualBoundingBoxLeft: 0,
+        actualBoundingBoxRight: width,
+        actualBoundingBoxAscent: 14,
+        actualBoundingBoxDescent: 2,
+      };
+    };
+    const scale = new FaceScales(measure, DEFAULT, DEFAULT).scaleOf("\u{6D4B}");
+    expect(scale).toBeGreaterThan(1);
+    expect(measure("\u{6D4B}", DEFAULT, scale).width).toBeLessThanOrEqual(2 * CELL);
+  });
+
   test.each([
     ["an emoji", "\u{1F600}"],
     ["an emoji inside a CJK block", "\u{3297}\u{FE0F}"],

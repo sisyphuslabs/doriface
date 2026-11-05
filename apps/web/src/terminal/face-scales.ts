@@ -80,14 +80,15 @@ export class FaceScales {
 
   /**
    * Which face draws a glyph can only be told by measuring that glyph, and nothing is measured per glyph. So a block the
-   * browser splits across fallback faces takes the smallest of their scales: no face draws past its two cells, and a
-   * face with a narrower ideograph is drawn a pixel short of them. A block drawn from one face keeps that face's scale.
+   * browser splits across fallback faces takes the smallest of their scales: no face draws past its two cells. A face
+   * with a narrower ideograph then draws short of them: a pixel when both faces need enlarging, the whole gap of #197
+   * when the other face already fills its cells and keeps scale 1. A block drawn from one face keeps that face's scale.
    */
   #blockScale(samples: string): number {
     const [first, ...others] = [...samples];
     if (first === undefined) return 1;
     const own = this.#faceScale(first);
-    // The user's chosen font draws the block (its common sample): it keeps its size, as before.
+    // The user's chosen font draws the block (its common sample), or no face has it: it keeps its size, as before.
     if (own === undefined) return 1;
     let scale = own;
     for (const sample of others) {
@@ -97,7 +98,10 @@ export class FaceScales {
     return scale;
   }
 
-  /** The scale of the face that draws `sample`, or undefined when the user's chosen font draws it. */
+  /**
+   * The scale of the face that draws `sample`; undefined when the user's chosen font draws it, or when what is drawn is
+   * no wider than a cell: a missing glyph's box, not a face to fit, so it must not hold the block to scale 1.
+   */
   #faceScale(sample: string): number | undefined {
     const drawn = this.#measure(sample, this.#family, 1);
     // The user's chosen font drew the sample when it differs from what the default stack falls back to; like Ghostty,
@@ -105,6 +109,7 @@ export class FaceScales {
     if (this.#family !== this.#defaultFamily && !sameGlyph(drawn, this.#measure(sample, this.#defaultFamily, 1)))
       return undefined;
     this.#primary ??= primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) });
+    if (!(drawn.width > this.#primary.cell)) return undefined;
     return wideGlyphScale(
       (at) => (at === 1 ? drawn.width : this.#measure(sample, this.#family, at).width),
       this.#primary,
