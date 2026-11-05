@@ -8,6 +8,7 @@
 - Rename a space from its menu, the command palette or a double-click; the new name shows on every device. (#416)
 - Closing a tab or pane ends its program, and asks first only when the program is still busy; a close that needs no question shows none. (#426, #534)
 - A tab follows its machine through a rename. (#495)
+- A tab moved while its machine is being renamed stays visible: its layout follows the machine to the new name. (#589)
 - A double-click on the tab after the selected one renames it instead of closing it. (#573)
 
 ### Sidebar and titlebar
