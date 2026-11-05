@@ -304,6 +304,7 @@ Web push notices (v1.7). The relay is not on the push path and does not change: 
 - A client reads it with hc's own `doc.get`: `{name:"doriface-host"}` for a terminal on the core it is connected to, `{name:"doriface-host", on:<machine>}` for one on a machine that core added (a mesh member or any machine running doriface-host). hc's frames pass through unchanged; nothing is added to them.
 - A reader takes `v:1` and `os`, and ignores members it does not know, so a later host may add some. No document, another `v`, an unknown `os`, or a failed read (an offline machine) means the host did not say: the phone key bar then guesses from the core's or machine's name, as before.
 - The phone key bar shows Command only on a `darwin` host's terminal, and its paste chord is cmd+v there and ctrl+shift+v elsewhere.
+- The document is advisory and never used for security. hc's `doc.set` takes `on`, so a core that added machine X, or any client of X's core, can overwrite X's `doriface-host` document until X's host restarts and writes it again. The effect is limited to X's key bar: whether it shows Command and which paste chord it sends.
 
 ## Close codes
 
