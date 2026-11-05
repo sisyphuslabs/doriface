@@ -6,11 +6,19 @@ export interface ShellAction {
   readonly unavailable?: string;
 }
 
-/** The app actions each shell's palette may offer; that shell's handler takes every one of them. */
+/**
+ * The app actions each shell's palette may offer; that shell's handler takes every one of them. Resize is not offered:
+ * one step moves a line a twentieth, so it is left to its keys, the divider's own keys and the Shell menu.
+ */
 const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
   desktop: [
     "tab.new",
-    "pane.split",
+    "pane.split:right",
+    "pane.split:down",
+    "pane.close",
+    "pane.equalize",
+    "pane.zoom",
+    "tab.close",
     "tab.move:left",
     "tab.move:right",
     "session.rename",
@@ -44,7 +52,7 @@ function canMove(id: string, { keys, active }: Strip): boolean {
 
 /** Splitting needs a terminal in view whose layout takes edits; until then it is listed as unavailable, with why. */
 function unavailable(id: string, inView: boolean, readOnly: string | null): string | undefined {
-  if (id !== "pane.split") return undefined;
+  if (!id.startsWith("pane.split:")) return undefined;
   return inView ? (readOnly ?? undefined) : "No terminal to split";
 }
 

@@ -95,6 +95,8 @@ export interface ExtraKeysBarProps {
   readonly onPad?: () => void;
   readonly onPaste?: () => void;
   readonly onHideKeyboard?: () => void;
+  /** The hide button's name: Hide keyboard by default; Hide keys where the bar shows without a soft keyboard. */
+  readonly hideLabel?: string;
   /** Wraps the Switch session button, e.g. in the menu it opens. */
   readonly renderSessions?: (trigger: ReactElement) => ReactNode;
   readonly className?: string;
@@ -185,7 +187,7 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
           {props.renderSessions === undefined ? sessions : props.renderSessions(sessions)}
           <button
             type="button"
-            aria-label="Hide keyboard"
+            aria-label={props.hideLabel ?? "Hide keyboard"}
             onMouseDown={keepFocus}
             onClick={props.onHideKeyboard}
             className={cn(key, idleKey)}
@@ -201,13 +203,15 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
 export interface KeyboardButtonProps {
   readonly onPress?: () => void;
   readonly className?: string;
+  /** Show keyboard by default; Show keys where the button opens the keys bar itself (no soft keyboard to raise). */
+  readonly label?: string;
 }
 
-export function KeyboardButton({ onPress, className }: KeyboardButtonProps) {
+export function KeyboardButton({ onPress, className, label = "Show keyboard" }: KeyboardButtonProps) {
   return (
     <button
       type="button"
-      aria-label="Show keyboard"
+      aria-label={label}
       onClick={onPress}
       className={cn(
         "flex size-12 items-center justify-center rounded-full border border-border bg-chrome/90 text-foreground shadow-lg backdrop-blur-md outline-none active:bg-selected [&_svg]:size-5",

@@ -8,7 +8,8 @@ import { LiveSessions } from "./e2ee/sessions.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
-import { publishHostInfo } from "./host-info.ts";
+import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
+import { retireStateLock } from "./state/lock.ts";
 import { listenError, StartupError } from "./startup-error.ts";
 import { type StartedPart, stopStarted } from "./stop-started.ts";
 import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
@@ -156,15 +157,15 @@ async function serve(
     () => ends.stop(),
     () => ends.kill().map((pid) => `hc connect pid ${pid}`),
   );
+  // The host's OS goes on its core once a client opens a pipe, as the end sweeper starts: every hc call starts its
+  // session's core when none runs, and a host that no one uses must not start one (#306).
   const core = { hc: options.hc, session: options.session, env: options.env };
-  const info = publishHostInfo(core, options.platform ?? process.platform, options.log);
+  let info: HostInfoPublisher | undefined;
   started(
     "host info",
-    () => info.stop(),
-    () => info.kill().map((pid) => `hc connect pid ${pid}`),
+    () => info?.stop(),
+    () => (info?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
   );
-  // A client that connects next reads the OS already; a core too slow to answer does not hold the start.
-  await settledWithin(info.settled, HOST_INFO_WAIT_MS);
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -175,6 +176,7 @@ async function serve(
     directIdleMs: options.directIdleMs,
     openPipe: () => {
       void ends.ensure();
+      info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
@@ -257,22 +259,23 @@ async function serve(
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
-        .then(() => info.stop())
+        .then(() => info?.stop())
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
-        .then(() => undefined);
+        .then(() => retireLock(stateDir, options.log));
       return stopping;
     },
   };
 }
 
-/** How long a start waits for the host's OS to be on its core before it serves anyway. */
-const HOST_INFO_WAIT_MS = 2_000;
-
-async function settledWithin(work: Promise<void>, ms: number): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([work, new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))]);
-  clearTimeout(timer);
+/** Once nothing of a host writes its state, leaves no state.lock for an older host to read as a file (#297). */
+function retireLock(stateDir: string | undefined, log: (line: string) => void): void {
+  if (stateDir === undefined) return;
+  try {
+    retireStateLock(stateDir);
+  } catch (error) {
+    log(`host: cannot retire the state lock: ${String(error)}`);
+  }
 }
 
 /** The control socket is how `devices revoke` closes live sessions, so a host that cannot open it does not start. */

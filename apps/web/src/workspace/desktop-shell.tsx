@@ -9,7 +9,7 @@ import {
   TabBar,
   type WorkspaceTab,
 } from "@doriface/ui";
-import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
+import { Columns2, Folder, Monitor, PanelLeft, Rows2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
@@ -29,10 +29,9 @@ import { useArrivalReady, workspaceSettled } from "./use-arrival-ready.ts";
 import { useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown } from "./layout-store.ts";
 import type { LayoutTab } from "./layout-model.ts";
-import type { Layout } from "./use-layout.ts";
+import type { Axis } from "@doriface/protocol/layout";
+import type { Layout, PaneTarget } from "./use-layout.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
-
-const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
 
 /** A tab's glyph: the state that most needs the person among its panes, as the sidebar sections rank them. */
 const URGENCY: readonly AgentStatus[] = ["blocked", "done", "working", "idle", "unknown"];
@@ -60,6 +59,8 @@ function tabEntry(tab: LayoutTab, byAddress: ReadonlyMap<string, Session>, focus
 const focusedTab = (): string | null =>
   document.activeElement?.closest("[data-tab-id]")?.getAttribute("data-tab-id") ?? null;
 
+const FOCUSED_TERMINAL_INPUT = '[data-focused="true"] [data-terminal] textarea';
+
 export interface DesktopShellProps {
   readonly connection: HcConnection;
   readonly terminals: readonly Session[];
@@ -67,7 +68,7 @@ export interface DesktopShellProps {
   readonly loaded: boolean;
   readonly layout: Layout;
   readonly onNew: () => void;
-  readonly onSplit: () => void;
+  readonly onSplit: (axis: Axis, target?: PaneTarget) => void;
   readonly onCloseTab: (key: string) => void;
   readonly onClosePane: (address: string) => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
@@ -99,13 +100,13 @@ export function DesktopShell(props: DesktopShellProps) {
   const moveLeftKeys = useActionKeys("tab.move:left");
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
+  const focusedAddress = layout.focused?.address ?? null;
   const voice = useDictation();
   const sends = usePaneSends();
   const mic = useRef<HTMLButtonElement>(null);
   // A dictation belongs to the pane it started in: moving focus to another tab or pane ends it, typing nothing.
   const { dictation } = voice;
-  const focusedPane = layout.focused?.id ?? null;
-  useEffect(() => dictation.close(), [dictation, focusedPane]);
+  useEffect(() => dictation.close(), [dictation, layout.active?.key, layout.focused?.id]);
   // Views that showed their program had already ended (a restarted program has a new pid, so its view counts afresh).
   const [endedViews, setEndedViews] = useState<ReadonlySet<string>>(() => new Set());
   const onEnded = useCallback((address: string, pid: number | null) => {
@@ -126,7 +127,7 @@ export function DesktopShell(props: DesktopShellProps) {
     onSession,
     // The session in view, as the tab bar's mic acts on it; none in view (or its machine offline) leaves the key alone.
     onDictate: () => {
-      const target = terminals.find((terminal) => terminal.address === layout.focused?.address);
+      const target = terminals.find((terminal) => terminal.address === focusedAddress);
       if (target === undefined || target.offline === true || showsEnded(target)) return false;
       voice.toggle();
       return true;
@@ -134,7 +135,6 @@ export function DesktopShell(props: DesktopShellProps) {
     focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
-  const focusedAddress = layout.focused?.address ?? null;
   const tabList: WorkspaceTab[] = layout.tabs.map((tab, position) => {
     const entry = tabEntry(tab, byAddress, tab.key === layout.active?.key ? (layout.focused?.id ?? null) : null);
     // tab.select:N selects layout.tabs[N - 1], so the hint is read by the same position.
@@ -156,15 +156,26 @@ export function DesktopShell(props: DesktopShellProps) {
   useArrivalReady(
     workspaceSettled(loaded, { open: layout.tabs.map((tab) => tab.key), restored: layout.restored }, live.length),
   );
-  const splitKeys = useActionKeys("pane.split");
+  const splitRightKeys = useActionKeys("pane.split:right");
+  const splitDownKeys = useActionKeys("pane.split:down");
+  const cannotSplit = focusedTerminal === undefined || layout.active?.readOnly != null;
   const split = (
-    <IconButton
-      label="Split right"
-      {...(splitKeys === undefined ? {} : { keys: splitKeys })}
-      icon={<Columns2 />}
-      disabled={focusedTerminal === undefined || layout.active?.readOnly != null}
-      onClick={onSplit}
-    />
+    <>
+      <IconButton
+        label="Split right"
+        {...(splitRightKeys === undefined ? {} : { keys: splitRightKeys })}
+        icon={<Columns2 />}
+        disabled={cannotSplit}
+        onClick={() => onSplit("row")}
+      />
+      <IconButton
+        label="Split down"
+        {...(splitDownKeys === undefined ? {} : { keys: splitDownKeys })}
+        icon={<Rows2 />}
+        disabled={cannotSplit}
+        onClick={() => onSplit("column")}
+      />
+    </>
   );
 
   return (
@@ -223,6 +234,8 @@ export function DesktopShell(props: DesktopShellProps) {
           layout={layout}
           titles={new Map(tabList.map((tab) => [tab.id, tab.title]))}
           onEnd={onEnd}
+          onSplit={onSplit}
+          onClose={onClosePane}
           onEnded={onEnded}
           sends={sends}
           dock={

@@ -1,4 +1,5 @@
 import { Monitor, Plus, Server } from "lucide-react";
+import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
 
@@ -20,6 +21,8 @@ export interface MachineHeaderProps {
   readonly connected: boolean;
   readonly rail?: boolean;
   readonly className?: string;
+  /** More for the row's button, as a list that reorders its machines needs: a ref, keys, focus tracking. */
+  readonly buttonProps?: ButtonHTMLAttributes<HTMLButtonElement> & { readonly ref?: Ref<HTMLButtonElement> };
 }
 
 /**
@@ -38,12 +41,14 @@ export function MachineHeader({
   connected,
   rail = false,
   className,
+  buttonProps,
 }: MachineHeaderProps) {
   const Icon = local ? Monitor : Server;
   const quiet = onOpen === undefined && "opacity-45";
   return (
     <div className={cn("group flex h-(--row) min-w-0 items-center rounded-md", selected && "bg-selected", className)}>
       <button
+        {...buttonProps}
         type="button"
         data-machine-header={name}
         aria-current={selected ? "true" : undefined}
