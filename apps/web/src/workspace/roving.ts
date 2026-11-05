@@ -1,7 +1,8 @@
 /**
  * Roving focus over the sidebar lists: every `section` is one list and one Tab stop. A row is a button that is a
  * direct child of the section, or the first button of a direct child (a machine row); the other buttons of that child
- * are the row's actions, reached with ArrowRight instead of Tab. A row that is disabled (a machine with nothing to
+ * are the row's actions, reached with ArrowRight instead of Tab. A machine row that a reorderable list wraps to drag it
+ * (`data-machine-row`, #140) holds that child one level down. A row that is disabled (a machine with nothing to
  * open) is still a stop, so its actions stay reachable; it stays focusable through aria-disabled instead of disabled.
  * ArrowUp, ArrowDown, Home and End move inside the focused list; Tab moves to the next list.
  */
@@ -11,8 +12,9 @@ const isButton = (node: unknown): node is HTMLButtonElement => node instanceof H
 
 function rowOf(child: Element): HTMLButtonElement | undefined {
   if (isButton(child)) return child;
-  const first = child.firstElementChild;
-  return child.tagName === "DIV" && isButton(first) ? first : undefined;
+  const item = child.hasAttribute("data-machine-row") ? child.firstElementChild : child;
+  const first = item?.firstElementChild;
+  return item?.tagName === "DIV" && isButton(first) ? first : undefined;
 }
 
 export function rowsOf(section: Element): HTMLButtonElement[] {

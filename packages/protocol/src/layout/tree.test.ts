@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type Node } from "./node.ts";
-import { panesOf, removePane, splitPane } from "./tree.ts";
+import { equalize, panesOf, removePane, resizeAt, splitPane } from "./tree.ts";
 
 const block = (id: string, weight?: number): Node => ({
   content: { terminal: `t-${id}` },
@@ -86,5 +86,46 @@ describe("splitting along the parent's own axis", () => {
         { ...parent, children: [block("a", 0.25), block("n", 0.25), block("b", 0.5)] },
       ]),
     );
+  });
+});
+
+describe("resizing and equalizing", () => {
+  const deep = box("column", "deep", [block("x"), block("y")]);
+  const root = box("row", "root", [block("a", 0.5), box("column", "c", [block("b"), deep], 0.5)]);
+
+  test("moving a deep line changes only its two neighbours, keeps their sum, and leaves the rest as it was", () => {
+    const next = resizeAt(root, "deep", 0, 0.1);
+    expect(next).toEqual(
+      box("row", "root", [
+        block("a", 0.5),
+        box("column", "c", [block("b"), box("column", "deep", [block("x", 1.2), block("y", 0.8)])], 0.5),
+      ]),
+    );
+    expect(Array.isArray(next?.["children"]) && next["children"][0]).toBe(
+      Array.isArray(root["children"]) && root["children"][0],
+    );
+  });
+
+  test("a line never squeezes a neighbour below its minimum share", () => {
+    const next = resizeAt(root, "deep", 0, 5);
+    expect(JSON.stringify(next)).toContain('"id":"y","size":{"weight":0.1}');
+  });
+
+  test("a line that does not exist, or that moves nothing, changes nothing", () => {
+    expect(resizeAt(root, "deep", 1, 0.1)).toBeNull();
+    expect(resizeAt(root, "a", 0, 0.1)).toBeNull();
+    expect(resizeAt(root, "deep", 0, 0)).toBeNull();
+  });
+
+  test("equalize evens every row and column and leaves an even tree untouched", () => {
+    const uneven = resizeAt(root, "deep", 0, 0.1) ?? root;
+    const even = equalize(uneven);
+    expect(even).toEqual(
+      box("row", "root", [
+        block("a", 1),
+        box("column", "c", [block("b"), box("column", "deep", [block("x", 1), block("y", 1)])], 1),
+      ]),
+    );
+    expect(equalize(even)).toBe(even);
   });
 });

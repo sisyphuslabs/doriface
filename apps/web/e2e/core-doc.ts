@@ -48,8 +48,8 @@ export function setCoreDoc(name: string, value: unknown, on?: string, which: Cor
   call(core, "doc.set", { ...where, value, version });
 }
 
-/** A herdr document on the e2e host's core, as another client would read it. */
-export function getCoreDoc(name: string): unknown {
-  const current = call(coreEnv(), "doc.get", { name });
+/** A herdr document on the e2e host's core (or, with `on`, on its added machine), as another client would read it. */
+export function getCoreDoc(name: string, on?: string): unknown {
+  const current = call(coreEnv(), "doc.get", on === undefined ? { name } : { name, on });
   return typeof current === "object" && current !== null && "value" in current ? current.value : null;
 }

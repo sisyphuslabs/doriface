@@ -62,13 +62,15 @@ async function churn(pressure: { perMinute: number; minutes: number }, minutes: 
   await settle();
   const pushAt = (k: number): number => (k * MINUTE) / pressure.perMinute;
   let pushes = 0;
+  const pushing = (at: number): boolean => pressure.perMinute > 0 && at < pressure.minutes * MINUTE;
+  // Goes from push to push (and then to the end), not second by second: the policy moves only by its timers, which
+  // advanceTimers fires in order, so a quiet second only cost event-loop turns (#316).
   const second = async (now: number): Promise<void> => {
     if (now >= minutes * MINUTE) return;
-    for (; pressure.perMinute > 0 && pushAt(pushes) <= now && now < pressure.minutes * MINUTE; pushes++) {
-      void policy.acquire(`push-${pushes}`, "push");
-    }
-    await clock.advance(1000);
-    return second(now + 1000);
+    for (; pushing(now) && pushAt(pushes) <= now; pushes++) void policy.acquire(`push-${pushes}`, "push");
+    const next = Math.min(pushing(pushAt(pushes)) ? pushAt(pushes) : minutes * MINUTE, minutes * MINUTE);
+    await clock.advanceTimers(next - now);
+    return second(next);
   };
   await second(0);
   return { addsAt, added: table.length };

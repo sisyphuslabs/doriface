@@ -8,10 +8,10 @@ import { codeRetired, type PairingStore, type PendingPairing } from "./state/pai
  */
 export interface PairingSlotRegistrar {
   /**
-   * Registers the slot with this host's Noise static key, sent as `encodePairSlot(slot, noiseStaticPub)`;
-   * "collision" when the relay answers 409 because another host holds it.
+   * Registers the slot with this host's Noise static key and the offer's expiry, signed by the host (contract v1.9,
+   * #22); "collision" when the relay answers that another host holds it.
    */
-  register(slot: string, noiseStaticPub: Uint8Array): Promise<"registered" | "collision">;
+  register(slot: string, noiseStaticPub: Uint8Array, expiresAt: number): Promise<"registered" | "collision">;
   /** The offer behind the slot ended (paired, expired or replaced): send the empty PAIR_SLOT (`PAIR_SLOT_CLEAR`). */
   release(slot: string): void;
 }
@@ -133,7 +133,7 @@ export class PairingSlots {
   async #register(registrar: PairingSlotRegistrar, pending: PendingPairing, redraws: number): Promise<void> {
     if (redraws >= MAX_REDRAWS) return this.#store.setSlot(pending.code, "unavailable");
     const slot = pairingSlotOf(pending.code);
-    const answer = await registrar.register(slot, this.#noiseStaticPub);
+    const answer = await registrar.register(slot, this.#noiseStaticPub, pending.expiresAt);
     if (this.#stopped) {
       if (answer === "registered") registrar.release(slot);
       return;

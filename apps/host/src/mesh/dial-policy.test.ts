@@ -95,7 +95,7 @@ describe("gating after 4404 (S-5)", () => {
       const start = clock.now();
       starts.push(start);
       expect((await dials.acquire("m", "push")).ok).toBe(false);
-      await clock.until(() => due.some((entry) => entry.reason === "probe" && entry.at > start), 300_000, 1_000);
+      await clock.untilTimers(() => due.some((entry) => entry.reason === "probe" && entry.at > start), 300_000);
       expect(granted(await dials.acquire("m", "probe"))).toBe(true);
       return miss(left - 1);
     };

@@ -1,6 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { cn, IconButton } from "@doriface/ui";
-import { Columns2, Rows2, X } from "lucide-react";
+import { Columns2, Maximize2, Minimize2, Rows2, X } from "lucide-react";
 import type { Axis } from "@doriface/protocol/layout";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import type { ReactNode } from "react";
@@ -20,7 +20,9 @@ export interface PaneProps {
   readonly split: boolean;
   readonly onFocus: () => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
+  readonly zoomed: boolean;
   readonly onSplit: (axis: Axis) => void;
+  readonly onZoom: () => void;
   readonly onClose: () => void;
   /** The view showed that its program had already ended when it attached: there is no terminal left to type into. */
   readonly onEnded: (address: string, pid: number | null) => void;
@@ -31,9 +33,15 @@ export interface PaneProps {
 }
 
 /** herdr-app's pane header buttons, each with its shortcut in the tooltip. */
-function PaneButtons({ onSplit, onClose }: Pick<PaneProps, "onSplit" | "onClose">) {
+function PaneButtons({
+  zoomed,
+  onSplit,
+  onZoom,
+  onClose,
+}: Pick<PaneProps, "zoomed" | "onSplit" | "onZoom" | "onClose">) {
   const right = useActionKeys("pane.split:right");
   const down = useActionKeys("pane.split:down");
+  const zoom = useActionKeys("pane.zoom");
   const close = useActionKeys("pane.close");
   const small = "size-6 [&_svg]:size-3.5";
   return (
@@ -53,6 +61,14 @@ function PaneButtons({ onSplit, onClose }: Pick<PaneProps, "onSplit" | "onClose"
         onClick={() => onSplit("column")}
       />
       <IconButton
+        label={zoomed ? "Show every pane" : "Zoom pane"}
+        icon={zoomed ? <Minimize2 /> : <Maximize2 />}
+        className={small}
+        pressed={zoomed}
+        {...(zoom === undefined ? {} : { keys: zoom })}
+        onClick={onZoom}
+      />
+      <IconButton
         label="Close pane"
         icon={<X />}
         className={small}
@@ -68,19 +84,22 @@ function PaneButtons({ onSplit, onClose }: Pick<PaneProps, "onSplit" | "onClose"
  * tab strip carries its session actions. Inside a split each pane gets a slim header naming its terminal, as herdr-app
  * frames panes only once a tab is split, since the tab can name only one of them.
  */
-export function Pane({
-  connection,
-  terminal,
-  focused,
-  split,
-  onFocus,
-  onEnd,
-  onEnded,
-  onPort,
-  dock,
-  onSplit,
-  onClose,
-}: PaneProps) {
+export function Pane(props: PaneProps) {
+  const {
+    connection,
+    terminal,
+    focused,
+    split,
+    zoomed,
+    onFocus,
+    onEnd,
+    onEnded,
+    onPort,
+    dock,
+    onSplit,
+    onZoom,
+    onClose,
+  } = props;
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   return (
@@ -104,7 +123,7 @@ export function Pane({
           <h2 title={title} className="min-w-0 truncate">
             {title}
           </h2>
-          <PaneButtons onSplit={onSplit} onClose={onClose} />
+          <PaneButtons zoomed={zoomed} onSplit={onSplit} onZoom={onZoom} onClose={onClose} />
         </header>
       ) : null}
       {/* The terminal's own box: the approval banner pins to its top, under a split pane's header, never over it. */}

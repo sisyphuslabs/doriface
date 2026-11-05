@@ -125,3 +125,21 @@ export function useSoftKeyboard(scope: HTMLElement | null): { readonly up: boole
   }, [scope]);
   return { up: typing && keyboard.open, inset: keyboard.inset };
 }
+
+const ANY_TOUCH = "(any-pointer: coarse)";
+
+/**
+ * Whether every pointer here is fine (a mouse or trackpad, as on a narrow desktop window): such a device has a physical
+ * keyboard and no soft keyboard to raise, so the phone shell opens its keys bar itself (#287).
+ */
+export function useMouseOnly(): boolean {
+  const [mouseOnly, setMouseOnly] = useState(() => !window.matchMedia(ANY_TOUCH).matches);
+  useEffect(() => {
+    const query = window.matchMedia(ANY_TOUCH);
+    const follow = (): void => setMouseOnly(!query.matches);
+    query.addEventListener("change", follow);
+    follow();
+    return () => query.removeEventListener("change", follow);
+  }, []);
+  return mouseOnly;
+}

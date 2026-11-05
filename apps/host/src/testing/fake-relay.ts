@@ -23,7 +23,7 @@ export class RelaySessionClosed extends Error {
   }
 }
 
-export type PairSlotSeen = { readonly slot: string; readonly noiseStaticPub: Uint8Array } | "clear";
+export type PairSlotSeen = NonNullable<ReturnType<typeof decodePairSlotRequest>> | "clear";
 
 interface Uplink {
   /** False for a client socket (`/v1/client/<hostId>`): this relay serves no client of its own, so it answers 4404. */
