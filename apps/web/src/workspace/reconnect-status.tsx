@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { staysOnThisComputer } from "../connection/settings.ts";
 import { connectionStore, useConnection } from "../connection/store.ts";
 import { useOnline } from "../pwa/use-online.ts";
+import { RetryButton } from "./retry-button.tsx";
 
 function useSecondsUntil(at: number | null, longest: number): number | null {
   const [now, setNow] = useState(Date.now);
@@ -44,11 +45,13 @@ const glyph = (notice: ConnectionNotice) => (notice.offline ? <WifiOff aria-hidd
 export function ReconnectStatus() {
   const notice = useConnectionNotice();
   if (notice === null) return null;
+  // Offline, what happens next is said in the bar itself (a phone shows no tooltip), with a way to try at once (#475).
   return (
-    <span role="status" className="flex min-w-0" title={notice.detail}>
+    <span role="status" className="flex min-w-0 items-center gap-2" title={notice.detail}>
       <StatusBarItem icon={glyph(notice)}>
-        <span className="text-foreground">{notice.label}</span>
+        <span className="text-foreground">{notice.offline ? notice.detail : notice.label}</span>
       </StatusBarItem>
+      {notice.offline ? <RetryButton size="sm" onRetry={() => Promise.resolve(connectionStore.retryNow())} /> : null}
     </span>
   );
 }

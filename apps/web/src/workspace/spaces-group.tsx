@@ -18,6 +18,7 @@ import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
 import { stateLabel, type MachineEntry } from "./machines.ts";
 import { firstInSpace, spaceId, toSpaces } from "./model.ts";
+import { useConnectionNotice } from "./reconnect-status.tsx";
 import { RetryButton } from "./retry-button.tsx";
 import { SpaceNameInput } from "./space-name-input.tsx";
 import { useSpaceRenaming } from "./space-rename-context.ts";
@@ -158,15 +159,18 @@ function SpacesLists({
     grouped !== undefined || local === undefined || rail ? undefined : (
       <IconButton label="New space" icon={<Plus />} className="-mr-1" onClick={() => machines.start({})} />
     );
+  // While this device's own link is down, the machine list it last read is not news: no row claims a live link (#476).
+  const notice = useConnectionNotice();
+  const linkDown = notice === null ? null : notice.offline ? "not known while offline" : "not known while reconnecting";
   const header = (machine: MachineEntry, button: HeaderButton | undefined) => (
     <MachineHeader
       {...(button === undefined ? {} : { buttonProps: button })}
       name={machine.name}
       local={machine.local}
-      state={machine.local ? "this machine" : stateLabel(machine.state)}
-      alarm={ALARM.has(machine.state)}
+      state={linkDown !== null ? linkDown : machine.local ? "this machine" : stateLabel(machine.state)}
+      alarm={linkDown === null && ALARM.has(machine.state)}
       live={machine.live}
-      connected={machine.state === "connected"}
+      connected={linkDown === null && machine.state === "connected"}
       rail={rail}
       collapsed={collapsed.includes(machine.id)}
       onToggle={() => toggle(machine.id)}
@@ -205,7 +209,10 @@ function SpacesLists({
                 <>
                   {rows(own, true)}
                   {own.length > 0 || rail ? null : (
-                    <NewSpaceThere disabled={machine.state !== "connected"} onClick={() => newSpaceOn(machine)} />
+                    <NewSpaceThere
+                      disabled={linkDown !== null || machine.state !== "connected"}
+                      onClick={() => newSpaceOn(machine)}
+                    />
                   )}
                   {machine.local || rail ? null : <MachineNotice name={machine.name} />}
                 </>

@@ -50,7 +50,7 @@ test.describe("desktop", () => {
     let host: FakeRelayHost;
     test.beforeAll(async () => {
       test.setTimeout(60_000);
-      host = await startFakeRelayHost();
+      host = await startFakeRelayHost({ machine: true });
     });
     test.afterAll(async () => host.stop());
 
@@ -174,7 +174,7 @@ test.describe("phone", () => {
     let host: FakeRelayHost;
     test.beforeAll(async () => {
       test.setTimeout(60_000);
-      host = await startFakeRelayHost();
+      host = await startFakeRelayHost({ machine: true });
     });
     test.afterAll(async () => host.stop());
 
