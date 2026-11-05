@@ -9,6 +9,7 @@ import {
   signRecord,
   type View,
 } from "@doriface/mesh";
+import { AckCover } from "./ack-cover.ts";
 import type { MeshFile } from "./mesh-file.ts";
 
 /** This host's own records are ahead of the counter it persisted: a restore from an older backup (section 10.1). */
@@ -60,6 +61,10 @@ export class Transaction implements MeshTx {
   #changed = false;
   /** Records this transaction added that the file does not hold yet: the index on disk does not cover them. */
   #unwritten = false;
+  /** This host's record signed since the last write, when it is all that the index on disk does not cover. */
+  #ownSince: Signed | undefined;
+  /** Over the records as merged, for every own record signed on them since (see AckCover). */
+  #cover: AckCover | undefined;
   readonly #deps: TxDeps;
 
   constructor(file: MeshFile, deps: TxDeps) {
@@ -95,6 +100,8 @@ export class Transaction implements MeshTx {
     if (merged.added.length > 0) {
       this.#records = merged.stored;
       this.#unwritten = true;
+      this.#ownSince = undefined;
+      this.#cover = undefined;
     }
     this.#dangling = merged.dangling;
     return { added: merged.added, refused: merged.refused, dropped: merged.dropped };
@@ -120,7 +127,7 @@ export class Transaction implements MeshTx {
         ...this.#disk,
         records: this.#records,
         dangling: this.#dangling,
-        index: this.#unwritten ? undefined : this.#disk.index,
+        index: this.#unwritten && !this.#inertSince() ? undefined : this.#disk.index,
       },
       own + 1,
       this.#view?.records === this.#records ? this.#view.view : undefined,
@@ -132,7 +139,19 @@ export class Transaction implements MeshTx {
     this.#records = [...this.#records, record];
     this.#changed = true;
     this.#unwritten = true;
+    this.#ownSince = record;
     return record;
+  }
+
+  /**
+   * Whether the one record the index on disk does not cover is an own ack that leaves the index as it is, so the counter
+   * is persisted with that index instead of a view evaluated again (#567).
+   */
+  #inertSince(): boolean {
+    const own = this.#ownSince;
+    if (own === undefined) return false;
+    this.#cover ??= new AckCover(this.#records);
+    return this.#cover.inert(own);
   }
 
   /** What to commit, with the view when it was evaluated on exactly these records; undefined when nothing changed. */
