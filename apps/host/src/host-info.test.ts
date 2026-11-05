@@ -78,4 +78,36 @@ describe("publishHostInfo", () => {
     await publisher.settled;
     expect(logs).toEqual([]);
   });
+
+  test("kill ends a write's child that closing its stdin did not, and names its pid; a child already gone is not killed", async () => {
+    const closes = new Set<(error: Error | undefined) => void>();
+    const signals: string[] = [];
+    // A core that never answers and ignores a closed stdin: only a kill ends it.
+    const hung = {
+      pid: 4545,
+      send: () => {},
+      onData: () => () => {},
+      onClose: (listener: (error: Error | undefined) => void) => {
+        closes.add(listener);
+        return () => closes.delete(listener);
+      },
+      close: () => {},
+      kill: (signal: "SIGKILL") => {
+        signals.push(signal);
+        for (const listener of closes) listener(new Error("killed"));
+      },
+    };
+    const publisher = publishHostInfo(
+      { hc: "hc" },
+      "darwin",
+      () => {},
+      () => hung,
+    );
+    const stopped = publisher.stop();
+    expect(publisher.kill()).toEqual([4545]);
+    expect(signals).toEqual(["SIGKILL"]);
+    await stopped;
+    expect(publisher.kill()).toEqual([]);
+    expect(signals).toEqual(["SIGKILL"]);
+  });
 });

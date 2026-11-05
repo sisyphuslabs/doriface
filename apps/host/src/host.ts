@@ -158,7 +158,11 @@ async function serve(
   );
   const core = { hc: options.hc, session: options.session, env: options.env };
   const info = publishHostInfo(core, options.platform ?? process.platform, options.log);
-  started("host info", () => info.stop());
+  started(
+    "host info",
+    () => info.stop(),
+    () => info.kill().map((pid) => `hc connect pid ${pid}`),
+  );
   // A client that connects next reads the OS already; a core too slow to answer does not hold the start.
   await settledWithin(info.settled, HOST_INFO_WAIT_MS);
   const gateway = createGateway({

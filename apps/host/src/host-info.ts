@@ -1,12 +1,14 @@
-import { type ByteLink, HcConnection } from "@doriface/client";
+import { HcConnection } from "@doriface/client";
 import { HcRpcError, HOST_INFO_DOC, type HostInfo, hostInfoFor, parseHostInfo } from "@doriface/protocol";
-import { type HcTarget, spawnHcLink } from "./mesh/hc-machines.ts";
+import { type HcTarget, type KillableLink, spawnHcLink } from "./mesh/hc-machines.ts";
 
 export interface HostInfoPublisher {
   /** Settles once the document is written (or left as it was, or the write failed and was logged) and its child exited. */
   readonly settled: Promise<void>;
   /** Ends the write if it is still going; settles once its `hc connect` child has exited. */
   stop(): Promise<void>;
+  /** Kills the write's child if it has not exited (one that ignores a closed stdin), and returns the pids it killed. */
+  kill(): readonly number[];
 }
 
 const isConflict = (error: unknown): boolean => error instanceof HcRpcError && error.kind === "conflict";
@@ -20,13 +22,19 @@ export function publishHostInfo(
   core: HcTarget,
   platform: string,
   log: (line: string) => void,
-  link: (core: HcTarget) => ByteLink = spawnHcLink,
+  link: (core: HcTarget) => KillableLink = spawnHcLink,
 ): HostInfoPublisher {
   const info = hostInfoFor(platform);
-  if (info === undefined) return { settled: Promise.resolve(), stop: () => Promise.resolve() };
+  if (info === undefined) return { settled: Promise.resolve(), stop: () => Promise.resolve(), kill: () => [] };
   let stopped = false;
   const child = link(core);
-  const exited = new Promise<void>((resolve) => child.onClose(() => resolve()));
+  let childOpen = true;
+  const exited = new Promise<void>((resolve) =>
+    child.onClose(() => {
+      childOpen = false;
+      resolve();
+    }),
+  );
   const write = async (): Promise<void> => {
     const connection = await HcConnection.open(child);
     try {
@@ -47,6 +55,11 @@ export function publishHostInfo(
       stopped = true;
       child.close();
       return exited;
+    },
+    kill() {
+      if (child.kill === undefined || child.pid === undefined || !childOpen) return [];
+      child.kill("SIGKILL");
+      return [child.pid];
     },
   };
 }
