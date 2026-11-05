@@ -22,6 +22,13 @@ interface Decided {
 
 type Tables = Map<string, Map<string, unknown>>;
 
+/** The ack statuses of the last full views of one context, and every record those views held. */
+interface KeptAcks {
+  readonly context: string;
+  readonly seen: Set<string>;
+  readonly statuses: Map<string, Status>;
+}
+
 export class Shared {
   readonly history: History;
   readonly #once: Tables = new Map();
@@ -33,6 +40,7 @@ export class Shared {
   readonly #views = new Map<string, RuleView>();
   readonly #contexts = new Map<string, RuleView>();
   #decided: Decided | undefined;
+  #acks: KeptAcks | undefined;
   readonly #growing = new Map<string, { readonly list: string[]; scanned: number }>();
 
   constructor(history: History) {
@@ -121,6 +129,34 @@ export class Shared {
     }
     this.#views.set(heads, view);
     return view;
+  }
+
+  /**
+   * The ack statuses decided by earlier full views of this context, for a full view of `ids` (#86). An ack's status
+   * depends on its context (the non-ack records and the acks concurrent with them, so its accusers, their standing and
+   * the governing statuses) and on the records that saw one of the ack and an accuser but not the other. With the
+   * context unchanged, every record added since sees every non-ack record of the set, so it testifies about an ack
+   * only when the ack is not in its past: `holds(added)` keeps exactly the acks every added record has in its past.
+   * Another context, or a set missing a record an earlier view held, starts the statuses over.
+   */
+  ackStatuses(
+    context: string,
+    ids: readonly string[],
+    holds: (added: readonly string[]) => (ack: string) => boolean,
+  ): Map<string, Status> {
+    const kept = this.#acks;
+    const added = kept === undefined ? [] : ids.filter((id) => !kept.seen.has(id));
+    if (kept === undefined || kept.context !== context || kept.seen.size + added.length !== ids.length) {
+      const fresh: KeptAcks = { context, seen: new Set(ids), statuses: new Map() };
+      this.#acks = fresh;
+      return fresh.statuses;
+    }
+    if (added.length > 0) {
+      const stays = holds(added);
+      for (const ack of kept.statuses.keys()) if (!stays(ack)) kept.statuses.delete(ack);
+      for (const id of added) kept.seen.add(id);
+    }
+    return kept.statuses;
   }
 
   /**
