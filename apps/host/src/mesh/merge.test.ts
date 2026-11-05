@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { hashOf, parseRecord, type Signed, viewOf } from "@doriface/mesh";
 import type { MeshStore } from "../state/mesh.ts";
 import { appendOwn, mergeBatch } from "./merge.ts";
@@ -21,6 +21,27 @@ function atB(seed: (founder: Signer, start: readonly string[]) => readonly Signe
 const acks = (width: number) => (founder: Signer, start: readonly string[]) =>
   Array.from({ length: width }, () => founder.ack(start));
 
+/**
+ * A mesh a founded with b, and 200 acks of a's on its first heads, signed once for the fold tests: each case needs a
+ * wide set of heads, not signatures of its own. Signing them per case, and passing a second wide batch through the
+ * door's signature checks, was most of those cases' CPU, so their wall time followed the host's load (#559).
+ */
+function wideMesh() {
+  const { records, meshId } = meshOf([a, b]);
+  const founder = new Signer(a, records);
+  const start = headsOfRecords(records);
+  return { records, meshId, founder, start, acks: Array.from({ length: 200 }, () => founder.ack(start)) };
+}
+
+/**
+ * b's store holding `records` as stored, not merged: a wide set of heads costs one signature check per record at the
+ * door, which is not what the fold tests check and dominated their run time.
+ */
+function bOver(meshId: string, records: readonly Signed[]) {
+  const store = storeOf(b, records);
+  return { store, deps: { store, identity: b.machine.identity, meshId } };
+}
+
 const recordsOf = (store: MeshStore): readonly Signed[] => store.read()?.records ?? [];
 const headsAt = (store: MeshStore): readonly string[] => headsOfRecords(recordsOf(store));
 const acksBy = (store: MeshStore, who: string): readonly Signed[] =>
@@ -30,6 +51,11 @@ const acksBy = (store: MeshStore, who: string): readonly Signed[] =>
   });
 
 describe("automatic acks (S-3, section 5.5)", () => {
+  let wide: ReturnType<typeof wideMesh>;
+  beforeAll(() => {
+    wide = wideMesh();
+  });
+
   test("a merged admission is acked in the same store transaction, the ack naming it", () => {
     const { store, deps, founder } = atB();
     const admit = founder.admit(c, headsAt(store));
@@ -68,7 +94,8 @@ describe("automatic acks (S-3, section 5.5)", () => {
   test.each([70, 120, 200])(
     "%i heads are folded by acks within the door's limits, and every record b signs stays effective (section 3.2)",
     (width) => {
-      const { store, deps, founder, start } = atB(acks(width));
+      const { records, meshId, founder, start } = wide;
+      const { store, deps } = bOver(meshId, [...records, ...wide.acks.slice(0, width)]);
       expect(headsAt(store).length).toBe(width);
       mergeBatch(deps, [founder.admit(c, start)]);
       expect(headsAt(store).length).toBeLessThanOrEqual(1);
