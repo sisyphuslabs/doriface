@@ -20,10 +20,21 @@ async function reachableIn(probe: string): Promise<{ counts: Record<string, numb
   return out as { counts: Record<string, number> } & Record<string, unknown>;
 }
 
-/** The bound for each heap-probe test (unchanged here; set from measurement in the next commit). */
-export const HEAP_PROBE_TEST_MS = 30_000;
-/** The bound for each cache-heap test (unchanged here; set from measurement in the next commit). */
-export const CACHE_HEAP_TEST_MS = { "names-only": 120_000, "admits-only-2048": 120_000, partition: 120_000 } as const;
+/**
+ * The bound for each heap-probe test: one bun process that runs the probe and takes one debug snapshot of its own heap
+ * (16-19k nodes, whatever the test process holds). On agents-seoul-1, 20 runs each at load1 67-115 took at most 1.45 s
+ * (single-record) and 0.45 s (clear), and 20 runs each at load1 115-130 took at most 2.29 s and 0.96 s. The bound is that
+ * worst case with about 3x margin. The in-process probes it replaces snapshotted the whole test process: 72k nodes after
+ * the mesh suite, and 41 s in rev-157's whole-repository run (#542).
+ */
+export const HEAP_PROBE_TEST_MS = 7_000;
+/**
+ * The bound for each cache-heap test, per shape: a cold view in a fresh bun process, CPU-bound, so its wall time follows
+ * the load. Worst of 20 runs each on agents-seoul-1 at load1 67-130: names-only 66.4 s (about 27 s of CPU in the cold
+ * view at the cap), admits-only-2048 20.9 s, partition 6.95 s. Each bound is that worst case with about 3x margin.
+ */
+export const CACHE_HEAP_TEST_MS = { "names-only": 200_000, "admits-only-2048": 63_000, partition: 21_000 } as const;
+
 /** Heap one cold view at the cap may leave in a cache for a names-only mesh: views and history, no per-context statuses. */
 const NAMES_BUDGET_MB = 96;
 /** For the partition shape: a common past per accuser/record pair is n/32 words of bits, not a Set of ids. */
