@@ -91,6 +91,7 @@ describe("assignColors", () => {
 
 const entry = (name: string, local: boolean): MachineEntry => ({
   id: local ? "local" : `machine:${name}`,
+  core: local ? "local-core" : `core:${name}`,
   name,
   local,
   state: "connected",
