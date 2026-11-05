@@ -11,6 +11,11 @@ export interface TypeAhead {
   readonly deliver: (hold: number, address: string) => void;
   /** The terminal never came: focus goes back where it was, and input typed for it is reported as not sent. */
   readonly release: (hold: number) => void;
+  /**
+   * Whether the keyboard is still the terminal's at `address`: in the hold, on nothing, or in that terminal's own view.
+   * False once the person has moved on (a menu, a dialog, another terminal), which a late answer must leave alone (#360).
+   */
+  readonly holds: (hold: number, address: string) => boolean;
   /** The element that holds the keyboard meanwhile; render it once, with `CATCHER_ATTRIBUTES`. */
   readonly catcher: React.RefObject<HTMLTextAreaElement | null>;
 }
@@ -24,6 +29,13 @@ export const CATCHER_ATTRIBUTES = { [TYPE_AHEAD_ATTRIBUTE]: "", inert: true, "ar
 /** How long a started terminal's view may take to mount before its held input is given up. */
 export const MOUNT_BUDGET_MS = 15_000;
 const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock"]);
+
+/** Whether the keyboard sits where a hold left it for the terminal at `address`. */
+function keyboardStayed(catcher: HTMLTextAreaElement | null, address: string): boolean {
+  const active = document.activeElement;
+  if (active === null || active === document.body || active === catcher) return true;
+  return active.closest(`[data-terminal="${CSS.escape(address)}"]`) !== null;
+}
 
 const awake = (input: HTMLTextAreaElement | null, on: boolean): void => {
   if (input === null) return;
@@ -116,7 +128,8 @@ export function useTypeAhead(dropped: (reason: DropReason) => void): TypeAhead {
   const deliver = useCallback(
     (id: number, address: string): void => {
       const hand = (input: HTMLTextAreaElement): void => {
-        const last = newest.current === id;
+        // Read before finish, which puts the hold out of the page: a person who moved on keeps the keyboard there.
+        const last = newest.current === id && keyboardStayed(catcher.current, address);
         const queue = finish(id);
         if (last) input.focus({ preventScroll: true });
         replay(input, queue);
@@ -138,5 +151,10 @@ export function useTypeAhead(dropped: (reason: DropReason) => void): TypeAhead {
     [finish, giveUp],
   );
 
-  return useMemo(() => ({ hold, deliver, release, catcher }), [hold, deliver, release]);
+  const holds = useCallback(
+    (id: number, address: string): boolean => newest.current === id && keyboardStayed(catcher.current, address),
+    [],
+  );
+
+  return useMemo(() => ({ hold, deliver, release, holds, catcher }), [hold, deliver, release, holds]);
 }

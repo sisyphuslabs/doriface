@@ -3,6 +3,7 @@ import type { TerminalRunParams } from "@doriface/protocol";
 import { useToastManager } from "@doriface/ui";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { failureNotice, startTerminal } from "./start-on.ts";
+import { withoutClaim } from "./use-layout.ts";
 import type { TypeAhead } from "./use-type-ahead.ts";
 
 export interface MachineRuns {
@@ -42,7 +43,9 @@ export function useMachineRuns(
       void startTerminal((run) => connection.call("terminal.run", run), params, core).then((started) => {
         if (!mounted.current) return undefined;
         if (started.ok) {
-          place(started.address);
+          // Placed either way; claimed (its view takes the keyboard) only while the keyboard is still the new terminal's.
+          if (typeAhead.holds(hold, started.address)) place(started.address);
+          else withoutClaim(() => place(started.address));
           return typeAhead.deliver(hold, started.address);
         }
         typeAhead.release(hold);

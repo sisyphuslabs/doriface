@@ -89,6 +89,22 @@ function written(tab: LayoutTab): { id: string; pane: string; root: Node } {
   return { id, pane, root: rootOf(id, [terminalBlock(pane, localOf(address))]) };
 }
 
+/** Set while a placement runs without claiming its pane (see `withoutClaim`). */
+let placingQuietly = false;
+
+/**
+ * Runs `place` (an open, a new tab, a split) without this screen claiming the pane it shows: for a terminal whose start
+ * answered after the person moved on, so its view does not take the keyboard from what they turned to (#360).
+ */
+export function withoutClaim(place: () => void): void {
+  placingQuietly = true;
+  try {
+    place();
+  } finally {
+    placingQuietly = false;
+  }
+}
+
 export function useLayout(
   core: string,
   layouts: readonly MachineLayout[],
@@ -141,7 +157,7 @@ export function useLayout(
   // Panes focused per tab, oldest first, as herdr-app's `before`: moving focus prefers the pane left last.
   const history = useRef(new Map<string, string[]>());
   const show = useCallback((key: string, pane: string | null): void => {
-    if (pane !== null) setClaimed(pane);
+    if (pane !== null && !placingQuietly) setClaimed(pane);
     if (pane !== null) {
       const visited = (history.current.get(key) ?? []).filter((id) => id !== pane);
       history.current.set(key, [...visited, pane].slice(-HISTORY));
