@@ -2,7 +2,7 @@ import { backoffDelay } from "./backoff.ts";
 import { AckCounter, keepAlive } from "./flow-control.ts";
 import { rethrowAfter } from "./inbox.ts";
 import { LinkClosedError } from "./link.ts";
-import { type PairSlotResult, PairSlotRequests } from "./pair-requests.ts";
+import { PairSlotMalformedError, type PairSlotResult, PairSlotRequests } from "./pair-requests.ts";
 import type { RelayProofs } from "./pass-book.ts";
 import { UplinkPasses } from "./uplink-passes.ts";
 import { SessionLink } from "./session-link.ts";
@@ -18,6 +18,7 @@ import {
   encodeClose,
   encodePairSlotClear,
   encodePairSlotRequest,
+  pairSlotStatement,
   hostIdOf,
   MAX_ACTIVE_SESSIONS,
   MAX_PENDING_SESSIONS,
@@ -54,6 +55,11 @@ export interface UplinkOptions {
   readonly onState?: (state: UplinkState) => void;
   /** Called for every session refused over the session caps; the refused session allocates nothing. */
   readonly onRefused?: (refusal: SessionRefusal) => void;
+  /**
+   * The relay refused this connection's signed PAIR_SLOT, so a slot went unsigned for that request (#22): told at most
+   * once per connection. Clients of contract v1.9 refuse an unsigned slot, so this names an outdated relay.
+   */
+  readonly onUnsignedPairSlot?: (slot: string) => void;
   readonly createSocket?: CreateSocket;
   readonly random?: () => number;
   readonly pingIntervalMs?: number;
@@ -88,6 +94,8 @@ export class Uplink {
   #attempt = 0;
   #answeredAt: number | undefined;
   #pairSlot: string | undefined;
+  /** Whether this connection already told onUnsignedPairSlot. */
+  #toldUnsigned = false;
   #pairSlotQueue: Promise<void> = Promise.resolve();
   #done = false;
 
@@ -115,13 +123,31 @@ export class Uplink {
    * Registers a pairing slot (the typed code's first 3 characters) so a client with only the code can find this
    * host. "taken" means another host holds the slot: draw a new code. Rejects if the uplink is not connected.
    */
-  registerPairSlot(slot: string, noiseStaticPub: Uint8Array): Promise<PairSlotResult> {
-    const frame = encodePairSlotRequest(slot, noiseStaticPub);
+  registerPairSlot(slot: string, noiseStaticPub: Uint8Array, expiresAt: number): Promise<PairSlotResult> {
     return this.#onePairSlotRequest(async () => {
-      const outcome = await this.#pairSlotRequest(slot, frame);
+      const outcome = await this.#signedPairSlotRequest(slot, noiseStaticPub, expiresAt);
       if (outcome === "registered") this.#pairSlot = slot;
       return outcome;
     });
+  }
+
+  /**
+   * Every registration is sent in the signed form of contract v1.9 first: the host's signature over its slot, Noise key
+   * and the offer's expiry (#22). A relay older than v1.9 acks it Malformed; then this request alone is sent unsigned,
+   * so the next registration tries the signed form again and a relay updated meanwhile gets it.
+   */
+  async #signedPairSlotRequest(slot: string, noiseStaticPub: Uint8Array, expiresAt: number): Promise<PairSlotResult> {
+    const signature = await this.#options.signer.sign(pairSlotStatement(slot, noiseStaticPub, expiresAt));
+    try {
+      return await this.#pairSlotRequest(slot, encodePairSlotRequest(slot, noiseStaticPub, { expiresAt, signature }));
+    } catch (error) {
+      if (!(error instanceof PairSlotMalformedError)) throw error;
+      if (!this.#toldUnsigned) {
+        this.#toldUnsigned = true;
+        this.#options.onUnsignedPairSlot?.(slot);
+      }
+      return this.#pairSlotRequest(slot, encodePairSlotRequest(slot, noiseStaticPub));
+    }
   }
 
   /**
@@ -203,6 +229,7 @@ export class Uplink {
     if (!isOpen(ws)) return;
     ws.send(encodeAuthAnswer(signer.publicKey, signature));
     this.#answeredAt = Date.now();
+    this.#toldUnsigned = false;
     this.#options.onState?.({ state: "answered" });
   }
 

@@ -58,6 +58,10 @@ export class HostUplink implements PairingSlotRegistrar {
       relayUrl,
       signer: ed25519Signer(identity.sign.secretKey),
       onSession: handlers.onSession,
+      onUnsignedPairSlot: (slot) =>
+        log(
+          `relay: the relay refused the signed pairing slot ${slot}, so it went unsigned; clients from v1.9 refuse a typed code until the relay is updated (#22)`,
+        ),
       onRefused: ({ sessionId, reason }) => {
         if (told.has(reason)) return;
         told.add(reason);
@@ -75,10 +79,10 @@ export class HostUplink implements PairingSlotRegistrar {
     });
   }
 
-  async register(slot: string, noiseStaticPub: Uint8Array): Promise<"registered" | "collision"> {
+  async register(slot: string, noiseStaticPub: Uint8Array, expiresAt: number): Promise<"registered" | "collision"> {
     const uplink = this.#uplink;
     if (uplink === undefined) throw new LinkClosedError("the relay uplink has not started");
-    return (await uplink.registerPairSlot(slot, noiseStaticPub)) === "taken" ? "collision" : "registered";
+    return (await uplink.registerPairSlot(slot, noiseStaticPub, expiresAt)) === "taken" ? "collision" : "registered";
   }
 
   release(): void {
