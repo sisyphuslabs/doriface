@@ -110,3 +110,88 @@ test("a loopback address that is not on this computer is refused once and not re
   expect(attempts).toBe(1);
   store.stop();
 });
+
+test("a loopback link that fails asks this computer's host first, and the retry dials where the host is now (#515)", async () => {
+  jest.useFakeTimers();
+  // The retry saves where the host is now, as the app does.
+  const saved: string[] = [];
+  Object.assign(globalThis, {
+    localStorage: { getItem: () => null, setItem: (_key: string, value: string) => saved.push(value) },
+  });
+  const closes: ((error?: Error) => void)[] = [];
+  const live = { onClose: (fn: (error?: Error) => void) => (closes.push(fn), () => undefined), close: () => undefined };
+  const connection = live as unknown as HcConnection;
+  const dialled: string[] = [];
+  const store = new ConnectionStore({ ...SETTINGS, loopbackUrl: "ws://127.0.0.1:1111/v1/hc" }, (settings) => {
+    dialled.push(`${settings.loopbackUrl} ${settings.token}`);
+    return Promise.resolve(connection);
+  });
+  const asked: string[] = [];
+  store.restartsLocalHost({
+    start: () => {
+      asked.push("start");
+      return Promise.resolve({ url: "ws://127.0.0.1:2222/v1/hc", token: "n3w" });
+    },
+    failure: () => ({ code: "unknown", message: "", details: "" }),
+  });
+  const reached = (phase: string): Promise<void> =>
+    new Promise((resolve) => {
+      const off = store.subscribe(() => {
+        if (store.state.phase !== phase) return;
+        off();
+        resolve();
+      });
+    });
+
+  const first = reached("open");
+  store.start();
+  await first;
+  expect(asked).toEqual([]);
+
+  const failed = reached("failed");
+  closes[0]?.(new Error("connection is closed"));
+  await failed;
+  const again = reached("open");
+  store.retryNow();
+  await again;
+  expect(asked).toEqual(["start"]);
+  expect(dialled).toEqual(["ws://127.0.0.1:1111/v1/hc t0k", "ws://127.0.0.1:2222/v1/hc n3w"]);
+  expect(store.settings).toMatchObject({ loopbackUrl: "ws://127.0.0.1:2222/v1/hc", token: "n3w" });
+  expect(saved.at(-1)).toContain("2222");
+  store.stop();
+  Reflect.deleteProperty(globalThis, "localStorage");
+});
+
+test("a host that does not start again shows its cause, and no link is tried", async () => {
+  jest.useFakeTimers();
+  let attempts = 0;
+  const store = new ConnectionStore(SETTINGS, () => {
+    attempts += 1;
+    return Promise.reject(new Error("refused"));
+  });
+  store.restartsLocalHost({
+    start: () => Promise.reject(new Error("no hc")),
+    failure: (cause) => ({ code: "unknown", message: String(cause), details: "" }),
+  });
+  const failed = new Promise<void>((resolve) => {
+    const off = store.subscribe(() => {
+      if (store.state.phase !== "failed") return;
+      off();
+      resolve();
+    });
+  });
+  store.start();
+  await failed;
+  const hostFailed = new Promise<void>((resolve) => {
+    const off = store.subscribe(() => {
+      if (store.state.phase !== "host-failed") return;
+      off();
+      resolve();
+    });
+  });
+  store.retryNow();
+  await hostFailed;
+  expect(attempts).toBe(1);
+  expect(store.state).toMatchObject({ phase: "host-failed", failure: { message: "Error: no hc" } });
+  store.stop();
+});
