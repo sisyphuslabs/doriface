@@ -1,8 +1,15 @@
 import type { Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { E2E_HOST_ENV } from "./config.ts";
 import { getCoreDoc, setCoreDoc } from "./core-doc.ts";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
-import { MACHINE_NAME } from "./machine.ts";
-import { machineRow } from "./machine-switch.ts";
+import { MACHINE_NAME, viaCommand } from "./machine.ts";
+import { hcOn, machineRow } from "./machine-switch.ts";
+import { readSavedEnv } from "./saved-env.ts";
 import { domOrder, selectedIndex, tabs } from "./tab-strip.ts";
 
 const ORDER_DOC = "doriface";
@@ -168,5 +175,132 @@ test.describe("machine order", () => {
     setCoreDoc(ORDER_DOC, { machine_order: ids.toReversed(), kept: { by: "another client" } });
     await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
     await expect(elsewhere).toBeFocused();
+  });
+});
+
+/** The chords that move a focused row on this browser's platform, as the move keys test reads them. */
+async function moveKeys(page: Page): Promise<readonly [string, string]> {
+  const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
+  return mac ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+PageUp", "Control+Shift+PageDown"];
+}
+
+/** The ids the order document holds, after a move this page made. */
+function writtenOrder(): readonly string[] {
+  const written = getCoreDoc(ORDER_DOC);
+  if (typeof written !== "object" || written === null || !("machine_order" in written)) throw new Error("no order");
+  const ids = written.machine_order;
+  if (!Array.isArray(ids) || !ids.every((id): id is string => typeof id === "string")) throw new Error("not a list");
+  return ids;
+}
+
+test.describe("machine order follow-ups (#205, #161)", () => {
+  test("a rebound Move tab right moves a focused machine row with the new chord", async ({ page }) => {
+    await page.goto("/settings");
+    await page
+      .getByRole("tab", { name: "Keybindings" })
+      .or(page.getByRole("button", { name: "Keybindings" }))
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Record a shortcut for Move tab right" }).click();
+    await expect(page.getByRole("status")).toHaveText("Press keys…");
+    await page.keyboard.press("Control+Alt+J");
+    await expect(page.getByText("Changed")).toBeVisible();
+    const local = await openWorkspace(page);
+    const button = page.getByRole("button", { name: new RegExp(`^${local}\\b`) });
+    await button.focus();
+    await page.keyboard.press("Control+Alt+J");
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await expect(button).toBeFocused();
+  });
+
+  test("the announcement names this person's move, and an order another client writes clears it, never rewords it", async ({
+    page,
+  }) => {
+    const local = await openWorkspace(page);
+    const [up] = await moveKeys(page);
+    await machineRow(page).focus();
+    await page.keyboard.press(up);
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+    await expect(status(page)).toHaveText(new RegExp(`^Moved ${MACHINE_NAME} to position 1 of 2`));
+    setCoreDoc(ORDER_DOC, { machine_order: writtenOrder().toReversed() });
+    await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME]);
+    await expect(status(page)).toHaveText("");
+  });
+
+  test("a move the order document cannot take says why in the machine order's words, and Retry makes it once it can", async ({
+    page,
+  }) => {
+    setCoreDoc(ORDER_DOC, { machine_order: "not a list" });
+    const local = await openWorkspace(page);
+    await rowOf(page, local).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Move down" }).click();
+    const toasts = page.getByRole("region", { name: "Notifications" });
+    await expect(toasts.getByText("The machine order was not saved")).toBeVisible();
+    await expect(
+      toasts.getByText("The machine order cannot be changed now: a machine order that is not a list of machine ids."),
+    ).toBeVisible();
+    await expect(toasts.getByText(/layout/i)).toHaveCount(0);
+    expect(await order(page)).toEqual([local, MACHINE_NAME]);
+    setCoreDoc(ORDER_DOC, null);
+    await toasts.getByRole("button", { name: "Retry" }).click();
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local]);
+  });
+});
+
+test.describe("machine order with a third machine (#161)", () => {
+  const THIRD = "third-box";
+  let stop: (() => void) | undefined;
+  let root = "";
+  // A third core reached the way the host reaches the added machine (machine.ts), through Node: specs do not run in Bun.
+  test.beforeEach(() => {
+    const { hc, env } = readSavedEnv(E2E_HOST_ENV);
+    root = mkdtempSync(join(tmpdir(), "doriface-e2e-third-"));
+    const session = `web-e2e-c-${randomUUID().slice(0, 8)}`;
+    const own = {
+      HC_SESSION: session,
+      XDG_STATE_HOME: join(root, "state"),
+      XDG_RUNTIME_DIR: join(root, "run"),
+      HC_SOCKET: join(root, "c.sock"),
+      PATH: `${dirname(hc)}:${env["PATH"] ?? "/usr/bin:/bin"}`,
+    };
+    const coreDir = join(own.XDG_STATE_HOME, "herdr-core", session);
+    mkdirSync(coreDir, { recursive: true });
+    writeFileSync(join(coreDir, "core.json"), JSON.stringify({ id: randomUUID().replace(/-/g, ""), name: "third" }));
+    const spec = { name: THIRD, dir: join(root, "switch"), seeds: [] };
+    mkdirSync(spec.dir, { recursive: true });
+    execFileSync(hc, ["machine", "add", "--via", viaCommand(own, spec), "--name", THIRD], {
+      env: { ...process.env, ...env },
+      stdio: "pipe",
+    });
+    stop = () =>
+      void execFileSync(hc, ["connect", "--session", session], {
+        env: { ...process.env, ...env, ...own },
+        input: '{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n',
+        stdio: ["pipe", "ignore", "ignore"],
+      });
+  });
+  test.afterEach(() => {
+    hcOn("host", ["machine", "rm", THIRD]);
+    stop?.();
+    stop = undefined;
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("the move keys keep focus on the moved row when it is the one the list re-inserts", async ({ page }) => {
+    await page.goto("/");
+    await expect(machineRow(page)).toContainText("connected", { timeout: 30_000 });
+    await expect(rowOf(page, THIRD)).toBeVisible({ timeout: 30_000 });
+    const local = await rows(page).first().locator("span[title]").getAttribute("title");
+    if (local === null) throw new Error("no local machine row");
+    await expect.poll(() => order(page)).toEqual([local, MACHINE_NAME, THIRD]);
+    const [, down] = await moveKeys(page);
+    const button = page.getByRole("button", { name: new RegExp(`^${local}\\b`) });
+    await button.focus();
+    await page.keyboard.press(down);
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, local, THIRD]);
+    await expect(button).toBeFocused();
+    await page.keyboard.press(down);
+    await expect.poll(() => order(page)).toEqual([MACHINE_NAME, THIRD, local]);
+    await expect(button).toBeFocused();
   });
 });

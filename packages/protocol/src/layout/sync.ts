@@ -23,6 +23,23 @@ const unwritable = (state: Exclude<DocState, { readonly phase: "ready" }>): stri
   state.phase === "loading" ? "it is still loading" : state.reason;
 
 /**
+ * Why an edit was not saved, for a caller that words it in its own document's terms: the document kept changing on
+ * another device through every retry (`conflict`), or it cannot take writes now (`unwritable`: loading, unreadable or
+ * not reachable), with `detail` saying which. The message stays the layout's own wording.
+ */
+export class DocWriteError extends Error {
+  readonly kind: "conflict" | "unwritable";
+  readonly detail: string;
+
+  constructor(kind: "conflict" | "unwritable", detail: string, message: string) {
+    super(message);
+    this.name = "DocWriteError";
+    this.kind = kind;
+    this.detail = detail;
+  }
+}
+
+/**
  * One machine's herdr-app document, kept the way herdr-app keeps it (`src/mirror_sync.rs`): read with `doc.get`, every
  * write a compare-and-set at the version that was read, and a conflict re-reads the document and replaces ours with it.
  * Unlike herdr-app, which writes its whole model, doriface writes edits: after a conflict the person's edit is made
@@ -120,8 +137,17 @@ export class LayoutDoc {
 
   async #attempt(change: DocEdit, left: number): Promise<boolean> {
     const state = this.#state;
-    if (left === 0) throw new Error("The layout kept changing on another device, so this change was not saved");
-    if (state.phase !== "ready") throw new Error(`The layout cannot take changes now: ${unwritable(state)}`);
+    if (left === 0) {
+      throw new DocWriteError(
+        "conflict",
+        "",
+        "The layout kept changing on another device, so this change was not saved",
+      );
+    }
+    if (state.phase !== "ready") {
+      const detail = unwritable(state);
+      throw new DocWriteError("unwritable", detail, `The layout cannot take changes now: ${detail}`);
+    }
     const next = change(state.doc);
     if (next === null) return false;
     this.#reads += 1;

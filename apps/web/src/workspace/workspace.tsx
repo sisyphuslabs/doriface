@@ -27,6 +27,7 @@ import { chainedSplit, SplitChain } from "./split-chain.ts";
 import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
+import { orderNotSaved } from "./machine-order.ts";
 import { useMachineOrder } from "./use-machine-order.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
 import { useResumeEnds } from "./resume-ends.ts";
@@ -66,14 +67,22 @@ export function Workspace({ connection }: WorkspaceProps) {
   const toasts = useToastManager();
   const { move: saveMove } = order;
   const moveMachine = useCallback(
-    (core: string, to: number): void =>
-      void saveMove(core, to).catch((cause: unknown) =>
-        toasts.add({
+    function move(core: string, to: number): Promise<boolean> {
+      return saveMove(core, to).catch((cause: unknown) => {
+        const id = toasts.add({
           type: "error",
-          title: "The machine order was not saved",
-          description: cause instanceof Error ? cause.message : String(cause),
-        }),
-      ),
+          ...orderNotSaved(cause),
+          actionProps: {
+            children: "Retry",
+            onClick: () => {
+              toasts.close(id);
+              void move(core, to);
+            },
+          },
+        });
+        return false;
+      });
+    },
     [saveMove, toasts],
   );
   const failed = useCallback(

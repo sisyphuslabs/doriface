@@ -1,4 +1,4 @@
-import { arrangeIds, type DocEdit, moveInOrder } from "@doriface/protocol/layout";
+import { arrangeIds, type DocEdit, DocWriteError, moveInOrder } from "@doriface/protocol/layout";
 import type { MachineEntry } from "./machines.ts";
 
 /**
@@ -20,3 +20,20 @@ export const moveMachine = (entries: readonly MachineEntry[], core: string, to: 
     core,
     to,
   );
+
+/**
+ * The notice for a move the machine order did not take, in the machine order's own words (never the layout's, whose
+ * document error it is): what happened, then why. The toast's Retry is the next step (DESIGN.md 5(f)).
+ */
+export function orderNotSaved(cause: unknown): { readonly title: string; readonly description: string } {
+  const title = "The machine order was not saved";
+  if (cause instanceof DocWriteError) {
+    return cause.kind === "conflict"
+      ? { title, description: "Another device kept changing the machine order. Retry to move the machine again." }
+      : { title, description: `The machine order cannot be changed now: ${cause.detail}.` };
+  }
+  return {
+    title,
+    description: `The machine order could not be written: ${cause instanceof Error ? cause.message : String(cause)}.`,
+  };
+}

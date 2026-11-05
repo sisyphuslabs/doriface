@@ -23,8 +23,11 @@ export interface Machines {
   readonly views: readonly MachineView[];
   /** Dials a machine now (`machine.connect`) instead of at hc's next retry, then reads machine.list again. */
   readonly retry: (machine: string) => Promise<void>;
-  /** Moves a machine (by its permanent core id) to index `to` of `entries` and saves the order for every device. */
-  readonly moveMachine: (core: string, to: number) => void;
+  /**
+   * Moves a machine (by its permanent core id) to index `to` of `entries` and saves the order for every device;
+   * resolves true once saved, false when the move no longer applies or was not saved (the person was told why).
+   */
+  readonly moveMachine: (core: string, to: number) => Promise<boolean>;
 }
 
 export const MachinesContext = createContext<Machines>({
@@ -37,7 +40,7 @@ export const MachinesContext = createContext<Machines>({
   openAddMachine: () => {},
   views: [],
   retry: async () => {},
-  moveMachine: () => {},
+  moveMachine: async () => false,
 });
 
 export const useMachinesContext = (): Machines => useContext(MachinesContext);
