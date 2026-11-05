@@ -41,10 +41,10 @@ test("off macOS the tab bar and the tab tooltip show Ctrl shortcuts", async ({ p
   await expect(selected).toHaveAttribute("title", /\(Ctrl\+\d\)$/);
   await expect(selected).not.toHaveAttribute("title", /⌘/);
   await expect(terminal).toBeVisible();
-  // CI intermittently showed no tooltip when re-hovering New tab right after openNewTerminal clicked
-  // it; the cause is unknown (#43). A reload sidesteps it, and the terminal survives the reload.
-  await page.reload();
-  await expect(page.locator('[data-focused="true"] [data-terminal]')).toContainText("$", { timeout: 15_000 });
+  // The new tab's label passes through interim names before the shell's own ("sh"), and each one changes the tab's
+  // width, which moves New tab. Hovered before the last of them, the button slides out from under the pointer during
+  // the tooltip's open delay and no tooltip opens (#43). Hover once the label is final, so New tab stays put.
+  await expect(selected).toHaveAttribute("title", /^sh \(Ctrl\+\d\)$/, { timeout: 15_000 });
   await page.getByRole("button", { name: "New tab" }).hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "New tab" }).locator("kbd > span");
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "T"]);
