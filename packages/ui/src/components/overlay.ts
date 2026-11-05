@@ -2,10 +2,11 @@ import { cn } from "../lib/cn.ts";
 
 /**
  * Text inside an overlay breaks anywhere once a word is too long for the line, so an unbroken name (a path, a URL,
- * a long session name) wraps inside the box instead of running past it and off the screen (#152). It is inherited,
- * so it reaches every caller's text too; a text that truncates keeps its ellipsis.
+ * a long session name) wraps inside the box instead of running past it and off the screen (#152). Korean breaks at
+ * spaces, not between the syllables of a word (keep-all); a Korean word longer than the line still breaks anywhere.
+ * Both are inherited, so they reach every caller's text too; a text that truncates keeps its ellipsis.
  */
-export const wrapAnywhere = "[overflow-wrap:anywhere]";
+export const wrapAnywhere = "[overflow-wrap:anywhere] break-keep";
 
 /** The one overlay level: popover tone, hairline, a single shadow, 120 ms scale-fade from its origin; text wraps anywhere. */
 export const overlaySurface = cn(

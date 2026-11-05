@@ -1,6 +1,6 @@
 import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { useId, type ReactElement, type ReactNode } from "react";
+import { useId, useRef, type ReactElement, type ReactNode } from "react";
 import { cn } from "../lib/cn.ts";
 import { backdropClass, overlaySurface } from "./overlay.ts";
 
@@ -48,10 +48,19 @@ export function Dialog({
   alert = false,
 }: DialogProps) {
   const state = { ...(open === undefined ? {} : { open }), ...(onOpenChange === undefined ? {} : { onOpenChange }) };
+  const panel = useRef<HTMLDivElement>(null);
+  // A question taller than the screen opens at its title: focus goes to the dialog itself, since focusing a button
+  // below the fold would scroll the title out of view. A question that fits keeps Base UI's first focusable.
+  const initialFocus = () => {
+    const element = panel.current;
+    return element !== null && element.scrollHeight > element.clientHeight ? element : true;
+  };
   const popup = (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop className={backdropClass} />
       <BaseDialog.Popup
+        ref={panel}
+        initialFocus={initialFocus}
         {...(finalFocus === undefined ? {} : { finalFocus })}
         className={cn(
           overlaySurface,

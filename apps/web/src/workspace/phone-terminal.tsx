@@ -43,7 +43,8 @@ export function PhoneTerminal({ connection, terminal, terminals, onOpen, onBack 
   const keysOpen = !ended && (keyboard.up || menu);
 
   return (
-    <div className="relative flex h-dvh min-h-0 flex-col bg-card">
+    // isolate: the keys float above the terminal (z-10) but stay under a dialog and its backdrop, which portal to the body.
+    <div className="relative isolate flex h-dvh min-h-0 flex-col bg-card">
       <PhoneHeader terminal={terminal} terminals={terminals} onBack={onBack} onOpen={onOpen} />
       <ConnectionLine />
       <div
