@@ -14,6 +14,11 @@ export interface IconButtonProps extends Omit<ButtonProps, "children" | "size"> 
 }
 
 const SIZE = { sm: "size-(--control-sm) px-0", md: "size-(--control) px-0" } as const;
+/**
+ * On a coarse pointer the hit area is at least 44 px, centred on the drawn box like Switch's: Button's min-size grows
+ * only right and down from the top-left, over the next control.
+ */
+const HIT = "coarse:after:inset-[min(-0.25rem,calc(50%-1.375rem))]";
 
 export function IconButton({
   label,
@@ -32,7 +37,7 @@ export function IconButton({
         variant={variant}
         aria-label={label}
         aria-pressed={pressed}
-        className={cn(SIZE[size], pressed === true && "bg-selected text-foreground", className)}
+        className={cn(SIZE[size], HIT, pressed === true && "bg-selected text-foreground", className)}
       >
         {icon}
       </Button>
