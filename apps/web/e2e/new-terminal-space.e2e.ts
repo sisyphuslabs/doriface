@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test, pressNewTab } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { machineRow, newOn } from "./machine-switch.ts";
 
@@ -25,7 +25,7 @@ test("New tab starts the shell where the active terminal runs: its machine and i
   const first = await focused(page).getAttribute("data-terminal");
   const there = await workingDirectory(page, page.locator(`[data-terminal="${first}"]`));
 
-  await page.getByRole("button", { name: "New tab" }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab" }));
   await expect(focused(page)).not.toHaveAttribute("data-terminal", first ?? "", { timeout: 15_000 });
   await expect(focused(page)).toHaveAttribute("data-terminal", remote);
   const opened = page.locator(`[data-terminal="${await focused(page).getAttribute("data-terminal")}"]`);
@@ -44,7 +44,7 @@ test("New tab starts in the directory the active shell has moved to", async ({ p
   expect(moved).toMatch(/f13-moved$/);
   // The tab bar's New tab, not openNewTerminal's first match, which can be the sidebar's New terminal on this machine.
   const before = await first.getAttribute("data-terminal");
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   await expect(focused(page)).not.toHaveAttribute("data-terminal", before ?? "", { timeout: 15_000 });
   const opened = page.locator(`[data-terminal="${await focused(page).getAttribute("data-terminal")}"]`);
   await expect(opened).toContainText("$", { timeout: 15_000 });

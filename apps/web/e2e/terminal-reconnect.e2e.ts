@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { FrameDecoder, FrameKind } from "@doriface/protocol";
-import { expect, laidOutBox, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { expect, laidOutBox, openNewTerminal, terminalCount, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -105,7 +105,7 @@ test("New tab while reconnecting says it could not open one instead of doing not
   await openNewTerminal(page);
   await socket.drop(true);
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
-  await page.getByRole("button", { name: "New tab" }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab" }));
   await expect(page.getByText("Could not open a new tab")).toBeVisible();
   await expect(page.getByText(/try again once it is back/)).toBeVisible();
   socket.restore();

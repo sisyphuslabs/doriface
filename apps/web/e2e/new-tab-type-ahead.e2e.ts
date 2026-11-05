@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { E2E_HOST_ENV } from "./config.ts";
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test, pressNewTab } from "./fixtures.ts";
 import { type HcSocket, routeHcSocket } from "./hc-socket.ts";
 import { readSavedEnv } from "./saved-env.ts";
 
@@ -29,7 +29,7 @@ type Via = "keys" | "button" | "palette";
 
 /** Asks for a new tab the way a person would, from the previous terminal. */
 async function askNewTab(page: Page, previous: ReturnType<Page["locator"]>, via: Via): Promise<void> {
-  if (via === "button") return void (await page.getByRole("button", { name: "New tab" }).first().click());
+  if (via === "button") return void (await pressNewTab(page.getByRole("button", { name: "New tab" }).first()));
   await previous.getByRole("textbox").focus();
   const onMac = await mac(page);
   if (via === "keys") return void (await page.keyboard.press(onMac ? "Meta+KeyT" : "Control+Shift+KeyT"));

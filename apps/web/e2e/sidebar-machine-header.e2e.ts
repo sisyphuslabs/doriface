@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { endAgent, startAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
+import { seedSpaces } from "./layout-doc.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { rows } from "./sidebar-measure.ts";
 
@@ -24,6 +25,10 @@ test.afterAll(() => endAgent("host", address));
 test("each machine header carries New space, a status dot and a fold chevron that hides its spaces across a reload", async ({
   page,
 }) => {
+  // The sidebar lists the layout's spaces (#404): one named mhfold, showing the agent.
+  seedSpaces([
+    { id: "spc-mhfold", name: "mhfold", folder: "", tabs: [{ id: "tb-mhfold", name: "", terminal: address }] },
+  ]);
   await page.goto("/");
   const studio = group(page);
   await expect(rows(spaces(page)).filter({ hasText: "mhfold" })).toBeVisible({ timeout: 20_000 });

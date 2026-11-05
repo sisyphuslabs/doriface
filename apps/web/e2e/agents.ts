@@ -53,7 +53,21 @@ export function crashProgram(core: "host" | "machine", address: string): void {
 /** Ends and removes a terminal on the core that started it, so later specs count the machine's terminals from zero. */
 export function endAgent(core: "host" | "machine", address: string): void {
   hcOn(core, ["kill", address]);
-  hcOn(core, ["rm", address]);
+  removeEnded(core, address, Date.now() + 10_000);
+}
+
+/**
+ * `hc kill` returns once it has hung the program up, which may still be exiting, and `hc rm` refuses a live terminal:
+ * it is asked again until the program has ended, within the deadline.
+ */
+function removeEnded(core: "host" | "machine", address: string, deadline: number): void {
+  try {
+    hcOn(core, ["rm", address]);
+  } catch (error) {
+    if (!(error instanceof Error && error.message.includes('"kind":"live"')) || Date.now() > deadline) throw error;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    removeEnded(core, address, deadline);
+  }
 }
 
 /** The row of an agent in a page or a section: on the added machine (`remote`) or on this one. */

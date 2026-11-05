@@ -4,6 +4,7 @@ import { expect, test } from "./fixtures.ts";
 import { clearLayouts, LAYOUT_DOC, paneOf, seedLayout } from "./layout-doc.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, STATE_BOUND_MS } from "./machine-switch.ts";
+import { rows } from "./sidebar-measure.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -53,10 +54,13 @@ test("a terminal removed on an added machine while no page was open leaves its l
   await expect(machineRow(page)).toContainText("connected", { timeout: 20_000 });
   await expect.poll(() => [gone, splitGone].filter(inMachineLayout), { timeout: STATE_BOUND_MS }).toEqual([]);
   expect([kept, splitKept].filter(inMachineLayout)).toEqual([kept, splitKept]);
+  // The strip shows the selected space's tabs (#404): the seeded space, named after its folder, under the machine.
+  const group = page.getByRole("region", { name: "Spaces" }).getByRole("region", { name: MACHINE_NAME, exact: true });
+  await rows(group).filter({ hasText: "tmp" }).click();
   const strip = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-  await expect(strip.filter({ hasText: MACHINE_NAME })).toHaveCount(2);
+  await expect(strip).toHaveCount(2);
   await expect(page.getByText("Waiting for this terminal to start")).toHaveCount(0);
   // The machine's tabs follow its document's order: the kept tab, then the split.
-  await strip.filter({ hasText: MACHINE_NAME }).nth(1).click();
+  await strip.nth(1).click();
   await expect(paneOf(page, `${MACHINE_NAME}/${splitKept}`)).toContainText("$", { timeout: 15_000 });
 });

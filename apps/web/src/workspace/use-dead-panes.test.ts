@@ -12,6 +12,7 @@ const tab = (
   key,
   id: key,
   space: "s",
+  spaceKey: "space:s",
   machine,
   name: "",
   root: { children: [], id: key, type: "row" },

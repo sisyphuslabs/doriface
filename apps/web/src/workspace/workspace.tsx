@@ -1,3 +1,4 @@
+import type { TerminalRunParams } from "@doriface/protocol";
 import type { HcConnection } from "@doriface/client";
 import { useToastManager } from "@doriface/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,16 +21,18 @@ import { PIN_LABEL } from "./sidebar-model.ts";
 import { PinContext, type PinTerminal } from "./use-pin.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
-import { spaceId } from "./model.ts";
 import { useNarrow } from "./use-narrow.ts";
 import { machineIds, tabAddress, tabKey } from "./tab-keys.ts";
-import { findTerminal } from "./layout-model.ts";
+import { findTerminal, type LayoutTab } from "./layout-model.ts";
 import { useLayout, type PaneTarget } from "./use-layout.ts";
 import { chainedSplit, SplitChain } from "./split-chain.ts";
 import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
 import { GitFactsContext, useGitFacts } from "./git-facts.ts";
+import { layoutSpaces, tabTitle } from "./model.ts";
+import { SpaceSelectionContext } from "./space-selection.ts";
+import { useAdoptLoose } from "./use-adopt-loose.ts";
 import { orderNotSaved } from "./machine-order.ts";
 import { useMachineOrder } from "./use-machine-order.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
@@ -99,7 +102,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     (message: string) =>
       toasts.add({
         type: "error",
-        title: "The tab order was not saved",
+        title: "The tab selection was not saved",
         description: `${message.replace(/\.$/, "")}. This window keeps it until it reloads.`,
       }),
     [toasts],
@@ -131,6 +134,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     [dropPane],
   );
   useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, dropEnded);
+  useAdoptLoose(layouts, fed.loaded ? terminals : null, failed);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
   // The phone's open terminal is kept by machine id like a tab, so a rename keeps it open at the new address.
@@ -177,7 +181,15 @@ export function Workspace({ connection }: WorkspaceProps) {
     if (shownTab !== undefined && shownPane !== undefined) splits.shown(shownTab, shownPane);
   }, [splits, shownTab, shownPane]);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
-  const newTerminal = (): void => runs.start(runParamsFor(terminals.find((terminal) => terminal.address === inView)));
+  // A new tab goes to the selected space (openTerminal), so it starts where that space is when no terminal is in focus.
+  const newTerminal = (template?: string): void =>
+    runs.start({
+      ...runParamsFor(
+        terminals.find((terminal) => terminal.address === inView),
+        spaces.find((space) => space.id === layout.active?.spaceKey),
+      ),
+      ...(template === undefined ? {} : { argv: [template], name: template }),
+    });
   const split = (axis: Axis, target?: PaneTarget): void => {
     const from =
       target === undefined
@@ -196,8 +208,12 @@ export function Workspace({ connection }: WorkspaceProps) {
       (address, pane, made) => layout.split(axis, address, { tab: tab.key, pane }, made),
     );
   };
+  // A space's last tab takes the space with it, as herdr-app's tab.close: that always asks first (CloseTabDialog).
+  const lastOfSpace = (tab: LayoutTab | undefined): boolean =>
+    tab !== undefined && !tab.transient && layout.tabs.filter((each) => each.spaceKey === tab.spaceKey).length === 1;
   const closeTab = (key: string): void => {
     const tab = layout.tabs.find((each) => each.key === key);
+    if (lastOfSpace(tab)) return setClosingTab(key);
     const shown = tab?.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
     const [only] = shown;
     if (shown.length === 1 && only !== undefined) setAsk({ kind: "close", address: only });
@@ -208,16 +224,31 @@ export function Workspace({ connection }: WorkspaceProps) {
     // An End of this session drops its pane only once it has removed the terminal (see afterEnd).
     if (closesTab(end)) afterEnd(address, () => dropEnded(address));
   };
+  // A tab's only pane closes as its tab, as herdr-app's pane.close does.
+  const closePane = (address: string): void => {
+    const found = findTerminal(layout.tabs, address);
+    if (found !== null && found.tab.panes.length === 1) closeTab(found.tab.key);
+    else setAsk({ kind: "close", address });
+  };
   const closing = layout.tabs.find((tab) => tab.key === closingTab);
   const phoneTab = phoneOpen === null ? null : findTerminal(layout.tabs, phoneOpen);
   const phonePanes = phoneTab?.tab.panes.flatMap((pane) => (pane.address === null ? [] : [pane.address])) ?? [];
+  // The phone's header reads the tab as the desktop strip does: its name, else its place among its space's tabs.
+  const phoneTitle =
+    phoneTab === null
+      ? null
+      : tabTitle(
+          phoneTab.tab.name,
+          layout.tabs.filter((tab) => tab.spaceKey === phoneTab.tab.spaceKey).indexOf(phoneTab.tab),
+        );
   usePushPresence(inView);
   useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
+  const spaces = useMemo(() => layoutSpaces(layouts, terminals, gitOf), [layouts, terminals, gitOf]);
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
-    const shown = terminals.find((terminal) => terminal.address === inView && terminal.state === "live");
-    if (inView === null || (verb === "rename-space" && shown === undefined)) return false;
-    if (verb === "rename-space") setSpaceAsk(shown === undefined ? null : spaceId(shown));
+    const space = spaces.find((each) => inView !== null && each.addresses.includes(inView));
+    if (inView === null || (verb === "rename-space" && space === undefined)) return false;
+    if (verb === "rename-space") setSpaceAsk(space?.id ?? null);
     else setAsk({ kind: verb, address: inView });
     return true;
   };
@@ -236,88 +267,134 @@ export function Workspace({ connection }: WorkspaceProps) {
   const openAddMachine = useCallback(() => setAdding(true), []);
   const terminalsLoaded = fed.loaded;
   const machinesListed = machineReads > 0 || listError !== undefined;
+  // The sidebar's runs are its New space buttons: each terminal they start is the first tab of a new space (#404).
+  const inNewSpace = useCallback(
+    (address: string): void => {
+      openInLayout(address, true);
+      showOnPhone(address);
+    },
+    [openInLayout, showOnPhone],
+  );
   const machines = useMemo(
-    () => ({ entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, ...runs }),
-    [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, runs],
+    () => ({
+      entries,
+      terminalsLoaded,
+      machinesListed,
+      listError,
+      openAddMachine,
+      views,
+      retry,
+      moveMachine,
+      start: (params: TerminalRunParams) => runs.start(params, inNewSpace),
+      newTerminalOn: (machine: string) => runs.start({ on: machine }, inNewSpace),
+    }),
+    [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, runs, inNewSpace],
+  );
+  const { selectSpace } = layout;
+  const selectedSpace = layout.active?.spaceKey ?? null;
+  const spaceSelection = useMemo(
+    () => ({ spaces, selected: selectedSpace, select: selectSpace }),
+    [spaces, selectedSpace, selectSpace],
   );
   return (
     <MachinesContext value={machines}>
       <GitFactsContext value={gitOf}>
-        <PinContext value={pin}>
-          <SessionContext value={setAsk}>
-            <SpaceRename connection={connection} terminals={terminals} ask={spaceAsk} onAsk={setSpaceAsk}>
-              {narrow ? (
-                <PhoneShell
-                  connection={connection}
-                  terminals={terminals}
-                  open={phoneOpen}
-                  panes={phonePanes}
-                  onOpen={showOnPhone}
-                  onBack={() => setPhoneKey(null)}
-                  onNew={() => newTerminal()}
-                  onPalette={onPalette}
-                  onSession={onSession}
-                />
-              ) : (
-                <DesktopShell
-                  connection={connection}
-                  terminals={terminals}
-                  loaded={fed.loaded}
-                  layout={layout}
-                  onNew={() => newTerminal()}
-                  onSplit={split}
-                  onCloseTab={closeTab}
-                  onClosePane={(address) => setAsk({ kind: "close", address })}
-                  onEnd={onEnd}
-                  onPalette={onPalette}
-                  onSession={onSession}
-                />
-              )}
-            </SpaceRename>
-          </SessionContext>
-        </PinContext>
-        <PromptAnswerBanner />
-        <textarea
-          ref={typeAhead.catcher}
-          {...CATCHER_ATTRIBUTES}
-          aria-label="New terminal starting: what you type goes to it"
-          tabIndex={-1}
-          className="sr-only"
-          autoCapitalize="off"
-          autoComplete="off"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
-        <SessionDialogs
-          connection={connection}
-          terminals={terminals}
-          ask={ask}
-          onDone={done}
-          onDrop={layout.dropPane}
-        />
-        {closing === undefined ? null : (
-          <CloseTabDialog
+        <SpaceSelectionContext value={spaceSelection}>
+          <PinContext value={pin}>
+            <SessionContext value={setAsk}>
+              <SpaceRename
+                connection={connection}
+                terminals={terminals}
+                layouts={layouts}
+                spaces={spaces}
+                ask={spaceAsk}
+                onAsk={setSpaceAsk}
+              >
+                {narrow ? (
+                  <PhoneShell
+                    connection={connection}
+                    terminals={terminals}
+                    open={phoneOpen}
+                    panes={phonePanes}
+                    tabTitle={phoneTitle}
+                    onOpen={showOnPhone}
+                    onBack={() => setPhoneKey(null)}
+                    onNew={() => newTerminal()}
+                    onPalette={onPalette}
+                    onSession={onSession}
+                  />
+                ) : (
+                  <DesktopShell
+                    connection={connection}
+                    terminals={terminals}
+                    loaded={fed.loaded}
+                    layout={layout}
+                    onNew={() => newTerminal()}
+                    onNewAgent={(template) => newTerminal(template)}
+                    onNewSpace={() => runs.start({}, inNewSpace)}
+                    onSplit={split}
+                    onCloseTab={closeTab}
+                    onClosePane={closePane}
+                    onEnd={onEnd}
+                    onPalette={onPalette}
+                    onSession={onSession}
+                  />
+                )}
+              </SpaceRename>
+            </SessionContext>
+          </PinContext>
+          <PromptAnswerBanner />
+          <textarea
+            ref={typeAhead.catcher}
+            {...CATCHER_ATTRIBUTES}
+            aria-label="New terminal starting: what you type goes to it"
+            tabIndex={-1}
+            className="sr-only"
+            autoCapitalize="off"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
+          <SessionDialogs
             connection={connection}
             terminals={terminals}
-            tab={closing}
-            onClosed={() => layout.closeTab(closing.key)}
-            onDone={() => setClosingTab(null)}
+            ask={ask}
+            onDone={done}
+            onDrop={layout.dropPane}
           />
-        )}
-        {palette ? (
-          <Palette
-            terminals={terminals}
-            host={connection.hello.core.name}
-            route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
-            actions={availableActions(narrow ? "phone" : "desktop", inView !== null, layout.active?.readOnly ?? null, {
-              keys: layout.tabs.map((tab) => tab.key),
-              active: layout.active?.key ?? null,
-            })}
-            onOpenTerminal={opened}
-            onClose={() => setPalette(false)}
-          />
-        ) : null}
+          {closing === undefined ? null : (
+            <CloseTabDialog
+              key={closing.key}
+              connection={connection}
+              terminals={terminals}
+              tab={closing}
+              {...(lastOfSpace(closing)
+                ? { space: { name: spaces.find((space) => space.id === closing.spaceKey)?.name ?? "Space" } }
+                : {})}
+              onClosed={() => layout.closeTab(closing.key)}
+              onDone={() => setClosingTab(null)}
+            />
+          )}
+          {palette ? (
+            <Palette
+              terminals={terminals}
+              host={connection.hello.core.name}
+              route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
+              actions={availableActions(
+                narrow ? "phone" : "desktop",
+                inView !== null,
+                layout.active?.readOnly ?? null,
+                {
+                  keys: layout.shown.map((tab) => tab.key),
+                  active: layout.active?.key ?? null,
+                },
+              )}
+              onOpenTerminal={opened}
+              onClose={() => setPalette(false)}
+            />
+          ) : null}
+        </SpaceSelectionContext>
       </GitFactsContext>
     </MachinesContext>
   );

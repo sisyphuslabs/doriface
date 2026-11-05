@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
+import { seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 import { rows } from "./sidebar-measure.ts";
 
@@ -35,8 +36,14 @@ test.afterAll(() => {
 test("two spaces with the same name on one machine are two rows, told apart, and the count says 2 (#397)", async ({
   page,
 }) => {
-  startIn(join(dir, "home", "twin397"), "twin-home");
-  startIn(join(dir, "data", "twin397"), "twin-data");
+  // The sidebar lists the layout's spaces (#404): two unnamed ones whose folders end the same way.
+  seedSpaces(
+    ["home", "data"].map((parent) => {
+      const folder = join(dir, parent, "twin397");
+      const tab = { id: `tb-${parent}`, name: "", terminal: startIn(folder, `twin-${parent}`) };
+      return { id: `spc-${parent}`, name: "", folder, tabs: [tab] };
+    }),
+  );
   await page.goto("/");
   const spaces = page.getByRole("complementary", { name: "Workspace" }).getByRole("region", { name: "Spaces" });
   const twins = rows(spaces).filter({ hasText: "twin397" });

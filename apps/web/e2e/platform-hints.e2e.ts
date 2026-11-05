@@ -1,6 +1,5 @@
 import type { Locator } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
-import { hcOn } from "./machine-switch.ts";
 
 /** Clicks every match, one at a time, until none is left. */
 const removeAll = async (buttons: Locator): Promise<void> => {
@@ -31,26 +30,24 @@ test("off macOS the status bar and sidebar show the palette shortcut as Ctrl Shi
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "P"]);
 });
 
-test("off macOS the tab bar and the tab tooltip show Ctrl shortcuts", async ({ page }) => {
+test("off macOS the tab bar's + and its menu's Terminal item show the Ctrl shortcut", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, "platform", { get: () => "Linux x86_64" });
     Object.defineProperty(Navigator.prototype, "userAgent", { get: () => "Mozilla/5.0 (X11; Linux x86_64)" });
   });
   await page.goto("/");
-  const terminal = await openNewTerminal(page);
-  const selected = page.getByRole("tab", { selected: true });
-  await expect(selected).toHaveAttribute("title", /\(Ctrl\+\d\)$/);
-  await expect(selected).not.toHaveAttribute("title", /⌘/);
-  await expect(terminal).toBeVisible();
-  // Give the terminal a stable name: /bin/sh reports bash on macOS and sh on Linux. A changing tab width moves
-  // New tab out from under the pointer during the tooltip's open delay (#43).
-  const address = await terminal.getAttribute("data-terminal");
-  if (address === null) throw new Error("the new terminal has no address");
-  hcOn("host", ["label", address, "herdr.name=shortcut-hints"]);
-  await expect(selected).toHaveAttribute("title", /^shortcut-hints \(Ctrl\+\d\)$/, { timeout: 15_000 });
-  await page.getByRole("button", { name: "New tab" }).hover();
+  await openNewTerminal(page);
+  // A tab has no tooltip (#466 ruling A): New tab's chord is on + and on the Terminal item of the menu it opens.
+  const newTab = page.getByRole("button", { name: "New tab", exact: true });
+  await newTab.hover();
   const tooltip = page.locator("[data-side]").filter({ hasText: "New tab" }).locator("kbd > span");
   await expect(tooltip).toHaveText(["Ctrl", "Shift", "T"]);
+  await newTab.click();
+  const item = page.getByRole("menuitem", { name: /^Terminal/ });
+  await expect(item.locator("kbd > span")).toHaveText(["Ctrl", "Shift", "T"]);
+  await expect(item).not.toContainText("⌘");
+  await page.keyboard.press("Escape");
+  await expect(item).toHaveCount(0);
 });
 
 test("with New tab unbound the tab bar shows no shortcut for it", async ({ page }) => {
