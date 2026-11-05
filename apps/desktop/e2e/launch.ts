@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,4 +38,16 @@ export function launchOptions(
 ): { readonly args: string[] } | { readonly executablePath: string; readonly args: string[] } {
   const args = appArgs(extra, { gpu });
   return packagedExecutable === undefined ? { args } : { executablePath: attachAfterFirstLoad, args };
+}
+
+/** Opens a terminal through the strip's New tab menu, or the empty workspace's direct New terminal button. */
+export async function pressNewTab(page: Page, options: { readonly timeout?: number } = {}): Promise<void> {
+  const button = page
+    .getByRole("button", { name: "New tab" })
+    .or(page.getByRole("button", { name: "New terminal" }))
+    .first();
+  await button.click(options);
+  if ((await button.getAttribute("aria-haspopup")) === "menu") {
+    await page.getByRole("menuitem", { name: /^Terminal/ }).click(options);
+  }
 }

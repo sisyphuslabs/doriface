@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 interface Scratch {
   readonly hc: ReturnType<typeof scratchHcSession>;
@@ -191,11 +191,7 @@ let opened: Drawn | undefined;
 test("Cmd/Ctrl + = / - / 0 size the terminal text, not the window", async () => {
   const page = await app().firstWindow();
   await page.getByRole("button", { name: "Use this computer" }).click();
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click({ timeout: 30_000 });
+  await pressNewTab(page, { timeout: 30_000 });
   await expect(terminalIn(page)).toContainText("$", { timeout: 30_000 });
   expect(await zoomFactor()).toBe(1);
   const before = await settled(page);
@@ -251,11 +247,7 @@ test("the window opens unzoomed even after an older build saved a window zoom, a
   await page.waitForLoadState("domcontentloaded");
   expect(await zoomFactor()).toBe(1);
   expect(await page.evaluate(() => devicePixelRatio)).toBe(opened.dpr);
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click({ timeout: 30_000 });
+  await pressNewTab(page, { timeout: 30_000 });
   await expect(terminalIn(page)).toContainText("$", { timeout: 30_000 });
   const reopened = await settled(page);
   expect(points(reopened)).toBe(points(opened) - 1);

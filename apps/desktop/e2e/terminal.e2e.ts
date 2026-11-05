@@ -4,7 +4,7 @@ import { hostname, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { MAC_TITLEBAR_CSS } from "../src/config/window.ts";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 /** A scratch hc session and a scratch profile, made only when the tests run (not on --list). */
 interface Scratch {
@@ -63,20 +63,16 @@ test("Use this computer attaches a live terminal that echoes", async () => {
   if (launched === undefined) throw new Error("the app did not launch");
   const page = await launched.firstWindow();
   await page.getByRole("button", { name: "Use this computer" }).click();
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click({ timeout: 30_000 });
+  await pressNewTab(page, { timeout: 30_000 });
   const terminal = page.locator('[data-focused="true"] [data-terminal]');
   await expect(terminal).toContainText("$", { timeout: 30_000 });
   await terminal.getByRole("textbox").focus();
   await page.keyboard.type("echo doriface-ok");
   await page.keyboard.press("Enter");
   await expect(terminal).toContainText(/doriface-ok[\s\S]*doriface-ok/, { timeout: 15_000 });
-  // The tab title comes from the running program's argv (clean-shell, then bash once it execs);
-  // wait until it is set and names no path before reading what the window shows.
-  await expect(page.getByRole("tab", { selected: true })).toHaveAttribute("title", /^[^/]+$/, { timeout: 10_000 });
+  // The session actions name the running program (clean-shell, then bash once it execs); the tab now reads its number.
+  // Wait until the program names no path before reading what the window shows.
+  await expect(page.getByRole("button", { name: /^Session actions for [^/]+$/ })).toBeVisible({ timeout: 10_000 });
   // The whole window, so the status bar's machine name counts as well as the prompt.
   const shown = (await page.locator("body").textContent()) ?? "";
   const host = hostname().split(".")[0] ?? "";

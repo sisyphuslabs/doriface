@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 const mac = process.platform === "darwin";
 /** The app's own defaults: Ghostty's and herdr-app's ⌘D / ⌘⇧D, Ctrl+Shift+O / E off macOS. */
@@ -95,11 +95,7 @@ test("in the desktop app, split right and split down focus the new pane beside o
   if (launched === undefined) throw new Error("the app did not launch");
   const page = await launched.firstWindow();
   await page.getByRole("button", { name: "Use this computer" }).click();
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click({ timeout: 30_000 });
+  await pressNewTab(page, { timeout: 30_000 });
   const first = page.locator('[data-focused="true"] [data-terminal]');
   await expect(first).toContainText("$", { timeout: 30_000 });
   const one = (await first.getAttribute("data-terminal")) ?? "";
