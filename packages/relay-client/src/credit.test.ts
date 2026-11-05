@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { SendWindow } from "./send-window.ts";
-import { decodeMux, encodeCredit, encodeCreditText, MuxError, MuxType, parseCreditText } from "./wire/index.ts";
+import {
+  ACK_INTERVAL_BYTES,
+  decodeMux,
+  encodeCredit,
+  encodeCreditText,
+  MuxError,
+  MuxType,
+  parseCreditText,
+} from "./wire/index.ts";
 
 describe("credit wire", () => {
   test("CREDIT is a u32 LE byte count for one session", () => {
@@ -25,6 +33,24 @@ function sendsOf(window: SendWindow): number[] {
       () => sent.push(size),
       () => {},
     );
+  return sent;
+}
+
+/** A window of one credit step plus 100 bytes, after a send of `inFlight` bytes: whether a 200-byte send goes too. */
+function sendAt(inFlight: number): number[] {
+  const window = new SendWindow(ACK_INTERVAL_BYTES + 100);
+  window.credit(0);
+  const sent: number[] = [];
+  window.admit(
+    inFlight,
+    () => sent.push(inFlight),
+    () => {},
+  );
+  window.admit(
+    200,
+    () => sent.push(200),
+    () => {},
+  );
   return sent;
 }
 
@@ -69,6 +95,11 @@ describe("SendWindow", () => {
       () => {},
     );
     expect(sent).toEqual([63, 600]);
+  });
+
+  test("the residue edge is exclusive: at one credit step in flight a send past the window waits, one byte less it goes", () => {
+    expect(sendAt(ACK_INTERVAL_BYTES)).toEqual([ACK_INTERVAL_BYTES]);
+    expect(sendAt(ACK_INTERVAL_BYTES - 1)).toEqual([ACK_INTERVAL_BYTES - 1, 200]);
   });
 
   test("a send bigger than the window goes once nothing is in flight", () => {
