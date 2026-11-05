@@ -93,6 +93,11 @@ test.describe("at 390 with touch", () => {
         { side: "right", x: box.x + box.width + OUT, y: midY, label },
         { side: "top", x: midX, y: box.y - OUT, label },
         { side: "bottom", x: midX, y: box.y + box.height + OUT, label },
+        // The corners too: the rows above and below and the list's edge must not take any of the 44 px (#504 re-test).
+        { side: "top-left", x: box.x - OUT, y: box.y - OUT, label },
+        { side: "top-right", x: box.x + box.width + OUT, y: box.y - OUT, label },
+        { side: "bottom-left", x: box.x - OUT, y: box.y + box.height + OUT, label },
+        { side: "bottom-right", x: box.x + box.width + OUT, y: box.y + box.height + OUT, label },
       ];
     });
     const hits = await page.evaluate(
