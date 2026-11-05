@@ -3,7 +3,9 @@ import { cn, IconButton } from "@doriface/ui";
 import { Columns2, Maximize2, Minimize2, Rows2, X } from "lucide-react";
 import type { Axis } from "@doriface/protocol/layout";
 import { useActionKeys } from "../keys/use-action-keys.ts";
+import type { ReactNode } from "react";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
+import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
@@ -21,6 +23,10 @@ export interface PaneProps {
   readonly onSplit: (axis: Axis) => void;
   readonly onZoom: () => void;
   readonly onClose: () => void;
+  /** The view's input path, for input from outside the pane (dictation); null once the view unmounts. */
+  readonly onPort: (port: TerminalPort | null) => void;
+  /** Docked under the terminal, inside the card: the voice strip while this pane is dictated into. */
+  readonly dock?: ReactNode;
 }
 
 /** herdr-app's pane header buttons, each with its shortcut in the tooltip. */
@@ -76,7 +82,8 @@ function PaneButtons({
  * frames panes only once a tab is split, since the tab can name only one of them.
  */
 export function Pane(props: PaneProps) {
-  const { connection, terminal, focused, split, zoomed, onFocus, onEnd, onSplit, onZoom, onClose } = props;
+  const { connection, terminal, focused, split, zoomed, onFocus, onEnd, onPort, dock, onSplit, onZoom, onClose } =
+    props;
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
   return (
@@ -116,8 +123,10 @@ export function Pane(props: PaneProps) {
           focused={focused}
           label={`${title} output`}
           onEnd={onEnd}
+          onPort={onPort}
         />
       )}
+      {dock}
     </section>
   );
 }

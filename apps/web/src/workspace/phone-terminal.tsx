@@ -1,10 +1,13 @@
 import type { HcConnection } from "@doriface/client";
-import { useCallback, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useSoftKeyboard } from "../terminal/keyboard-inset.ts";
 import { hostPlatform } from "../terminal/keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
+import { DictateButton } from "../voice/dictate-button.tsx";
+import { useDictation } from "../voice/use-dictation.ts";
+import { VoiceDock } from "../voice/voice-dock.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
@@ -22,10 +25,12 @@ export interface PhoneTerminalProps {
   readonly panes: readonly string[];
   readonly onOpen: (address: string) => void;
   readonly onBack: () => void;
+  /** Where this terminal registers its dictation for the shell's palette row and bound key; null while it takes none. */
+  readonly dictate: RefObject<(() => void) | null>;
 }
 
 /** One session full screen on a phone, its terminal kept clear of the soft keyboard and the keys bar riding on it. */
-export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, onBack }: PhoneTerminalProps) {
+export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, onBack, dictate }: PhoneTerminalProps) {
   const port = useRef<TerminalPort | null>(null);
   const onPort = useCallback((next: TerminalPort | null) => {
     port.current = next;
@@ -43,11 +48,32 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   const host = hostPlatform(machine ?? connection.hello.core.name);
   const sticky = useStickyKeys(port, host);
   const offline = terminal.offline === true && machine !== undefined;
-  const keysOpen = !ended && (keyboard.up || menu);
+  const voice = useDictation();
+  const mic = useRef<HTMLButtonElement>(null);
+  const { toggle } = voice;
+  // An ended view or an offline machine has nothing to type into: no mic, no dictation from the palette, and one under
+  // way ends.
+  useEffect(() => {
+    dictate.current = offline || ended ? null : toggle;
+    return () => {
+      dictate.current = null;
+    };
+  }, [dictate, offline, ended, toggle]);
+  useEffect(() => {
+    if (ended || offline) voice.dictation.close();
+  }, [ended, offline, voice.dictation]);
+  const dictating = voice.state.kind !== "idle" && !ended && !offline;
+  const keysOpen = !ended && !dictating && (keyboard.up || menu);
 
   return (
     <div className="relative flex h-dvh min-h-0 flex-col bg-card">
-      <PhoneHeader terminal={terminal} terminals={terminals} onBack={onBack} onOpen={onOpen} />
+      <PhoneHeader
+        terminal={terminal}
+        terminals={terminals}
+        onBack={onBack}
+        onOpen={onOpen}
+        action={offline || ended ? null : <DictateButton voice={voice} target={title} ref={mic} />}
+      />
       <ConnectionLine />
       <PaneSwitcher panes={panes} open={terminal.address} onOpen={onOpen} />
       <div
@@ -76,7 +102,21 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
           />
         )}
       </div>
-      {offline || ended ? null : (
+      {dictating ? (
+        // Dictation takes the keys' place, riding on the soft keyboard when it is up; the transcript is typed past the
+        // sticky modifiers, as written.
+        <VoiceDock
+          voice={voice}
+          target={title}
+          onType={(text) => {
+            port.current?.send(text);
+            port.current?.focus();
+          }}
+          onClose={() => mic.current?.focus()}
+          className="pb-[max(0.5rem,var(--safe-bottom))]"
+          {...(keyboard.inset > 0 ? { style: { marginBottom: `${keyboard.inset}px` } } : {})}
+        />
+      ) : offline || ended ? null : (
         <PhoneKeys
           port={port}
           open={keysOpen}

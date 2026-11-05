@@ -36,11 +36,14 @@ export const MAC_TITLEBAR_CSS = [
   `[data-titlebar] :is(${TITLEBAR_CONTROLS}) { -webkit-app-region: no-drag; }`,
 ].join(" ");
 
+/** The sidebar's icon rail on macOS: wide enough to clear the window buttons (herdr-app's 76 px). */
+export const MAC_RAIL_WIDTH = 76;
+
 /**
  * The web app reads --titlebar-inset-start to keep what it draws in the top-left corner out from under the window
  * buttons. Full screen hides the buttons, so the shell removes this sheet there.
  */
-export const MAC_INSET_CSS = `:root { --titlebar-inset-start: ${TITLEBAR_INSET_START}px; }`;
+export const MAC_INSET_CSS = `:root { --titlebar-inset-start: ${TITLEBAR_INSET_START}px; --sidebar-rail-width: ${MAC_RAIL_WIDTH}px; }`;
 
 export function secureWebPreferences(preload: string, version: string): WebPreferences {
   return {

@@ -3,13 +3,15 @@ import { expect, test } from "./fixtures.ts";
 
 test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 
-/** The height of the sidebar's machine rows (the section's own rows, not its header). */
+/** The height of the sidebar's machine rows: the header rows that head each machine's spaces. */
 const rowHeight = (page: Page) =>
   page
     .getByRole("complementary", { name: "Workspace" })
-    .getByRole("region", { name: "Machines" })
-    .evaluate((section) => {
-      const rows = [...section.querySelectorAll(":scope > div")].map((row) => row.getBoundingClientRect().height);
+    .getByRole("region", { name: "Spaces", exact: true })
+    .evaluate((spaces) => {
+      const rows = [...spaces.querySelectorAll("[data-machine-header]")].map(
+        (button) => button.parentElement?.getBoundingClientRect().height ?? 0,
+      );
       return rows.length === 0 ? 0 : Math.max(...rows);
     });
 
