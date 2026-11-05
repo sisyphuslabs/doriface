@@ -2,7 +2,7 @@ import { Badge, Button, Dialog, Input, Notice } from "@doriface/ui";
 import { asSentence } from "../storage/sentence.ts";
 import { useMemo, useState } from "react";
 import { ACTIONS, actionFor, type ActionDef, type Scope } from "../keys/actions.ts";
-import { keymapStore, useKeymapError, useOverrides } from "../keys/keymap-store.ts";
+import { keymapStore, NewerKeymapError, useKeymapError, useOverrides } from "../keys/keymap-store.ts";
 import {
   importKeybinds,
   isChanged,
@@ -101,7 +101,11 @@ export function KeybindingsSection() {
   };
   return (
     <div className="flex flex-col gap-5">
-      {storageError === null ? null : (
+      {storageError === null ? null : storageError instanceof NewerKeymapError ? (
+        <Notice tone="warning" title="Keybindings were saved by a newer version of doriface">
+          This version shows the default keys and saves no changes, so the newer version's keybindings stay as they are.
+        </Notice>
+      ) : (
         <Notice tone="error" title="Keybindings could not be read from this browser's storage">
           Changes are not saved, so the stored keybindings stay as they are. Reload the page to try again.{" "}
           {asSentence(storageError.message)}

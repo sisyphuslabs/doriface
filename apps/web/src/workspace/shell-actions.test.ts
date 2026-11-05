@@ -17,10 +17,22 @@ const terminal = (address: string): Terminal => ({
   state: "live",
 });
 const noop = (): void => undefined;
+const pane = { id: "p1", address: "t1", mod: null };
+const tab: LayoutTab = {
+  key: "tb1",
+  id: "tb1",
+  space: "spc1",
+  machine: null,
+  name: "",
+  root: { children: [{ content: { terminal: "t1" }, id: "p1", type: "block" }], id: "tb1", type: "row" },
+  panes: [pane],
+  readOnly: null,
+  transient: false,
+};
 const layout: Layout = {
-  tabs: [],
-  active: null,
-  focused: { id: "p1", address: "t1", mod: null },
+  tabs: [tab],
+  active: tab,
+  focused: pane,
   zoomed: null,
   selectTab: noop,
   focusPane: noop,
@@ -28,7 +40,13 @@ const layout: Layout = {
   split: noop,
   dropPane: noop,
   closeTab: noop,
-  go: () => true,
+  go: () => false,
+  bumped: null,
+  fresh: null,
+  resize: () => Promise.resolve(true),
+  resizeFocused: () => false,
+  equalize: () => true,
+  toggleZoom: () => true,
   moveTab: noop,
   restored: true,
   lastMove: null,

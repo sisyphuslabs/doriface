@@ -12,6 +12,7 @@ import { mayTakeFocus } from "./may-take-focus.ts";
 import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
+import { KittyPngTranscoder } from "./kitty-png.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
@@ -22,6 +23,7 @@ import { Ended } from "./ended.tsx";
 import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } from "./terminal-scroll.tsx";
+import { TerminalLinks } from "./terminal-links.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
 
@@ -86,6 +88,8 @@ export function TerminalView(props: TerminalViewProps) {
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
+  // The program's output reaches the core through this: Kitty images sent as PNG are decoded to RGBA on the way.
+  const output = useMemo(() => new KittyPngTranscoder((bytes) => handle.current?.write(bytes)), []);
 
   useEffect(() => {
     let mounted = true;
@@ -100,6 +104,12 @@ export function TerminalView(props: TerminalViewProps) {
       mounted = false;
     };
   }, []);
+
+  // The terminal's engine, with its scrollback and images, is freed once the view closes and its renderer is gone.
+  useEffect(() => {
+    if (core === null) return undefined;
+    return () => queueMicrotask(() => core.dispose());
+  }, [core]);
 
   const unmounted = useRef(false);
   const unsent = useRef<() => void>(() => undefined);
@@ -254,15 +264,18 @@ export function TerminalView(props: TerminalViewProps) {
           // A fit while the attach was in flight had no stream to resize.
           if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
           // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
-          if (attachedBefore.current) handle.current?.write(FULL_RESET);
+          if (attachedBefore.current) {
+            output.reset();
+            handle.current?.write(FULL_RESET);
+          }
           attachedBefore.current = true;
           const resets = new CursorResets();
           attached.onData((bytes) => {
-            handle.current?.write(bytes);
+            output.push(bytes);
             attached.consumed(bytes.byteLength);
             outputShown.current();
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
-            if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
+            if (resets.push(bytes)) output.push(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
           attached.onClose((close) => {
             if (stream.current === attached) stream.current = null;
@@ -335,6 +348,7 @@ export function TerminalView(props: TerminalViewProps) {
       {wt === null ? null : (
         <>
           <TerminalScrollbar wt={wt} scroll={scroll} />
+          <TerminalLinks wt={wt} />
           <JumpToBottom
             wt={wt}
             scroll={scroll}

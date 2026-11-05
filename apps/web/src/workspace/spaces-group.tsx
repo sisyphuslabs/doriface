@@ -1,13 +1,15 @@
 import type { Terminal } from "@doriface/protocol";
 import { IconButton, MachineHeader, Notice, SidebarSection, SpaceRow, cn, type Space } from "@doriface/ui";
 import { Plus } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { machineCause } from "./machine-cause.ts";
+import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
 import { stateLabel, type MachineEntry } from "./machines.ts";
 import { firstInSpace, spaceId, toSpaces } from "./model.ts";
 import { RetryButton } from "./retry-button.tsx";
 import { machineGroups } from "./sidebar-model.ts";
 import { useSpaceColors } from "./sidebar-prefs.ts";
+import { useMachineReorder } from "./use-machine-reorder.tsx";
 import { useMachinesContext } from "./use-machines.ts";
 
 export interface SpacesGroupProps {
@@ -89,13 +91,17 @@ function SpacesLists({
       />
     ));
   const grouped = machineGroups(machines.entries, colored);
+  // The icon rail has no room for a drag handle or a menu; the full sidebar reorders.
+  const list = useRef<HTMLDivElement>(null);
+  const { reorderOf, overlay } = useMachineReorder(list, machines.entries, !rail);
   const local = machines.entries.find((machine) => machine.local);
   const newHere =
     grouped !== undefined || local === undefined || rail ? undefined : (
       <IconButton label="New space" icon={<Plus />} className="-mr-1" onClick={() => machines.start({})} />
     );
-  const header = (machine: MachineEntry) => (
+  const header = (machine: MachineEntry, button: HeaderButton | undefined) => (
     <MachineHeader
+      {...(button === undefined ? {} : { buttonProps: button })}
       name={machine.name}
       local={machine.local}
       state={machine.local ? "this machine" : stateLabel(machine.state)}
@@ -124,13 +130,19 @@ function SpacesLists({
           {rows(colored, false)}
         </section>
       ) : (
-        <div className="flex flex-col gap-2">
-          {grouped.map(({ machine, spaces: own }) => (
-            <section key={machine.id} aria-label={machine.name} className="flex flex-col gap-px">
-              {header(machine)}
+        <div ref={list} className="relative flex flex-col gap-2">
+          {overlay}
+          {grouped.map(({ machine, spaces: own }, index) => (
+            <MachineGroup
+              key={machine.id}
+              core={machine.core}
+              name={machine.name}
+              reorder={reorderOf(machine, index)}
+              header={(button) => header(machine, button)}
+            >
               {rows(own, true)}
               {machine.local || rail ? null : <MachineNotice name={machine.name} />}
-            </section>
+            </MachineGroup>
           ))}
         </div>
       )}

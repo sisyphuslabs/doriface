@@ -14,7 +14,16 @@ import { Claims } from "./claims.ts";
 import { Confirmed } from "./confirmed.ts";
 import { retireIfGone, revokedBy } from "./revocation.ts";
 import { Sweeps } from "./sweeps.ts";
-import { ackAdmission, appendOwn, type MergeDeps, type MergeResult, mergeBatch, type RecordDraft } from "./merge.ts";
+import {
+  ackAdmission,
+  appendOwn,
+  type MergeDeps,
+  type MergeResult,
+  mergeBatch,
+  owesAck,
+  owesAdmission,
+  type RecordDraft,
+} from "./merge.ts";
 import { type SyncHost, SyncSession } from "./sync.ts";
 
 /** Section 5.1 and 5.3's timings, production values. */
@@ -101,7 +110,20 @@ export class Gossip implements SyncHost {
       if (result.added.length > 0) this.#changed(result, true);
       return result.counterBehind;
     };
-    this.#claims = new Claims(options.clock, own, (peer) => this.#known.nameOf(peer), options.log, ack);
+    const admit = (): void => {
+      const admitted = ackAdmission(this.#claims.signing(options));
+      if (admitted !== undefined) this.#changed(admitted, true);
+    };
+    this.#claims = new Claims(
+      options.clock,
+      own,
+      (peer) => this.#known.nameOf(peer),
+      options.log,
+      ack,
+      admit,
+      () => owesAck(options),
+    );
+    this.#claims.recheckAckOnce();
     this.#view = this.#stored.view();
     this.#known.remember(this.#view);
   }
@@ -114,11 +136,13 @@ export class Gossip implements SyncHost {
     this.#sweeps.start();
   }
 
-  /** The joiner's ack of its own admission (section 5.5), once, owed to every member; false when nothing was signed. */
+  /**
+   * The joiner's ack of its own admission (section 5.5), once, owed to every member. It is signed once a member's hello
+   * has been read (or none answered within a claim's wait) and no claim stands (#159); true when this made it owed.
+   */
   ackAdmission(): boolean {
-    const admitted = ackAdmission(this.#options);
-    if (admitted !== undefined) this.#changed(admitted, true);
-    return admitted !== undefined;
+    if (!owesAdmission(this.#options)) return false;
+    return this.#claims.oweAdmission();
   }
 
   stop(): void {
@@ -231,7 +255,9 @@ export class Gossip implements SyncHost {
     if (this.#confirmed.owedCount(peer) === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self] ?? 0;
     this.#peerCounter = Math.max(this.#peerCounter, claim);
-    return this.#claims.claim(peer, claim);
+    const holds = this.#claims.claim(peer, claim);
+    if (!holds) this.#claims.release();
+    return holds;
   }
 
   meets(records: readonly Signed[]): boolean {

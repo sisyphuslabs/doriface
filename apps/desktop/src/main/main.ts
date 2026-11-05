@@ -82,6 +82,17 @@ const zoomWindow = (step: ZoomStep): void => {
   if (window !== undefined) currentZoom().step(window, step);
 };
 
+/** A Shell menu item runs its action in the page, as its key would. */
+function runAction(action: string): void {
+  liveWindow()?.webContents.send(Channel.runAction, action);
+}
+
+function showMenu(keys: ReadonlyMap<string, string>): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, zoomWindow, keys, runAction })),
+  );
+}
+
 function createWindow(path: string): BrowserWindow {
   const placementFile = savedFile("window-placement.json");
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
@@ -130,7 +141,7 @@ function ready(): void {
   lockPermissions(session.defaultSession, origin);
   if (devUrl === undefined) serveApp(webRoot(), csp);
   else applyDevCsp(session.defaultSession, origin, csp);
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate({ platform, openExternal, openSettings, zoomWindow })));
+  showMenu(new Map());
   registerIpc({
     origin,
     startLocalHost: () => localHost.start(),
@@ -139,6 +150,7 @@ function ready(): void {
     closeWindow: () => liveWindow()?.close(),
     zoomWindow,
     takePairingLink,
+    setMenuKeys: showMenu,
   });
   // In a checkout the executable is Electron itself, which must not become the OS handler for doriface: links.
   if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
