@@ -272,3 +272,41 @@ test("zoomed, moving focus or splitting shows every pane again, so a close acts 
   await expect(paneOf(page, made)).toBeVisible();
   await expect(paneOf(page, five)).toBeVisible();
 });
+
+test("in a left/right split made with Cmd+D, a dialog's button over the pane divider takes the click (#321)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const first = startShell("host", "resize-321");
+  seedLayout([{ id: "tb-321", name: "split", root: [{ pane: "p1", terminal: first }] }]);
+  await setPlatform(page, "mac");
+  await page.goto("/");
+  await expect(paneOf(page, first)).toContainText("$", { timeout: 15_000 });
+  await paneOf(page, first).getByRole("textbox").focus();
+  await page.keyboard.press("Meta+d");
+  const panes = page.locator("[data-terminal]");
+  await expect(panes).toHaveCount(2, { timeout: 15_000 });
+  const second =
+    (await panes.evaluateAll((all) => all.map((each) => each.getAttribute("data-terminal") ?? ""))).find(
+      (address) => address !== first,
+    ) ?? "";
+  await page
+    .getByRole("button", { name: /^Session actions for / })
+    .first()
+    .click();
+  await page.getByRole("menuitem", { name: "End session…" }).click();
+  const ask = page.getByRole("dialog", { name: /^End / });
+  const end = ask.getByRole("button", { name: "End session" });
+  // The case of #321: the part of the button that lies over the divider between the two panes takes the click.
+  const button = await end.boundingBox();
+  const leftBox = await paneOf(page, first).boundingBox();
+  const rightBox = await paneOf(page, second).boundingBox();
+  if (button === null || leftBox === null || rightBox === null) throw new Error("no button or pane box");
+  const x = (leftBox.x + leftBox.width + rightBox.x) / 2;
+  expect(x > button.x + 2 && x < button.x + button.width - 2).toBe(true);
+  await end.click({ position: { x: x - button.x, y: button.height / 2 }, timeout: 5_000 });
+  await expect(ask).toHaveCount(0);
+  await expect(panes).toHaveCount(1, { timeout: 15_000 });
+  const kept = await panes.getAttribute("data-terminal");
+  if (kept !== null) hcOn("host", ["kill", kept]);
+});

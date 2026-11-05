@@ -22,7 +22,14 @@ export const overlaySurface = cn(
  */
 export const fitsViewportWidth = "max-w-(--available-width)";
 
+/**
+ * A modal's backdrop and popup sit above everything in the page, so nothing under them takes a click meant for them:
+ * a split's pane divider is `z-10` in the workspace (#321).
+ */
+export const modalLayer = "z-50";
+
 export const backdropClass = cn(
+  modalLayer,
   "fixed inset-0 bg-black/40 transition-opacity duration-(--duration-standard)",
   "data-starting-style:opacity-0 data-ending-style:opacity-0",
 );
