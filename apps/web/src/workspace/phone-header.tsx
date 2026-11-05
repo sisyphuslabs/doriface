@@ -1,9 +1,8 @@
 import { IconButton, StatusChip, StatusIndicator, cn } from "@doriface/ui";
-import { ArrowLeftRight, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 import { useFittedLines } from "./fit-lines.ts";
-import { agentCounts, agentStatus, machineOf, type Session, spaceName, tabPosition, terminalTitle } from "./model.ts";
-import { SpaceSheet } from "./phone-tab-switcher.tsx";
+import { agentCounts, agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { useSpaceSelection } from "./space-selection.ts";
 import { SessionMenu } from "./session-menu.tsx";
 
@@ -13,7 +12,6 @@ export interface PhoneHeaderProps {
   /** Its tab as the desktop strip reads it (its name, else its number); null when it is in no tab. */
   readonly tabTitle: string | null;
   readonly onBack: () => void;
-  readonly onOpen: (address: string) => void;
   /** One more header control before the switch, such as the mic (#227). */
   readonly action?: ReactNode;
 }
@@ -24,8 +22,11 @@ const COUNTED = [
   { status: "idle", word: "idle" },
 ] as const;
 
-/** The phone terminal's header, after herdr-app's: its tab and state, where it is (n/m), the agent counts, a switch. */
-export function PhoneHeader({ terminal, terminals, tabTitle, onBack, onOpen, action }: PhoneHeaderProps) {
+/**
+ * The phone terminal's header: its tab and state, where it is, the agent counts. Switching tabs and the tab's place (n/m)
+ * live in the bottom tabs bar alone, one strip as in herdr-app (#466).
+ */
+export function PhoneHeader({ terminal, terminals, tabTitle, onBack, action }: PhoneHeaderProps) {
   // The tab, as the desktop strip names it (#466 ruling A); a terminal in no tab has only its own title.
   const title = tabTitle ?? terminalTitle(terminal);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -35,7 +36,6 @@ export function PhoneHeader({ terminal, terminals, tabTitle, onBack, onOpen, act
   const { spaces } = useSpaceSelection();
   const space = spaces.find((each) => each.addresses.includes(terminal.address))?.name ?? spaceName(terminal);
   const where = machine === undefined ? space : `${machine} · ${space}`;
-  const position = tabPosition(spaces, terminals, terminal.address);
   const counts = agentCounts(terminals);
   return (
     <header
@@ -66,12 +66,6 @@ export function PhoneHeader({ terminal, terminals, tabTitle, onBack, onOpen, act
           <p title={where} className="min-w-0 grow basis-8 truncate">
             {where}
           </p>
-          {position === undefined ? null : (
-            <span data-tab-position data-numeric className="shrink-0">
-              <span aria-hidden>{`${position.index}/${position.count}`}</span>
-              <span className="sr-only">{`Tab ${position.index} of ${position.count}`}</span>
-            </span>
-          )}
           <span data-agent-counts data-numeric className="ml-auto flex shrink-0 items-center gap-1.5">
             {COUNTED.map(({ status, word }, index) => (
               <span key={status} className="inline-flex items-center gap-0.5">
@@ -91,12 +85,6 @@ export function PhoneHeader({ terminal, terminals, tabTitle, onBack, onOpen, act
       <span data-header-action className="contents">
         {action}
       </span>
-      <SpaceSheet
-        terminals={terminals}
-        active={terminal.address}
-        onOpen={onOpen}
-        trigger={<IconButton label="Switch space or tab" icon={<ArrowLeftRight />} size="md" />}
-      />
       <SessionMenu address={terminal.address} title={terminalTitle(terminal)} placement="header" />
     </header>
   );

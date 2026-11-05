@@ -182,13 +182,14 @@ export function Workspace({ connection }: WorkspaceProps) {
   }, [splits, shownTab, shownPane]);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   // A new tab goes to the selected space (openTerminal), so it starts where that space is when no terminal is in focus.
-  const newTerminal = (): void =>
-    runs.start(
-      runParamsFor(
+  const newTerminal = (template?: string): void =>
+    runs.start({
+      ...runParamsFor(
         terminals.find((terminal) => terminal.address === inView),
         spaces.find((space) => space.id === layout.active?.spaceKey),
       ),
-    );
+      ...(template === undefined ? {} : { argv: [template], name: template }),
+    });
   const split = (axis: Axis, target?: PaneTarget): void => {
     const from =
       target === undefined
@@ -329,6 +330,8 @@ export function Workspace({ connection }: WorkspaceProps) {
                     loaded={fed.loaded}
                     layout={layout}
                     onNew={() => newTerminal()}
+                    onNewAgent={(template) => newTerminal(template)}
+                    onNewSpace={() => runs.start({}, inNewSpace)}
                     onSplit={split}
                     onCloseTab={closeTab}
                     onClosePane={closePane}

@@ -1,4 +1,4 @@
-import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { expect, openNewTerminal, terminalCount, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 test.use({ serviceWorkers: "block" });
@@ -17,7 +17,7 @@ test("a run that answers after a menu was opened leaves the keyboard in the menu
   const answersBefore = answers();
   const releaseAnswer = link.holdFromHost(RUN_ANSWER);
   const count = await terminalCount(page);
-  await page.getByRole("button", { name: "New tab" }).first().click();
+  await pressNewTab(page.getByRole("button", { name: "New tab" }).first());
   // The core started it and the feed lists it; the page has not heard the run's answer.
   await count.grown();
   expect(answers()).toBe(answersBefore);

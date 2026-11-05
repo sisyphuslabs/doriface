@@ -1,4 +1,4 @@
-import { expect, openNewTerminal, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 
 test.use({ serviceWorkers: "block" });
@@ -13,7 +13,7 @@ test("a New tab that fails says so with the sidebar hidden, where the machine li
   await expect(page.getByRole("complementary", { name: "Workspace" })).toBeHidden();
   await socket.drop(true);
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting" })).toBeVisible();
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab", exact: true }));
   await expect(page.getByText("Could not open a new tab")).toBeVisible();
   await expect(page.getByText(/try again once it is back/)).toBeVisible();
   socket.restore();
