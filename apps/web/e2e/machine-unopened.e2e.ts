@@ -31,8 +31,11 @@ test("a session on a machine that just dropped shows the didn't-open screen, and
 }) => {
   const socket = await routeHcSocket(page);
   await page.goto("/");
-  // The anchor's view mounts once the machine's layout has loaded and adopted it; later terminals are not adopted.
-  await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${anchor}"]`)).toContainText("$", { timeout: 20_000 });
+  // The anchor's view mounts once the machine's layout has loaded and adopted it; later terminals are not adopted. Its
+  // tab is in the background, and a pane out of view draws nothing until it shows (#560), so its mount is the sign.
+  await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${anchor}"]`)).toHaveAttribute("data-ready", "true", {
+    timeout: 20_000,
+  });
   remote = startShell("machine", "fin");
   await expect(agentRow(page, "fin", true)).toBeVisible({ timeout: 20_000 });
   await expect(page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`)).toHaveCount(0);
