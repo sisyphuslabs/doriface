@@ -109,20 +109,17 @@ async function heldMb(shape: string): Promise<number> {
 }
 
 describe("M-14: a ViewCache holds one mesh's history, not one engine per merge", () => {
-  test("the heap probe sees a Dag that is still held (positive control)", () => {
-    const mesh = bigMesh({ records: 32, revokes: 1, seed: 7 });
-    const held = reachable(["Dag"]);
-    const kept = [new Dag(mesh), new Dag(mesh)];
-    expect((reachable(["Dag"], kept)["Dag"] ?? 0) - (held["Dag"] ?? 0)).toBe(kept.length);
-  });
-
   test("single-record merges through one cache leave no per-merge Dag or Engine reachable", () => {
     const mesh = bigMesh({ records: MERGES, revokes: 4, seed: 3 });
     const cache = new ViewCache();
     const held = reachable(["Dag", "Engine"], cache);
     for (let n = 2; n <= mesh.length; n++) viewOfRecords(mesh.slice(0, n), cache);
-    const left = reachable(["Dag", "Engine"], cache);
-    expect((left["Dag"] ?? 0) - (held["Dag"] ?? 0)).toBeLessThanOrEqual(1);
+    // The positive control shares the snapshot: two Dags still held must be seen, on top of what the cache keeps.
+    const kept = [new Dag(mesh), new Dag(mesh)];
+    const left = reachable(["Dag", "Engine"], cache, kept);
+    const dags = (left["Dag"] ?? 0) - (held["Dag"] ?? 0);
+    expect(dags).toBeGreaterThanOrEqual(kept.length);
+    expect(dags - kept.length).toBeLessThanOrEqual(1);
     expect((left["Engine"] ?? 0) - (held["Engine"] ?? 0)).toBeLessThanOrEqual(1);
   });
 
