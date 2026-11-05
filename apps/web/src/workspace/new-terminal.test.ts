@@ -26,6 +26,12 @@ describe("runParamsFor", () => {
     expect(runParamsFor(moved)).toEqual({ cwd: "/work/api/src" });
   });
 
+  test("with no terminal in focus it starts where the selected space is, on its machine", () => {
+    expect(runParamsFor(undefined, { dir: "/srv/api", machine: "build" })).toEqual({ cwd: "/srv/api", on: "build" });
+    expect(runParamsFor(undefined, { dir: "" })).toEqual({});
+    expect(runParamsFor(terminal("t1"), { dir: "/srv/api" })).toEqual({ cwd: "/work/api" });
+  });
+
   test("an active terminal on an added machine starts the new one there, and a named space carries over", () => {
     expect(runParamsFor(terminal("build/t3", { labels: { space: "infra" } }))).toEqual({
       cwd: "/work/api",
