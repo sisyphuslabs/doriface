@@ -154,6 +154,7 @@ jobs:
         env:
           SOAK_CLIENT: ${{ matrix.label }}
           SOAK_PREBUILT: ${{ runner.temp }}/web-dist
+          SOAK_OUTPUT_DIR: ${{ runner.temp }}/playwright
         run: |
           mkdir -p "$RUNNER_TEMP/result"
           SOAK_LINK_FILE="$RUNNER_TEMP/link.txt" SOAK_RESULT="$RUNNER_TEMP/result/soak-result-${{ matrix.name }}.json" \
@@ -169,6 +170,14 @@ jobs:
           name: soak-done-${{ matrix.name }}
           path: ${{ runner.temp }}/done/${{ matrix.name }}.txt
           retention-days: 1
+      # Screenshots of a failed soak; the page holds no pairing secret once paired.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: soak-playwright-${{ matrix.name }}
+          path: ${{ runner.temp }}/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:
