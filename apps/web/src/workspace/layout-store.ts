@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { loadLayout, LAYOUT_KEY, type Layout } from "./layout.ts";
+import { guardedLocalStorage } from "../storage/guarded.ts";
 
 class LayoutStore {
   #value = loadLayout();
@@ -13,7 +14,7 @@ class LayoutStore {
   };
   update(patch: Partial<Layout>): void {
     this.#value = { ...this.#value, ...patch };
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(this.#value));
+    guardedLocalStorage().setItem(LAYOUT_KEY, JSON.stringify(this.#value));
     for (const listener of this.#listeners) listener();
   }
 }

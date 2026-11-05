@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { guardedSessionStorage, guardedStorage, type StorageLike } from "./guarded.ts";
+import {
+  browserStorage,
+  guardedLocalStorage,
+  guardedSessionStorage,
+  guardedStorage,
+  type StorageLike,
+} from "./guarded.ts";
 
 const refused = (): never => {
   throw new DOMException("The operation is insecure.", "SecurityError");
@@ -27,8 +33,15 @@ describe("guardedStorage", () => {
     expect(storage.getItem("k")).toBeNull();
   });
 
-  test("with no sessionStorage at all, as under bun's test runner, the empty store", () => {
+  test("with no browser storage at all, as under bun's test runner, the guarded stores are empty", () => {
     expect(Reflect.get(globalThis, "sessionStorage")).toBeUndefined();
+    expect(Reflect.get(globalThis, "localStorage")).toBeUndefined();
     expect(guardedSessionStorage().getItem("k")).toBeNull();
+    expect(guardedLocalStorage().getItem("k")).toBeNull();
+    expect(() => guardedLocalStorage().setItem("k", "v")).not.toThrow();
+  });
+
+  test("browserStorage keeps the refusal for a caller that reports it (saveView)", () => {
+    expect(() => browserStorage("localStorage").setItem("k", "v")).toThrow("localStorage is not available");
   });
 });

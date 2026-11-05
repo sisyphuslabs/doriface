@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { ScreenAwake, type ScreenWakeLock } from "./wake-lock.ts";
+import { guardedLocalStorage } from "../storage/guarded.ts";
 
 const KEY = "doriface.device.keep-awake";
 
@@ -15,11 +16,7 @@ export function screenWakeLock(scope: object = globalThis.navigator): ScreenWake
 
 /** Off unless stored as on; storage that refuses the read leaves it off, so the app still starts. */
 function storedKeepAwake(): boolean {
-  try {
-    return localStorage.getItem(KEY) === "true";
-  } catch {
-    return false;
-  }
+  return guardedLocalStorage().getItem(KEY) === "true";
 }
 
 class KeepAwakeStore {
@@ -34,7 +31,7 @@ class KeepAwakeStore {
   };
   set(value: boolean): void {
     this.#value = value;
-    localStorage.setItem(KEY, String(value));
+    guardedLocalStorage().setItem(KEY, String(value));
     for (const listener of this.#listeners) listener();
   }
 }
