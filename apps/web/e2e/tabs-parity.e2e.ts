@@ -16,7 +16,7 @@ import { type Browser, devices, type Page } from "@playwright/test";
 import { agentRow } from "./agents.ts";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { getCoreDoc } from "./core-doc.ts";
-import { expect, laidOutBox, test } from "./fixtures.ts";
+import { expect, laidOutBox, test, pressNewTab } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { LAYOUT_DOC, paneOf, seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
@@ -190,7 +190,7 @@ test('2: the New tab chord and "+" add a focused tab after the active one, in th
     ["beta", ["b-one", "", "b-two"]],
   ]);
 
-  await page.getByRole("button", { name: "New tab" }).click();
+  await pressNewTab(page.getByRole("button", { name: "New tab" }));
   await page.keyboard.type("echo at-$PWD-plus");
   await page.keyboard.press("Enter");
   await expect(tabBar(page)).toHaveCount(4, { timeout: 15_000 });

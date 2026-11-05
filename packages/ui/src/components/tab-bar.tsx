@@ -1,8 +1,8 @@
 import { ArrowLeft, ArrowRight, Pencil, Plus, X } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
-import { ContextMenu, MenuItem, skipMenuHandler } from "./menu.tsx";
+import { ContextMenu, Menu, MenuItem, skipMenuHandler } from "./menu.tsx";
 import { StatusIndicator, type AgentStatus } from "./status.tsx";
 import { useTabDrag } from "./tab-drag.ts";
 import { DropCaret, DropIndicator, placement } from "./tab-drop.tsx";
@@ -28,6 +28,8 @@ export interface TabBarProps {
   readonly onSelect?: (id: string) => void;
   readonly onClose?: (id: string) => void;
   readonly onNew?: () => void;
+  /** herdr-app's new menu: given, the strip's New tab button opens it (#466 item 7); else the button is `onNew`. */
+  readonly newMenu?: ReactNode;
   /** Asks for a tab's name: a double-click on it, as herdr-app's strip, and Rename tab in its menu. */
   readonly onRename?: (id: string) => void;
   /** Moves a tab so it ends at index `to` of `tabs`; without it tabs neither drag nor offer Move in their menu. */
@@ -54,6 +56,7 @@ export function TabBar({
   onSelect,
   onClose,
   onNew,
+  newMenu,
   onRename,
   onMove,
   newTabKeys,
@@ -82,6 +85,14 @@ export function TabBar({
     },
   });
 
+  // With more tabs than fit, the selected one (a new tab lands after it) scrolls into view; New tab no longer scrolls
+  // with the tabs to carry them along. Again when its title changes: a new tab's label settles after it arrives.
+  const activeTitle = tabs.find((tab) => tab.id === activeId)?.title;
+  useEffect(() => {
+    // The whole tab, with its close button, not only its label button.
+    buttons.current.get(activeId)?.parentElement?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId, key, activeTitle]);
+
   // Said once per move, as the strip stood then: a later title change or a tab opening or closing does not say it again.
   // The count's parity changes the text each time, so a second move to the same place is still read out.
   const [said, setSaid] = useState({ count: 0, text: "" });
@@ -100,7 +111,7 @@ export function TabBar({
     <div
       data-titlebar
       className={cn(
-        "flex h-(--tabbar-height) shrink-0 items-center gap-1 border-b border-border bg-chrome px-2.5",
+        "flex h-(--tabbar-height) shrink-0 items-center gap-[3px] border-b border-border bg-chrome px-2.5",
         className,
       )}
     >
@@ -112,14 +123,17 @@ export function TabBar({
         role="tablist"
         aria-label="Tabs"
         onClickCapture={onClickCapture}
-        // As herdr-app's strip: a vertical wheel step selects the previous or next tab; sideways scrolls the strip.
+        // As herdr-app's strip: a vertical wheel step selects the previous or next tab, wrapping at the ends as tab.next
+        // and tab.prev do (#466 item 8); sideways scrolls the strip.
         onWheel={(event) => {
           if (Math.abs(event.deltaY) < 1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
           const at = tabs.findIndex((tab) => tab.id === activeId);
-          const next = tabs[at + (event.deltaY > 0 ? 1 : -1)];
-          if (at !== -1 && next !== undefined) onSelect?.(next.id);
+          if (at === -1) return;
+          const next = tabs[(at + (event.deltaY > 0 ? 1 : -1) + tabs.length) % tabs.length];
+          if (next !== undefined && next.id !== activeId) onSelect?.(next.id);
         }}
-        className="relative flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden py-1"
+        // herdr-app's #tab-scroll: tabs alone scroll, with a scrollbar once they overflow, and gap(3) between them.
+        className="relative flex min-w-0 flex-1 items-center gap-[3px] overflow-x-auto overflow-y-hidden py-1"
       >
         {drag === null ? null : <DropIndicator drag={drag} />}
         {drag === null ? null : <DropCaret drag={drag} />}
@@ -142,7 +156,7 @@ export function TabBar({
               }}
               style={place.offset === 0 ? undefined : { translate: `${place.offset}px 0` }}
               className={cn(
-                "group relative motion-arrive flex h-7 max-w-52 shrink-0 items-center gap-2 rounded-md border pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
+                "group relative motion-arrive flex h-[29px] shrink-0 items-center gap-[7px] rounded-[7px] border pl-2.5 text-[0.8rem] select-none [--arrive-duration:var(--duration-micro)]",
                 active
                   ? "border-border bg-raised pr-1 text-foreground"
                   : "border-transparent pr-2.5 text-muted-foreground hover:bg-hover",
@@ -161,11 +175,14 @@ export function TabBar({
                 aria-controls={tab.controls}
                 onClick={() => onSelect?.(tab.id)}
                 onDoubleClick={() => onRename?.(tab.id)}
-                className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+                className="flex min-w-0 items-center gap-[7px] rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
-                <span className="truncate">{tab.title}</span>
-                {tab.status === undefined ? null : <StatusIndicator status={tab.status} className="size-3" />}
+                <span className="max-w-[170px] truncate">{tab.title}</span>
+                {/* herdr-app draws nothing for an idle tab: a spinner while working, a dot when blocked or done. */}
+                {tab.status === undefined || tab.status === "idle" || tab.status === "unknown" ? null : (
+                  <StatusIndicator status={tab.status} className="size-3" />
+                )}
               </button>
               {active ? (
                 <IconButton
@@ -225,13 +242,25 @@ export function TabBar({
             </ContextMenu>
           );
         })}
+      </div>
+      {/* Outside the scrolling tabs, as herdr-app's tab-new beside #tab-scroll: 22 tabs never push it away (item 5). */}
+      {newMenu === undefined ? (
         <IconButton
           label="New tab"
           {...(newTabKeys === undefined ? {} : { keys: newTabKeys })}
           icon={<Plus />}
           onClick={onNew}
         />
-      </div>
+      ) : (
+        <Menu
+          trigger={
+            <IconButton label="New tab" {...(newTabKeys === undefined ? {} : { keys: newTabKeys })} icon={<Plus />} />
+          }
+          className="w-[250px]"
+        >
+          {newMenu}
+        </Menu>
+      )}
       <span role="status" aria-live="polite" className="sr-only">
         {said.text}
       </span>
