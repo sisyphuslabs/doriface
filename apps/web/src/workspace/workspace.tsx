@@ -1,6 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { useToastManager } from "@doriface/ui";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 import { type Axis, LAYOUT_DOC, ORDER_DOC } from "@doriface/protocol/layout";
@@ -115,6 +115,12 @@ export function Workspace({ connection }: WorkspaceProps) {
   const [closingTab, setClosingTab] = useState<string | null>(null);
   const runs = useMachineRuns(connection, opened, refresh);
   const [splits] = useState(() => new SplitChain());
+  // A split key reads focus from the last render; the chain hands a landed split's pane on until this render shows it.
+  const shownTab = layout.active?.key;
+  const shownPane = layout.focused?.id;
+  useEffect(() => {
+    if (shownTab !== undefined && shownPane !== undefined) splits.shown(shownTab, shownPane);
+  }, [splits, shownTab, shownPane]);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   const newTerminal = (): void => runs.start(runParamsFor(terminals.find((terminal) => terminal.address === inView)));
   const split = (axis: Axis, target?: PaneTarget): void => {
