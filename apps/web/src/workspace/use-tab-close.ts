@@ -13,13 +13,15 @@ export interface TabClose {
 const noUndo = (): void => undefined;
 
 /**
- * Closing panes and tabs from this screen. A tab in view that closes leaves the last of the others in view, as the tab
- * strip did before the split tree, so the keyboard lands in a terminal that is left rather than in the first tab.
+ * Closing panes and tabs from this screen. A tab in view that closes leaves the tab herdr-app would show in view
+ * (afterClosing), so the keyboard lands in a terminal that is left rather than in the first tab.
  * That switch is part of the close's edit: a write that fails puts the tab back, and the view with it.
  */
 export function useTabClose(
   tabs: readonly LayoutTab[],
   active: LayoutTab | null,
+  /** The tab each space showed last, which a space comes back on when the closed tab's space goes. */
+  remembered: Readonly<Record<string, string>>,
   layoutOf: (machine: string | null) => DropTarget | undefined,
   setLoose: Dispatch<SetStateAction<readonly string[]>>,
   setView: Dispatch<SetStateAction<View>>,
@@ -31,11 +33,11 @@ export function useTabClose(
   const leave = useCallback(
     (key: string): (() => void) => {
       if (active?.key !== key) return noUndo;
-      const next = afterClosing(tabs, key);
+      const next = afterClosing(tabs, key, remembered);
       setView((prev) => ({ ...prev, active: next }));
       return () => setView((prev) => (prev.active === next ? { ...prev, active: key } : prev));
     },
-    [active, setView, tabs],
+    [active, remembered, setView, tabs],
   );
 
   // A tab's last pane takes the tab with it, so the tab leaves the view as that drop goes out, not before a deferred one
