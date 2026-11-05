@@ -17,6 +17,8 @@ export const Channel = {
   runAction: "doriface:run-action",
   /** Renderer to main: the page's current trigger for each Shell menu action, so the menu shows the live shortcuts. */
   setMenuKeys: "doriface:set-menu-keys",
+  /** Renderer to main: pick herdr-core's hc in a file dialog and keep it for every later start. */
+  chooseHc: "doriface:choose-hc",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -81,6 +83,8 @@ export interface DorifaceBridge {
   onRunAction(listener: (action: string) => void): void;
   /** Tells the menu the page's trigger (Ghostty syntax) for each of its actions. */
   setMenuKeys(keys: Readonly<Record<string, string>>): Promise<boolean>;
+  /** Asks for herdr-core's hc in a file dialog and keeps it; resolves with its path, or null when cancelled. */
+  chooseHc(): Promise<string | null>;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {

@@ -175,3 +175,13 @@ export function desktopBridge(scope: object = globalThis): DesktopBridge | null 
     },
   };
 }
+
+/** The shell's Choose hc (a file dialog that keeps the chosen herdr-core), or null when it offers none. */
+export function desktopHcChooser(scope: object = globalThis): (() => Promise<string | null>) | null {
+  const choose = bridgeMethod("chooseHc", scope);
+  if (choose === null) return null;
+  return async () => {
+    const chosen: unknown = await choose();
+    return typeof chosen === "string" ? chosen : null;
+  };
+}

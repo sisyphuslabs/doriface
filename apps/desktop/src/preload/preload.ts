@@ -59,6 +59,10 @@ const bridge: DorifaceBridge = {
     const shown: unknown = await ipcRenderer.invoke(Channel.setMenuKeys, keys);
     return shown === true;
   },
+  async chooseHc() {
+    const chosen: unknown = await ipcRenderer.invoke(Channel.chooseHc);
+    return typeof chosen === "string" ? chosen : null;
+  },
 };
 
 contextBridge.exposeInMainWorld("doriface", bridge);

@@ -20,6 +20,8 @@ export interface IpcDeps {
   readonly zoomWindow: (step: ZoomStep) => void;
   readonly takePairingLink: () => string | undefined;
   readonly setMenuKeys: (keys: ReadonlyMap<string, string>) => void;
+  /** Shows the file dialog for hc and keeps the choice; undefined when it was cancelled. */
+  readonly chooseHc: () => Promise<string | undefined>;
 }
 
 export interface IpcHandlers {
@@ -36,6 +38,8 @@ export interface IpcHandlers {
   takePairingLink(event: IpcSender): string | null;
   /** Shows the page's shortcuts in the Shell menu; only its own action ids and short trigger text are taken. */
   setMenuKeys(event: IpcSender, candidate: unknown): Promise<boolean>;
+  /** Choose hc: the chosen file's path, or null when the dialog was cancelled. */
+  chooseHc(event: IpcSender): Promise<string | null>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -108,6 +112,10 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
       if (keys === undefined) return false;
       deps.setMenuKeys(keys);
       return true;
+    },
+    async chooseHc(event) {
+      assertAppFrame(event, deps.origin);
+      return (await deps.chooseHc()) ?? null;
     },
   };
 }

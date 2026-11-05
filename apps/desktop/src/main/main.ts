@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeTheme, screen, session, shell } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeTheme, screen, session, shell } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { contextMenuTemplate } from "../config/context-menu.ts";
@@ -10,7 +10,7 @@ import { launchBackground, secureWebPreferences, windowOptions } from "../config
 import { Channel, parsePlatform } from "../shared/bridge.ts";
 import { openDeepLink, routeDeepLinksTo, takePairingLink } from "./deep-link.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
-import { findHc, hostCommand, type HostContext, usualHcDirs } from "./host-command.ts";
+import { findHc, hostCommand, type HostContext, saveHc, savedHc, usualHcDirs } from "./host-command.ts";
 import { registerIpc } from "./ipc.ts";
 import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
@@ -133,7 +133,7 @@ function ready(): void {
   const context = hostContext();
   const localHost = new LocalHost({
     command: hostCommand(context),
-    hc: () => findHc(context),
+    hc: () => findHc(context, usualHcDirs(context), savedHc(savedFile("hc.json"))),
     searched: () => usualHcDirs(context),
     env: process.env,
     log: (line) => console.log(line),
@@ -152,6 +152,15 @@ function ready(): void {
     zoomWindow,
     takePairingLink,
     setMenuKeys: showMenu,
+    chooseHc: async () => {
+      const window = liveWindow();
+      const options = { title: "Choose herdr-core's hc", properties: ["openFile" as const] };
+      const answer =
+        window === undefined ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(window, options);
+      const chosen = answer.canceled ? undefined : answer.filePaths[0];
+      if (chosen !== undefined) saveHc(savedFile("hc.json"), chosen);
+      return chosen;
+    },
   });
   // In a checkout the executable is Electron itself, which must not become the OS handler for doriface: links.
   if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
