@@ -7,6 +7,7 @@ import {
   editTab,
   freshId,
   type Node,
+  renameTab as renameDocTab,
   splitPane,
   terminalBlock,
 } from "@doriface/protocol/layout";
@@ -65,6 +66,11 @@ export interface Layout extends PaneMoves {
   readonly claimed: string | null;
   /** Moves a tab so it ends at index `to` of `shown`, in its space's document; panes and focus stay as they are. */
   readonly moveTab: (key: string, to: number) => void;
+  /**
+   * Names a tab in its document, as herdr-app's `tab.rename` ("": named by its focused pane again), so every device shows
+   * it; rejects with why when the tab is not in a document that takes edits, or the write fails.
+   */
+  readonly renameTab: (key: string, name: string) => Promise<void>;
   /** The last tab moved, counted so the strip can say where it went each time, even to the same place twice. */
   readonly lastMove: TabMove | null;
   /**
@@ -336,6 +342,16 @@ export function useLayout(
   const selectTab = useCallback((key: string): void => show(key, null), [show]);
   const focusPane = useCallback((tab: string, pane: string): void => show(tab, pane), [show]);
   const { moveTab, lastMove } = useTabMoves(shown, layoutOf);
+  const renameTab = useCallback(
+    async (key: string, name: string): Promise<void> => {
+      const tab = tabs.find((each) => each.key === key);
+      const layout = tab === undefined ? undefined : layouts.find((each) => each.machine === tab.machine);
+      if (tab === undefined || tab.transient || layout === undefined) throw new Error("This tab is not saved yet.");
+      if (layout.readOnly !== null) throw new Error(layout.readOnly);
+      await layout.edit((doc) => (doc === null ? null : renameDocTab(doc, tab.id, name)));
+    },
+    [layouts, tabs],
+  );
 
   return {
     tabs,
@@ -354,6 +370,7 @@ export function useLayout(
     claimed,
     ...moves,
     moveTab,
+    renameTab,
     lastMove,
     restored: machinesListed && layouts.every((layout) => layout.loaded || layout.readOnly !== LAYOUT_LOADING),
   };

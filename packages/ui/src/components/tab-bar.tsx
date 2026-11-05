@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Plus, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
 import { IconButton } from "./icon-button.tsx";
@@ -37,6 +37,8 @@ export interface TabBarProps {
   readonly onSelect?: (id: string) => void;
   readonly onClose?: (id: string) => void;
   readonly onNew?: () => void;
+  /** Asks for a tab's name: a double-click on it, as herdr-app's strip, and Rename tab in its menu. */
+  readonly onRename?: (id: string) => void;
   /** Moves a tab so it ends at index `to` of `tabs`; without it tabs neither drag nor offer Move in their menu. */
   readonly onMove?: (id: string, to: number) => void;
   /** The New tab shortcut as key chips, from the app's live binding; none when it is unbound. */
@@ -58,6 +60,7 @@ export function TabBar({
   onSelect,
   onClose,
   onNew,
+  onRename,
   onMove,
   newTabKeys,
   moveKeys,
@@ -166,6 +169,7 @@ export function TabBar({
                 aria-controls={tab.controls}
                 title={tooltipOf(tab)}
                 onClick={() => onSelect?.(tab.id)}
+                onDoubleClick={() => onRename?.(tab.id)}
                 className="flex min-w-0 items-center gap-2 rounded-xs outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
               >
                 {tab.icon}
@@ -220,6 +224,11 @@ export function TabBar({
               >
                 Move tab right
               </MenuItem>
+              {onRename === undefined ? null : (
+                <MenuItem icon={<Pencil />} onClick={() => onRename(tab.id)}>
+                  Rename tab…
+                </MenuItem>
+              )}
             </ContextMenu>
           );
         })}

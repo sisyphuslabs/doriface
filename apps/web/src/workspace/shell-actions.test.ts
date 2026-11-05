@@ -54,6 +54,7 @@ const layout: Layout = {
   move: () => Promise.resolve(false),
   swap: () => true,
   moveTab: noop,
+  renameTab: () => Promise.resolve(),
   restored: true,
   lastMove: null,
 };
