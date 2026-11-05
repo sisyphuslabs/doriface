@@ -515,6 +515,47 @@ test.describe("10: on a phone at 390", () => {
     await expect(header.getByText("2/2", { exact: true })).toBeVisible();
   });
 
+  test("10B: a tabs bar in the bottom third, with 44 px targets, steps between the space's tabs by touch and opens the sheet", async ({
+    page,
+  }) => {
+    twoSpaces();
+    await page.goto("/");
+    expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
+    await agentRow(page, "parity-b1", false).click();
+    const header = page.getByRole("banner");
+    await expect(header.getByRole("heading", { name: "b-one", exact: true })).toBeVisible({ timeout: 15_000 });
+    const bar = page.getByRole("navigation", { name: "Tabs in this space" });
+    const previous = bar.getByRole("button", { name: "Previous tab" });
+    const next = bar.getByRole("button", { name: "Next tab" });
+    const all = bar.getByRole("button", { name: /^Switch tab, b-one, tab 1 of 2/ });
+    // Thumb reach: every target sits in the screen's bottom third.
+    const height = page.viewportSize()?.height ?? 0;
+    const boxes = await Promise.all([previous, all, next].map(laidOutBox));
+    for (const box of boxes) {
+      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+      expect(box.y).toBeGreaterThanOrEqual((height * 2) / 3);
+      expect(box.y + box.height).toBeLessThanOrEqual(height);
+    }
+
+    await next.tap();
+    await expect(header.getByRole("heading", { name: "b-two", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(header.getByText("2/2", { exact: true })).toBeVisible();
+    // It wraps, as Ctrl+Tab does on the strip.
+    await bar.getByRole("button", { name: "Next tab" }).tap();
+    await expect(header.getByRole("heading", { name: "b-one", exact: true })).toBeVisible({ timeout: 15_000 });
+    await bar.getByRole("button", { name: "Previous tab" }).tap();
+    await expect(header.getByRole("heading", { name: "b-two", exact: true })).toBeVisible({ timeout: 15_000 });
+
+    // Its middle opens the spaces sheet, for a tab of another space.
+    await bar.getByRole("button", { name: /^Switch tab, b-two/ }).tap();
+    const sheet = page.getByRole("dialog", { name: "Spaces" });
+    await expect(sheet).toBeVisible();
+    await tabRow(sheet.getByRole("region", { name: "alpha" }), "a-two").tap();
+    await expect(sheet).toBeHidden();
+    await expect(header.getByRole("heading", { name: "a-two", exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(bar.getByRole("button", { name: /^Switch tab, a-two, tab 2 of 2/ })).toBeVisible();
+  });
+
   test("a split tab is one tab: the header counts 2/3 for 3 tabs and the sheet lists each tab once", async ({
     page,
   }) => {
