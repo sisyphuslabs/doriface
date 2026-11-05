@@ -19,7 +19,9 @@ interface Held {
  * resolves when this host holds its own records up to the claimed counter (an honest answer sends those first), and it
  * expires when 30 s pass without the claimer delivering one of them, after which the peer's claims are ignored for 10
  * minutes. While a claim stands this host signs nothing of its own, its automatic acks included, so its counter moves
- * only by records that arrive; an ack held back is signed once no claim stands.
+ * only by records that arrive; an ack held back is signed once no claim stands. The joiner's ack of its own admission
+ * waits the same way, and before it a member's hello must have been read (or none answered within {@link CLAIM_MS}):
+ * at sync start no claim can stand yet, so a restored host would sign it below a counter a peer already holds (#159).
  */
 export class Claims {
   readonly #clock: Clock;
@@ -28,9 +30,15 @@ export class Claims {
   readonly #log: (line: string) => void;
   /** Signs the held-back ack; true when it is still owed (the counter was behind, so the next merge signs it). */
   readonly #ack: () => boolean;
+  /** Signs the joiner's ack of its own admission when it is still owed. */
+  readonly #admit: () => void;
   readonly #held = new Map<string, Held>();
   readonly #ignoredUntil = new Map<string, number>();
   #ackOwed = false;
+  #admissionOwed = false;
+  /** Whether a peer's hello has been read, or the wait for one passed: until then a claim may not have shown yet. */
+  #heard = false;
+  #cancelWait: (() => void) | undefined;
 
   constructor(
     clock: Clock,
@@ -38,16 +46,39 @@ export class Claims {
     nameOf: (peer: string) => string,
     log: (line: string) => void,
     ack: () => boolean,
+    admit: () => void,
   ) {
     this.#clock = clock;
     this.#own = own;
     this.#nameOf = nameOf;
     this.#log = log;
     this.#ack = ack;
+    this.#admit = admit;
+  }
+
+  /**
+   * The joiner owes the ack of its own admission: it is signed once a hello has been read (or none came within
+   * {@link CLAIM_MS}) and no claim stands. True when this newly made it owed.
+   */
+  oweAdmission(): boolean {
+    if (this.#admissionOwed) return false;
+    this.#admissionOwed = true;
+    if (!this.#heard && this.#cancelWait === undefined) {
+      this.#cancelWait = deadline(this.#clock, CLAIM_MS, () => {
+        this.#cancelWait = undefined;
+        this.#heard = true;
+        this.release();
+      });
+    }
+    this.release();
+    return true;
   }
 
   /** A peer's hello claims counter `n` of this host's key; true when it holds this host's own records back. */
   claim(peer: string, n: number): boolean {
+    this.#heard = true;
+    this.#cancelWait?.();
+    this.#cancelWait = undefined;
     const own = this.#own();
     const now = this.#clock.now();
     for (const [key, until] of this.#ignoredUntil) if (until <= now) this.#ignoredUntil.delete(key);
@@ -83,7 +114,12 @@ export class Claims {
 
   /** No claim stands: the ack a claim held back is signed now. */
   release(): void {
-    if (this.#ackOwed && this.#held.size === 0) this.#ackOwed = this.#ack();
+    if (this.#held.size > 0) return;
+    if (this.#ackOwed) this.#ackOwed = this.#ack();
+    if (this.#admissionOwed && this.#heard) {
+      this.#admissionOwed = false;
+      this.#admit();
+    }
   }
 
   /** Whether `records` carry records of `self` above its own counter while a claim waits on them. */
@@ -110,6 +146,8 @@ export class Claims {
   }
 
   stop(): void {
+    this.#cancelWait?.();
+    this.#cancelWait = undefined;
     for (const held of this.#held.values()) held.cancel();
     this.#held.clear();
   }
