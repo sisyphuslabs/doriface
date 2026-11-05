@@ -18,7 +18,7 @@ import { createServer, type Server } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 /** The real hc the fixture release serves: CI's HC_BIN, else the one installed on this machine. */
 const realHc = process.env["HC_BIN"] || join(homedir(), ".local", "bin", "herdr-core");
@@ -133,11 +133,7 @@ test("with no hc anywhere, Install herdr-core refuses a damaged download, then i
     release.state.sha256 = createHash("sha256").update(archive).digest("hex");
     await notice.getByRole("button", { name: "Retry install" }).click();
     // Installed, then the host started again on its own: the workspace replaces the notice.
-    await page
-      .getByRole("button", { name: "New tab" })
-      .or(page.getByRole("button", { name: "New terminal" }))
-      .first()
-      .click({ timeout: 45_000 });
+    await pressNewTab(page, { timeout: 45_000 });
     const terminal = page.locator('[data-focused="true"] [data-terminal]');
     await expect(terminal).toContainText("$", { timeout: 30_000 });
     expect(readFileSync(join(bin, "herdr-core")).equals(readFileSync(realHc))).toBe(true);

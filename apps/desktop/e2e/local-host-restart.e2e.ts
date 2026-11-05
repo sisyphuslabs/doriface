@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { scratchHcSession } from "./hc-session.ts";
-import { launchOptions } from "./launch.ts";
+import { launchOptions, pressNewTab } from "./launch.ts";
 
 /** A scratch hc session and a scratch profile, made only when the tests run (not on --list). */
 interface Scratch {
@@ -84,11 +84,7 @@ test("when the app's own host dies, a new one starts and the terminal answers ag
   if (launched === undefined) throw new Error("the app did not launch");
   const page = await launched.firstWindow();
   await page.getByRole("button", { name: "Use this computer" }).click();
-  await page
-    .getByRole("button", { name: "New tab" })
-    .or(page.getByRole("button", { name: "New terminal" }))
-    .first()
-    .click({ timeout: 30_000 });
+  await pressNewTab(page, { timeout: 30_000 });
   const terminal = page.locator('[data-focused="true"] [data-terminal]');
   await expect(terminal).toContainText("$", { timeout: 30_000 });
 
