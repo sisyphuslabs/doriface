@@ -101,10 +101,14 @@ async function serving(socket: string): Promise<boolean> {
 /**
  * Stops the core of every scratch session that still serves, removes every scratch dir, and returns those sessions'
  * names. A core can outlive `dispose`: another core whose machine dials this session starts it again.
+ *
+ * With `only`, it checks just those sessions (a test's own) and leaves every other file's to that file's sweep or to
+ * the preloaded guard at the end of the run, since one `bun test` process shares this registry across files (#261).
  */
-export async function stopLeftoverCores(): Promise<string[]> {
-  const checked = [...scratches];
-  scratches.clear();
+export async function stopLeftoverCores(only?: Iterable<HcSession>): Promise<string[]> {
+  const wanted = only === undefined ? undefined : new Set(only);
+  const checked = [...scratches].filter((scratch) => wanted === undefined || wanted.has(scratch.session));
+  for (const scratch of checked) scratches.delete(scratch);
   const leftover = await Promise.all(
     checked.map(async ({ session, dir, socket }) => {
       const alive = await serving(socket);
