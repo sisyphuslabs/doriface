@@ -4,7 +4,7 @@ import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn } from "./machine-switch.ts";
-import { domOrder, dragPast, openFour, tabs } from "./tab-strip.ts";
+import { domOrder, dragPast, openFour, tabOf, tabs } from "./tab-strip.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -119,19 +119,19 @@ test("the first screen does not animate in: nothing arrives on load, and a later
 test("a kept tab on an added machine does not arrive late on the way back from Settings while machine.list is slow", async ({
   page,
 }) => {
-  startShell("machine", "faraway");
-  startShell("host", "nearby");
+  const faraway = startShell("machine", "faraway");
+  const nearby = startShell("host", "nearby");
   const socket = await routeHcSocket(page);
   await page.goto("/");
   // A local tab beside the remote one: the local tab shows at once, the remote one only once machine.list names its
   // machine (its tab is kept by machine id). Each is opened from its own agent row: New tab opens on the focused pane's
   // machine, and the tab the workspace opens on its own at load can be the remote one, so it cannot make the local tab.
-  const strip = page.getByRole("tablist", { name: "Tabs" });
   await agentRow(page, "nearby", false).click({ timeout: 20_000 });
-  const localTab = strip.getByRole("tab", { name: /nearby/ });
+  // A tab reads its number, as herdr-app's: each is found by the terminal its panel shows, then kept by its panel id.
+  const localTab = await tabOf(page, nearby);
   await expect(localTab).toBeVisible({ timeout: 20_000 });
   await agentRow(page, "faraway", true).click({ timeout: 20_000 });
-  const remoteTab = strip.getByRole("tab", { name: /faraway/ });
+  const remoteTab = await tabOf(page, `${MACHINE_NAME}/${faraway}`);
   await expect(remoteTab).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
   await watchArrivals(page);

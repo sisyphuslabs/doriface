@@ -23,8 +23,9 @@ for (const colorScheme of ["light", "dark"] as const) {
       await page.goto("/");
       const opened = await openNewTerminal(page);
       const address = (await opened.getAttribute("data-terminal")) ?? "";
-      const tab = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { selected: true });
-      const name = ((await tab.getAttribute("title")) ?? "").split(" (")[0] ?? "";
+      // A tab reads its number, as herdr-app's, with no tooltip: the session's name is on its actions.
+      const actions = page.getByRole("button", { name: /^Session actions for / });
+      const name = ((await actions.getAttribute("aria-label")) ?? "").replace(/^Session actions for /, "");
       await page.getByRole("link", { name: "Settings" }).first().click();
       await page
         .getByRole("tab", { name: "Terminal", exact: true })

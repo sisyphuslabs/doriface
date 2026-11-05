@@ -3,6 +3,17 @@ import { expect, laidOutBox, openNewTerminal } from "./fixtures.ts";
 
 export const strip = (page: Page) => page.getByRole("tablist", { name: "Tabs" });
 export const tabs = (page: Page) => strip(page).getByRole("tab");
+
+/**
+ * The strip's tab whose panel shows the terminal: a tab reads its name or its number, as herdr-app's, so a spec finds a
+ * terminal's tab by what it shows. None (count 0) while that tab is not in the selected space.
+ */
+export async function tabOf(page: Page, address: string): Promise<Locator> {
+  const panel = page.locator(`[role="tabpanel"]:has([data-terminal="${address}"])`);
+  await expect(panel).toHaveCount(1, { timeout: 20_000 });
+  const id = (await panel.getAttribute("id")) ?? "";
+  return strip(page).locator(`[role="tab"][aria-controls="${id}"]`);
+}
 export const focusedAddress = (page: Page) =>
   page.locator('[data-focused="true"] [data-terminal]').getAttribute("data-terminal");
 export const selectedIndex = (page: Page) =>
