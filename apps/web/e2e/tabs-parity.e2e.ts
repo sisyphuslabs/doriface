@@ -482,8 +482,11 @@ test.describe("10: on a phone at 390", () => {
     // The tab's name, not the terminal's (ruling A).
     await expect(header.getByRole("heading", { name: "b-one", exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(header.getByRole("heading", { name: "parity-b1" })).toHaveCount(0);
-    await expect(header.getByText("1/2", { exact: true })).toBeVisible();
-    const switcher = header.getByRole("button", { name: "Switch space or tab" });
+    // One strip, as herdr-app: the tab's place and the switch are the bottom tabs bar's alone, not the header's.
+    await expect(header.getByRole("button", { name: "Switch space or tab" })).toHaveCount(0);
+    await expect(header.locator("[data-tab-position]")).toHaveCount(0);
+    const switcher = page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / });
+    await expect(switcher).toContainText("1/2");
     const box = await laidOutBox(switcher);
     expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
 
@@ -512,7 +515,7 @@ test.describe("10: on a phone at 390", () => {
     await agentRow(beta, "b-two", false).click();
     await expect(sheet).toBeHidden();
     await expect(header.getByRole("heading", { name: "b-two", exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(header.getByText("2/2", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText("2/2");
   });
 
   test("10B: a tabs bar in the bottom third, with 44 px targets, steps between the space's tabs by touch and opens the sheet", async ({
@@ -539,7 +542,7 @@ test.describe("10: on a phone at 390", () => {
 
     await next.tap();
     await expect(header.getByRole("heading", { name: "b-two", exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(header.getByText("2/2", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText("2/2");
     // It wraps, as Ctrl+Tab does on the strip.
     await bar.getByRole("button", { name: "Next tab" }).tap();
     await expect(header.getByRole("heading", { name: "b-one", exact: true })).toBeVisible({ timeout: 15_000 });
@@ -556,7 +559,7 @@ test.describe("10: on a phone at 390", () => {
     await expect(bar.getByRole("button", { name: /^Switch tab, a-two, tab 2 of 2/ })).toBeVisible();
   });
 
-  test("a split tab is one tab: the header counts 2/3 for 3 tabs and the sheet lists each tab once", async ({
+  test("a split tab is one tab: the tabs bar counts 2/3 for 3 tabs and the sheet lists each tab once", async ({
     page,
   }) => {
     const folder = mkdtempSync(join(tmpdir(), "tabs-parity-split-"));
@@ -583,15 +586,18 @@ test.describe("10: on a phone at 390", () => {
     const header = page.getByRole("banner");
     // An unnamed tab reads its number, whichever of its panes is in view (ruling A).
     await expect(header.getByRole("heading", { name: "2", exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(header.getByText("2/3", { exact: true })).toBeVisible();
-    await expect(header.getByText("Tab 2 of 3")).toHaveCount(1);
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText("2/3");
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toHaveAccessibleName(
+      /tab 2 of 3$/,
+    );
     const panes = page.getByRole("navigation", { name: "Panes in this tab" });
     await panes.getByRole("button", { name: "Next pane" }).click();
     await expect(page.locator(`[data-terminal="${twoBeside}"]`)).toBeVisible({ timeout: 15_000 });
     await expect(header.getByRole("heading", { name: "2", exact: true })).toBeVisible();
-    await expect(header.getByText("2/3", { exact: true })).toBeVisible();
+    const tabSwitch = page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / });
+    await expect(tabSwitch).toContainText("2/3");
 
-    await header.getByRole("button", { name: "Switch space or tab" }).click();
+    await tabSwitch.click();
     const web = page.getByRole("dialog", { name: "Spaces" }).getByRole("region", { name: "web" });
     // One row per tab, read as the strip reads it (its number); the split tab's row opens the pane in view.
     await expect(web.getByRole("button")).toHaveCount(3);

@@ -78,9 +78,14 @@ for (const [script, title] of Object.entries(TITLES)) {
       expect(await shownCharacters(page)).toBeGreaterThanOrEqual(12);
       // Nothing of the title sits under the controls beside it.
       const headingRight = await heading.evaluate((el) => el.getBoundingClientRect().right);
-      const firstControl = await bar
-        .getByRole("button", { name: "Switch space or tab" })
-        .evaluate((el) => el.getBoundingClientRect().left);
+      // The first control right of the title: the action slot's, else the session menu.
+      const firstControl = await bar.evaluate((el) =>
+        Math.min(
+          ...[...el.querySelectorAll("button")]
+            .filter((button) => button.getAttribute("aria-label") !== "Back to agents")
+            .map((button) => button.getBoundingClientRect().left),
+        ),
+      );
       expect(headingRight).toBeLessThanOrEqual(firstControl + 0.5);
     } finally {
       endAgent("host", address);

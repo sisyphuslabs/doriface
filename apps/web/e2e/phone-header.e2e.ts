@@ -82,8 +82,11 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
 
     // Where: the space, and this tab's place among the space's tabs.
     await expect(header(page).getByText(space, { exact: true })).toBeVisible();
-    await expect(header(page).getByText("1/2", { exact: true })).toBeVisible();
-    await expect(header(page).getByText("Tab 1 of 2", { exact: true })).toBeAttached();
+    // The tab's place is the bottom tabs bar's, not the header's (#466).
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText("1/2");
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toHaveAccessibleName(
+      /tab 1 of 2$/,
+    );
 
     // The counts move as hc reports each agent's state, without a reload.
     const before = await readCounts(page);
@@ -98,8 +101,10 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
       timeout: 15_000,
     });
 
-    // The switch button opens the spaces and their tabs; picking another tab opens it and moves the position.
-    const switcher = header(page).getByRole("button", { name: "Switch space or tab" });
+    // The bottom tabs bar's switch opens the spaces and their tabs (the header has none: one strip, #466); picking another
+    // tab opens it and moves the position.
+    await expect(header(page).getByRole("button", { name: "Switch space or tab" })).toHaveCount(0);
+    const switcher = page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / });
     const box = await laidOutBox(switcher);
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -125,12 +130,15 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await tabRow("2").click();
     await expect(sheet).toBeHidden();
     await expect(header(page).getByRole("heading", { name: "2", exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(header(page).getByText("2/2", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText("2/2");
 
     // A new tab in the same space, saved by another device, is counted at once.
     started.push(startShellIn(space, `hdr-c-${run}`));
     saveSpace();
-    await expect(header(page).getByText("2/3", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText(
+      "2/3",
+      { timeout: 15_000 },
+    );
   } finally {
     for (const address of started) endAgent("host", address);
   }

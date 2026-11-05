@@ -103,7 +103,6 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
         terminals={terminals}
         tabTitle={tabTitle}
         onBack={onBack}
-        onOpen={onOpen}
         action={offline || ended ? null : <DictateButton voice={voice} target={title} ref={mic} />}
       />
       <ConnectionLine />
