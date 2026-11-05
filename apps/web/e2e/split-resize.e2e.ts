@@ -50,7 +50,14 @@ const keyboardAddress = (page: Page): Promise<string | null> =>
 
 const shells: string[] = [];
 test.afterEach(() => {
-  for (const address of shells.splice(0)) hcOn("host", ["kill", address]);
+  for (const address of shells.splice(0)) {
+    try {
+      hcOn("host", ["kill", address]);
+    } catch (error) {
+      // A test that closed its pane ended that shell already (#409); any other failure stands.
+      if (!(error instanceof Error && error.message.includes('"kind":"not_found"'))) throw error;
+    }
+  }
 });
 
 const shell = (name: string): string => {
@@ -218,7 +225,6 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
   await paneOf(page, two).getByRole("textbox").focus();
   await paneOf(page, three).getByRole("textbox").focus();
   await paneOf(page, three).getByRole("button", { name: "Close pane" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
   await expect(paneOf(page, three)).toHaveCount(0);
   // The column of four and five takes three's place, the whole bottom right.
   await expectAt(page, four, { x: 0.5, y: 0.5, w: 0.5, h: 0.25 });
@@ -233,7 +239,6 @@ test("closing a pane in the middle gives its space to its neighbour and focus to
     await previous;
     await paneOf(page, address).getByRole("textbox").focus();
     await page.keyboard.press(KEYS.other.close);
-    await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
     await expect(paneOf(page, address)).toHaveCount(0);
   }, Promise.resolve());
   await expect(tabs).toHaveCount(1);
@@ -317,7 +322,6 @@ test("closing the tab in view while its layout write is refused keeps that tab i
 
   socket.staleWrites(true);
   await page.getByRole("button", { name: /^Close .*solo/ }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
   await expect(page.getByText("The layout was not saved")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("tab", { selected: true })).toHaveText(/solo/);
   expect(savedTab("tb-solo")).toBe(saved);
@@ -403,7 +407,6 @@ test("zoomed, moving focus or splitting shows every pane again, so a close acts 
   await expect(paneOf(page, five)).toBeVisible();
   await expect.poll(() => keyboardAddress(page), { timeout: 5_000 }).toBe(two);
   await page.keyboard.press(KEYS.other.close);
-  await page.getByRole("dialog").getByRole("button", { name: "Keep running" }).click();
   await expect(paneOf(page, two)).toHaveCount(0);
   await expect(paneOf(page, four)).toBeVisible();
 

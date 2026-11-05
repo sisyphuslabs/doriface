@@ -2,8 +2,10 @@ import type { HcConnection } from "@doriface/client";
 import type { Terminal } from "@doriface/protocol";
 import { Button, Dialog, Notice } from "@doriface/ui";
 import { useEffect, useRef, useState } from "react";
+import { useTerminalConfig } from "../ghostty/config-store.ts";
+import { single } from "../ghostty/config.ts";
 import { terminalInput } from "./focus-targets.ts";
-import { terminalTitle } from "./model.ts";
+import { asksBeforeClosing, terminalTitle } from "./model.ts";
 import { RenameDialog } from "./rename-dialog.tsx";
 import { pendingEnds } from "./pending-ends.ts";
 import { recordedEnd } from "./resume-ends.ts";
@@ -15,19 +17,19 @@ export interface SessionDialogsProps {
   readonly terminals: readonly Terminal[];
   readonly ask: SessionAsk | null;
   readonly onDone: () => void;
-  /** Hides the tab and leaves the program running. */
-  readonly onKeep: (address: string) => void;
+  /** Takes a session's pane out of the layout once the session is gone. */
+  readonly onDrop: (address: string) => void;
 }
 
 const COPY = {
   end: "The program stops and its output is gone. This cannot be undone.",
-  close: "Keep it running and reopen it from the sidebar any time, or end the program now.",
+  close: "The running program will end.",
 } as const;
 
 const ENDED = {
   rename: "It ended before you answered, so there is nothing to rename.",
   end: "It ended before you answered, so there is nothing to end.",
-  close: "It ended before you answered, so there is nothing to keep running or end.",
+  close: "It ended before you answered, so there is nothing to close.",
 } as const;
 
 /**
@@ -35,7 +37,7 @@ const ENDED = {
  * question into a statement that it ended, with only OK: the question never disappears on its own, and nothing is
  * answered for the user. A question asked about a session that had already ended needs no answer and closes.
  */
-export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: SessionDialogsProps) {
+export function SessionDialogs({ connection, terminals, ask, onDone, onDrop }: SessionDialogsProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The question open now: an action settles into the question that started it, never into a later one.
@@ -71,14 +73,54 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
   useEffect(() => {
     if (ask === null || keep || live) return;
     // The closed tab's session is gone either way; dropping its tab is tidying up, not an answer.
-    if (ask.kind === "close") onKeep(ask.address);
+    if (ask.kind === "close") onDrop(ask.address);
     if (ask !== liveAsk) onDone();
-  }, [ask, keep, live, liveAsk, onDone, onKeep]);
+  }, [ask, keep, live, liveAsk, onDone, onDrop]);
   useEffect(() => {
     setBusy(false);
     setError(null);
   }, [ask]);
+  const run = (work: () => Promise<void>, after: () => void): void => {
+    const started = ask;
+    if (started === null) return;
+    setBusy(true);
+    work().then(
+      () => (askNow.current === started ? after() : undefined),
+      (cause: unknown) => {
+        const why = cause instanceof Error ? cause.message : String(cause);
+        // Left with Cancel meanwhile: the question it would answer is gone, and the one open now is about something else.
+        if (askNow.current !== started) return console.error(`${started.kind} ${started.address}: ${why}`);
+        setBusy(false);
+        setError(why);
+      },
+    );
+  };
+  // Kept in local storage until it settles, so a page closed before End's calls leave it has the next page finish it.
+  const end = (): void => {
+    if (ask === null) return;
+    const { address } = ask;
+    const calls = sessionCalls(connection);
+    const record = terminal === undefined ? null : { address, pid: terminal.pid ?? null, created: terminal.created_ms };
+    run(
+      () =>
+        record === null
+          ? endSession(calls, address)
+          : recordedEnd(pendingEnds(connection.hello.core.id), { ...record, at: Date.now() }, calls),
+      onDone,
+    );
+  };
+  // Closing ends the program, as in herdr-app and Ghostty; it asks first only as confirm-close-surface says. A close
+  // that needs no question ends at once, and the question shows only to say why that End failed.
+  const confirm = single(useTerminalConfig(), "confirm-close-surface");
+  const quiet = ask?.kind === "close" && terminal !== undefined && live && !asksBeforeClosing(confirm, [terminal]);
+  const endedQuietly = useRef<SessionAsk | null>(null);
+  useEffect(() => {
+    if (!quiet || endedQuietly.current === ask) return;
+    endedQuietly.current = ask;
+    end();
+  });
   if (ask === null || !(live || keep || ended)) return null;
+  if (quiet && error === null) return null;
   const title = (asked.ask === ask ? asked.name : null) ?? current ?? "";
   // Asked with focus on the page body (a terminal whose renderer had not started yet), or from an element that is gone
   // by now, the question gives focus to the focused pane's terminal instead of leaving keys with nowhere to go.
@@ -104,33 +146,6 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
       />
     );
   }
-  const run = (work: () => Promise<void>, after: () => void): void => {
-    const started = ask;
-    setBusy(true);
-    work().then(
-      () => (askNow.current === started ? after() : undefined),
-      (cause: unknown) => {
-        const why = cause instanceof Error ? cause.message : String(cause);
-        // Left with Cancel meanwhile: the question it would answer is gone, and the one open now is about something else.
-        if (askNow.current !== started) return console.error(`${started.kind} ${started.address}: ${why}`);
-        setBusy(false);
-        setError(why);
-      },
-    );
-  };
-  // Kept in local storage until it settles, so a page closed before End's calls leave it has the next page finish it.
-  const end = (): void => {
-    const { address } = ask;
-    const calls = sessionCalls(connection);
-    const record = terminal === undefined ? null : { address, pid: terminal.pid ?? null, created: terminal.created_ms };
-    run(
-      () =>
-        record === null
-          ? endSession(calls, address)
-          : recordedEnd(pendingEnds(connection.hello.core.id), { ...record, at: Date.now() }, calls),
-      onDone,
-    );
-  };
   // Left after a failed End, the session runs on: it must not keep End's mark, which a dropped link may have kept.
   const dismiss = (): void => {
     if (error !== null && live) {
@@ -167,19 +182,8 @@ export function SessionDialogs({ connection, terminals, ask, onDone, onKeep }: S
             Cancel
           </Button>
           <Button variant="destructive" loading={busy} onClick={end}>
-            End session
+            {ask.kind === "close" ? "Close" : "End session"}
           </Button>
-          {ask.kind === "close" ? (
-            <Button
-              variant="primary"
-              onClick={() => {
-                onKeep(ask.address);
-                onDone();
-              }}
-            >
-              Keep running
-            </Button>
-          ) : null}
         </>
       }
     >

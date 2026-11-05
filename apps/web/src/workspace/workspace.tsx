@@ -270,14 +270,14 @@ export function Workspace({ connection }: WorkspaceProps) {
           terminals={terminals}
           ask={ask}
           onDone={done}
-          onKeep={layout.dropPane}
+          onDrop={layout.dropPane}
         />
         {closing === undefined ? null : (
           <CloseTabDialog
             connection={connection}
             terminals={terminals}
             tab={closing}
-            onKeep={() => layout.closeTab(closing.key)}
+            onClosed={() => layout.closeTab(closing.key)}
             onDone={() => setClosingTab(null)}
           />
         )}
