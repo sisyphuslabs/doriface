@@ -18,6 +18,7 @@ import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
 import { stateLabel, type MachineEntry } from "./machines.ts";
 import { firstInSpace, spaceId, toSpaces } from "./model.ts";
+import { MachinesListError } from "./machines-list-error.tsx";
 import { useConnectionNotice } from "./reconnect-status.tsx";
 import { RetryButton } from "./retry-button.tsx";
 import { SpaceNameInput } from "./space-name-input.tsx";
@@ -185,10 +186,9 @@ function SpacesLists({
       {...(newHere === undefined ? {} : { action: newHere })}
       {...(rail ? { className: "[&>header]:sr-only" } : {})}
     >
-      {machines.listError === undefined ? null : (
-        <Notice tone="error" className="mx-1 mt-1" title="Could not list the machines">
-          {machines.listError}
-        </Notice>
+      {/* While the link is down the connection notice says it once; the failed list would only repeat it (#545). */}
+      {machines.listError === undefined || linkDown !== null ? null : (
+        <MachinesListError cause={machines.listError} className="mx-1 mt-1" />
       )}
       {grouped === undefined ? (
         <section aria-label="Spaces on this machine" className="flex flex-col gap-px">
