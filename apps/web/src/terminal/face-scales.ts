@@ -1,0 +1,172 @@
+import { type PrimaryMetrics, primaryMetrics, wideGlyphScale } from "./wide-glyph.ts";
+
+type GlyphMetrics = Pick<
+  TextMetrics,
+  "width" | "actualBoundingBoxLeft" | "actualBoundingBoxRight" | "actualBoundingBoxAscent" | "actualBoundingBoxDescent"
+>;
+
+/** `text`'s metrics in `family` at `scale` times the terminal's size. */
+export type Measure = (text: string, family: string, scale: number) => GlyphMetrics;
+
+const HANGUL = "\u{AC00}";
+const KANA = "\u{3042}";
+/**
+ * Ideographs, sampled from each face a browser can split them across (#252): \u6C34 is in every CJK font, Korean Hanja
+ * fonts included; \u8FD9 is a simplified-only form those lack; \u8FBC is a Japanese-only form. The first is the block's
+ * own sample, as before.
+ */
+const HAN = "\u{6C34}\u{8FD9}\u{8FBC}";
+
+/**
+ * The script blocks of wide text, each with its full-width sample glyphs. A CJK face draws a block at one advance, so a
+ * sample's advance stands for every glyph of the block the browser draws from the same face.
+ */
+const BLOCKS: readonly (readonly [from: number, to: number, samples: string])[] = [
+  [0x1100, 0x11ff, HANGUL],
+  [0x3130, 0x318f, HANGUL],
+  [0xa960, 0xa97f, HANGUL],
+  [0xac00, 0xd7ff, HANGUL],
+  [0x3040, 0x30ff, KANA],
+  [0x31f0, 0x31ff, KANA],
+  [0x2e80, 0x303f, HAN],
+  [0x3100, 0x312f, HAN],
+  [0x3190, 0x31ef, HAN],
+  [0x3200, 0x9fff, HAN],
+  [0xf900, 0xfaff, HAN],
+  [0xfe30, 0xfe4f, HAN],
+  [0xff00, 0xffef, HAN],
+  [0x20000, 0x3ffff, HAN],
+];
+
+function blockSamples(code: number): string | undefined {
+  return BLOCKS.find(([from, to]) => code >= from && code <= to)?.[2];
+}
+
+/** Emoji keep their size: Ghostty fits them to the cells with their own rule, not the ideograph width. */
+const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\uFE0F/u;
+
+const INK = ["width", "actualBoundingBoxLeft", "actualBoundingBoxRight", "actualBoundingBoxAscent"] as const;
+const sameGlyph = (a: GlyphMetrics, b: GlyphMetrics): boolean => INK.every((key) => Math.abs(a[key] - b[key]) < 0.01);
+
+/**
+ * The wide-glyph scales of one terminal font at one size. Ghostty sizes each fallback face, not each glyph, so each
+ * script block is measured once, from its samples, the first time one of its glyphs is drawn; after that a glyph's scale
+ * is a range lookup with no canvas work.
+ */
+export class FaceScales {
+  readonly #measure: Measure;
+  readonly #family: string;
+  readonly #defaultFamily: string;
+  readonly #scales = new Map<string, number>();
+  #primary: PrimaryMetrics | undefined;
+
+  /** `family` is the terminal's font stack; `defaultFamily` is the stack without the families the user chose. */
+  constructor(measure: Measure, family: string, defaultFamily: string) {
+    this.#measure = measure;
+    this.#family = family;
+    this.#defaultFamily = defaultFamily;
+  }
+
+  scaleOf(text: string): number {
+    const samples = blockSamples(text.codePointAt(0) ?? 0);
+    if (samples === undefined || EMOJI.test(text)) return 1;
+    let scale = this.#scales.get(samples);
+    if (scale === undefined) {
+      scale = this.#blockScale(samples);
+      this.#scales.set(samples, scale);
+    }
+    return scale;
+  }
+
+  /**
+   * Which face draws a glyph can only be told by measuring that glyph, and nothing is measured per glyph. So a block the
+   * browser splits across fallback faces takes the smallest of their scales: no face draws past its two cells. A face
+   * with a narrower ideograph then draws short of them: a pixel when both faces need enlarging, the whole gap of #197
+   * when the other face already fills its cells and keeps scale 1. A block drawn from one face keeps that face's scale.
+   */
+  #blockScale(samples: string): number {
+    const [first, ...others] = [...samples];
+    if (first === undefined) return 1;
+    const own = this.#faceScale(first);
+    // The user's chosen font draws the block (its common sample), or no face has it: it keeps its size, as before.
+    if (own === undefined) return 1;
+    let scale = own;
+    for (const sample of others) {
+      const other = this.#faceScale(sample);
+      if (other !== undefined) scale = Math.min(scale, other);
+    }
+    return scale;
+  }
+
+  /**
+   * The scale of the face that draws `sample`; undefined when the user's chosen font draws it, or when what is drawn is
+   * no wider than a cell: a missing glyph's box, not a face to fit, so it must not hold the block to scale 1.
+   */
+  #faceScale(sample: string): number | undefined {
+    const drawn = this.#measure(sample, this.#family, 1);
+    // The user's chosen font drew the sample when it differs from what the default stack falls back to; like Ghostty,
+    // only a fallback face is resized.
+    if (this.#family !== this.#defaultFamily && !sameGlyph(drawn, this.#measure(sample, this.#defaultFamily, 1)))
+      return undefined;
+    this.#primary ??= primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) });
+    if (!(drawn.width > this.#primary.cell)) return undefined;
+    return wideGlyphScale(
+      (at) => (at === 1 ? drawn.width : this.#measure(sample, this.#family, at).width),
+      this.#primary,
+    );
+  }
+}
+
+/** One FaceScales per font and size, shared by every terminal view, so a new view or a new scaler measures nothing. */
+const faces = new Map<string, FaceScales>();
+
+/** Drops every measurement: a web font that finished loading changes the metrics behind the same font string. */
+export function forgetMeasuredFaces(): void {
+  faces.clear();
+}
+
+// Here, not in each terminal view: the cache outlives the views, and a font can finish loading while none is mounted.
+if (typeof document !== "undefined") document.fonts.addEventListener("loadingdone", forgetMeasuredFaces);
+
+/**
+ * The FaceScales for a font stack at a size in px, made the first time that font and size is asked for, with the
+ * measure `measureFor(size)` returns. Null when there is nothing to measure with.
+ */
+export function faceScalesFor(
+  size: number,
+  family: string,
+  defaultFamily: string,
+  measureFor: (size: number) => Measure | null,
+): FaceScales | null {
+  const key = `${size}px ${family} | ${defaultFamily}`;
+  const known = faces.get(key);
+  if (known !== undefined) return known;
+  const measure = measureFor(size);
+  if (measure === null) return null;
+  const made = new FaceScales(measure, family, defaultFamily);
+  faces.set(key, made);
+  return made;
+}
+
+/**
+ * The scale for each wide glyph of `element`'s terminal, in its computed font: the browser's own fallback picks the face,
+ * so each face is measured, never assumed. Null when there is no canvas to measure with.
+ */
+export function wideGlyphScaler(element: HTMLElement): ((text: string) => number) | null {
+  const style = getComputedStyle(element);
+  const family = style.fontFamily;
+  const scales = faceScalesFor(
+    parseFloat(style.fontSize),
+    family,
+    style.getPropertyValue("--font-term").trim() || family,
+    (size) => {
+      const context = element.ownerDocument.createElement("canvas").getContext("2d");
+      if (context === null) return null;
+      return (text, font, at) => {
+        context.font = `${size * at}px ${font}`;
+        return context.measureText(text);
+      };
+    },
+  );
+  return scales === null ? null : (text) => scales.scaleOf(text);
+}

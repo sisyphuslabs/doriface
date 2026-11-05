@@ -1,5 +1,5 @@
 import { DirectionPad, ExtraKeysBar, extraKeys, KeyboardButton, Menu, MenuItem } from "@doriface/ui";
-import { type RefObject, useState } from "react";
+import type { RefObject } from "react";
 import type { HostPlatform } from "../terminal/keys.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
@@ -12,6 +12,12 @@ export function keysBottom(inset: number): string {
 /** The keys bar's own height (a 3.25rem pill and 0.25rem above and below it), which the terminal keeps clear. */
 export const KEYS_BAR_HEIGHT = "3.75rem";
 
+/** How far up from the terminal's bottom the round keyboard button reaches: its 3rem and the gap below it. */
+export const KEYBOARD_BUTTON_CLEARANCE = "calc(max(1rem, calc(var(--safe-bottom) + 0.5rem)) + 3rem)";
+
+/** How far up from the terminal's bottom the arrow pad reaches: its 0.5rem gap, three 3rem rows with their gaps and padding. */
+export const DIRECTION_PAD_CLEARANCE = "calc(0.5rem + 9rem + 0.5rem + 0.75rem + 2px)";
+
 export interface PhoneKeysProps {
   readonly port: RefObject<TerminalPort | null>;
   readonly open: boolean;
@@ -22,6 +28,15 @@ export interface PhoneKeysProps {
   readonly current: string;
   readonly onOpen: (address: string) => void;
   readonly onMenu: (open: boolean) => void;
+  /** The arrow pad is open over the keys bar; the terminal keeps its own controls above it. */
+  readonly pad: boolean;
+  readonly onPad: (open: boolean) => void;
+  /**
+   * Set where the bar opens without a soft keyboard (a mouse-only device, #287): the round button reads Show keys and
+   * calls this with true, and the bar's last key reads Hide keys and calls it with false. Unset, the button raises the
+   * soft keyboard and the bar's key puts it down.
+   */
+  readonly onKeys?: (shown: boolean) => void;
 }
 
 function hideKeyboard(): void {
@@ -33,12 +48,15 @@ function hideKeyboard(): void {
  * can open the arrow pad; with it down, only a round keyboard button stays, at the bottom right.
  */
 export function PhoneKeys(props: PhoneKeysProps) {
-  const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu } = props;
-  const [pad, setPad] = useState(false);
+  const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu, pad, onPad, onKeys } = props;
   if (!open) {
     return (
       <KeyboardButton
-        onPress={() => port.current?.focus()}
+        {...(onKeys === undefined ? {} : { label: "Show keys" })}
+        onPress={() => {
+          onKeys?.(true);
+          port.current?.focus();
+        }}
         className="absolute right-4 bottom-[max(1rem,calc(var(--safe-bottom)+0.5rem))] z-10"
       />
     );
@@ -60,9 +78,11 @@ export function PhoneKeys(props: PhoneKeysProps) {
         latched={[...sticky.latched]}
         onKey={sticky.press}
         padOpen={pad}
-        onPad={() => setPad((shown) => !shown)}
+        onPad={() => onPad(!pad)}
         onPaste={sticky.paste}
-        onHideKeyboard={hideKeyboard}
+        {...(onKeys === undefined
+          ? { onHideKeyboard: hideKeyboard }
+          : { hideLabel: "Hide keys", onHideKeyboard: () => onKeys(false) })}
         renderSessions={(trigger) => (
           <Menu
             trigger={trigger}

@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { legacyStateLock } from "../testing/lock-steps.ts";
 import { DeviceStore } from "./devices.ts";
 import { withStateLock } from "./lock.ts";
 
@@ -49,11 +50,30 @@ function whenLockMoved(path: string, take: () => void): void {
 
 const run = (...args: string[]) => Bun.spawn([process.execPath, WORKER, ...args], { stdout: "ignore", stderr: "pipe" });
 
-describe("state lock", () => {
+/** A lock directory whose highest generation has this content. */
+function generation(content: string): void {
+  fs.mkdirSync(join(dir, "state.lock"), { mode: 0o700 });
+  writeFileSync(join(dir, "state.lock", "1"), content);
+}
+
+describe("state lock, a dead holder whose pid was reused (#276)", () => {
+  test("a generation naming a live pid that started at another time is a dead holder's: it is taken, not waited for", () => {
+    // The holder died and its pid now belongs to a live process, this one, which did not start when the holder did.
+    generation(`${process.pid} ${crypto.randomUUID()} start-of-a-process-that-is-gone`);
+    expect(withStateLock(dir, () => "taken", 500)).toBe("taken");
+  });
+
+  test("a generation naming a live pid with no start time, as older hosts write it, is still waited for", () => {
+    generation(`${process.pid} ${crypto.randomUUID()}`);
+    expect(() => withStateLock(dir, () => "taken", 50)).toThrow("locked by another process");
+  });
+});
+
+describe("state lock, from a v0.1.0 lock file", () => {
   test("a lock whose holder has not written its pid yet is held, not broken", () => {
     const devices = new DeviceStore(dir, { lockTimeoutMs: 50 });
     devices.add(crypto.getRandomValues(new Uint8Array(32)), "phone");
-    writeFileSync(join(dir, "state.lock"), "");
+    legacyStateLock(dir, "");
     expect(() => devices.revoke(devices.list()[0]?.clientStaticPub ?? "")).toThrow("locked");
     expect(devices.list()).toHaveLength(1);
   });
@@ -83,14 +103,17 @@ describe("state lock", () => {
   });
 
   test("a breaker that died holding the break guard does not keep a stale lock from being broken", () => {
-    writeFileSync(join(dir, "state.lock"), `${deadPid()} stale-token`);
+    legacyStateLock(dir, `${deadPid()} stale-token`);
     writeFileSync(join(dir, "state.lock.break"), `${deadPid()} breaker-token`);
     expect(withStateLock(dir, () => "ran", 200)).toBe("ran");
-    expect(fs.readdirSync(dir)).toEqual([]);
+    expect(fs.readdirSync(dir)).toEqual(["state.lock"]);
+    expect(
+      fs.readdirSync(join(dir, "state.lock")).map((name) => readFileSync(join(dir, "state.lock", name), "utf8")),
+    ).toEqual(["free"]);
   });
 
   test("a live breaker's guard is waited for", () => {
-    writeFileSync(join(dir, "state.lock"), `${deadPid()} stale-token`);
+    legacyStateLock(dir, `${deadPid()} stale-token`);
     writeFileSync(join(dir, "state.lock.break"), `${process.pid} breaker-token`);
     expect(() => withStateLock(dir, () => undefined, 50)).toThrow("locked");
   });
@@ -102,7 +125,7 @@ describe("state lock", () => {
       seeded.add(key, `seed-${i}`);
       return base64urlEncode(key);
     });
-    writeFileSync(join(dir, "state.lock"), `${deadPid()} stale-token`);
+    legacyStateLock(dir, `${deadPid()} stale-token`);
     const workers = [
       ...["a", "b", "c", "d"].map((prefix) => run("add", dir, prefix, "15")),
       run("revoke", dir, ...revokeKeys),

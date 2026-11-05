@@ -1,5 +1,5 @@
 import { agentRow, endAgent, startShell } from "./agents.ts";
-import { removeTerminal } from "./ended-terminal.ts";
+import { removeTerminal, stateOn } from "./ended-terminal.ts";
 import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
@@ -13,13 +13,17 @@ const OTHER = "dictate-other";
 
 let address = "";
 let other = "";
+/** A shell a test started by splitting a pane: ended with the others, so no spec leaves a live terminal. */
+let split = "";
 test.beforeEach(() => {
   address = startShell("host", NAME);
   other = startShell("host", OTHER);
+  split = "";
 });
 test.afterEach(() => {
   endAgent("host", address);
   endAgent("host", other);
+  if (split !== "") endAgent("host", split);
 });
 
 test("Dictate in the tab bar docks under the focused pane and types into it without Enter", async ({ page }) => {
@@ -73,6 +77,43 @@ test("moving focus to another tab ends the dictation, so nothing heard for one p
   expect(hcOn("host", ["read", address])).not.toContain("echo stray");
 });
 
+test("moving focus to the other pane of a split tab ends the dictation, so nothing heard for one pane is typed into the other", async ({
+  page,
+}) => {
+  const speech = await stubSpeech(page);
+  await page.goto("/");
+  await agentRow(page, OTHER, false).click();
+  await expect(page.locator(`[data-terminal="${other}"]`)).toContainText("$", { timeout: 15_000 });
+  await agentRow(page, NAME, false).click();
+  const shown = page.locator("section[data-split='true']:visible");
+  const mine = shown.locator(`[data-terminal="${address}"]`);
+  await expect(page.locator(`[data-focused="true"] [data-terminal="${address}"]`)).toContainText("$", {
+    timeout: 15_000,
+  });
+  // Split right starts a new shell in the new pane, beside this one in the same tab.
+  await page.getByRole("button", { name: "Split right" }).click();
+  await expect(shown).toHaveCount(2);
+  const theirs = shown.locator(`[data-terminal]:not([data-terminal="${address}"])`);
+  await expect(theirs).toContainText("$", { timeout: 15_000 });
+  split = (await theirs.getAttribute("data-terminal")) ?? "";
+  await mine.click();
+  await expect(page.locator(`section[data-focused="true"]:visible [data-terminal="${address}"]`)).toBeVisible();
+
+  await page.getByRole("button", { name: `Dictate into ${NAME}` }).click();
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect(page.locator("[data-voice-strip]")).toHaveAttribute("data-voice-strip", "listening");
+  await theirs.click();
+  await expect(page.locator(`section[data-focused="true"]:visible [data-terminal="${split}"]`)).toBeVisible();
+
+  await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+  expect(await speech.aborts()).toBe(1);
+  await speech.say(["echo stray-pane", true]);
+  await speech.end();
+  await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+  expect(hcOn("host", ["read", split])).not.toContain("echo stray-pane");
+  expect(hcOn("host", ["read", address])).not.toContain("echo stray-pane");
+});
+
 test("a dictation under way ends when its terminal's machine drops: the recognizer is aborted, the strip goes (#254)", async ({
   page,
 }) => {
@@ -98,5 +139,74 @@ test("a dictation under way ends when its terminal's machine drops: the recogniz
   } finally {
     reconnect();
     removeTerminal("machine", remote, test.info().outputPath("go"));
+  }
+});
+
+test("the desktop's ended view offers no dictation: no mic, no strip, and a bound Dictate key starts nothing (#258)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const speech = await stubSpeech(page);
+  const remote = startShell("machine", "dictate-ended");
+  try {
+    await page.goto("/settings");
+    await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Keybindings" }).click();
+    await page.getByRole("button", { name: "Record a shortcut for Dictate", exact: true }).click();
+    await page.keyboard.press("Control+Alt+Shift+D");
+    await expect(
+      page.locator('[id="keybinding-voice.dictate"]').locator("xpath=../..").getByText("Changed"),
+    ).toBeVisible();
+    // The speech service, so the bound key would start a real dictation if the ended view still took one.
+    await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Voice input" }).click();
+    await page.getByRole("button", { name: "Service", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Service", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    await page.goto("/");
+    await expect(machineRow(page)).toContainText("connected", { timeout: STATE_BOUND_MS });
+    await agentRow(page, "dictate-ended", true).click();
+    const terminal = page.locator(`[data-terminal="${MACHINE_NAME}/${remote}"]`);
+    await expect(terminal).toContainText("$", { timeout: 15_000 });
+    switchTo("drop");
+    await expect(terminal).toHaveCount(0, { timeout: STATE_BOUND_MS });
+    hcOn("machine", ["kill", remote]);
+    await expect.poll(() => stateOn("machine", remote), { timeout: 15_000 }).toBe("finished");
+    reconnect();
+    await expect(page.getByRole("heading", { name: "This session ended" })).toBeVisible({ timeout: STATE_BOUND_MS });
+
+    await expect(page.getByRole("button", { name: /^Dictate into/ })).toHaveCount(0);
+    await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+    await page.keyboard.press("Control+Alt+Shift+D");
+    await expect(page.getByRole("heading", { name: "This session ended" })).toBeVisible();
+    await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+    expect(await speech.started()).toEqual([]);
+  } finally {
+    reconnect();
+    removeTerminal("machine", remote, test.info().outputPath("go"));
+  }
+});
+
+test("a tab whose program ended while the page was closed offers no Dictate in the tab bar (#269)", async ({
+  page,
+}) => {
+  const speech = await stubSpeech(page);
+  const ended = startShell("host", "dictate-gone");
+  try {
+    await page.goto("/");
+    await agentRow(page, "dictate-gone", false).click();
+    await expect(page.locator(`[data-terminal="${ended}"]`)).toContainText("$", { timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Dictate into dictate-gone" })).toBeVisible();
+
+    // The page goes away, the program ends on the host, and the page comes back to the same tab.
+    await page.goto("about:blank");
+    hcOn("host", ["kill", ended]);
+    await expect.poll(() => stateOn("host", ended), { timeout: 15_000 }).toBe("finished");
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "This session ended" })).toBeVisible({ timeout: 30_000 });
+
+    await expect(page.getByRole("button", { name: /^Dictate into/ })).toHaveCount(0);
+    await expect(page.locator("[data-voice-strip]")).toHaveCount(0);
+    expect(await speech.started()).toEqual([]);
+  } finally {
+    removeTerminal("host", ended, test.info().outputPath("go"));
   }
 });

@@ -8,6 +8,31 @@
   --term-font-family: var(--font-term);
 }
 
+/* The terminal draws its own scrollbar as an overlay (terminal-scroll.tsx): a native one would take its width from the
+   grid when scrollback appears, and wterm would refit the grid to fewer columns. */
+.wterm.wterm {
+  scrollbar-width: none;
+}
+
+.wterm.wterm::-webkit-scrollbar {
+  display: none;
+}
+
+/* Links are underlined and opened by terminal-links.tsx, for plain URLs and OSC 8 links alike: wterm's own hover
+   styling for its OSC 8 anchors is turned off so a link is drawn one way. */
+.wterm.wterm.link-modifier-active .term-link:hover > span {
+  text-decoration: none;
+}
+
+.wterm.wterm.link-modifier-active .term-link:hover {
+  cursor: text;
+}
+
+.wterm.wterm.term-link-hover,
+.wterm.wterm.term-link-hover .term-link {
+  cursor: pointer;
+}
+
 .wterm.cursor-none {
   cursor: none;
 }
@@ -41,7 +66,9 @@
   --term-preedit-bg: light-dark(var(--term-bg), var(--term-fg));
 }
 
-/* A two-cell glyph is usually narrower than its cells; centre it in the pair rather than leaving a gap after it. */
+/* A two-cell glyph is sized to fill its cells as Ghostty sizes a fallback face (use-wide-glyph-scale.ts); what is left
+   is split either side. adjust-cell-width is already in the two cells, so the glyph takes no letter-spacing of its own. */
 .wterm .term-wide {
   text-align: center;
+  letter-spacing: 0;
 }

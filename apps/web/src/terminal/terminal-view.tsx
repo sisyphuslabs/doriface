@@ -12,6 +12,7 @@ import { mayTakeFocus } from "./may-take-focus.ts";
 import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
+import { KittyPngTranscoder } from "./kitty-png.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
@@ -21,7 +22,10 @@ import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } fro
 import { Ended } from "./ended.tsx";
 import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
+import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } from "./terminal-scroll.tsx";
+import { TerminalLinks } from "./terminal-links.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
+import { useWideGlyphScale } from "./use-wide-glyph-scale.ts";
 
 /** Typed text, or the bytes a bound key sends. */
 export type TerminalInput = string | Uint8Array;
@@ -46,6 +50,8 @@ export interface TerminalViewProps {
   readonly closeLabel?: string;
   /** Once the view shows that its program had ended before it attached: there is no terminal left to type into. */
   readonly onEnded?: () => void;
+  /** A CSS length the jump-to-bottom button keeps above the terminal's bottom, for controls floating over it. */
+  readonly jumpClearance?: string;
 }
 
 const HISTORY_LINES = 2_000;
@@ -66,7 +72,7 @@ function handBack(event: FocusEvent<HTMLElement>): void {
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onPort, onEnd } = props;
-  const { closeLabel = "Close tab", onEnded } = props;
+  const { closeLabel = "Close tab", onEnded, jumpClearance } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -82,6 +88,8 @@ export function TerminalView(props: TerminalViewProps) {
   const [paste, setPaste] = useState<PendingPaste | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
+  // The program's output reaches the core through this: Kitty images sent as PNG are decoded to RGBA on the way.
+  const output = useMemo(() => new KittyPngTranscoder((bytes) => handle.current?.write(bytes)), []);
 
   useEffect(() => {
     let mounted = true;
@@ -96,6 +104,12 @@ export function TerminalView(props: TerminalViewProps) {
       mounted = false;
     };
   }, []);
+
+  // The terminal's engine, with its scrollback and images, is freed once the view closes and its renderer is gone.
+  useEffect(() => {
+    if (core === null) return undefined;
+    return () => queueMicrotask(() => core.dispose());
+  }, [core]);
 
   const unmounted = useRef(false);
   const unsent = useRef<() => void>(() => undefined);
@@ -138,9 +152,23 @@ export function TerminalView(props: TerminalViewProps) {
   const send = useCallback((data: TerminalInput): void => {
     if (stream.current?.write(data) !== true) pending.current.push(data);
   }, []);
-  useTerminalPort(handle, send, onPort);
+  // Typed input from outside the renderer (the phone's keys, a bound key, a confirmed paste) scrolls to the bottom, as
+  // wterm already does for keys typed into it.
+  const typed = useCallback(
+    (data: TerminalInput): void => {
+      const instance = handle.current?.instance;
+      if (instance !== null && instance !== undefined) scrollTerminal(instance, { to: "bottom" });
+      send(data);
+    },
+    [send],
+  );
+  const scroll = useTerminalScroll(wt);
+  const outputShown = useRef(scroll.changed);
+  outputShown.current = scroll.changed;
+  useTerminalPort(handle, typed, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
-  useTerminalActions(wt, send, focused);
+  useWideGlyphScale(wt, config);
+  useTerminalActions(wt, typed, focused);
   useFocusAfterSelect(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
@@ -236,14 +264,18 @@ export function TerminalView(props: TerminalViewProps) {
           // A fit while the attach was in flight had no stream to resize.
           if (ready.cols !== cols || ready.rows !== rows) attached.resize(ready.cols, ready.rows);
           // Reattached after a reconnect: the replay redraws everything, so the old screen and scrollback go first.
-          if (attachedBefore.current) handle.current?.write(FULL_RESET);
+          if (attachedBefore.current) {
+            output.reset();
+            handle.current?.write(FULL_RESET);
+          }
           attachedBefore.current = true;
           const resets = new CursorResets();
           attached.onData((bytes) => {
-            handle.current?.write(bytes);
+            output.push(bytes);
             attached.consumed(bytes.byteLength);
+            outputShown.current();
             // A cursor reset (the attach replay starts with one) means the default shape: the configured cursor-style.
-            if (resets.push(bytes)) handle.current?.write(rendererOptions(terminalConfigStore.config).cursorSequence);
+            if (resets.push(bytes)) output.push(rendererOptions(terminalConfigStore.config).cursorSequence);
           });
           attached.onClose((close) => {
             if (stream.current === attached) stream.current = null;
@@ -283,7 +315,8 @@ export function TerminalView(props: TerminalViewProps) {
   if (unopened !== null) return <Unopened why={unopened} className={className} onRetry={() => setUnopened(null)} />;
   if (core === null) return <div className={cn("min-h-0 flex-1 bg-term-bg", className)} aria-busy="true" />;
   return (
-    <>
+    // The scrollbar and the jump button overlay the terminal: neither takes room from the grid.
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       <Terminal
         ref={handle}
         core={core}
@@ -312,14 +345,25 @@ export function TerminalView(props: TerminalViewProps) {
         }}
         onBlur={() => stream.current?.focus(false)}
       />
+      {wt === null ? null : (
+        <>
+          <TerminalScrollbar wt={wt} scroll={scroll} />
+          <TerminalLinks wt={wt} />
+          <JumpToBottom
+            wt={wt}
+            scroll={scroll}
+            {...(jumpClearance === undefined ? {} : { clearance: jumpClearance })}
+          />
+        </>
+      )}
       <PasteDialog
         paste={paste}
         onCancel={() => setPaste(null)}
         onPaste={(text) => {
-          send(text);
+          typed(text);
           setPaste(null);
         }}
       />
-    </>
+    </div>
   );
 }

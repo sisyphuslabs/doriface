@@ -38,6 +38,9 @@ export function naiveView(records: readonly Rec[]): Lite {
     const r = rec(i);
     const b = before(i);
     if (!b.members.includes(r.by)) return false;
+    // No admit or rekey puts a key on another current member's Noise key (#90).
+    const others = b.members.filter((k) => k !== r.subject).map((k) => b.noise.get(k));
+    if ((r.type === "admit" || r.type === "rekey") && others.includes(r.card?.noise)) return false;
     if (r.type === "admit" && b.members.includes(r.subject ?? ""))
       return r.card?.noise === b.noise.get(r.subject ?? "");
     if (r.type === "name") return b.members.includes(r.subject ?? "");

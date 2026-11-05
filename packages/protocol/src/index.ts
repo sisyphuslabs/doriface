@@ -5,6 +5,7 @@ export * from "./jsonrpc.ts";
 export * from "./lines.ts";
 export * from "./events.ts";
 export { END_LABEL } from "./end-label.ts";
+export * from "./host-info.ts";
 export * from "./mesh-status.ts";
 export * from "./push.ts";
 export { isMeshName, meshRevokeCommand } from "./mesh-name.ts";
@@ -22,7 +23,12 @@ export {
 export { promptStillThere, readApproval, type ApprovalCore } from "./approval-live.ts";
 export {
   answerApproval,
+  approvalClock,
+  CLAIM_TTL_MS,
+  FENCE_MARGIN_MS,
+  type ApprovalClock,
   readApprovalRecord,
+  type AnswerOptions,
   type AnswerResult,
   type Answerer,
   type ApprovalOutcome,

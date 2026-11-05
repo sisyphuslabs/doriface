@@ -1,7 +1,8 @@
 import type { HcConnection } from "@doriface/client";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import { useSoftKeyboard } from "../terminal/keyboard-inset.ts";
-import { hostPlatform } from "../terminal/keys.ts";
+import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
+import { useMouseOnly, useSoftKeyboard } from "../terminal/keyboard-inset.ts";
+import { useHostPlatform } from "../terminal/host-os.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
@@ -12,7 +13,13 @@ import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
 import { PaneSwitcher } from "./phone-pane-switcher.tsx";
-import { KEYS_BAR_HEIGHT, keysBottom, PhoneKeys } from "./phone-keys.tsx";
+import {
+  DIRECTION_PAD_CLEARANCE,
+  KEYBOARD_BUTTON_CLEARANCE,
+  KEYS_BAR_HEIGHT,
+  keysBottom,
+  PhoneKeys,
+} from "./phone-keys.tsx";
 import { ConnectionLine } from "./reconnect-status.tsx";
 import { afterEnd } from "./session-actions.ts";
 import { useStickyKeys } from "./use-sticky-keys.ts";
@@ -37,7 +44,11 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   }, []);
   const [scope, setScope] = useState<HTMLDivElement | null>(null);
   const keyboard = useSoftKeyboard(scope);
+  // A mouse-only device has no soft keyboard to ride on: its keys bar is opened and closed by hand (#287).
+  const mouseOnly = useMouseOnly();
+  const [keysShown, setKeysShown] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [pad, setPad] = useState(false);
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
   const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
   // The view that showed its program had already ended; the keys have nothing to send to under it.
@@ -45,9 +56,9 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
   const ended = endedView === viewKey;
   const title = terminalTitle(terminal);
   const machine = machineOf(terminal.address);
-  const host = hostPlatform(machine ?? connection.hello.core.name);
-  const sticky = useStickyKeys(port, host);
   const offline = terminal.offline === true && machine !== undefined;
+  const host = useHostPlatform(connection, machine, offline);
+  const sticky = useStickyKeys(port, host);
   const voice = useDictation();
   const mic = useRef<HTMLButtonElement>(null);
   const { toggle } = voice;
@@ -63,10 +74,14 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
     if (ended || offline) voice.dictation.close();
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
-  const keysOpen = !ended && !dictating && (keyboard.up || menu);
+  const keysOpen = !ended && !dictating && (keyboard.up || menu || (mouseOnly && keysShown));
+  // The terminal's jump button stays clear of what floats over its bottom right: the keyboard button, or the arrow pad.
+  const keysControls =
+    offline || ended || dictating ? null : !keysOpen ? KEYBOARD_BUTTON_CLEARANCE : pad ? DIRECTION_PAD_CLEARANCE : null;
 
   return (
-    <div className="relative flex h-dvh min-h-0 flex-col bg-card">
+    // isolate: the keys float above the terminal (z-10) but stay under a dialog and its backdrop, which portal to the body.
+    <div className="relative isolate flex h-dvh min-h-0 flex-col bg-card">
       <PhoneHeader
         terminal={terminal}
         terminals={terminals}
@@ -78,9 +93,10 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
       <PaneSwitcher panes={panes} open={terminal.address} onOpen={onOpen} />
       <div
         ref={setScope}
-        className="flex min-h-0 flex-1 flex-col"
+        className="relative flex min-h-0 flex-1 flex-col"
         style={keysOpen ? { paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})` } : undefined}
       >
+        {offline ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
         {offline ? (
           <MachineOffline machine={machine} />
         ) : (
@@ -98,6 +114,7 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
             onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
             // The header already has Back to agents; this one closes the ended session.
             closeLabel="Close"
+            {...(keysControls === null ? {} : { jumpClearance: keysControls })}
             onEnded={() => setEndedView(viewKey)}
           />
         )}
@@ -127,6 +144,9 @@ export function PhoneTerminal({ connection, terminal, terminals, panes, onOpen, 
           current={terminal.address}
           onOpen={onOpen}
           onMenu={setMenu}
+          pad={pad}
+          onPad={setPad}
+          {...(mouseOnly ? { onKeys: setKeysShown } : {})}
         />
       )}
     </div>

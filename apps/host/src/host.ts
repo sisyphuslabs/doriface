@@ -8,6 +8,7 @@ import { LiveSessions } from "./e2ee/sessions.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
+import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { listenError, StartupError } from "./startup-error.ts";
 import { type StartedPart, stopStarted } from "./stop-started.ts";
 import { assertListenAllowed, formatHost, type ListenAddress } from "./listen.ts";
@@ -55,6 +56,8 @@ export interface HostOptions {
   /** For tests: origins of a private push service the host may post web push notices to, besides the browsers' own. */
   readonly pushTestOrigins?: readonly string[] | undefined;
   readonly log: (line: string) => void;
+  /** The OS this host reports on its core (`process.platform` unless a test names another). */
+  readonly platform?: string;
 }
 
 export interface E2eeEndpoint {
@@ -91,7 +94,9 @@ export async function startHost(options: HostOptions): Promise<Host> {
   // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
   const parts: StartedPart[] = [];
   try {
-    return await serve(options, hcVersion, (name, stop) => parts.push({ name, stop }));
+    return await serve(options, hcVersion, (name, stop, kill) =>
+      parts.push(kill === undefined ? { name, stop } : { name, stop, kill }),
+    );
   } catch (error) {
     await stopStarted(parts, options.log);
     throw error;
@@ -102,7 +107,7 @@ export async function startHost(options: HostOptions): Promise<Host> {
 async function serve(
   options: HostOptions,
   hcVersion: string,
-  started: (name: string, stop: () => unknown) => void,
+  started: (name: string, stop: () => unknown, kill?: () => readonly string[]) => void,
 ): Promise<Host> {
   const { hostname, port } = options.listen;
   const stateDir = options.stateDir;
@@ -138,9 +143,28 @@ async function serve(
           extraOrigins: options.pushTestOrigins,
           log: options.log,
         });
-  if (push !== undefined) started("push feed", () => push.stop());
+  if (push !== undefined) {
+    started(
+      "push feed",
+      () => push.stop(),
+      () => push.kill().map((pid) => `hc connect pid ${pid}`),
+    );
+  }
   const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
-  started("end sweeper", () => ends.stop());
+  started(
+    "end sweeper",
+    () => ends.stop(),
+    () => ends.kill().map((pid) => `hc connect pid ${pid}`),
+  );
+  // The host's OS goes on its core once a client opens a pipe, as the end sweeper starts: every hc call starts its
+  // session's core when none runs, and a host that no one uses must not start one (#306).
+  const core = { hc: options.hc, session: options.session, env: options.env };
+  let info: HostInfoPublisher | undefined;
+  started(
+    "host info",
+    () => info?.stop(),
+    () => (info?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
+  );
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
@@ -151,6 +175,7 @@ async function serve(
     directIdleMs: options.directIdleMs,
     openPipe: () => {
       void ends.ensure();
+      info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
@@ -233,6 +258,7 @@ async function serve(
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
+        .then(() => info?.stop())
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => undefined);

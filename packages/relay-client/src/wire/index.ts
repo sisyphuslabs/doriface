@@ -24,7 +24,7 @@ export {
   SIGN_PUB_BYTES,
   SIGNATURE_BYTES,
 } from "./identity.ts";
-export { MAX_SESSION_SEND_BYTES, RELAY_MESSAGE_CAP } from "./limits.ts";
+export { MAX_ACTIVE_SESSIONS, MAX_PENDING_SESSIONS, MAX_SESSION_SEND_BYTES, RELAY_MESSAGE_CAP } from "./limits.ts";
 export {
   decodeMux,
   encodeClose,
@@ -67,6 +67,12 @@ export {
   encodePairSlotClear,
   encodePairSlotAck,
   encodePairSlotRequest,
+  isPairSlotExpiry,
+  PAIR_SLOT_EXPIRES_BYTES,
+  PAIR_SLOT_SIGNATURE_BYTES,
+  PAIR_SLOT_STATEMENT_PREFIX,
+  pairSlotStatement,
+  type PairSlotSignature,
   NOISE_STATIC_PUB_BYTES,
   PairSlotAckStatus,
   slotOf,

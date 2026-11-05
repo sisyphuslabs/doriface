@@ -3,7 +3,7 @@ import { useToastManager } from "@doriface/ui";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
-import { type Axis, LAYOUT_DOC } from "@doriface/protocol/layout";
+import { type Axis, LAYOUT_DOC, ORDER_DOC } from "@doriface/protocol/layout";
 import { closesTab, type TerminalEnd } from "../terminal/terminal-end.ts";
 import { CloseTabDialog } from "./close-tab-dialog.tsx";
 import { AddMachineDialog } from "./add-machine-dialog.tsx";
@@ -27,7 +27,9 @@ import { chainedSplit, SplitChain } from "./split-chain.ts";
 import { afterEnd } from "./session-actions.ts";
 import { useDeadPanes } from "./use-dead-panes.ts";
 import { useLayoutDocs } from "./use-layout-docs.ts";
+import { useMachineOrder } from "./use-machine-order.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
+import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
@@ -40,20 +42,53 @@ export interface WorkspaceProps {
 export function Workspace({ connection }: WorkspaceProps) {
   // The feed comes before the machine list the layout documents need, so its doc events reach them through a ref.
   const heardLayout = useRef<(machine: string | null, version: number) => void>(() => undefined);
+  const heardOrder = useRef<(version: number) => void>(() => undefined);
   const onDoc = useCallback<DocHeard>((machine, name, version) => {
     if (name === LAYOUT_DOC) heardLayout.current(machine, version);
+    if (name === ORDER_DOC && machine === null) heardOrder.current(version);
   }, []);
   const fed = useTerminals(connection, onDoc);
-  const { entries, terminals, refresh, listError, views, retry, listed } = useMachines(connection, fed.terminals);
+  useResumeEnds(connection);
+  const {
+    entries: listed,
+    terminals,
+    refresh,
+    listError,
+    views,
+    retry,
+    listed: machineReads,
+  } = useMachines(connection, fed.terminals);
   const { layouts, heard } = useLayoutDocs(connection, views);
   heardLayout.current = heard;
+  const order = useMachineOrder(connection, listed);
+  heardOrder.current = order.heard;
+  const entries = order.entries;
   const toasts = useToastManager();
+  const { move: saveMove } = order;
+  const moveMachine = useCallback(
+    (core: string, to: number): void =>
+      void saveMove(core, to).catch((cause: unknown) =>
+        toasts.add({
+          type: "error",
+          title: "The machine order was not saved",
+          description: cause instanceof Error ? cause.message : String(cause),
+        }),
+      ),
+    [saveMove, toasts],
+  );
   const failed = useCallback(
     (message: string) => toasts.add({ type: "error", title: "The layout was not saved", description: message }),
     [toasts],
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
-  const layout = useLayout(connection.hello.core.id, layouts, fed.loaded ? terminals : [], failed, told, listed > 0);
+  const layout = useLayout(
+    connection.hello.core.id,
+    layouts,
+    fed.loaded ? terminals : [],
+    failed,
+    told,
+    machineReads > 0,
+  );
   useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, layout.dropPane);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
@@ -137,10 +172,10 @@ export function Workspace({ connection }: WorkspaceProps) {
 
   const openAddMachine = useCallback(() => setAdding(true), []);
   const terminalsLoaded = fed.loaded;
-  const machinesListed = listed > 0 || listError !== undefined;
+  const machinesListed = machineReads > 0 || listError !== undefined;
   const machines = useMemo(
-    () => ({ entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, ...runs }),
-    [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, runs],
+    () => ({ entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, ...runs }),
+    [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, runs],
   );
   return (
     <MachinesContext value={machines}>

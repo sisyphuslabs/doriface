@@ -129,7 +129,8 @@ export class PushService {
   /**
    * Answers a permission notice with the agent's own key through the rule #192's banner uses (`answerApproval`): one
    * claim per prompt across every client, then the live screen re-read, and the key only if the marked prompt is
-   * still up. Anything else is `stale` and sends nothing.
+   * still up. `failed`: it did not go through and nothing was pressed; `unknown`: the key press failed after it was
+   * sent, so it may have landed; anything else is `stale` and sends nothing.
    */
   async answer(id: string, answer: PromptAnswer, owner: string): Promise<PushHostLine> {
     const entry = this.resolve(id);
@@ -137,13 +138,30 @@ export class PushService {
     const { terminal, mark } = entry ?? {};
     const core = this.#core;
     if (entry?.kind !== "permission" || terminal == null || mark === undefined || core === undefined) return stale;
-    const who = { by: this.#options.deviceName?.(owner) ?? "a notification", client: `push:${owner}` };
+    // One id per answer: a device's worker and its page each answer for themselves, never as one client.
+    const who = {
+      by: this.#options.deviceName?.(owner) ?? "a notification",
+      client: `push:${owner}:${crypto.randomUUID()}`,
+    };
     try {
       const result = await answerApproval(core, mark, answer, who, this.#now());
-      return result.kind === "sent" ? { t: "answered", terminal } : stale;
+      switch (result.kind) {
+        case "sent":
+          return { t: "answered", terminal };
+        case "failed":
+          this.#options.log(`push: an answer to ${terminal} did not go through, nothing was pressed: ${result.reason}`);
+          return { t: "failed", terminal, reason: result.reason };
+        case "unknown":
+          this.#options.log(`push: an answer to ${terminal} may have reached the agent: ${result.reason}`);
+          return { t: "unknown", terminal };
+        case "stale":
+        case "lost":
+          return stale;
+      }
     } catch (error) {
-      this.#options.log(`push: could not answer a permission notice: ${String(error)}`);
-      return stale;
+      // The claim itself could not be read or written: nothing was pressed.
+      this.#options.log(`push: an answer to ${terminal} did not go through, nothing was pressed: ${String(error)}`);
+      return { t: "failed", terminal, reason: String(error) };
     }
   }
 

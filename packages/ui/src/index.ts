@@ -2,6 +2,7 @@ export { cn } from "./lib/cn.ts";
 export { AgentRow, type Agent, type AgentRowProps } from "./components/agent-row.tsx";
 export {
   ApprovalBanner,
+  approvalAnnouncement,
   type ApprovalAnswer,
   type ApprovalBannerProps,
   type ApprovalBannerState,
@@ -30,8 +31,29 @@ export { IconButton, type IconButtonProps } from "./components/icon-button.tsx";
 export { Field, Input, inputClass, type FieldProps, type InputProps } from "./components/input.tsx";
 export { Kbd, type KbdProps } from "./components/kbd.tsx";
 export {
+  type ListDrag,
+  type ListDragOptions,
+  ROW_DRAG_THRESHOLD_PX,
+  ROW_TOUCH_HOLD_MS,
+  useListDrag,
+} from "./components/list-drag.ts";
+export { RowDropCaret, RowDropIndicator, rowPlacement } from "./components/list-drop.tsx";
+export {
+  type ListDragState,
+  type ListSettle,
+  type RowSlot,
+  rowCaretTop,
+  rowLandingIndex,
+  rowLandingTop,
+  rowShiftOf,
+} from "./components/list-drop-geometry.ts";
+export { skipMenuHandler } from "./components/menu.tsx";
+export {
   ContextMenu,
   Menu,
+  MenuCaption,
+  PointMenu,
+  type PointMenuProps,
   MenuItem,
   MenuRadioGroup,
   MenuRadioItem,

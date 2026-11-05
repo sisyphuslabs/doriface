@@ -11,7 +11,7 @@ import {
 } from "react";
 import { cn } from "../lib/cn.ts";
 import { Kbd } from "./kbd.tsx";
-import { overlaySurface } from "./overlay.ts";
+import { fitsViewportWidth, overlaySurface } from "./overlay.ts";
 
 export interface MenuProps {
   readonly trigger: ReactElement;
@@ -26,9 +26,9 @@ export interface MenuProps {
 
 /**
  * A popup never grows past the room the viewport leaves it: it is capped at the positioner's available height and
- * scrolls inside. Fixed positioning measures that room against the visual viewport, so a phone's soft keyboard counts.
+ * width, and scrolls inside. Fixed positioning measures that room against the visual viewport, so a phone's soft keyboard counts.
  */
-const bounded = "max-h-(--available-height) overflow-y-auto overscroll-contain";
+const bounded = cn("max-h-(--available-height) overflow-y-auto overscroll-contain", fitsViewportWidth);
 
 /** Brings the item marked `aria-current` (the session open now) into view inside an opened menu. */
 function revealCurrent(popup: HTMLElement | null): void {
@@ -102,6 +102,37 @@ export function ContextMenu({ trigger, children, open, onOpenChange, finalFocus 
   );
 }
 
+export interface PointMenuProps {
+  /** Where the menu opens, in viewport px; null keeps it closed. */
+  readonly at: { readonly x: number; readonly y: number } | null;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+  /** Names the menu for assistive tech. */
+  readonly label: string;
+}
+
+/** A menu that opens at a point rather than from a trigger: e.g. a link tapped inside a terminal. */
+export function PointMenu({ at, onClose, children, label }: PointMenuProps) {
+  const anchor =
+    at === null ? null : { getBoundingClientRect: () => DOMRect.fromRect({ x: at.x, y: at.y, width: 0, height: 0 }) };
+  return (
+    <BaseMenu.Root open={at !== null} onOpenChange={(open) => !open && onClose()}>
+      <BaseMenu.Portal>
+        <BaseMenu.Positioner anchor={anchor} sideOffset={6} positionMethod="fixed">
+          <BaseMenu.Popup aria-label={label} className={cn(overlaySurface, "min-w-48 p-1", bounded)}>
+            {children}
+          </BaseMenu.Popup>
+        </BaseMenu.Positioner>
+      </BaseMenu.Portal>
+    </BaseMenu.Root>
+  );
+}
+
+/** A line of text at the head of a menu, not an item: e.g. where a link really goes. */
+export function MenuCaption({ children }: { readonly children: ReactNode }) {
+  return <div className="max-w-80 px-2 pt-1 pb-1.5 font-mono text-xs break-all text-muted-foreground">{children}</div>;
+}
+
 export interface MenuItemProps extends Omit<ComponentProps<typeof BaseMenu.Item>, "className" | "children"> {
   readonly icon?: ReactNode;
   readonly keys?: readonly string[];
@@ -114,13 +145,14 @@ export function MenuItem({ icon, keys, destructive = false, children, ...props }
     <BaseMenu.Item
       {...props}
       className={cn(
-        "flex h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 text-sm outline-none select-none",
+        // A label too long for the menu's width wraps, so the row grows from its usual height instead of running out.
+        "flex min-h-(--row) cursor-default items-center gap-2.5 rounded-md px-2 py-1 text-sm outline-none select-none",
         "data-highlighted:bg-hover data-disabled:opacity-45 [&_svg]:size-3.5 [&_svg]:text-muted-foreground",
         destructive && "text-destructive [&_svg]:text-destructive",
       )}
     >
       {icon}
-      <span className="flex-1">{children}</span>
+      <span className="min-w-0 flex-1">{children}</span>
       {keys === undefined ? null : <Kbd keys={keys} />}
     </BaseMenu.Item>
   );
