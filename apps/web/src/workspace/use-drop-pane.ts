@@ -1,5 +1,5 @@
 import type { JsonObject } from "@doriface/protocol";
-import { editTab, panesOf, removePane, removeTab, tabsOf } from "@doriface/protocol/layout";
+import { editTab, panesOf, pathTo, removePane, removeTab, tabsOf } from "@doriface/protocol/layout";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import { findTerminal, type LayoutPane, type LayoutTab } from "./layout-model.ts";
 
@@ -64,12 +64,15 @@ export function useDropPane(
       void layout
         .edit((doc) => {
           const tab = doc === null ? undefined : tabsOf(doc).find((each) => each.id === found.tab.id);
-          const root = tab === undefined ? null : removePane(tab.root, found.pane.id);
-          if (doc === null || root === null) {
+          if (doc === null || tab === undefined || pathTo(tab.root, found.pane.id) === null) {
             gone = true;
             return null;
           }
-          return panesOf(root).length === 0 ? removeTab(doc, found.tab.id) : editTab(doc, found.tab.id, () => root);
+          // A tab's only pane is its root: removing it leaves no tree at all, so the tab goes with it (#354).
+          const root = removePane(tab.root, found.pane.id);
+          return root === null || panesOf(root).length === 0
+            ? removeTab(doc, found.tab.id)
+            : editTab(doc, found.tab.id, () => root);
         })
         .then((written) => {
           if (!written && !gone) undo();

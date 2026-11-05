@@ -74,7 +74,9 @@ function looseTab(address: string, layouts: readonly MachineLayout[]): LayoutTab
 /**
  * Every tab of every machine's document, this core's first, then the terminals opened on this screen while their
  * machine's layout could not take a tab (`loose`: offline, loading). With no tab at all, the first live terminal is
- * shown alone, as it opened before the layout lived in the core.
+ * shown alone, as it opened before the layout lived in the core, but only while this core has no layout yet: a layout
+ * whose tabs the person closed (Keep running on the last one) shows none, so the workspace is empty and the terminal
+ * waits in the sidebar (#354).
  */
 export function buildTabs(
   layouts: readonly MachineLayout[],
@@ -87,7 +89,7 @@ export function buildTabs(
   if (tabs.length + extra.length > 0) return [...tabs, ...extra];
   const local = layouts.find((layout) => layout.machine === null);
   const first = terminals.find((terminal) => terminal.state === "live");
-  if (local === undefined || !local.loaded || first === undefined) return [];
+  if (local === undefined || !local.loaded || local.doc !== null || first === undefined) return [];
   return [{ ...looseTab(first.address, layouts), key: TRANSIENT, id: TRANSIENT }];
 }
 
