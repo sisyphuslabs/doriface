@@ -42,7 +42,7 @@ export async function renameSession(calls: SessionCalls, address: string, name: 
 const ending = new Map<string, Promise<void>>();
 
 /** Removed meanwhile (another client, the host, or an earlier attempt's removal arriving late): what End is for. */
-const gone = (cause: unknown): boolean => cause instanceof HcRpcError && cause.kind === "not_found";
+export const isGone = (cause: unknown): boolean => cause instanceof HcRpcError && cause.kind === "not_found";
 
 /**
  * Takes End's mark off a terminal whose End did not kill it, so a later finish of its program is not taken for End's.
@@ -52,7 +52,7 @@ export async function takeBackEnd(calls: SessionCalls, address: string): Promise
   try {
     await calls.label({ terminal: address, labels: { [END_LABEL]: "" } });
   } catch (cause) {
-    if (!gone(cause)) throw cause;
+    if (!isGone(cause)) throw cause;
   }
 }
 
@@ -65,13 +65,13 @@ async function killAndRemove(calls: SessionCalls, address: string): Promise<void
     try {
       ended = await calls.kill({ terminal: address });
     } catch (cause) {
-      notKilled = !gone(cause);
+      notKilled = !isGone(cause);
       throw cause;
     }
     if (ended.state === "finished") await calls.rm({ terminal: address });
   })();
   const failed = (await Promise.allSettled([marked, removed])).find(
-    (outcome) => outcome.status === "rejected" && !gone(outcome.reason),
+    (outcome) => outcome.status === "rejected" && !isGone(outcome.reason),
   );
   if (failed?.status !== "rejected") return;
   if (notKilled) {

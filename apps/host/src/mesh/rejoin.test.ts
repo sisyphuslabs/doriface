@@ -13,7 +13,7 @@ import {
   side,
   type Side,
 } from "../testing/join-harness.ts";
-import { cardFor, machine, signPubOf } from "../testing/mesh-history.ts";
+import { cardFor, type Machine, machine, noiseOf, signPubOf } from "../testing/mesh-history.ts";
 import { PendingJoins } from "./pending-joins.ts";
 
 afterEach(removeSides);
@@ -25,6 +25,35 @@ const autoJoins = (): PendingJoins => {
   pending.setAuto(Date.now() + 60_000);
   return pending;
 };
+
+/** A machine `inviter` admitted and then revoked, as the stored set records it. */
+function admittedThenRevoked(inviter: Side): Machine {
+  inviter.mesh.found(inviter.m.identity, ownOf(inviter));
+  const meshId = inviter.mesh.read()?.meshId ?? "";
+  const z = machine("zeta");
+  const by = signPubOf(inviter.m);
+  const card = cardFor(z, meshId, inviter.m);
+  inviter.mesh.sign(inviter.m.identity, (n, prev) => ({
+    v: 2,
+    mesh: meshId,
+    type: "admit",
+    by,
+    n,
+    prev,
+    subject: { card },
+  }));
+  inviter.mesh.sign(inviter.m.identity, (n, prev) => ({
+    v: 2,
+    mesh: meshId,
+    type: "revoke",
+    by,
+    n,
+    prev,
+    subject: { signPubs: [signPubOf(z)], reason: "revoke" },
+  }));
+  return z;
+}
+
 const isWelcome = (bytes: Uint8Array): boolean => /^\{"t":"(records|done)"/.test(new TextDecoder().decode(bytes));
 
 describe("section 4.4 step 3: a member whose welcome was lost joins again", () => {
@@ -119,6 +148,33 @@ describe("section 4.4 step 3: a member whose welcome was lost joins again", () =
     expect(await failure(run.invited)).toBe("this Noise key is another mesh member's");
     expect(types(a)).toEqual(["found", "admit"]);
     expect(twinSide.mesh.read()).toBeUndefined();
+  });
+
+  test("#90: a new signing key presenting a revoked member's Noise key is refused, and no admit is written", async () => {
+    const [a, twinSide] = [side("alpha"), side("twin")];
+    const z = admittedThenRevoked(a);
+    const twin = { ...generateHostIdentity(), noise: z.identity.noise };
+    const run = runJoin(
+      inviteDeps(a, autoJoins()),
+      { ...joinerContext(twinSide, a), identity: twin },
+      twin.noise.publicKey,
+    );
+    expect(await failure(run.invited)).toBe("this Noise key is another mesh member's");
+    expect(types(a)).toEqual(["found", "admit", "revoke"]);
+    expect(twinSide.mesh.read()).toBeUndefined();
+  });
+
+  test("#90: a revoked member joining again under its own keys is re-admitted and authorized", async () => {
+    const [a, zSide] = [side("alpha"), side("zeta")];
+    const z = admittedThenRevoked(a);
+    const run = runJoin(
+      inviteDeps(a, autoJoins()),
+      { ...joinerContext(zSide, a), identity: z.identity },
+      z.identity.noise.publicKey,
+    );
+    expect(await run.joined).toBe(a.mesh.read()?.meshId ?? "");
+    expect(types(a)).toEqual(["found", "admit", "revoke", "admit"]);
+    expect(a.mesh.authorizeIndex()?.member(noiseOf(z))?.signPub).toBe(signPubOf(z));
   });
 
   test("a mesh that filled up while a join waited for approval refuses it and writes no admit", async () => {

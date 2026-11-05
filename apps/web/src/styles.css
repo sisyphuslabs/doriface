@@ -8,6 +8,16 @@
   --term-font-family: var(--font-term);
 }
 
+/* The terminal draws its own scrollbar as an overlay (terminal-scroll.tsx): a native one would take its width from the
+   grid when scrollback appears, and wterm would refit the grid to fewer columns. */
+.wterm.wterm {
+  scrollbar-width: none;
+}
+
+.wterm.wterm::-webkit-scrollbar {
+  display: none;
+}
+
 .wterm.cursor-none {
   cursor: none;
 }

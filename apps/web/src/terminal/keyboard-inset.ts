@@ -36,12 +36,12 @@ const typingIn = (scope: HTMLElement | null): boolean => {
 };
 
 /**
- * The soft keyboard over `scope`: whether it is up for a terminal in it, and its inset over the page. On a touch screen
- * it is up while a terminal has the text focus and the keyboard takes room, whichever way the browser makes it: by
- * shrinking the visual viewport over the page (the inset) or the layout viewport itself (the page is shorter, so the
- * inset stays 0). A focus without a tap raises no keyboard on iOS, so the focus alone does not count there; with a
- * fine pointer there is no soft keyboard, so it does. A keyboard that closes by its own key while the terminal keeps
- * focus (Android's back, iPadOS's hide key) blurs the terminal, so the page agrees with the screen.
+ * The soft keyboard over `scope`: whether it is up for a terminal in it, and its inset over the page. It is up while a
+ * terminal has the text focus and the keyboard takes room, whichever way the browser makes it: by shrinking the visual
+ * viewport over the page (the inset) or the layout viewport itself (the page is shorter, so the inset stays 0). The
+ * focus alone never counts: a focus without a tap raises no keyboard on iOS, and a fine pointer has none to raise, so
+ * the keys say Show keyboard until one takes room (#274). A keyboard that closes by its own key while the terminal
+ * keeps focus (Android's back, iPadOS's hide key) blurs the terminal, so the page agrees with the screen.
  */
 export function useSoftKeyboard(scope: HTMLElement | null): { readonly up: boolean; readonly inset: number } {
   const [typing, setTyping] = useState(false);
@@ -69,6 +69,5 @@ export function useSoftKeyboard(scope: HTMLElement | null): { readonly up: boole
     measure();
     return () => abort.abort();
   }, [scope]);
-  const touch = window.matchMedia("(pointer: coarse)").matches;
-  return { up: typing && (keyboard.open || !touch), inset: keyboard.inset };
+  return { up: typing && keyboard.open, inset: keyboard.inset };
 }
