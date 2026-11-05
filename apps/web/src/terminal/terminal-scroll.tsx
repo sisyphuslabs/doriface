@@ -13,6 +13,7 @@ import {
   awayFromBottom,
   type ScrollBox,
   scrollbarGrabAt,
+  scrollbarLane,
   scrollbarRowAt,
   scrollbarThumb,
   scrollRows,
@@ -34,9 +35,12 @@ interface ScrollView {
   readonly alt: boolean;
   readonly cols: number;
   readonly padTop: number;
-  readonly padRight: number;
   readonly padBottom: number;
+  /** The scrollbar's lane width: from the text's end to the pane's right edge, at least {@link LANE_MIN}. */
+  readonly lane: number;
 }
+
+const px = (value: string): number => parseFloat(value) || 0;
 
 function readView(wt: WTerm): ScrollView | null {
   const element = wt.element;
@@ -45,6 +49,11 @@ function readView(wt: WTerm): ScrollView | null {
   const rowHeight = row?.getBoundingClientRect().height ?? 0;
   if (bridge === null || rowHeight <= 0) return null;
   const style = getComputedStyle(element);
+  // wterm sets the cell width it lays the grid out with; the text ends `cols` cells past the content box's left.
+  const cell = px(element.style.getPropertyValue("--term-cell-width"));
+  const textEnd = px(style.borderLeftWidth) + px(style.paddingLeft) + wt.cols * cell;
+  const lane =
+    cell > 0 ? scrollbarLane(element.offsetWidth, textEnd, LANE_MIN) : Math.max(px(style.paddingRight), LANE_MIN);
   return {
     box: {
       scrollTop: element.scrollTop,
@@ -56,9 +65,9 @@ function readView(wt: WTerm): ScrollView | null {
     },
     alt: bridge.usingAltScreen(),
     cols: wt.cols,
-    padTop: parseFloat(style.paddingTop) || 0,
-    padRight: parseFloat(style.paddingRight) || 0,
-    padBottom: parseFloat(style.paddingBottom) || 0,
+    padTop: px(style.paddingTop),
+    padBottom: px(style.paddingBottom),
+    lane,
   };
 }
 
@@ -156,8 +165,8 @@ interface OverlayProps {
 }
 
 /**
- * Herdr-app's pane scrollbar (`src/terminal.rs`): an overlay in the terminal's right padding (the last 8 px when there
- * is less), over the grid's rows only, so scrollback appearing never resizes the grid or reflows its text. Hidden on the
+ * Herdr-app's pane scrollbar (`src/terminal.rs`): an overlay in the room past the grid's text, from its last column to
+ * the pane's edge (the last 8 px when there is less), over the grid's rows only, so scrollback appearing never resizes the grid or reflows its text. Hidden on the
  * alternate screen, under five columns and when nothing scrolls. The lane is wider than the thumb, for the pointer.
  */
 export function TerminalScrollbar({ wt, scroll }: OverlayProps) {
@@ -170,7 +179,7 @@ export function TerminalScrollbar({ wt, scroll }: OverlayProps) {
   const rows = scrollRows(box);
   const thumb = scrollbarThumb(rows, track, box.rowHeight);
   if (thumb === null) return null;
-  const lane = Math.max(view.padRight, LANE_MIN);
+  const lane = view.lane;
 
   const scrollToThumbTop = (top: number): void => {
     const row = scrollbarRowAt(rows.total, rows.len, track, box.rowHeight, top);
@@ -247,7 +256,7 @@ export function JumpToBottom({ wt, scroll, clearance }: OverlayProps & { readonl
         "transition-opacity duration-(--duration-micro) ease-out starting:opacity-0 motion-reduce:transition-none",
       )}
       style={{
-        right: Math.max(view.padRight, LANE_MIN) + 8,
+        right: view.lane + 8,
         bottom: clearance === undefined ? view.padBottom + 8 : `calc(${view.padBottom + 8}px + ${clearance})`,
       }}
       // The terminal keeps the keyboard: a click here is not a reason to leave it.

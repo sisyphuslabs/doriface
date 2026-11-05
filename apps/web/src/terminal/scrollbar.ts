@@ -23,6 +23,14 @@ export function scrollbarThumb(
   return { top, length };
 }
 
+/**
+ * The scrollbar lane's width (herdr-app's `scrollbar_lane`): from where the grid's text ends to the pane's right edge, or
+ * the last `min` px when the text runs closer, never wider than the pane. `textEnd` is measured from the pane's left.
+ */
+export function scrollbarLane(width: number, textEnd: number, min: number): number {
+  return Math.min(Math.max(width - textEnd, min), width);
+}
+
 /** Where a press at `y` grabs the thumb: the px into it, or its middle when the press is on the track beside it. */
 export function scrollbarGrabAt(top: number, length: number, y: number): number {
   return y >= top && y < top + length ? y - top : length / 2;

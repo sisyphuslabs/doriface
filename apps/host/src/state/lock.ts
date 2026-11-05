@@ -8,6 +8,32 @@ const EMPTY_LOCK_STALE_MS = 5000;
 /** What a release publishes as the next generation: no holder. */
 const FREE = "free";
 const GENERATION = /^[1-9][0-9]{0,14}$/;
+/** How many times a release links its free generation before it gives up. */
+const RELEASE_TRIES = 3;
+/** The exit status of a process whose release could not link: its generation names it until it exits. */
+export const LOCK_WEDGED_EXIT_CODE = 9;
+
+/** The file operations a release uses, and what it does when it cannot release; tests replace them. */
+export interface ReleaseIo {
+  readonly link: (existing: string, path: string) => void;
+  /**
+   * Called once a release has failed every try. The default logs and exits with LOCK_WEDGED_EXIT_CODE: this process's
+   * generation stays the highest and names it while it lives, so only its exit lets the next start take the lock.
+   */
+  readonly wedged: (error: unknown, dir: string) => void;
+}
+
+const DEFAULT_RELEASE_IO: ReleaseIo = {
+  link: linkSync,
+  wedged: (error, dir) => {
+    const code = errorCode(error);
+    process.stderr.write(
+      `doriface-host: cannot release the state lock in ${dir} (${typeof code === "string" ? code : "no errno"}: ${String(error)}); ` +
+        `exiting with ${LOCK_WEDGED_EXIT_CODE} so the next start takes it\n`,
+    );
+    process.exit(LOCK_WEDGED_EXIT_CODE);
+  },
+};
 
 /**
  * A step of taking or releasing the lock, with the generation it concerns: found it held by a live process and about to
@@ -69,9 +95,9 @@ function writeTemporary(path: string, content: string): string {
 }
 
 /** Publishes the written `temporary` as `path`; false if `path` exists. */
-function publish(temporary: string, path: string): boolean {
+function publish(temporary: string, path: string, link: ReleaseIo["link"] = linkSync): boolean {
   try {
-    linkSync(temporary, path);
+    link(temporary, path);
     return true;
   } catch (error) {
     if (errorCode(error) === "EEXIST") return false;
@@ -207,6 +233,7 @@ export function withStateLock<T>(
   fn: () => T,
   timeoutMs = DEFAULT_LOCK_TIMEOUT_MS,
   step: LockStepHook = () => {},
+  io: ReleaseIo = DEFAULT_RELEASE_IO,
 ): T {
   const dir = join(stateDir, "state.lock");
   const content = `${process.pid} ${crypto.randomUUID()}`;
@@ -218,7 +245,7 @@ export function withStateLock<T>(
       if (ensureLockDir(dir)) {
         free ??= writeTemporary(join(dir, FREE), FREE);
         mine = attempt(dir, content, step);
-        if (typeof mine === "number") return hold(dir, mine, free, fn, step);
+        if (typeof mine === "number") return hold(dir, mine, free, fn, step, io);
       }
       if (Date.now() >= deadline) throw new Error(`the host state is locked by another process (${dir})`);
       if (mine === "wait") Bun.sleepSync(RETRY_MS);
@@ -228,14 +255,37 @@ export function withStateLock<T>(
   }
 }
 
-/** Runs `fn` holding generation `mine`, then releases it: links the written `free` as the next one, removes `mine`. */
-function hold<T>(dir: string, mine: number, free: string, fn: () => T, step: LockStepHook): T {
+/**
+ * Runs `fn` holding generation `mine`, then releases it: links the written `free` as the next one, removes `mine`. A
+ * link that fails is tried again up to RELEASE_TRIES times; one that never succeeds leaves `mine` in place (the highest
+ * generation must never go back) and is handed to `io.wedged`.
+ */
+function hold<T>(dir: string, mine: number, free: string, fn: () => T, step: LockStepHook, io: ReleaseIo): T {
   step("acquired", mine);
   try {
     return fn();
   } finally {
-    publish(free, join(dir, String(mine + 1)));
-    step("released", mine + 1);
-    rmSync(join(dir, String(mine)), { force: true });
+    const failure = release(free, join(dir, String(mine + 1)), io.link);
+    if (failure === undefined) {
+      step("released", mine + 1);
+      rmSync(join(dir, String(mine)), { force: true });
+    } else {
+      io.wedged(failure.error, dir);
+    }
   }
+}
+
+/** Links `free` as `next`, trying again after a failure; returns the last failure if every try failed. */
+function release(free: string, next: string, link: ReleaseIo["link"]): { readonly error: unknown } | undefined {
+  let failure: { readonly error: unknown } | undefined;
+  for (let tries = 0; tries < RELEASE_TRIES; tries += 1) {
+    if (tries > 0) Bun.sleepSync(RETRY_MS);
+    try {
+      publish(free, next, link);
+      return undefined;
+    } catch (error) {
+      failure = { error };
+    }
+  }
+  return failure;
 }
