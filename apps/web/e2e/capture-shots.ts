@@ -146,7 +146,8 @@ export const SHOTS: readonly Shot[] = [
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);
       const shown = page.locator("section[data-split='true']:visible");
       await expect(shown.and(page.getByLabel("deploy terminal"))).toHaveCount(1);
-      await expect(shown.and(page.getByLabel("shell terminal"))).toHaveCount(1);
+      // Split right starts a new shell beside the tab in view, as herdr-app's new_split does.
+      await expect(shown.and(page.getByLabel("sh terminal"))).toHaveCount(1);
       await expect(
         page.locator("[data-terminal]:visible").filter({ has: page.locator(".term-row", { hasText: /\S/ }) }),
       ).toHaveCount(2);

@@ -18,7 +18,8 @@
     "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run gen:api:check && bun run test",
     "relay:fetch": "bun tests/relay/private-relay.ts fetch",
     "relay:test": "bun tests/relay/private-relay.ts test",
-    "relay:dev": "bun tests/relay/private-relay.ts dev"
+    "relay:dev": "bun tests/relay/private-relay.ts dev",
+    "capture:readme": "bun run --cwd apps/web capture:readme"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
