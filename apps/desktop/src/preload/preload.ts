@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   Channel,
+  isHcInstallAnswer,
   isLocalHostEndpoint,
   isLocalHostStartFailed,
   isUpdateReady,
@@ -40,9 +41,6 @@ const bridge: DorifaceBridge = {
   async closeWindow() {
     await ipcRenderer.invoke(Channel.closeWindow);
   },
-  async zoomWindow(step) {
-    await ipcRenderer.invoke(Channel.zoomWindow, step);
-  },
   onPairingLink(listener) {
     const take = async (): Promise<void> => {
       const fragment: unknown = await ipcRenderer.invoke(Channel.takePairingLink);
@@ -63,6 +61,19 @@ const bridge: DorifaceBridge = {
   async chooseHc() {
     const chosen: unknown = await ipcRenderer.invoke(Channel.chooseHc);
     return typeof chosen === "string" ? chosen : null;
+  },
+  async installHc(onPhase) {
+    const phase = (_event: unknown, name: unknown): void => {
+      if (typeof name === "string") onPhase(name);
+    };
+    ipcRenderer.on(Channel.hcInstallPhase, phase);
+    try {
+      const answer: unknown = await ipcRenderer.invoke(Channel.installHc);
+      if (!isHcInstallAnswer(answer)) throw new Error("the main process returned no install answer");
+      return answer;
+    } finally {
+      ipcRenderer.removeListener(Channel.hcInstallPhase, phase);
+    }
   },
   onUpdateReady(listener) {
     const take = async (): Promise<void> => {

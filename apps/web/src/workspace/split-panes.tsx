@@ -122,7 +122,7 @@ export function SplitPanes(props: SplitPanesProps) {
           const { panes, dividers, containers } = arrange(root, box, PANE_GAP, zoomed);
           return (
             <div
-              key={tab.key}
+              key={tab.mount ?? tab.key}
               id={panelId(tab.key)}
               role="tabpanel"
               aria-label={titles.get(tab.key) ?? (tab.name === "" ? "Tab" : tab.name)}
@@ -136,7 +136,7 @@ export function SplitPanes(props: SplitPanesProps) {
                 // A pane a zoom hides stays mounted, so its stream and scrollback are there when it comes back.
                 return (
                   <PaneFrame
-                    key={pane.id}
+                    key={pane.mount ?? pane.id}
                     motion={{ rect: placed ?? HIDDEN, frame, grow, bump }}
                     hidden={placed === undefined}
                   >
