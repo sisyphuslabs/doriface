@@ -1,6 +1,6 @@
 import { DEFAULT_PUSH_PREFS } from "@doriface/protocol";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
@@ -8,6 +8,7 @@ import { startHost } from "./host.ts";
 import { LOOPBACK_OWNER, SubscriptionStore } from "./push/subscriptions.ts";
 import { parseStartupErrorLine } from "./startup-error.ts";
 import { createHcSession, resolveHcBin } from "./testing/hc-session.ts";
+import { openWsClient } from "./testing/ws-client.ts";
 
 const CLI = join(import.meta.dir, "cli.ts");
 /** These tests spawn the CLI; a cold transpiler cache alone can take most of bun's 5 s default. */
@@ -268,29 +269,42 @@ const alive = (pid: number): boolean => {
   }
 };
 
-describe("a host whose core never answers the write of its OS", () => {
-  test("starts within the bound, the write still pending, and stop reaps the write's child", async () => {
+describe("the write of a host's OS", () => {
+  test("starts no hc connect until a client opens a pipe, and stop reaps the write's child", async () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-silent-"));
     // An hc whose connect never answers the hello, keeps its output open, and exits once its input ends, as hc does.
     const hc = join(dir, "hc");
     writeFileSync(
       hc,
-      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/connect.pid"\nwhile read -r line; do :; done\n`,
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "hc 0.1.17"; exit 0; fi\necho $$ > "${dir}/connect-$$.pid"\nwhile read -r line; do :; done\n`,
       { mode: 0o755 },
     );
+    const connects = () => readdirSync(dir).filter((name) => name.startsWith("connect-"));
+    const token = generateToken();
     try {
       const host = await startHost({
         listen: { hostname: "127.0.0.1", port: 0 },
-        token: generateToken(),
+        token,
         hc,
         platform: "darwin",
         log: () => {},
       });
-      // The client's own handshake deadline (10 s) has not passed: only the start's bound let it serve.
-      const pid = Number(readFileSync(join(dir, "connect.pid"), "utf8"));
-      expect(alive(pid)).toBe(true);
+      expect(connects()).toEqual([]);
+      // A client's pipe and the OS write: two connects.
+      const both = new Promise<void>((resolve) => {
+        const watcher = watch(dir, () => {
+          if (connects().length < 2) return;
+          watcher.close();
+          resolve();
+        });
+      });
+      const client = await openWsClient(host.url, token);
+      await both;
+      const pids = connects().map((name) => Number(readFileSync(join(dir, name), "utf8")));
+      expect(pids.every(alive)).toBe(true);
+      client.socket.close();
       await host.stop();
-      expect(alive(pid)).toBe(false);
+      expect(pids.filter(alive)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

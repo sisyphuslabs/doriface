@@ -75,7 +75,8 @@ describe("keybind import and export", () => {
 
   test("a parameter doriface does not have is unknown, not another action", () => {
     expect(parseKeybinds("keybind = super+x=goto_tab:12").lines[0]?.status).toBe("unknown");
-    expect(parseKeybinds("keybind = super+x=new_split:down").lines[0]?.status).toBe("unknown");
+    expect(parseKeybinds("keybind = super+x=new_split:auto").lines[0]?.status).toBe("unknown");
+    expect(parseKeybinds("keybind = super+x=new_split:down").lines[0]?.status).toBe("applies");
   });
 
   test("the = key and actions without a Ghostty name export so they import back", () => {

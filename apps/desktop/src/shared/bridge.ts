@@ -11,6 +11,10 @@ export const Channel = {
   pairingLinkWaiting: "doriface:pairing-link-waiting",
   /** Renderer to main: hands over the waiting pairing link's fragment once, or null. */
   takePairingLink: "doriface:take-pairing-link",
+  /** Main to renderer: run one of the page's actions (a Shell menu item), e.g. `pane.split:right`. */
+  runAction: "doriface:run-action",
+  /** Renderer to main: the page's current trigger for each Shell menu action, so the menu shows the live shortcuts. */
+  setMenuKeys: "doriface:set-menu-keys",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -67,6 +71,10 @@ export interface DorifaceBridge {
   zoomWindow(step: ZoomStep): Promise<void>;
   /** Calls `listener` with each pairing link fragment the app is opened with (a doriface: link or an in-app click). */
   onPairingLink(listener: (fragment: string) => void): void;
+  /** Calls `listener` with each action id a Shell menu item asks the page to run. */
+  onRunAction(listener: (action: string) => void): void;
+  /** Tells the menu the page's trigger (Ghostty syntax) for each of its actions. */
+  setMenuKeys(keys: Readonly<Record<string, string>>): Promise<boolean>;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {

@@ -1,12 +1,14 @@
 import type { HcConnection } from "@doriface/client";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type Axis, type Node, nodeAt, pathTo } from "@doriface/protocol/layout";
 import { arrange, type Rect } from "../layout/rects.ts";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { LayoutPane, LayoutTab } from "./layout-model.ts";
 import type { Session } from "./model.ts";
 import type { PaneSends } from "./pane-sends.ts";
 import { Pane } from "./pane.tsx";
-import type { Layout } from "./use-layout.ts";
+import { usePaneMotion, type PaneMotion } from "./pane-motion.ts";
+import type { Layout, PaneTarget } from "./use-layout.ts";
 
 /** Space between panes, px: the gap shows the canvas, so panes read as separate cards. */
 export const PANE_GAP = 8;
@@ -38,19 +40,56 @@ export interface SplitPanesProps {
   /** Each tab's title as the strip shows it, so its panel is named the same (an unnamed tab takes its pane's title). */
   readonly titles: ReadonlyMap<string, string>;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
+  readonly onSplit: (axis: Axis, target: PaneTarget) => void;
+  readonly onClose: (address: string) => void;
   readonly onEnded: (address: string, pid: number | null) => void;
   readonly sends: PaneSends;
   /** Docked under the focused pane of the tab in view only. */
   readonly dock: ReactNode;
 }
 
+/** The axis of the row or column a pane sits in: a fresh pane grows out of its neighbour along it. */
+function axisAround(root: Node, pane: string): "row" | "column" | null {
+  const path = pathTo(root, pane);
+  const parent = path === null ? null : nodeAt(root, path.slice(0, -1));
+  const type = parent?.["type"];
+  return type === "row" || type === "column" ? type : null;
+}
+
+function PaneFrame({ motion, children }: { readonly motion: PaneMotion; readonly children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  usePaneMotion(ref, motion);
+  const { rect } = motion;
+  return (
+    <div
+      ref={ref}
+      className="absolute flex"
+      style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /**
  * Every tab's tree, each pane placed by its rectangle so a split or a close never remounts a terminal: panes are keyed
  * by id and only move. Hidden tabs stay mounted so their streams and scrollback survive tab switches.
  */
-export function SplitPanes({ connection, terminals, layout, titles, onEnd, onEnded, sends, dock }: SplitPanesProps) {
+export function SplitPanes({
+  connection,
+  terminals,
+  layout,
+  titles,
+  onEnd,
+  onEnded,
+  sends,
+  dock,
+  onSplit,
+  onClose,
+}: SplitPanesProps) {
   const [ref, box] = useBoxSize();
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
+  const frame = `${box.width}x${box.height}`;
   return (
     <div className="min-h-0 flex-1 p-2">
       <div ref={ref} className="relative h-full w-full">
@@ -69,12 +108,11 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onEnd
             >
               {tab.panes.map((pane) => {
                 const rect = panes.get(pane.id);
-                return rect === undefined ? null : (
-                  <div
-                    key={pane.id}
-                    className="absolute flex"
-                    style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
-                  >
+                if (rect === undefined) return null;
+                const grow = pane.id === layout.fresh ? axisAround(tab.root, pane.id) : null;
+                const bump = layout.bumped?.pane === pane.id ? layout.bumped : null;
+                return (
+                  <PaneFrame key={pane.id} motion={{ rect, frame, grow, bump }}>
                     <PaneSlot
                       connection={connection}
                       tab={tab}
@@ -83,11 +121,13 @@ export function SplitPanes({ connection, terminals, layout, titles, onEnd, onEnd
                       focused={selected && layout.focused?.id === pane.id}
                       onFocus={() => layout.focusPane(tab.key, pane.id)}
                       onEnd={onEnd}
+                      onSplit={(axis) => onSplit(axis, { tab: tab.key, pane: pane.id })}
+                      onClose={() => (pane.address === null ? undefined : onClose(pane.address))}
                       onEnded={onEnded}
                       sends={sends}
                       dock={selected && layout.focused?.id === pane.id ? dock : null}
                     />
-                  </div>
+                  </PaneFrame>
                 );
               })}
             </div>
@@ -106,12 +146,27 @@ interface PaneSlotProps {
   readonly focused: boolean;
   readonly onFocus: () => void;
   readonly onEnd: (address: string, end: TerminalEnd) => void;
+  readonly onSplit: (axis: Axis) => void;
+  readonly onClose: () => void;
   readonly onEnded: (address: string, pid: number | null) => void;
   readonly sends: PaneSends;
   readonly dock: ReactNode;
 }
 
-function PaneSlot({ connection, tab, pane, terminal, focused, onFocus, onEnd, onEnded, sends, dock }: PaneSlotProps) {
+function PaneSlot({
+  connection,
+  tab,
+  pane,
+  terminal,
+  focused,
+  onFocus,
+  onEnd,
+  onEnded,
+  sends,
+  dock,
+  onSplit,
+  onClose,
+}: PaneSlotProps) {
   if (terminal !== undefined) {
     return (
       <Pane
@@ -121,6 +176,8 @@ function PaneSlot({ connection, tab, pane, terminal, focused, onFocus, onEnd, on
         split={tab.panes.length > 1}
         onFocus={onFocus}
         onEnd={onEnd}
+        onSplit={onSplit}
+        onClose={onClose}
         onEnded={onEnded}
         onPort={sends.onPort(terminal.address)}
         dock={dock}

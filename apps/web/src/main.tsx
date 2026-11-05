@@ -10,6 +10,7 @@ import {
   desktopBridge,
   onDesktopNavigate,
   onDesktopPairingLink,
+  onDesktopRunAction,
   setDesktopBackground,
   zoomDesktopWindow,
 } from "./desktop/bridge.ts";
@@ -20,7 +21,8 @@ import { PAIR_PATH, pairingLink } from "./pair/link-capture.ts";
 import { removeServiceWorkers } from "./pwa/remove-service-workers.ts";
 import { captureNotice, listenForNotices } from "./push/notice-open.ts";
 import { followConnection } from "./push/push-settings.ts";
-import { setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
+import { runAction, setActionFallback, useKeymapDispatcher } from "./keys/dispatcher.ts";
+import { reportMenuKeys } from "./keys/menu-keys.ts";
 import { router } from "./router.tsx";
 
 startAppearance();
@@ -42,8 +44,12 @@ function paintWindow(): void {
 
 onDesktopNavigate((path) => router.history.push(path));
 if (desktopBridge() !== null) {
-  // The desktop app's Close Window leaves Cmd+W to the keymap; with no tab or Settings to close, it closes the window.
+  // The desktop app's Close Window leaves Cmd+W to the keymap; with no pane, tab or Settings to close, it closes the window.
   setActionFallback("tab.close", () => closeDesktopWindow());
+  setActionFallback("pane.close", () => closeDesktopWindow());
+  // The Shell menu runs the page's own actions and shows the page's own keys for them.
+  onDesktopRunAction((action) => void runAction(action));
+  reportMenuKeys();
   // The View menu shows the zoom keys without registering them, so on Linux and Windows only the keymap zooms. Screens
   // with no workspace (Settings, pairing) handle no zoom action, so the window zooms from here.
   setActionFallback("app.zoom_in", () => zoomDesktopWindow("in"));
