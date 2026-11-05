@@ -193,7 +193,12 @@ export function TabBar({
                   label={`Close ${tab.title}`}
                   icon={<X />}
                   data-tab-close
-                  onClick={() => onClose?.(tab.id)}
+                  onClick={(event) => {
+                    // Selecting a tab moves the strip (only the selected tab has this button), so the second click of a
+                    // double-click on the tab can land here: that is a rename of the tab, never its close.
+                    if (event.detail > 1) onRename?.(tab.id);
+                    else onClose?.(tab.id);
+                  }}
                   className="size-5 [&_svg]:size-3"
                 />
               ) : null}
