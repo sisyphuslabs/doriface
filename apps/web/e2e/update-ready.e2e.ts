@@ -78,3 +78,27 @@ test("a waiting service worker lights the Settings dot, and Reload to update app
     await site.close();
   }
 });
+
+test.describe("on the phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("a waiting service worker lights the dot on the header's Settings gear (#422)", async ({ page, baseURL }) => {
+    const site = await deployableSite(baseURL ?? "");
+    try {
+      await page.goto(site.url);
+      const settings = page.getByRole("banner").getByRole("link", { name: /^Settings\b/ });
+      await expect(settings).toHaveAccessibleName("Settings", { timeout: 20_000 });
+      await expect(settings.locator('[data-slot="settings-dot"]')).toHaveCount(0);
+      await expect.poll(() => registration(page), { timeout: 20_000 }).toEqual({ controlled: true, waiting: false });
+
+      site.deploy();
+      await page.evaluate(async () => {
+        await (await navigator.serviceWorker.getRegistration())?.update();
+      });
+      await expect(settings).toHaveAccessibleName("Settings, update ready", { timeout: 20_000 });
+      await expect(settings.locator('[data-slot="settings-dot"]')).toHaveCount(1);
+    } finally {
+      await site.close();
+    }
+  });
+});

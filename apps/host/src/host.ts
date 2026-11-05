@@ -3,9 +3,11 @@ import { controlIsLive } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
 import { endSweeper } from "./end-sweeper.ts";
 import { createGateway } from "./gateway.ts";
+import { HC_VERSION_FLOOR, meetsHcFloor } from "./hc-install.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { openControl } from "./host-control.ts";
 import { e2eeDeps } from "./host-e2ee.ts";
+import { type GitFactsPublisher, publishGitFacts } from "./git-facts.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { retireLock } from "./host-lock.ts";
 import { type Host, HOST_VERSION, type HostOptions } from "./host-types.ts";
@@ -30,6 +32,10 @@ export async function startHost(options: HostOptions): Promise<Host> {
     throw new StartupError("already-running", message, { path: options.stateDir });
   }
   const hcVersion = await readHcVersion(options.hc);
+  if (!meetsHcFloor(hcVersion)) {
+    const message = `${options.hc} is herdr-core ${hcVersion}; doriface-host needs ${HC_VERSION_FLOOR} or newer`;
+    throw new StartupError("hc-version-failed", message, { path: options.hc, version: hcVersion });
+  }
   // A start that fails stops what it had started, latest first, so it leaves no hc connect child, listener or socket.
   const parts: StartedPart[] = [];
   try {
@@ -99,6 +105,7 @@ async function serve(
   // session's core when none runs, and a host that no one uses must not start one (#306).
   const core = { hc: options.hc, session: options.session, env: options.env };
   let info: HostInfoPublisher | undefined;
+  let git: GitFactsPublisher | undefined;
   started(
     "host info",
     () => info?.stop(),
@@ -115,10 +122,16 @@ async function serve(
     openPipe: () => {
       void ends.ensure();
       info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
+      git ??= publishGitFacts(core, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
   started("gateway", () => gateway.closeAll());
+  started(
+    "git facts",
+    () => git?.stop(),
+    () => (git?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
+  );
   if (uplink !== undefined) started("relay uplink", () => uplink.stop());
   await uplink?.start({
     onSession: (session) => {
@@ -198,7 +211,7 @@ async function serve(
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
-        .then(() => info?.stop())
+        .then(() => Promise.all([info?.stop(), git?.stop()]))
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => retireLock(stateDir, options.log));

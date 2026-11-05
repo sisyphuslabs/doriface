@@ -91,7 +91,7 @@ bun run --cwd packages/ui showcase    # every component and screen mockup
 
 [Releases](https://github.com/sisyphuslabs/doriface/releases) carry the desktop app for macOS (Apple silicon and Intel: dmg and zip), Windows (x64 and arm64: installer exe) and Linux (x64 and arm64: AppImage and deb), the web client and PWA as a zip of static files, and `SHA256SUMS.txt`.
 
-The builds are not code signed yet. The macOS app is ad-hoc signed and not notarized, so macOS blocks the first open: choose **Open Anyway** in System Settings > Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/doriface.app`. On Windows, SmartScreen warns about an unknown publisher: choose **More info**, then **Run anyway**. The release workflow lists the secrets that turn signing on.
+From v0.1.1 the macOS app is signed with a Developer ID certificate and notarized, and the dmg is stapled. The v0.1.0 macOS app is only ad-hoc signed, so macOS blocks its first open: choose **Open Anyway** in System Settings > Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/doriface.app`. The Windows installers are not code signed yet: SmartScreen warns about an unknown publisher, so choose **More info**, then **Run anyway**. The release workflow signs with the repository secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, and stops before building when one is missing.
 
 The [release workflow](.github/workflows/release.yml) builds every file on GitHub-hosted runners. The version comes from `apps/desktop/package.json`:
 

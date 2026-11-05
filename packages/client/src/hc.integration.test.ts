@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { HcConnection } from "./connection.ts";
 import { raceDeadline } from "./deadline.ts";
 import type { StreamClose } from "./stream-close.ts";
-import { ProcessLink } from "./testing/process-link.ts";
+import { ProcessLink } from "./process-link.ts";
 
 const STEP_TIMEOUT_MS = 15_000;
 const hcBin = process.env["HC_BIN"] ?? Bun.which("hc");

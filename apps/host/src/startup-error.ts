@@ -25,6 +25,8 @@ export interface StartupErrorDetail {
   readonly path?: string | undefined;
   /** The `host:port` it tried to listen on. */
   readonly address?: string | undefined;
+  /** The version the hc answered with, when it is older than the host supports. */
+  readonly version?: string | undefined;
 }
 
 export class StartupError extends Error {
@@ -70,13 +72,15 @@ export function parseStartupErrorLine(line: string): StartupErrorReport | undefi
   const message: unknown = Reflect.get(value, "message");
   const path: unknown = Reflect.get(value, "path");
   const address: unknown = Reflect.get(value, "address");
+  const version: unknown = Reflect.get(value, "version");
   if (!isStartupErrorCode(code) || typeof message !== "string") return undefined;
-  if (!optionalString(path) || !optionalString(address)) return undefined;
+  if (!optionalString(path) || !optionalString(address) || !optionalString(version)) return undefined;
   return {
     code,
     message,
     ...(typeof path === "string" ? { path } : {}),
     ...(typeof address === "string" ? { address } : {}),
+    ...(typeof version === "string" ? { version } : {}),
   };
 }
 
