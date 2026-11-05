@@ -28,10 +28,14 @@ test("with a mouse, Show keys opens the keys bar itself, its keys reach the term
   await expect(input).toBeFocused();
   await expect(key(page, "Hide keyboard")).toHaveCount(0);
 
-  await page.keyboard.type("echo fine-pointer-287");
+  await page.keyboard.type("echo fine-pointer-$((287+0))");
   await key(page, "Control").click();
   await page.keyboard.press("c");
-  await expect(terminal).toContainText("^C");
+  // Shells differ on echoing ^C at a prompt. The cancelled line must not run, and the next line must.
+  await expect(key(page, "Control")).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.type("\recho recovered-$((286+1))\r");
+  await expect(terminal).toContainText("recovered-287");
+  await expect(terminal).not.toContainText("fine-pointer-287");
 
   await key(page, "Hide keys").click();
   await expect(keysBar(page)).toHaveCount(0);

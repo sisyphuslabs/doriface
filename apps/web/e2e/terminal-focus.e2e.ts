@@ -127,6 +127,46 @@ test.describe("with clipboard access", () => {
     await page.keyboard.press("Enter");
     await expect(terminal).toContainText("after-5", { timeout: 15_000 });
   });
+
+  for (const [gesture, clicks] of [
+    ["double-click on a word", 2],
+    ["triple-click on a line", 3],
+  ] as const) {
+    test(`a ${gesture} keeps keyboard focus in the terminal and copy still works (#516)`, async ({ page }) => {
+      await page.goto("/");
+      const terminal = await openNewTerminal(page);
+      const address = await terminal.getAttribute("data-terminal");
+      await terminal.getByRole("textbox").focus();
+      await page.keyboard.type("echo clicksrc-$((6*7))");
+      await page.keyboard.press("Enter");
+      await expect(terminal).toContainText("clicksrc-42", { timeout: 15_000 });
+
+      const at = await terminal.evaluate((root) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          const index = node.textContent?.indexOf("clicksrc-42") ?? -1;
+          // The output line, not the echoed command: it starts the row.
+          if (index !== 0) continue;
+          const range = document.createRange();
+          range.setStart(node, 0);
+          range.setEnd(node, "clicksrc".length);
+          const rect = range.getBoundingClientRect();
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
+        return null;
+      });
+      if (at === null) throw new Error("the output line is not in the terminal");
+      await page.mouse.click(at.x, at.y, { clickCount: clicks });
+      await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toContain("clicksrc");
+
+      await expect.poll(() => focusedAddress(page)).toBe(address);
+      await page.keyboard.press("ControlOrMeta+C");
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("clicksrc");
+      await page.keyboard.type("echo after-$((2+3))");
+      await page.keyboard.press("Enter");
+      await expect(terminal).toContainText("after-5", { timeout: 15_000 });
+    });
+  }
 });
 
 test("clicking Split right puts keyboard focus in the new pane beside the first, where typing lands", async ({

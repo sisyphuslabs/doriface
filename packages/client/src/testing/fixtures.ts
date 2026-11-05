@@ -29,8 +29,6 @@ export const FINISHED_EVENT = `{"jsonrpc":"2.0","method":"event","params":{"data
 
 export const KILLED_CLOSE = `{"exit_code":null,"finished_ms":1700000003000,"reason":"killed","signal":1}`;
 
-export const STOP_REPLY = `{"id":8,"jsonrpc":"2.0","result":{"stopped":true}}`;
-
 const utf8 = new TextEncoder();
 
 export function bytes(text: string): Uint8Array {

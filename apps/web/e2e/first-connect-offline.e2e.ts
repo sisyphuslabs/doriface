@@ -34,6 +34,8 @@ const CAUSE = "Your host isn't answering. Check that its computer is on and dori
  * attempt fails only a click on Try now can start another.
  */
 const CLOCK_START = new Date("2026-01-01T00:00:00Z").getTime();
+/** How far ahead of `install` the clock is stopped: past whatever it ran while the pause was on its way. */
+const CLOCK_PAUSE_STEP_MS = 200;
 
 /** How many WebSockets the page has opened to `url` that no route intercepts, counted from before the first load. */
 function attemptsTo(page: Page, url: string): () => number {
@@ -47,7 +49,9 @@ function attemptsTo(page: Page, url: string): () => number {
 /** Opens the app with the OS offline and the first connect to `url` failing: closed 1011 when routed, else refused. */
 async function firstConnectFails(page: Page, url: string, routed = true): Promise<() => number> {
   await page.clock.install({ time: CLOCK_START });
-  await page.clock.pauseAt(CLOCK_START);
+  // The clock runs from `install` until it is paused, so a pause at the clock's own time is already behind it. This
+  // pause is a step ahead instead: far shorter than the back-off's first retry, so stopping there fires no timer.
+  await page.clock.pauseAt(CLOCK_START + CLOCK_PAUSE_STEP_MS);
   await osOfflineFromStart(page);
   const attempts = routed ? await gatewayDown(page, url) : attemptsTo(page, url);
   await page.goto("/");

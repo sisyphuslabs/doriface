@@ -59,7 +59,9 @@ export function watchScreen(stream: Pick<TerminalStream, "onData">): ScreenWatch
     const chunk = decoder.decode(bytes, { stream: true });
     text += chunk;
     snapshots.push(text);
-    const parts = (partial + chunk).split(/\r?\n/);
+    // Only the new chunk is split: splitting `partial + chunk` rescans a long unterminated line on every chunk (#481).
+    const parts = chunk.split(/\r?\n/);
+    parts[0] = partial + (parts[0] ?? "");
     partial = parts.pop() ?? "";
     for (const part of parts) lines.push(part.trim());
   });

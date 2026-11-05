@@ -13,7 +13,9 @@ function hc(...args: string[]): string {
 
 test("ctrl latches for one key: ctrl then c interrupts a running command", async ({ page }) => {
   const terminal = await openPhoneTerminal(page);
-  await page.keyboard.type("sleep 30; echo slept-$((1+1))\r");
+  // bash (macOS /bin/sh) can continue a semicolon list after SIGINT; && depends on sleep succeeding on every shell.
+  await page.keyboard.type("sleep 30 && echo slept-$((1+1))\r");
+  await expect(page.locator("header h1")).toHaveText("sleep");
   const ctrl = key(page, "Control");
   await ctrl.click();
   await expect(ctrl).toHaveAttribute("aria-pressed", "true");
@@ -62,7 +64,7 @@ test("swiped-in characters type into the terminal", async ({ page }) => {
   await expect(terminal).toContainText(/x~\|\/-y[\s\S]*x~\|\/-y/, { timeout: 10_000 });
 });
 
-test("Paste and the ctrl+v chord paste the device clipboard", async ({ page, context }) => {
+test("Paste and the host's paste chord paste the device clipboard", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const terminal = await openPhoneTerminal(page);
   const clipboard = (text: string) => page.evaluate((value) => navigator.clipboard.writeText(value), text);
@@ -73,10 +75,14 @@ test("Paste and the ctrl+v chord paste the device clipboard", async ({ page, con
   await page.keyboard.type("\r");
   await expect(terminal).toContainText("pasted-42", { timeout: 10_000 });
 
-  // The core here is not a mac, so ctrl+shift+v is the paste chord.
+  // This real core runs on the test host: Cmd+V on macOS, Ctrl+Shift+V elsewhere.
   await clipboard("echo chord-$((5+5))");
-  await key(page, "Control").click();
-  await key(page, "Shift").click();
+  if (process.platform === "darwin") {
+    await key(page, "Command").click();
+  } else {
+    await key(page, "Control").click();
+    await key(page, "Shift").click();
+  }
   await page.keyboard.type("v");
   await expect(terminal).toContainText("echo chord-$((5+5))", { timeout: 10_000 });
   await page.keyboard.type("\r");

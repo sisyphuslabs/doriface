@@ -69,7 +69,7 @@ describe("parseGhosttyConfig", () => {
     ["font-size = huge", "font-size"],
     ["background-opacity = 1.5", "background-opacity"],
     ["theme = light:Day", "theme"],
-    ["theme = Catppuccin Mocha", "theme"],
+    ["theme = Not A Theme", "theme"],
     ["background = red", "background"],
     [
       "window-padding-x = 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -94,6 +94,17 @@ describe("parseGhosttyConfig", () => {
   test("an empty value keeps the key's support label", () => {
     const resets = parseGhosttyConfig('scrollback-limit = ""\nwindow-padding-balance = ""');
     expect(resets.lines.map((line) => line.status)).toEqual(["new-terminals", "unsupported"]);
+  });
+
+  test("a theme from Appearance is accepted by its name or id, alone or per side (#512)", () => {
+    for (const line of [
+      "theme = Dracula",
+      "theme = catppuccin mocha",
+      "theme = catppuccin-mocha",
+      "theme = light:Solarized Light,dark:Tokyo Night",
+    ])
+      expect(parseGhosttyConfig(line).lines[0]?.status).toBe("applies");
+    expect(parseGhosttyConfig("theme = Not A Theme").lines[0]?.reason).toContain("a theme from Appearance");
   });
 
   test("light:X,dark:Y themes are accepted in either order", () => {

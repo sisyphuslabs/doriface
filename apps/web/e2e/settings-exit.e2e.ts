@@ -9,7 +9,7 @@ const AIR_VIEWPORTS = [
   { width: 1280, height: 800 },
 ] as const;
 
-/** The default close-tab shortcut on this platform's keymap (Cmd+W on macOS, Ctrl+Shift+W elsewhere). */
+/** The close shortcut that exits Settings: Close pane on macOS, Close tab elsewhere. */
 const CLOSE_TAB = process.platform === "darwin" ? "Meta+KeyW" : "Control+Shift+KeyW";
 const SETTINGS = "ControlOrMeta+Comma";
 
@@ -90,7 +90,7 @@ for (const viewport of AIR_VIEWPORTS) {
     });
 
     for (const [key, owner] of [
-      [CLOSE_TAB, "Close tab"],
+      [CLOSE_TAB, process.platform === "darwin" ? "Close pane" : "Close tab"],
       [SETTINGS, "Open settings"],
     ] as const) {
       test(`a recording takes ${key} as the new shortcut instead of leaving Settings`, async ({ page }) => {

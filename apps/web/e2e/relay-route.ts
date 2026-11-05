@@ -60,23 +60,32 @@ export async function startFakeRelayHost(options: { readonly machine?: boolean }
   const input = driver.stdin;
   if (out === null || input === null) throw new Error("the fake relay host has no stdio");
   const lines: Interface = createInterface({ input: out });
-  const waiting: ((value: Record<string, unknown>) => void)[] = [];
-  const queued: Record<string, unknown>[] = [];
+  type Line = Record<string, unknown>;
+  const waiting: { readonly resolve: (value: Line) => void; readonly reject: (error: Error) => void }[] = [];
+  const queued: Line[] = [];
+  let ended: Error | undefined;
   void (async () => {
     for await (const line of lines) {
       if (!line.startsWith("{")) continue;
       const parsed: unknown = JSON.parse(line);
       if (typeof parsed !== "object" || parsed === null) continue;
       const next = waiting.shift();
-      if (next === undefined) queued.push(parsed as Record<string, unknown>);
-      else next(parsed as Record<string, unknown>);
+      if (next === undefined) queued.push(parsed as Line);
+      else next.resolve(parsed as Line);
     }
+    // Its stdout closed: it exited (its error is on this run's stderr). Nothing more is coming, so a wait fails now
+    // instead of running out the hook's time (#502).
+    ended = new Error(
+      `the fake relay host exited (code ${String(driver.exitCode ?? driver.signalCode)}); see its stderr above`,
+    );
+    for (const next of waiting.splice(0)) next.reject(ended);
   })();
-  const nextLine = (): Promise<Record<string, unknown>> =>
-    new Promise((resolve) => {
+  const nextLine = (): Promise<Line> =>
+    new Promise((resolve, reject) => {
       const ready = queued.shift();
-      if (ready === undefined) waiting.push(resolve);
-      else resolve(ready);
+      if (ready !== undefined) resolve(ready);
+      else if (ended !== undefined) reject(ended);
+      else waiting.push({ resolve, reject });
     });
   const first = await nextLine();
   const bridge = first["bridge"];

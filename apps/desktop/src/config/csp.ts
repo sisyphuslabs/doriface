@@ -1,3 +1,8 @@
+import { DEFAULT_RELAY_URL } from "@doriface/crypto";
+
+/** The release relay's HTTPS origin, where a typed pairing code is looked up; a release build dials no other relay. */
+const RELAY_ORIGIN = new URL(DEFAULT_RELAY_URL).origin;
+
 export interface CspOptions {
   /** The Vite dev server origin; relaxes script and style sources for its inline preamble and HMR. */
   readonly devServer?: string | undefined;
@@ -6,18 +11,27 @@ export interface CspOptions {
 /**
  * The renderer's Content-Security-Policy. Terminals render through WebAssembly, and the client reaches the
  * loopback host, a LAN host or a relay over ws:/wss:, where every byte past the loopback is end-to-end encrypted.
- * Plain fetches stay on the loopback host; there is no blanket https: source to carry data anywhere else.
+ * Plain fetches stay on the loopback host, except the relay's pairing-code lookup on its own HTTPS origin (#535);
+ * there is no blanket https: source to carry data anywhere else.
  */
+/**
+ * The one inline style the renderer needs: Base UI's scroll areas insert `<style>` with
+ * `.base-ui-disable-scrollbar{scrollbar-width:none}...` to hide the native scrollbar under their own (#499). Allowed by
+ * its hash, so style-src stays strict: any other inline style is still refused. test/config.test.ts recomputes it from
+ * Base UI's own source, so an upgrade that changes the rule fails there instead of bringing the native scrollbar back.
+ */
+export const BASE_UI_SCROLLBAR_STYLE_HASH = "'sha256-kLmvWqfziFavKtqHqRsb90f006UAK2Dmd0It5Iz2KFA='";
+
 export function contentSecurityPolicy(options: CspOptions = {}): string {
   const dev = options.devServer !== undefined;
   const inline = dev ? ["'unsafe-inline'"] : [];
   const directives: readonly (readonly string[])[] = [
     ["default-src", "'self'"],
     ["script-src", "'self'", "'wasm-unsafe-eval'", ...inline],
-    ["style-src", "'self'", ...inline],
+    ["style-src", "'self'", BASE_UI_SCROLLBAR_STYLE_HASH, ...inline],
     ["img-src", "'self'", "data:", "blob:"],
     ["font-src", "'self'", "data:"],
-    ["connect-src", "'self'", "ws:", "wss:", "http://127.0.0.1:*", "http://localhost:*"],
+    ["connect-src", "'self'", "ws:", "wss:", "http://127.0.0.1:*", "http://localhost:*", RELAY_ORIGIN],
     ["worker-src", "'self'", "blob:"],
     ["manifest-src", "'self'"],
     ["media-src", "'none'"],

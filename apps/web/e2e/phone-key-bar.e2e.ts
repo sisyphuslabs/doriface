@@ -22,8 +22,13 @@ for (const width of [390, 320]) {
         .filter((button) => button.getBoundingClientRect().right <= edge.right + 1)
         .map((button) => button.getAttribute("aria-label"));
     });
-    // At 390 the left part shows Ctrl Shift Tab Esc without a swipe; 320 shows what fits and swipes the rest.
-    if (width === 390) expect(shown).toEqual(expect.arrayContaining(["Control", "Shift", "Tab", "Escape"]));
+    // A Mac host adds Command after Control, so Escape moves behind the swipe at 390.
+    // At 320 each host shows what fits and swipes the rest.
+    if (width === 390) {
+      expect(shown).toEqual(
+        process.platform === "darwin" ? ["Control", "Command", "Shift", "Tab"] : ["Control", "Shift", "Tab", "Escape"],
+      );
+    }
     const box = await bar.boundingBox();
     // With the keyboard up the header stays above the bar: the terminal keeps the room between them.
     const head = await page.getByRole("banner").boundingBox();

@@ -62,8 +62,6 @@ export const PRIVATE_STATE_FILES = [
 /** The temporary files this host's writers leave only when a crash interrupts them. */
 const TEMPORARY = /\.(\d+)\.[0-9a-f-]+\.tmp$/;
 
-export { PrivateStateRefused };
-
 const ownerOnlyFile = (user: string): string => `O:${user}D:P(A;;FA;;;${user})`;
 const ownerOnlyFolder = (user: string): string => `O:${user}D:P(A;OICI;FA;;;${user})`;
 

@@ -26,6 +26,12 @@ export type ConnectionState =
 
 const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
 
+/** This computer's host, as the desktop app runs it: where it listens now, and why it did not start. */
+export interface LocalHostStarter {
+  start(): Promise<{ readonly url: string; readonly token: string }>;
+  failure(cause: unknown): HostStartFailure;
+}
+
 /** Owns the one live connection: connects, reconnects with backoff, and reports its state. */
 export class ConnectionStore {
   #settings: ConnectionSettings;
@@ -36,6 +42,8 @@ export class ConnectionStore {
   #stale: HcConnection | null = null;
   /** The attempt the pending retry timer will make, so `retryNow` can make it at once. */
   #pending: number | null = null;
+  /** Asked before each retry of a loopback link: this computer's host, started again if it died (the desktop app). */
+  #localHost: LocalHostStarter | null = null;
   readonly #connect: typeof connect;
 
   constructor(settings: ConnectionSettings, open: typeof connect = connect) {
@@ -67,6 +75,15 @@ export class ConnectionStore {
   restoring(): void {
     this.stop();
     this.#set({ phase: "connecting", attempt: 0, stale: null });
+  }
+
+  /**
+   * In the desktop app a loopback link is to this computer's own host. When that link fails and is tried again, the
+   * host is asked for first: it answers at once while it runs, and starts again (on a new port, with a new token) if
+   * it died, so the retry reaches a host that is there instead of the one that is gone (#515).
+   */
+  restartsLocalHost(starter: LocalHostStarter): void {
+    this.#localHost = starter;
   }
 
   /** The desktop app's local host did not start at boot: its cause is shown and the saved link is not tried. */
@@ -124,8 +141,32 @@ export class ConnectionStore {
     this.#pending = attempt;
     this.#timer = setTimeout(() => {
       this.#pending = null;
-      void this.#attempt(attempt);
+      void this.#again(attempt);
     }, delay);
+  }
+
+  /** A retry: for a loopback link in the desktop app, this computer's host first, then the link to where it is now. */
+  async #again(attempt: number): Promise<void> {
+    const starter = this.#localHost;
+    if (starter === null || this.#settings.mode !== "loopback") return this.#attempt(attempt);
+    const asked = this.#settings;
+    const abort = new AbortController();
+    this.#abort = abort;
+    this.#set({ phase: "connecting", attempt, stale: this.#stale });
+    let where: { readonly url: string; readonly token: string };
+    try {
+      where = await starter.start();
+    } catch (cause) {
+      if (abort.signal.aborted || this.#settings !== asked) return undefined;
+      this.#stale = null;
+      return this.#set({ phase: "host-failed", failure: starter.failure(cause) });
+    }
+    if (abort.signal.aborted || this.#settings !== asked) return undefined;
+    if (where.url !== asked.loopbackUrl || where.token !== asked.token) {
+      this.#settings = { ...asked, loopbackUrl: where.url, token: where.token };
+      saveSettings(this.#settings);
+    }
+    return this.#attempt(attempt);
   }
 
   /** Makes a waiting retry now instead of at the end of its back-off (the network is back); the workspace stays. */
@@ -134,7 +175,7 @@ export class ConnectionStore {
     if (attempt === null || this.#state.phase !== "failed") return;
     clearTimeout(this.#timer);
     this.#pending = null;
-    void this.#attempt(attempt);
+    void this.#again(attempt);
   }
 
   #set(state: ConnectionState): void {

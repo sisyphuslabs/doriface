@@ -1,4 +1,4 @@
-import { BUILTIN_PALETTES, type BuiltinThemeName } from "@doriface/ui";
+import { BUILTIN_PALETTES, LIBRARY_CREDITS, LIBRARY_PALETTES, type Palette } from "@doriface/ui";
 import type { Kind } from "./schema.ts";
 
 export const THEME_NAMES = ["Night", "Day", "Graphite", "Paper"] as const;
@@ -14,13 +14,14 @@ export function fontFamilyName(value: string): string {
   return value.length > 1 && (quote === "'" || quote === '"') && value.endsWith(quote) ? value.slice(1, -1) : value;
 }
 
-/** Ghostty theme names are case sensitive on disk; ours match the built-ins case-insensitively. */
-export function builtinTheme(name: string): BuiltinThemeName | null {
+/** Ghostty theme names are case sensitive on disk; ours match case-insensitively, by name or id (#512). */
+export function builtinTheme(name: string): Palette | null {
   const key = name.trim().toLowerCase();
-  return Object.hasOwn(BUILTIN_PALETTES, key) &&
-    (key === "night" || key === "day" || key === "graphite" || key === "paper")
-    ? key
-    : null;
+  if (key === "night" || key === "day" || key === "graphite" || key === "paper") return BUILTIN_PALETTES[key];
+  const library = Object.entries(LIBRARY_CREDITS).find(
+    ([id, credit]) => id === key || credit.name.toLowerCase() === key,
+  )?.[0];
+  return library === undefined ? null : LIBRARY_PALETTES[library as keyof typeof LIBRARY_PALETTES];
 }
 
 export type Checked = { readonly ok: true } | { readonly ok: false; readonly reason: string };
@@ -138,7 +139,9 @@ export function checkValue(kind: Kind, value: string): Checked {
       const theme = parseTheme(value);
       if (theme === null) return bad("expects a theme name or light:X,dark:Y");
       const missing = [theme.light, theme.dark].find((name) => builtinTheme(name) === null);
-      return missing === undefined ? OK : bad(`"${missing}" is not one of ${THEME_NAMES.join(", ")}`);
+      return missing === undefined
+        ? OK
+        : bad(`"${missing}" is not a theme doriface has: one of ${THEME_NAMES.join(", ")} or a theme from Appearance`);
     }
     case "padding":
       return parsePadding(value) === null ? bad("expects pixels, or two values like 4,8") : OK;

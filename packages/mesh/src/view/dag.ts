@@ -47,8 +47,6 @@ export interface PastSet extends RecordSet {
 /** The cache key of a past-closed set: its maximal records, sorted. A past-closed set is its heads and their past. */
 export const headsKey = (heads: Iterable<string>): string => [...heads].toSorted().join("\u0000");
 
-export { DagError, type DagProblem } from "./dag-error.ts";
-
 export class Dag {
   readonly byId: ReadonlyMap<string, Rec>;
   readonly found: Rec;

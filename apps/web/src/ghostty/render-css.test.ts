@@ -23,3 +23,11 @@ describe("terminalCss font families", () => {
     expect(css).toContain('font-family: "Bold Face", var(--term-font-family);');
   });
 });
+
+describe("terminalCss theme", () => {
+  test("a theme from Appearance draws the terminal in its colours (#512)", () => {
+    const css = terminalCss(new Map([["theme", ["Dracula"]]])).toLowerCase();
+    expect(css).toContain("--term-bg: #282a36");
+    expect(css).toContain("--term-fg: #f8f8f2");
+  });
+});
