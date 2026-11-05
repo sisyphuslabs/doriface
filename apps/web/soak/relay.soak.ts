@@ -74,10 +74,11 @@ const arm = (page: Page, token: string): Promise<void> =>
     if (terminal === undefined) throw new Error("no terminal on the page");
     const onKey = (event: KeyboardEvent): void => void (probe.lastKey = event.timeStamp);
     document.addEventListener("keydown", onKey, true);
+    // Joined, so a token the shell wrapped onto the next row still counts.
     const shown = (): boolean =>
-      Array.from(terminal.querySelectorAll(".term-row:not(.term-scrollback-row)"), (row) => row.textContent).some(
-        (text) => text?.includes(wanted) === true,
-      );
+      Array.from(terminal.querySelectorAll(".term-row:not(.term-scrollback-row)"), (row) => row.textContent ?? "")
+        .join("")
+        .includes(wanted);
     const observer = new MutationObserver(() => {
       if (!shown()) return;
       probe.doneAt = performance.now();
@@ -86,6 +87,40 @@ const arm = (page: Page, token: string): Promise<void> =>
     });
     observer.observe(terminal, { subtree: true, childList: true, characterData: true });
   }, token);
+
+/** The last terminal's rows on screen, top to bottom, trailing blanks trimmed. */
+const screenRows = (page: Page): Promise<string[]> =>
+  page.evaluate(() => {
+    const terminals = document.querySelectorAll("[data-terminal]");
+    const terminal = terminals[terminals.length - 1];
+    if (terminal === undefined) return [];
+    return Array.from(terminal.querySelectorAll(".term-row:not(.term-scrollback-row)"), (row) =>
+      (row.textContent ?? "").trimEnd(),
+    );
+  });
+
+const lastRows = async (page: Page, count: number): Promise<string[]> =>
+  (await screenRows(page)).filter((row) => row !== "").slice(-count);
+
+/** Whether the row the shell is editing (the last non-blank one) still shows `token`, within `timeout`. */
+const erased = (page: Page, token: string, timeout: number): Promise<boolean> =>
+  page
+    .waitForFunction(
+      (wanted) => {
+        const terminals = document.querySelectorAll("[data-terminal]");
+        const rows = Array.from(
+          terminals[terminals.length - 1]?.querySelectorAll(".term-row:not(.term-scrollback-row)") ?? [],
+          (row) => (row.textContent ?? "").trimEnd(),
+        ).filter((row) => row !== "");
+        return !(rows.at(-1) ?? "").includes(wanted);
+      },
+      token,
+      { timeout },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
 
 async function settle(page: Page, timeout: number): Promise<number | undefined> {
   const done = await page
@@ -135,7 +170,8 @@ async function pairAndOpen(page: Page, link: string): Promise<Locator> {
   await arm(page, "soak-ready-2");
   await page.keyboard.type("echo soak-ready-$((1+1))");
   await page.keyboard.press("Enter");
-  expect(await settle(page, 120_000), "the shell answers").not.toBeUndefined();
+  const ready = await settle(page, 120_000);
+  expect(ready, `the shell answers; on screen:\n${(await lastRows(page, 12)).join("\n")}`).not.toBeUndefined();
   return terminal;
 }
 
@@ -157,6 +193,14 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
   const bursts: number[] = [];
   let lost = 0;
   let burstsLost = 0;
+  let eraseFailures = 0;
+  /** What the screen showed at the first few lost echoes and failed erases, to tell the shell from the client. */
+  const diagnostics: { readonly atS: number; readonly what: string; readonly rows: string[] }[] = [];
+  const note = async (what: string): Promise<void> => {
+    if (diagnostics.length >= 6) return;
+    const atS = Math.round(((await page.evaluate(() => performance.now())) - startedAt) / 1000);
+    diagnostics.push({ atS, what, rows: await lastRows(page, 6) });
+  };
 
   const sample = async (i: number): Promise<void> => {
     if (Date.now() > deadline) return;
@@ -166,9 +210,18 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
     const ms = await settle(page, ECHO_TIMEOUT_MS);
     const at = Math.round(((await page.evaluate(() => performance.now())) - startedAt) / 1000);
     timeline.push([at, ms === undefined ? null : Math.round(ms * 10) / 10]);
-    if (ms === undefined) lost += 1;
-    else echoes.push(ms);
+    if (ms === undefined) {
+      lost += 1;
+      await note(`echo of ${token} lost`);
+    } else echoes.push(ms);
     await Array.from(token).reduce((typed) => typed.then(() => page.keyboard.press("Backspace")), Promise.resolve());
+    if (!(await erased(page, token, 5_000))) {
+      eraseFailures += 1;
+      await note(`Backspace left ${token}`);
+      // Ctrl+C drops the line in any shell, so one failed erase does not spoil every later sample.
+      await page.keyboard.press("Control+c");
+      await erased(page, token, 5_000);
+    }
     if (i % BURST_EVERY === BURST_EVERY - 1) {
       const end = `soak-${i + 1_000_000}`;
       await arm(page, end);
@@ -201,6 +254,8 @@ test("relay soak: typing and output through the relay", async ({ page }) => {
     userAgent: await page.evaluate(() => navigator.userAgent),
     minutes: MINUTES,
     echo: { ...summary(echoes), lost },
+    eraseFailures,
+    diagnostics,
     bursts: { ...summary(bursts), lost: burstsLost, lines: 3000 },
     sockets: {
       opensDuringSoak: opens.map(({ kind, at }) => ({ kind, atS: Math.round((at - startedAt) / 1000) })),

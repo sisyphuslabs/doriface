@@ -20,6 +20,7 @@ interface Result {
   readonly userAgent: string;
   readonly minutes: number;
   readonly echo: Stats;
+  readonly eraseFailures: number;
   readonly bursts: Stats & { readonly lines: number };
   readonly sockets: {
     readonly closes: readonly { readonly kind: string; readonly code?: number; readonly atS: number }[];
@@ -48,6 +49,7 @@ const rows: [string, (result: Result) => string][] = [
   ["Echo p99", (r) => ms(r.echo.p99)],
   ["Echo max", (r) => ms(r.echo.max)],
   ["Echoes lost (> 10 s)", (r) => String(r.echo.lost)],
+  ["Backspace erases that failed", (r) => String(r.eraseFailures)],
   ["Output bursts (lines each)", (r) => `${r.bursts.count} (${r.bursts.lines})`],
   ["Burst p50 / p95", (r) => `${ms(r.bursts.p50)} / ${ms(r.bursts.p95)}`],
   ["Bursts lost (> 60 s)", (r) => String(r.bursts.lost)],
