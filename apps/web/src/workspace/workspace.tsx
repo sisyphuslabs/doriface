@@ -1,6 +1,6 @@
 import type { HcConnection } from "@doriface/client";
 import { useToastManager } from "@doriface/ui";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connectionStore } from "../connection/store.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
 import { type Axis, LAYOUT_DOC, ORDER_DOC } from "@doriface/protocol/layout";
@@ -33,6 +33,7 @@ import { useResumeEnds } from "./resume-ends.ts";
 import { useNoticeOpen } from "../push/notice-open.ts";
 import { usePushPresence } from "../push/use-push-presence.ts";
 import { PromptAnswerBanner } from "../push/prompt-answer-banner.tsx";
+import { CATCHER_ATTRIBUTES, type DropReason, useTypeAhead } from "./use-type-ahead.ts";
 
 export interface WorkspaceProps {
   readonly connection: HcConnection;
@@ -81,12 +82,22 @@ export function Workspace({ connection }: WorkspaceProps) {
     [toasts],
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
+  const unsaved = useCallback(
+    (message: string) =>
+      toasts.add({
+        type: "error",
+        title: "The tab order was not saved",
+        description: `${message.replace(/\.$/, "")}. This window keeps it until it reloads.`,
+      }),
+    [toasts],
+  );
   const layout = useLayout(
     connection.hello.core.id,
     layouts,
     fed.loaded ? terminals : [],
     failed,
     told,
+    unsaved,
     machineReads > 0,
   );
   useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, layout.dropPane);
@@ -113,8 +124,27 @@ export function Workspace({ connection }: WorkspaceProps) {
     [openInLayout, showOnPhone],
   );
   const [closingTab, setClosingTab] = useState<string | null>(null);
-  const runs = useMachineRuns(connection, opened, refresh);
+  const notSent = useCallback(
+    (reason: DropReason) =>
+      toasts.add({
+        type: "error",
+        title: "What you typed was not sent",
+        description:
+          reason === "failed"
+            ? "The new terminal did not start, so the keys typed for it went nowhere."
+            : "The new terminal took too long to open, so the keys typed for it were dropped.",
+      }),
+    [toasts],
+  );
+  const typeAhead = useTypeAhead(notSent);
+  const runs = useMachineRuns(connection, opened, refresh, typeAhead);
   const [splits] = useState(() => new SplitChain());
+  // A split key reads focus from the last render; the chain hands a landed split's pane on until this render shows it.
+  const shownTab = layout.active?.key;
+  const shownPane = layout.focused?.id;
+  useEffect(() => {
+    if (shownTab !== undefined && shownPane !== undefined) splits.shown(shownTab, shownPane);
+  }, [splits, shownTab, shownPane]);
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   const newTerminal = (): void => runs.start(runParamsFor(terminals.find((terminal) => terminal.address === inView)));
   const split = (axis: Axis, target?: PaneTarget): void => {
@@ -211,6 +241,17 @@ export function Workspace({ connection }: WorkspaceProps) {
         </SessionContext>
       </PinContext>
       <PromptAnswerBanner />
+      <textarea
+        ref={typeAhead.catcher}
+        {...CATCHER_ATTRIBUTES}
+        aria-label="New terminal starting: what you type goes to it"
+        tabIndex={-1}
+        className="sr-only"
+        autoCapitalize="off"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+      />
       <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
       <SessionDialogs connection={connection} terminals={terminals} ask={ask} onDone={done} onKeep={layout.dropPane} />
       {closing === undefined ? null : (

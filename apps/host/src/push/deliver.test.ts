@@ -7,6 +7,47 @@ import { decryptPushBody, receiverKeys } from "../testing/push-receiver.ts";
 import { deliverPush, type PushFetch, pushEndpointAllowed } from "./deliver.ts";
 import { loadVapidKey } from "./vapid-key.ts";
 
+/** A post that fails with `failure` on its first call and accepts every later one, recording each call's keepalive. */
+function failingOnce(failure: Error) {
+  const calls: (boolean | undefined)[] = [];
+  const post: PushFetch = async (_, init) => {
+    calls.push(init.keepalive);
+    if (calls.length === 1) throw failure;
+    return new Response(null, { status: 201 });
+  };
+  return { calls, post };
+}
+
+const reset = (code: string): Error =>
+  Object.assign(new TypeError(`${code}: The socket connection was closed`), { code });
+
+describe("a notice the push service's connection drops (#316)", () => {
+  const notice = { v: 1, n: "AAAAAAAAAAAAAAAAAAAAAA", k: "done", h: "abcdefghijklmnopqrstuvwxyz" } as const;
+
+  async function deliverWith(post: PushFetch) {
+    const dir = mkdtempSync(join(tmpdir(), "dh-push-reset-"));
+    try {
+      const keys = await receiverKeys();
+      const subscription = { endpoint: "https://fcm.googleapis.com/fcm/send/r", p256dh: keys.p256dh, auth: keys.auth };
+      return await deliverPush(subscription, notice, await loadVapidKey(dir), post);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test("a pooled connection the service had closed as idle is retried once, on a new connection, and delivered", async () => {
+    const { calls, post } = failingOnce(reset("ECONNRESET"));
+    expect(await deliverWith(post)).toBe("sent");
+    expect(calls).toEqual([undefined, false]);
+  });
+
+  test("any other failure is not retried", async () => {
+    const { calls, post } = failingOnce(new TypeError("Unable to connect"));
+    await expect(deliverWith(post)).rejects.toThrow("Unable to connect");
+    expect(calls).toHaveLength(1);
+  });
+});
+
 describe("what the push service can learn from a notice's size", () => {
   test("every kind encrypts to one length, and the browser still reads each notice", async () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-push-pad-"));

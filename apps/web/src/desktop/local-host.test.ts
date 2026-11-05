@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, type ConnectionSettings } from "../connection/setting
 import {
   closeDesktopWindow,
   desktopBridge,
+  desktopHcChooser,
   HostStartError,
   type HostStartFailure,
   onDesktopNavigate,
@@ -106,7 +107,13 @@ describe("desktop local host", () => {
   });
 
   test("a start the shell reports as failed rejects with that failure, typed", async () => {
-    const failure = { code: "hc-binary-missing", message: "not found", path: "hc", details: "raw output" };
+    const failure = {
+      code: "hc-binary-missing",
+      message: "not found",
+      path: "hc",
+      searched: ["/h/.local/bin", "/h/.cargo/bin"],
+      details: "raw output",
+    };
     const failed = desktopBridge({ doriface: { startLocalHost: async () => ({ failure }) } });
     const error: unknown = await failed?.startLocalHost().then(
       () => undefined,
@@ -114,6 +121,15 @@ describe("desktop local host", () => {
     );
     expect(error).toBeInstanceOf(HostStartError);
     expect(error instanceof HostStartError ? error.failure : undefined).toEqual(failure);
+  });
+
+  test("Choose hc is offered only by a shell that has it, and only a string answer is a chosen file", async () => {
+    expect(desktopHcChooser({})).toBeNull();
+    expect(desktopHcChooser({ doriface: { startLocalHost: async () => ({}) } })).toBeNull();
+    const choose = desktopHcChooser({ doriface: { chooseHc: async () => "/opt/hc" } });
+    expect(await choose?.()).toBe("/opt/hc");
+    const odd = desktopHcChooser({ doriface: { chooseHc: async () => 7 } });
+    expect(await odd?.()).toBeNull();
   });
 
   test("the shell's navigations reach the app only as app paths, and only through a bridge that offers them", () => {

@@ -3,7 +3,9 @@ import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK, PAIRING_SETTINGS } from "./capture-relay.ts";
 import { E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
 import { expect } from "./fixtures.ts";
-import { LAYOUT_TERMINALS, UNBROKEN } from "./layout-seed.ts";
+import { setCoreDoc } from "./core-doc.ts";
+import { LAYOUT_DOC, treeNode } from "./layout-doc.ts";
+import { LAYOUT_MACHINE, LAYOUT_TERMINALS, UNBROKEN } from "./layout-seed.ts";
 
 export const STARTS = {
   layout: {
@@ -36,6 +38,15 @@ export interface Screen {
 }
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** A tab of one pane showing `terminal`, as the layout document holds it. */
+const layoutTab = (id: string, terminal: string) => ({
+  id,
+  name: "",
+  root: { children: [treeNode({ pane: `p-${id}`, terminal })], id, type: "row" },
+});
+/** A layout document of one space holding `tabs`. */
+const layoutDoc = (tabs: readonly unknown[]) => ({ spaces: [{ folder: "", id: "spc-layout", name: "", tabs }] });
+
 const row = (page: Page, title: string) => page.getByRole("button", { name: new RegExp(escape(title)) }).first();
 
 async function workspace(page: Page, narrow: boolean): Promise<void> {
@@ -106,12 +117,19 @@ export const SCREENS: readonly Screen[] = [
     start: "layout",
     only: "wide",
     open: async (page) => {
+      // Every seeded terminal open as a tab, written to the layout documents before the page loads, the way another
+      // device would have left them: opening each by a click mounts a terminal and writes the document on a page that
+      // can be starved for seconds. The layout host starts its terminals in order on a fresh core (runSeeds), so they
+      // are t1, t2, ... there and on its added machine; the tab titles below check that.
+      const local = LAYOUT_TERMINALS.map((_, index) => layoutTab(`tb-${index + 1}`, `t${index + 1}`));
+      setCoreDoc(LAYOUT_DOC, layoutDoc(local), undefined, "layout");
+      setCoreDoc(LAYOUT_DOC, layoutDoc([layoutTab("tb-remote", "t1")]), LAYOUT_MACHINE, "layout");
       await workspace(page, false);
-      // Each click opens the next tab, in order.
-      await LAYOUT_TERMINALS.reduce(
-        (opened, { title }) => opened.then(() => row(page, title).click()),
-        Promise.resolve(),
-      );
+      const tabs = page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
+      const titles = [...LAYOUT_TERMINALS.map(({ title }) => title), "remote-terraform-plan-runner-001"];
+      await expect(tabs).toHaveCount(titles.length, { timeout: 20_000 });
+      const shown = await tabs.allTextContents();
+      expect(titles.filter((title) => !shown.some((text) => text.includes(title)))).toEqual([]);
       await row(page, "remote-terraform-plan-runner-001").click();
       await page.getByRole("button", { name: "Split right" }).click();
       await expect(page.locator("[data-terminal]:visible")).toHaveCount(2);

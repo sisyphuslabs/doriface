@@ -1,20 +1,37 @@
 import { expect, test } from "bun:test";
-import { createHcSession, stopLeftoverCores } from "./hc-session.ts";
+import { createHcSession, type HcSession, stopLeftoverCores } from "./hc-session.ts";
 
 const line = (method: string): Uint8Array =>
   new TextEncoder().encode(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method })}\n`);
+
+/** hc connect starts a stopped core again, as a dialer's reconnect does. */
+async function startAgain(session: HcSession): Promise<void> {
+  const again = session.connect();
+  await again.write(line("server.status"));
+  await again.reader.line();
+  again.end();
+  await again.exited;
+}
+
+async function serving(session: HcSession): Promise<boolean> {
+  const socket = session.env["HC_SOCKET"];
+  if (socket === undefined) throw new Error("no HC_SOCKET");
+  try {
+    (await Bun.connect({ unix: socket, socket: { data: () => {} } })).end();
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && ["ECONNREFUSED", "ENOENT"].includes(String(error.code)))
+      return false;
+    throw error;
+  }
+}
 
 test("the guard's sweep reports a core started again after dispose, and stops it", async () => {
   const session = createHcSession("guard");
   const socket = session.env["HC_SOCKET"];
   if (socket === undefined) throw new Error("no HC_SOCKET");
   await session.dispose();
-  // hc connect starts the stopped core again, as a dialer's reconnect does.
-  const again = session.connect();
-  await again.write(line("server.status"));
-  await again.reader.line();
-  again.end();
-  await again.exited;
+  await startAgain(session);
   // Held across the sweep: only the core itself, stopping, closes it. The sweep removes the socket's dir, so a fresh
   // connect afterwards would be refused whether or not the core still runs.
   const closed = Promise.withResolvers<void>();
@@ -37,9 +54,9 @@ test("the guard's sweep reports a core started again after dispose, and stops it
     timer = setTimeout(() => reject(new Error("the core never closed the held connection: it still runs")), 10_000);
   });
   try {
-    expect(await stopLeftoverCores()).toEqual([session.name]);
+    expect(await stopLeftoverCores([session])).toEqual([session.name]);
     await Promise.race([closed.promise, stillRunning]);
-    expect(await stopLeftoverCores()).toEqual([]);
+    expect(await stopLeftoverCores([session])).toEqual([]);
   } finally {
     clearTimeout(timer);
     if (open) {
@@ -47,4 +64,21 @@ test("the guard's sweep reports a core started again after dispose, and stops it
       await closed.promise;
     }
   }
+}, 30_000);
+
+test("a test's sweep of its own sessions does not report another file's core that still serves (#261)", async () => {
+  // Another test file's scratch session, its core started again after dispose: registered and serving when this
+  // test sweeps. That file's own sweep, or the preloaded guard at the end of the run, owns it.
+  const other = createHcSession("other-file");
+  await other.dispose();
+  await startAgain(other);
+  const session = createHcSession("guard-own");
+  await session.dispose();
+  await startAgain(session);
+  const swept = await stopLeftoverCores([session]);
+  const otherServing = await serving(other);
+  await stopLeftoverCores([other]);
+  expect(swept).toEqual([session.name]);
+  expect(otherServing).toBe(true);
+  expect(await serving(other)).toBe(false);
 }, 30_000);

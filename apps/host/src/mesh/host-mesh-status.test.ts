@@ -12,10 +12,11 @@ import { createHcSession, type HcSession } from "../testing/hc-session.ts";
 import { type Machine, machine, MeshFixture } from "../testing/mesh-history.ts";
 
 const dirs: string[] = [];
-const hosts: Host[] = [];
+/** Each host's start, held from the call: a test that times out mid-start still stops the host that comes up later. */
+const hosts: Promise<Host | undefined>[] = [];
 const sessions: HcSession[] = [];
 afterEach(async () => {
-  await Promise.all(hosts.splice(0).map((host) => host.stop()));
+  await Promise.all(hosts.splice(0).map(async (started) => (await started)?.stop()));
   await Promise.all(sessions.splice(0).map((session) => session.dispose()));
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
@@ -24,7 +25,8 @@ afterEach(async () => {
 async function hostIn(dir: string): Promise<Host> {
   const session = createHcSession("host-mesh");
   sessions.push(session);
-  const host = await startHost({
+  // A start the test outlives would bring this session's core back after its dispose, with nothing to stop it.
+  const started = startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
     token: generateToken(),
     hc: session.hc,
@@ -33,8 +35,8 @@ async function hostIn(dir: string): Promise<Host> {
     stateDir: dir,
     log: () => {},
   });
-  hosts.push(host);
-  return host;
+  hosts.push(started.catch(() => undefined));
+  return started;
 }
 
 function meshHere(): { dir: string; self: Machine; mesh: MeshFixture } {

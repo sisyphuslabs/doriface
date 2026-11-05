@@ -125,7 +125,7 @@ jobs:
   web-e2e:
     name: Web e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -153,8 +153,18 @@ jobs:
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
         working-directory: apps/web
+      # The e2e workers follow the runner's cores (playwright.config.ts, #342): record what this runner has.
+      - name: Runner resources
+        run: |
+          echo "cores: $(nproc)"
+          free -m
       - name: Playwright e2e against a real hc
         run: bun run test:e2e
+        working-directory: apps/web
+        env:
+          CI: "1"
+      - name: Two e2e runs at once, each on its own ports (#37)
+        run: bun run test:e2e:two-runs
         working-directory: apps/web
         env:
           CI: "1"

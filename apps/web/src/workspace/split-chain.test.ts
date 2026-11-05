@@ -53,6 +53,41 @@ describe("splits pressed back to back", () => {
   });
 });
 
+describe("a split that landed before the screen shows its pane focused (#326)", () => {
+  test("a key read in that gap, which still sees the old pane focused, splits the pane the landed split made", async () => {
+    const chain = new SplitChain();
+    const first = placed(chain, "tab", "two");
+    first.land();
+    expect(await first.from).toBe("two");
+    const second = placed(chain, "tab", "two");
+    second.land();
+    expect(await second.from).toBe(first.link.pane);
+  });
+
+  test("once the screen shows the new pane focused, a pane focused after it is the one a key splits", async () => {
+    const chain = new SplitChain();
+    const first = placed(chain, "tab", "two");
+    first.land();
+    await first.from;
+    chain.shown("tab", first.link.pane);
+    chain.shown("tab", "two");
+    const again = placed(chain, "tab", "two");
+    again.land();
+    expect(await again.from).toBe("two");
+  });
+
+  test("focus shown anywhere else ends the handoff too", async () => {
+    const chain = new SplitChain();
+    const first = placed(chain, "tab", "two");
+    first.land();
+    await first.from;
+    chain.shown("tab", "three");
+    const next = placed(chain, "tab", "two");
+    next.land();
+    expect(await next.from).toBe("two");
+  });
+});
+
 describe("the workspace's split, through the chain", () => {
   test("two keys back to back: the second terminal starting first still splits the pane the first one makes", async () => {
     const chain = new SplitChain();

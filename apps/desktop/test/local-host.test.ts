@@ -120,10 +120,12 @@ describe("LocalHost when doriface-host cannot start", () => {
   const failureOf = async (
     command: { file: string; args: string[] },
     hc: string | undefined,
+    searched?: readonly string[],
   ): Promise<LocalHostFailure> => {
     const starting = new LocalHost({
       command,
       hc: () => hc,
+      ...(searched === undefined ? {} : { searched: () => searched }),
       env: { ...process.env, DORIFACE_HOST_STATE_DIR: stateDir },
       log: () => {},
     });
@@ -148,6 +150,14 @@ describe("LocalHost when doriface-host cannot start", () => {
     expect(failure.code).toBe("host-exited");
     expect(failure.details).toContain("no-such-flag");
     expect(failure.details).not.toContain("usage:");
+  });
+
+  test("herdr-core not found on PATH carries the folders searched after it, for the copy to name", async () => {
+    const searched = [join(stateDir, "a"), join(stateDir, "b")];
+    const failure = await failureOf({ file: process.execPath, args: [cli] }, join(stateDir, "no-hc"), searched);
+    expect(failure).toMatchObject({ code: "hc-binary-missing", searched });
+    const other = await failureOf({ file: process.execPath, args: [cli, "--no-such-flag"] }, undefined, searched);
+    expect(other.searched).toBeUndefined();
   });
 
   test("a doriface-host that cannot be run at all is host-spawn-failed", async () => {

@@ -4,17 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateToken } from "./auth.ts";
 import { type Host, startHost } from "./host.ts";
-import { resolveHcBin } from "./testing/hc-session.ts";
+import { createHcSession } from "./testing/hc-session.ts";
 
 const IDLE_MS = 300;
 const stateDir = mkdtempSync(join(tmpdir(), "dh-keepalive-"));
+// Its own scratch core: a host on the default session would start the default core on any call to the core.
+const session = createHcSession("keepalive");
 let host: Host;
 
 beforeAll(async () => {
   host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
     token: generateToken(),
-    hc: resolveHcBin(),
+    hc: session.hc,
+    session: session.name,
+    env: session.env,
     stateDir,
     directIdleMs: IDLE_MS,
     log: () => {},
@@ -23,6 +27,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await host.stop();
+  await session.dispose();
   rmSync(stateDir, { recursive: true, force: true });
 });
 
