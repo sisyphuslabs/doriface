@@ -8,12 +8,14 @@
 - Rename a space from its menu, the command palette or a double-click; the new name shows on every device. (#416)
 - Closing a tab or pane ends its program, and asks first only when the program is still busy; a close that needs no question shows none. (#426, #534)
 - A tab follows its machine through a rename. (#495)
+- A double-click on the tab after the selected one renames it instead of closing it. (#573)
 
 ### Sidebar and titlebar
 
 - One sidebar toggle, placed after the macOS window buttons, and a titlebar laid out like herdr-app's. (#445)
 - Agents sit at the bottom of the sidebar with a split you can drag, and two spaces with the same name show as separate rows. (#421)
 - A machine's header keeps its name ahead of its state, and its buttons have tap areas that don't overlap. (#504)
+- The machine header is labelled with the machine's name and state. (#579)
 - The desktop app waits for your saved tabs before showing "No terminal open", and a terminal that is still opening says so. (#489)
 - Native notifications in the desktop app, using the same triggers and settings as web push. (#412)
 
@@ -44,6 +46,7 @@
 ### Windows
 
 - The app's state lock no longer trips over a state folder that Windows is still deleting. (#524)
+- On Windows arm64, the state lock reads why a file could not be opened from Windows' own status, so a worker no longer dies on a failed open that reports no error. (#578)
 - Both Windows installers, x64 and arm64, are now installed and started on a clean machine before each release is published. (#451)
 - Windows builds are still not code signed, so SmartScreen warns on first run; see Code signing below.
 
@@ -52,8 +55,11 @@
 - A terminal on a link that just dropped no longer throws an error into the page. (#465)
 - A stopped host never restarts its terminal core behind your back. (#455)
 - Relayed sessions are faster on bulk output and handle split frames correctly. (#517)
+- A terminal that floods output no longer slows the app: output is drawn at most once a frame, flow control holds the program back until it is drawn, and hidden panes draw nothing. (#586)
+- Ending a terminal reaches the host even when the page closes right after you confirm. (#582)
+- A host in a large mesh acknowledges its own changes without re-reading the whole mesh each time. (#577)
 - The desktop app's content security policy stays strict while scroll areas hide their native scrollbars. (#520)
 - The app starts and keeps working when the browser refuses storage, as private windows and blocked site data do. (#550, #554)
 - On phones, the app, its header, its status bar and its sheets keep clear of the notch, the rounded corners and the home indicator on every side. (#561, #565)
 - An older browser gets an Update your browser screen instead of a page that does not work. (#563)
-- Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558, #564, #569)
+- Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558, #564, #569, #571, #574, #575, #585)
