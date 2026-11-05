@@ -37,5 +37,3 @@ export function tabAddress(key: string, ids: MachineIds): string | undefined {
   const name = ids.byId.get(rest.slice(0, slash));
   return name === undefined ? undefined : name + rest.slice(slash);
 }
-
-export const isLocalKey = (key: string): boolean => key.startsWith(LOCAL);
