@@ -1,16 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { base64urlEncode } from "@doriface/crypto";
 import { mergeAtDoor } from "../src/dangling.ts";
-import { door } from "../src/door.ts";
-import {
-  forgetCheckedCards,
-  hashOf,
-  meshIdOf,
-  parseRecord,
-  signCard,
-  signRecord,
-  verifies,
-} from "../src/records/codec.ts";
+import { door, holds } from "../src/door.ts";
+import * as codec from "../src/records/codec.ts";
+import { hashOf, meshIdOf, parseRecord, signCard, signRecord, verifies } from "../src/records/codec.ts";
 import { MAX_MESH_MEMBERS, MAX_RECORDS, type Signed } from "../src/records/types.ts";
 import { keyOf } from "./fixtures/signed.ts";
 
@@ -90,23 +83,53 @@ test("M-14 (door): a 4096-record welcome through the door costs a bounded multip
   expect(doorMs).toBeLessThan(BUDGET_PER_FLOOR * floorMs);
 }, 300_000);
 
+/** How many of `stored` the codec reads while `run` runs: parsed, hashed or signature-checked, plus every card check. */
+function readsOf(stored: readonly Signed[], run: () => void): { records: number; cards: number } {
+  const set = new Set<Signed>(stored);
+  const reads = [spyOn(codec, "parseRecord"), spyOn(codec, "hashOf")];
+  const verified = spyOn(codec, "verifies");
+  const cards = spyOn(codec, "verifyCard");
+  try {
+    run();
+    const touched = [...reads.flatMap((s) => s.mock.calls.map(([r]) => r)), ...verified.mock.calls.map(([, r]) => r)];
+    return { records: new Set(touched.filter((r) => set.has(r))).size, cards: cards.mock.calls.length };
+  } finally {
+    for (const spy of [...reads, verified, cards]) spy.mockRestore();
+  }
+}
+
+/**
+ * Counted, not timed (#521): a merge of one record is one signature check whatever the stored set's size, about 0.5 ms,
+ * and a few milliseconds of wall time is what a loaded runner moves most (merge p90 3.0 ms, p99 10.6 ms at load5 84),
+ * so a timing ratio flipped under load while the merge read nothing. The work M-14 rules out is reading the stored set
+ * again, and that is counted exactly: a set the door has indexed is read zero times by a merge, at any size.
+ */
 test("M-14 (door): a merge into a set the door has indexed re-reads none of it", () => {
   const records = welcome();
   const last = records.at(-1);
   if (last === undefined) throw new Error("empty welcome");
-  const indexed = mergeAtDoor([], [], records.slice(0, -1)).stored;
-  const merge = (): void => {
-    if (mergeAtDoor(indexed, [], [last]).added.length !== 1) throw new Error("the last welcome record was not added");
+  const mergeInto = (size: number) => {
+    const indexed = mergeAtDoor([], [], records.slice(0, size)).stored;
+    const next = records[size];
+    if (next === undefined) throw new Error("welcome too short");
+    // The merge that built `indexed` appended its last record after its last door call; the door indexes that one on
+    // its next call. Make that call here, so the set is wholly indexed when the counted merge starts.
+    holds(indexed, next);
+    const merge = readsOf(indexed, () => {
+      if (mergeAtDoor(indexed, [], [next]).added.length !== 1) throw new Error("the next welcome record was not added");
+    });
+    // The control: a fresh index of the same set is a first read of all of it, so the counter sees the door's reads.
+    const fresh = readsOf(indexed, () => door(next, [...indexed]));
+    return { size: indexed.length, merge, fresh };
   };
-  // A fresh index is a first read, as in a new process: its cards are checked again (#94 keeps them per process).
-  const fresh = (): void => {
-    forgetCheckedCards();
-    door(last, [...indexed]);
-  };
-  const mergeMs = Math.min(timed(merge), timed(merge), timed(merge));
-  const freshMs = Math.min(timed(fresh), timed(fresh), timed(fresh));
-  console.log(
-    `merge into ${indexed.length} indexed records: ${mergeMs.toFixed(1)} ms; fresh index ${freshMs.toFixed(1)} ms`,
-  );
-  expect(mergeMs).toBeLessThan(freshMs / 4);
+  const small = mergeInto(MAX_RECORDS / 4 - 1);
+  const full = mergeInto(MAX_RECORDS - 1);
+  console.log(`merge reads ${JSON.stringify([small, full])}`);
+  expect(full.size).toBe(MAX_RECORDS - 1);
+  expect(full.fresh.records).toBe(full.size);
+  expect(small.fresh.records).toBe(small.size);
+  expect([small.merge, full.merge]).toEqual([
+    { records: 0, cards: 0 },
+    { records: 0, cards: 0 },
+  ]);
 }, 300_000);
