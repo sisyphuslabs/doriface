@@ -58,6 +58,11 @@ export interface Host {
   readonly e2ee: E2eeEndpoint | undefined;
   /** The relay this host keeps its uplink to, when it does. */
   readonly relayUrl: string | undefined;
+  /**
+   * Settles once the write of this host's OS on its core is done and its one-shot `hc connect` child has exited; at once
+   * if no client has opened a pipe yet, since that write starts with the first pipe.
+   */
+  hostInfoSettled(): Promise<void>;
   /** Closes every client and `hc connect` child, then the listener. */
   stop(): Promise<void>;
 }

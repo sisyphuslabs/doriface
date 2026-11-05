@@ -84,7 +84,9 @@ describe("doriface-host against a real hc", () => {
       `byte-identical: hello reply ${helloViaHost.byteLength} B, terminal.list frame ${listViaHost.byteLength} B`,
     );
 
-    // This client's own child, and the one the host watches its core over (it removes Ended terminals).
+    // This client's own child, and the one the host watches its core over (it removes Ended terminals); the one-shot
+    // child that writes the host's OS on its first pipe is counted only until it exits, so wait for it first.
+    await host.hostInfoSettled();
     expect(hcConnectsOf(session.name)).toHaveLength(2);
     client.socket.close();
   });
