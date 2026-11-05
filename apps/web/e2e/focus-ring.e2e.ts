@@ -40,6 +40,13 @@ async function expectRing(target: Locator): Promise<void> {
   expect(ring.color).not.toMatch(/rgba\(.*,\s*0\)$|transparent/);
 }
 
+/** Settings, with `section` open: each part Tab-walks one section, so no part carries another's walk. */
+async function settings(page: Page, section?: string): Promise<void> {
+  await page.goto("/settings");
+  if (section !== undefined)
+    await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: section }).click();
+}
+
 async function ringOnTab(page: Page, target: Locator): Promise<void> {
   await tabTo(page, target);
   await expectRing(target);
@@ -68,19 +75,22 @@ for (const colorScheme of ["light", "dark"] as const) {
       await ringOnTab(page, body);
     });
 
-    test("the settings controls Tab reaches draw a focus ring", async ({ page }) => {
-      await page.goto("/settings");
+    test("the settings navigation Tab reaches draws a focus ring", async ({ page }) => {
+      await settings(page);
       const nav = page.getByRole("navigation", { name: "Settings" });
       await ringOnTab(page, nav.getByRole("button", { name: "Appearance" }));
       await ringOnTab(page, nav.getByRole("button", { name: "Terminal" }));
       await ringOnTab(page, nav.getByRole("button", { name: "Keybindings" }));
-      const open = async (name: string): Promise<void> => {
-        await nav.getByRole("button", { name }).click();
-      };
-      await open("Connections");
+    });
+
+    test("the Connections controls Tab reaches draw a focus ring", async ({ page }) => {
+      await settings(page, "Connections");
       // A release build has no Connect through switch (#389): the gateway of this loopback link is the section's control.
       await ringOnTab(page, page.getByRole("textbox", { name: "Gateway", exact: true }));
-      await open("Appearance");
+    });
+
+    test("the Appearance controls Tab reaches draw a focus ring", async ({ page }) => {
+      await settings(page, "Appearance");
       await ringOnTab(page, page.getByLabel("Appearance", { exact: true }).getByRole("button", { name: "System" }));
       await ringOnTab(page, page.getByRole("searchbox", { name: "Search themes" }));
       await ringOnTab(
@@ -91,22 +101,27 @@ for (const colorScheme of ["light", "dark"] as const) {
           .first(),
       );
       await ringOnTab(page, page.getByRole("button", { name: "Choose file…" }));
-      await open("Terminal");
+    });
+
+    test("the Terminal controls Tab reaches draw a focus ring", async ({ page }) => {
+      await settings(page, "Terminal");
       await ringOnTab(page, page.getByRole("button", { name: "Import Ghostty config…" }));
       await ringOnTab(page, page.getByRole("switch", { name: "font-thicken" }));
       await ringOnTab(
         page,
         page.getByLabel("cursor-style", { exact: true }).getByRole("button", { name: "block", exact: true }),
       );
-      await open("Keybindings");
+    });
+
+    test("the Keybindings controls Tab reaches draw a focus ring", async ({ page }) => {
+      await settings(page, "Keybindings");
       await ringOnTab(page, page.getByRole("button", { name: "Import keybinds…" }));
       await ringOnTab(page, page.getByRole("button", { name: "Export" }));
     });
 
     // Tab reaches only the value field: the - and + buttons stay out of the tab order (arrow keys step the value).
     test("a number stepper's value field Tab reaches draws a focus ring", async ({ page }) => {
-      await page.goto("/settings");
-      await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Terminal" }).click();
+      await settings(page, "Terminal");
       await ringOnTab(page, page.getByRole("textbox", { name: "font-size", exact: true }));
     });
   });
