@@ -106,7 +106,13 @@ describe("desktop local host", () => {
   });
 
   test("a start the shell reports as failed rejects with that failure, typed", async () => {
-    const failure = { code: "hc-binary-missing", message: "not found", path: "hc", details: "raw output" };
+    const failure = {
+      code: "hc-binary-missing",
+      message: "not found",
+      path: "hc",
+      searched: ["/h/.local/bin", "/h/.cargo/bin"],
+      details: "raw output",
+    };
     const failed = desktopBridge({ doriface: { startLocalHost: async () => ({ failure }) } });
     const error: unknown = await failed?.startLocalHost().then(
       () => undefined,
