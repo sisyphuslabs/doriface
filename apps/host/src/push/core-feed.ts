@@ -1,6 +1,6 @@
 import { type ByteLink, HcConnection } from "@doriface/client";
 import { HcRpcError } from "@doriface/protocol";
-import { type HcTarget, spawnHcLink } from "../mesh/hc-machines.ts";
+import { type ChildByteLink, type HcTarget, spawnHcLink } from "../mesh/hc-machines.ts";
 import type { PushCore, PushService } from "./push-service.ts";
 
 const RETRY_MS = 5_000;
@@ -10,19 +10,25 @@ export interface CoreFeed {
   readonly ready: Promise<void>;
   /** Settles once the feed's `hc connect` child has exited. */
   stop(): Promise<void>;
+  /** Kills the feed's child if it has not exited (one that ignores a closed stdin), and returns the pids it killed. */
+  kill(): readonly number[];
 }
+
+/** The feed's line to the core: a child it can kill, or a link that has none (a test's). */
+type FeedLink = ByteLink & Partial<Pick<ChildByteLink, "pid" | "kill">>;
 
 /** The push service's own line to this host's core: its events feed the notices, its calls answer prompts. */
 export function startCoreFeed(
   target: HcTarget,
   service: PushService,
   log: (line: string) => void,
-  openLink: (core: HcTarget) => ByteLink = spawnHcLink,
+  openLink: (core: HcTarget) => FeedLink = spawnHcLink,
 ): CoreFeed {
   const first = Promise.withResolvers<void>();
   let stopped = false;
   let current: HcConnection | undefined;
-  let link: ByteLink | undefined;
+  let link: FeedLink | undefined;
+  let linkOpen = false;
   /** Settles once the latest `hc connect` child has exited, so `stop` leaves no child behind. */
   let exited: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -34,8 +40,12 @@ export function startCoreFeed(
   const open = async (): Promise<void> => {
     const child = openLink(target);
     const gone = Promise.withResolvers<void>();
-    child.onClose(() => gone.resolve());
+    child.onClose(() => {
+      if (link === child) linkOpen = false;
+      gone.resolve();
+    });
     link = child;
+    linkOpen = true;
     exited = gone.promise;
     try {
       const connection = await HcConnection.open(child);
@@ -72,6 +82,11 @@ export function startCoreFeed(
       link?.close();
       first.resolve();
       return exited;
+    },
+    kill() {
+      if (link?.kill === undefined || link.pid === undefined || !linkOpen) return [];
+      link.kill("SIGKILL");
+      return [link.pid];
     },
   };
 }
