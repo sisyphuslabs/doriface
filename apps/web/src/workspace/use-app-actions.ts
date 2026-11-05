@@ -16,6 +16,8 @@ export interface AppActionTargets {
   readonly onFocusSidebar: () => void;
   /** Renames or ends the session in view; false when there is none. */
   readonly onSession: SessionVerb;
+  /** Starts dictating into the session in view, or ends the dictation under way; false with no session in view. */
+  readonly onDictate: () => boolean;
   /** The tab that has keyboard focus, which a key moves instead of the active one; none when focus is elsewhere. */
   readonly focusedTab?: () => string | null;
 }
@@ -75,19 +77,25 @@ function zoomAction(verb: string): boolean {
 }
 
 /** The phone shell's app actions: new terminal, settings and terminal text size; it has no tabs, panes or sidebar. */
-export function phoneActions(onNew: () => void, openSettings: () => void, onSession: SessionVerb): ActionHandler {
+export function phoneActions(
+  onNew: () => void,
+  openSettings: () => void,
+  onSession: SessionVerb,
+  onDictate: () => boolean,
+): ActionHandler {
   return (action) => {
     if (action === "tab.new") return (onNew(), true);
+    if (action === "voice.dictate") return onDictate();
     if (action === "app.settings") return (openSettings(), true);
     return sessionAction(action, onSession);
   };
 }
 
-export function usePhoneActions(onNew: () => void, onSession: SessionVerb): void {
+export function usePhoneActions(onNew: () => void, onSession: SessionVerb, onDictate: () => boolean): void {
   const navigate = useNavigate();
   useActionHandler(
     "app",
-    phoneActions(onNew, () => void navigate({ to: "/settings" }), onSession),
+    phoneActions(onNew, () => void navigate({ to: "/settings" }), onSession, onDictate),
   );
 }
 
@@ -116,7 +124,7 @@ function selectTab(tabs: Tabs, address: string | null): boolean {
 }
 
 export function desktopActions(
-  { terminals, tabs, onNew, onToggleSidebar, onFocusSidebar, onSession, focusedTab }: AppActionTargets,
+  { terminals, tabs, onNew, onToggleSidebar, onFocusSidebar, onSession, onDictate, focusedTab }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
   return (action) => {
@@ -161,6 +169,8 @@ export function desktopActions(
       case "app.settings":
         openSettings();
         return true;
+      case "voice.dictate":
+        return onDictate();
       default:
         return sessionAction(action, onSession);
     }

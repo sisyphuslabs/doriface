@@ -1,11 +1,16 @@
 import type { HcConnection } from "@doriface/client";
 import { Button, IconButton, Kbd, StatusBar, StatusBarItem, TabBar, type WorkspaceTab } from "@doriface/ui";
 import { Columns2, Folder, Monitor, PanelLeft } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { useTabSelectKeys } from "../keys/use-tab-select-keys.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
+import { DictateButton } from "../voice/dictate-button.tsx";
+import { useDictation } from "../voice/use-dictation.ts";
+import { VoiceDock } from "../voice/voice-dock.tsx";
 import { agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { NoTerminal } from "./no-terminal.tsx";
+import { usePaneSends } from "./pane-sends.ts";
 import { Panes } from "./panes.tsx";
 import { ReconnectStatus } from "./reconnect-status.tsx";
 import { afterEnd } from "./session-actions.ts";
@@ -35,6 +40,8 @@ export interface DesktopShellProps {
   readonly onSession: SessionVerb;
 }
 
+const viewKey = (address: string, pid: number | null): string => `${address}#${pid ?? ""}`;
+
 export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPalette, onSession }: DesktopShellProps) {
   const [sidebar, setSidebar] = useSidebarShown();
   const paletteKeys = useActionKeys("app.palette");
@@ -44,6 +51,20 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   const moveLeftKeys = useActionKeys("tab.move:left");
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
+  const voice = useDictation();
+  const sends = usePaneSends();
+  const mic = useRef<HTMLButtonElement>(null);
+  // A dictation belongs to the pane it started in: moving focus to another tab or pane ends it, typing nothing.
+  const { dictation } = voice;
+  useEffect(() => dictation.close(), [dictation, tabs.active]);
+  // Views that showed their program had already ended (a restarted program has a new pid, so its view counts afresh).
+  const [endedViews, setEndedViews] = useState<ReadonlySet<string>>(() => new Set());
+  const onEnded = useCallback((address: string, pid: number | null) => {
+    const key = viewKey(address, pid);
+    setEndedViews((seen) => (seen.has(key) ? seen : new Set(seen).add(key)));
+  }, []);
+  const showsEnded = (terminal: { readonly address: string; readonly pid?: number | null }): boolean =>
+    endedViews.has(viewKey(terminal.address, terminal.pid ?? null));
   useAppActions({
     terminals,
     tabs,
@@ -51,6 +72,13 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
     onToggleSidebar: () => setSidebar((shown) => !shown),
     onFocusSidebar: focusSidebar,
     onSession,
+    // The session in view, as the tab bar's mic acts on it; none in view (or its machine offline) leaves the key alone.
+    onDictate: () => {
+      const target = terminals.find((terminal) => terminal.address === tabs.active);
+      if (target === undefined || target.offline === true || showsEnded(target)) return false;
+      voice.toggle();
+      return true;
+    },
     focusedTab,
   });
   const byAddress = new Map(terminals.map((terminal) => [terminal.address, terminal]));
@@ -72,6 +100,13 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
   });
   const focusedMachine = (tabs.active === null ? undefined : machineOf(tabs.active)) ?? connection.hello.core.name;
   const focusedTerminal = tabs.active === null ? undefined : byAddress.get(tabs.active);
+  // As on the phone: a focused terminal that is gone, whose machine is offline, or whose view showed it had ended has
+  // nothing to type into, so a dictation under way ends (its recognizer aborted) and no mic or bound key starts one (#254, #258).
+  const nothingToType =
+    focusedTerminal === undefined || focusedTerminal.offline === true || showsEnded(focusedTerminal);
+  useEffect(() => {
+    if (nothingToType) dictation.close();
+  }, [dictation, nothingToType]);
   const live = terminals.filter((terminal) => terminal.state === "live" && terminal.offline !== true);
   const blocked = live.filter((terminal) => agentStatus(terminal) === "blocked").length;
   useArrivalReady(workspaceSettled(loaded, tabs, live.length));
@@ -133,6 +168,9 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           }
           trailing={
             <>
+              {focusedTerminal === undefined || nothingToType ? null : (
+                <DictateButton voice={voice} target={terminalTitle(focusedTerminal)} size="sm" ref={mic} />
+              )}
               {focusedTerminal === undefined ? null : (
                 <SessionMenu address={focusedTerminal.address} title={terminalTitle(focusedTerminal)} />
               )}
@@ -149,6 +187,22 @@ export function DesktopShell({ connection, terminals, loaded, tabs, onNew, onPal
           split={tabs.split}
           onFocus={tabs.focus}
           onEnd={(address, end) => (closesTab(end) ? afterEnd(address, () => tabs.drop(address)) : undefined)}
+          onEnded={onEnded}
+          sends={sends}
+          dock={
+            focusedTerminal === undefined || nothingToType ? null : (
+              <VoiceDock
+                voice={voice}
+                target={terminalTitle(focusedTerminal)}
+                onType={(text) => {
+                  sends.type(focusedTerminal.address, text);
+                  document.querySelector<HTMLElement>(FOCUSED_TERMINAL_INPUT)?.focus();
+                }}
+                onClose={() => mic.current?.focus()}
+                className="pb-2"
+              />
+            )
+          }
         />
         <StatusBar
           start={

@@ -15,10 +15,11 @@ function policy(): { clock: FakeClock; dials: DialPolicy; due: { member: string;
   return { clock, dials, due };
 }
 
-function net(): { clock: FakeClock; mesh: MeshNet } {
+/** A net of only the hosts a test names: each bystander would merge, ack and gossip every record for nothing. */
+function net(names: readonly string[]): { clock: FakeClock; mesh: MeshNet } {
   const clock = new FakeClock();
   const mesh = new MeshNet(clock, seededRandom(17));
-  const members = ["a", "b", "c", "d"].map(peer);
+  const members = names.map(peer);
   const { records } = meshOf(members);
   for (const entry of members) mesh.add(entry, records);
   return { clock, mesh };
@@ -54,7 +55,7 @@ describe("this host's own outage drops only the 4404s it saw while down (section
   });
 
   test("a 4404 seen during a 20 s drop is dropped on return; a member gated before it stays gated", async () => {
-    const { clock, mesh } = net();
+    const { clock, mesh } = net(["a", "b", "d"]);
     const d = mesh.host("d");
     const [a, b] = [mesh.host("a").member, mesh.host("b").member];
     mesh.offline("b");
@@ -93,7 +94,7 @@ describe("a 4429 and other failed dials (section 8.2)", () => {
   });
 
   test("a dial that fails without a close code gates the member, and its probe delivers what it is owed", async () => {
-    const { clock, mesh } = net();
+    const { clock, mesh } = net(["a", "d"]);
     const a = mesh.host("a");
     const d = mesh.host("d");
     mesh.breakDials("d");
@@ -102,7 +103,10 @@ describe("a 4429 and other failed dials (section 8.2)", () => {
     expect(a.policy.gate(d.member.signPub)?.misses).toBe(1);
     mesh.mendDials("d");
     const has = (): boolean => d.records().some((record) => record.body === admit.body);
-    const took = await clock.until(has, 35_000);
-    expect(took).toBeGreaterThanOrEqual(29_000);
+    // Fires only the timers that are due: stepping the clock in fixed slices spent thousands of event-loop turns.
+    await clock.advance(29_000 - 1);
+    expect(has()).toBe(false);
+    await clock.advance(6_001);
+    expect(has()).toBe(true);
   });
 });
