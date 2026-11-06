@@ -267,8 +267,11 @@ jobs:
             echo "| Version | $VERSION |"
             echo "| Targets | ${{ matrix.targets }} |"
             echo
-            for file in "$RUNNER_TEMP"/out/*; do
-              [ -f "$file" ] && echo "- \`$(basename "$file")\` ($(wc -c < "$file" | tr -d ' ') bytes)"
+            # out/ holds the update feed in a folder (feed-<os>-<arch>/), so list one level down too. `|| continue` rather
+            # than `[ -f ] && echo`: a test that fails on the loop's last entry is the loop's status, and so the step's.
+            for file in "$RUNNER_TEMP"/out/* "$RUNNER_TEMP"/out/*/*; do
+              [ -f "$file" ] || continue
+              echo "- \`${file#"$RUNNER_TEMP"/out/}\` ($(wc -c < "$file" | tr -d ' ') bytes)"
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
