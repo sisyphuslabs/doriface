@@ -147,7 +147,8 @@ function along(points) {
 /** The point at a fraction of a polyline's length, from its `along()` offsets. */
 function pointAt(points, at) {
   const end = points.findIndex(({ offset }) => offset >= at);
-  if (end <= 0) return points[Math.max(end, 0)].point;
+  if (end === -1) return points.at(-1).point;
+  if (end === 0) return points[0].point;
   const {
     point: [x0, y0],
     offset: o0,
