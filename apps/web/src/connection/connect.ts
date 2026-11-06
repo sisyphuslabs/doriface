@@ -1,6 +1,9 @@
 import { HcConnection } from "@doriface/client";
+import type { ByteLink } from "@doriface/client";
 import { base64urlDecode, CloseCode, type SecureLink, secureLink, SecureLinkError } from "@doriface/crypto";
 import { connectRelayClient } from "@doriface/relay-client";
+import { directDial, type PageAccess, pageAccess, parseDirectAddress } from "./direct-address.ts";
+import { attemptDirect, DirectFailure, type DirectReason } from "./direct-attempt.ts";
 import { BROWSER_DEPS, deviceKeyFor, type RelayDeps } from "./relay-deps.ts";
 import type { ConnectionSettings } from "./settings.ts";
 import { loopbackOnly } from "./loopback-address.ts";
@@ -17,21 +20,98 @@ export class DeviceNotPairedError extends Error {
   }
 }
 
-/** Opens a framed herdr-core connection with the given settings. */
+/** Which transport carried the session, so the workspace can say Direct or Relay (#446 §5). */
+export type ConnectionPath = "direct" | "relay" | "loopback";
+
+/** A session that opened, and the path it opened on; `directReason` says why direct did not carry it, when one is set. */
+export interface OpenConnection {
+  readonly connection: HcConnection;
+  readonly path: ConnectionPath;
+  readonly directReason?: DirectReason | undefined;
+}
+
+export interface OpenOptions {
+  /** What this page may open itself; the browser's own secure context and the desktop shell's forwarder (#446 §0). */
+  readonly page?: PageAccess | undefined;
+  /** The direct race's budget; the contract's 300 ms unless a test needs another. */
+  readonly budgetMs?: number | undefined;
+  /** This attempt dials the relay at once: the one before it was a direct link that dropped (#446 §4). */
+  readonly skipDirect?: boolean | undefined;
+}
+
+/**
+ * Opens a framed herdr-core connection with the given settings. In relay mode a saved direct address is tried first with
+ * the same pinned Noise session; the relay carries the session when direct does not answer within the budget, or fails
+ * for any reason, so a broken direct address never costs the connection (#446 §2).
+ */
 export async function connect(
   settings: ConnectionSettings,
   signal?: AbortSignal,
   deps: RelayDeps = BROWSER_DEPS,
-): Promise<HcConnection> {
-  const link =
-    settings.mode === "relay"
-      ? await openRelaySession(settings, deps)
-      : await openWebSocketLink(loopbackOnly(settings.loopbackUrl, "hc"), [SUBPROTOCOL, TOKEN_PREFIX + settings.token]);
-  return HcConnection.open(link, signal === undefined ? {} : { signal });
+  options: OpenOptions = {},
+): Promise<OpenConnection> {
+  if (settings.mode === "loopback") {
+    const link = await openWebSocketLink(
+      loopbackOnly(settings.loopbackUrl, "hc"),
+      [SUBPROTOCOL, TOKEN_PREFIX + settings.token],
+      signal === undefined ? {} : { signal },
+    );
+    return { connection: await HcConnection.open(link, signal === undefined ? {} : { signal }), path: "loopback" };
+  }
+  const direct = await openDirect(settings, signal, deps, options);
+  if ("connection" in direct) return { connection: direct.connection, path: "direct" };
+  const relayed = await openRelaySession(settings, deps);
+  const connection = await HcConnection.open(relayed, signal === undefined ? {} : { signal });
+  return {
+    connection,
+    path: "relay",
+    ...(direct.reason === undefined ? {} : { directReason: direct.reason }),
+  };
+}
+
+type DirectOutcome = { readonly connection: HcConnection } | { readonly reason: DirectReason | undefined };
+
+/**
+ * One direct attempt at a saved address. Every failure is a value here: the caller dials the relay next, so an address
+ * that cannot be used costs a reason, never the connection.
+ */
+async function openDirect(
+  settings: ConnectionSettings,
+  signal: AbortSignal | undefined,
+  deps: RelayDeps,
+  options: OpenOptions,
+): Promise<DirectOutcome> {
+  if (options.skipDirect === true) return { reason: undefined };
+  const address = parseDirectAddress(settings.directUrl);
+  if (!address.usable) return { reason: address.reason === "no address is set" ? undefined : "unusable-address" };
+  const dial = directDial(address, options.page ?? pageAccess());
+  if (dial.kind === "blocked") return { reason: "blocked" };
+  if (dial.kind === "forward") return { reason: "blocked" };
+  try {
+    const secured = await attemptDirect({
+      url: dial.url,
+      ...(options.budgetMs === undefined ? {} : { budgetMs: options.budgetMs }),
+      ...(signal === undefined ? {} : { signal }),
+      secure: (link) => openSessionOn(link, settings, deps),
+    });
+    const connection = await HcConnection.open(secured, signal === undefined ? {} : { signal });
+    return { connection };
+  } catch (error) {
+    return { reason: directFailureReason(error) };
+  }
+}
+
+function directFailureReason(error: unknown): DirectReason {
+  return error instanceof DirectFailure ? error.reason : "could-not-connect";
 }
 
 async function openRelaySession(settings: ConnectionSettings, deps: RelayDeps): Promise<SecureLink> {
   const link = await connectRelayClient({ relayUrl: settings.relayUrl, hostId: settings.hostId });
+  return openSessionOn(link, settings, deps);
+}
+
+/** The session both paths run after their socket is open: Noise IK as the initiator, pinned to the paired host key. */
+async function openSessionOn(link: ByteLink, settings: ConnectionSettings, deps: RelayDeps): Promise<SecureLink> {
   const staticKey = await deviceKeyFor(link, deps);
   try {
     return await secureLink(link, {

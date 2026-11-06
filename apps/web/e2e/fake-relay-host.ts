@@ -41,6 +41,8 @@ async function stopAll(): Promise<void> {
 try {
   host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
+    // #446: the LAN listener a direct address names; it serves only /v1/e2ee, admitted by the Noise handshake.
+    lanListen: { hostname: "127.0.0.1", port: 0 },
     token: `fake-relay-host-${crypto.randomUUID()}`,
     hc: hc.hc,
     session: hc.name,
@@ -76,7 +78,7 @@ async function pairingLink(): Promise<string> {
 const done = Promise.withResolvers<void>();
 process.once("SIGTERM", () => done.resolve());
 process.once("SIGINT", () => done.resolve());
-console.log(JSON.stringify({ bridge: bridge.url }));
+console.log(JSON.stringify({ bridge: bridge.url, directUrl: host.e2ee?.lanUrls[0] ?? "" }));
 void (async () => {
   for await (const _ of createInterface({ input: process.stdin }))
     console.log(JSON.stringify({ link: await pairingLink() }));

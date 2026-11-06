@@ -1,6 +1,7 @@
 import { Spinner, StatusBarItem } from "@doriface/ui";
-import { WifiOff } from "lucide-react";
+import { Cable, Globe, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { DirectReason } from "../connection/direct-attempt.ts";
 import { staysOnThisComputer } from "../connection/settings.ts";
 import { connectionStore, useConnection } from "../connection/store.ts";
 import { useOnline } from "../pwa/use-online.ts";
@@ -66,6 +67,36 @@ export function ReconnectStatus({ compact = false }: { readonly compact?: boolea
         <span className="text-foreground">{notice.offline ? notice.detail : notice.label}</span>
       </StatusBarItem>
       {notice.offline ? <RetryButton size="sm" onRetry={() => Promise.resolve(connectionStore.retryNow())} /> : null}
+    </span>
+  );
+}
+
+const DIRECT_REASONS: Record<DirectReason, string> = {
+  blocked: "this page can't open ws:// to another machine; use wss://",
+  "unusable-address": "the saved address can't be used",
+  "no-answer": "no answer within 300 ms",
+  "could-not-connect": "could not connect",
+  "authentication-failed": "the host key did not match",
+};
+
+/**
+ * The transport the open session runs on, shown while a direct address is saved: Direct, or Relay with the reason direct
+ * did not carry it. A phone shows it in its own bar, whose screen has no tooltip (#446 §5).
+ */
+export function ConnectionPathItem() {
+  const state = useConnection();
+  if (state.phase !== "open" || connectionStore.settings.mode !== "relay") return null;
+  if (connectionStore.settings.directUrl.trim() === "") return null;
+  const direct = state.path === "direct";
+  const reason = state.directReason;
+  const detail = direct
+    ? "Direct: this device reached your host on your network."
+    : `Relay: ${reason === undefined ? "the relay carried this session." : DIRECT_REASONS[reason]}.`;
+  return (
+    <span data-connection-path={state.path} className="flex shrink-0" title={detail}>
+      <StatusBarItem icon={direct ? <Cable aria-hidden /> : <Globe aria-hidden />}>
+        {direct ? "Direct" : "Relay"}
+      </StatusBarItem>
     </span>
   );
 }

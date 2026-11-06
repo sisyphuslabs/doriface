@@ -14,6 +14,10 @@ export class PushChannel {
   /** The route `#client` was opened on: a request for another host never reuses it. */
   #clientRoute = "";
   #opening: Promise<PushStreamClient> | undefined;
+  /** The route the pending open dials, so a request for another route never adopts it. */
+  #openingRoute: string | undefined;
+  /** Bumped by `reset()`: an open that resolves under an older generation is closed, never adopted (#446 §3). */
+  #generation = 0;
   #focus: string | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -59,6 +63,9 @@ export class PushChannel {
 
   /** Closes the stream, e.g. when the connection moved to another host; the next request opens a fresh one. */
   reset(): void {
+    this.#generation += 1;
+    this.#opening = undefined;
+    this.#openingRoute = undefined;
     const client = this.#client;
     if (client !== undefined) this.#drop(client);
   }
@@ -68,16 +75,27 @@ export class PushChannel {
     const client = this.#client;
     if (client !== undefined && !client.closed && this.#clientRoute === key) return Promise.resolve(client);
     if (client !== undefined) this.#drop(client);
-    this.#opening ??= this.#open(route)
+    if (this.#opening !== undefined && this.#openingRoute === key) return this.#opening;
+    const generation = this.#generation;
+    const started = this.#open(route)
       .then((opened) => {
+        if (generation !== this.#generation) {
+          opened.close();
+          throw new Error("the push stream was reset while it opened");
+        }
         this.#client = opened;
         this.#clientRoute = key;
         return opened;
       })
       .finally(() => {
-        this.#opening = undefined;
+        if (this.#opening === started) {
+          this.#opening = undefined;
+          this.#openingRoute = undefined;
+        }
       });
-    return this.#opening;
+    this.#opening = started;
+    this.#openingRoute = key;
+    return started;
   }
 
   #drop(client: PushStreamClient): void {

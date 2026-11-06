@@ -1,7 +1,8 @@
 import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
-import { connect, DeviceNotPairedError } from "./connect.ts";
+import { connect, type ConnectionPath, DeviceNotPairedError, type OpenConnection } from "./connect.ts";
+import type { DirectReason } from "./direct-attempt.ts";
 import { LoopbackAddressError } from "./loopback-address.ts";
 import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSettings } from "./settings.ts";
 
@@ -12,7 +13,12 @@ import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSet
 export type ConnectionState =
   | { readonly phase: "unconfigured" }
   | { readonly phase: "connecting"; readonly attempt: number; readonly stale: HcConnection | null }
-  | { readonly phase: "open"; readonly connection: HcConnection }
+  | {
+      readonly phase: "open";
+      readonly connection: HcConnection;
+      readonly path: ConnectionPath;
+      readonly directReason?: DirectReason | undefined;
+    }
   /** This computer's host did not start: nothing is tried until a start succeeds. */
   | { readonly phase: "host-failed"; readonly failure: HostStartFailure }
   | {
@@ -42,6 +48,8 @@ export class ConnectionStore {
   #stale: HcConnection | null = null;
   /** The attempt the pending retry timer will make, so `retryNow` can make it at once. */
   #pending: number | null = null;
+  /** The next attempt goes to the relay at once: the one before it was a direct link that dropped (#446 §4). */
+  #relayFirst = false;
   /** Asked before each retry of a loopback link: this computer's host, started again if it died (the desktop app). */
   #localHost: LocalHostStarter | null = null;
   readonly #connect: typeof connect;
@@ -96,6 +104,7 @@ export class ConnectionStore {
 
   start(): void {
     this.stop();
+    this.#relayFirst = false;
     if (!isConfigured(this.#settings)) {
       this.#set({ phase: "unconfigured" });
       return;
@@ -115,18 +124,32 @@ export class ConnectionStore {
   async #attempt(attempt: number): Promise<void> {
     const abort = new AbortController();
     this.#abort = abort;
+    const relayFirst = this.#relayFirst;
+    this.#relayFirst = false;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const connection = await this.#connect(this.#settings, abort.signal);
+      const opened: OpenConnection = await this.#connect(
+        this.#settings,
+        abort.signal,
+        undefined,
+        relayFirst ? { skipDirect: true } : {},
+      );
+      const { connection } = opened;
       if (abort.signal.aborted) return connection.close();
       this.#rememberName(connection);
       connection.onClose((error) => {
         if (this.#abort !== abort) return;
+        if (opened.path === "direct") this.#relayFirst = true;
         this.#stale = connection;
         this.#retry(error ?? new Error("the host closed the connection"), 0);
       });
       this.#stale = null;
-      this.#set({ phase: "open", connection });
+      this.#set({
+        phase: "open",
+        connection,
+        path: opened.path,
+        ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
+      });
     } catch (error) {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
