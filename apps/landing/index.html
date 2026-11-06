@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>doriterm: your terminals, on every device, end-to-end encrypted</title>
+    <title>doriterm: your devices, one terminal</title>
     <meta
       name="description"
       content="doriterm puts the shells and coding agents on your machines in a browser tab, a phone and a desktop app. Every session is end-to-end encrypted with Noise; the relay in the middle only sees ciphertext."
@@ -15,17 +15,19 @@
       property="og:description"
       content="Your terminals on every device. End-to-end encrypted with Noise; the relay only sees ciphertext."
     />
-    <meta property="og:url" content="https://doriterm.com" />
-    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <meta property="og:url" content="https://doriterm.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://doriterm.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://doriterm.com/" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="./fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
-    <script>
-      // Applies a pinned theme before first paint so the page never flashes the other palette.
-      (() => {
-        document.documentElement.classList.remove("no-js");
-        const pinned = localStorage.getItem("doriterm-theme");
-        if (pinned === "light" || pinned === "dark") document.documentElement.dataset.theme = pinned;
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
@@ -33,12 +35,13 @@
     <header class="nav">
       <div class="wrap nav__inner">
         <a class="brand" href="#top" aria-label="doriterm, home">
-          <img class="mark-dark" src="mark-dark.svg" alt="" width="28" height="28" />
-          <img class="mark-light" src="mark-light.svg" alt="" width="28" height="28" />
+          <img class="mark-dark" src="/mark-dark.svg" alt="" width="28" height="28" />
+          <img class="mark-light" src="/mark-light.svg" alt="" width="28" height="28" />
           <span>doriterm</span>
         </a>
         <nav aria-label="Sections">
           <ul class="nav__links">
+            <li><a href="#app">App</a></li>
             <li><a href="#relay">Relay</a></li>
             <li><a href="#pairing">Pairing</a></li>
             <li><a href="#mesh">Mesh</a></li>
@@ -95,7 +98,7 @@
               <span class="visually-hidden">Dark</span>
             </button>
           </div>
-          <a class="btn btn--primary btn--sm" href="https://github.com/sisyphuslabs/doriterm/releases">Download</a>
+          <a class="btn btn--primary btn--sm" href="https://app.doriterm.com">Open the app</a>
         </div>
       </div>
     </header>
@@ -103,23 +106,22 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">Noise IK</span><span class="rule"></span>end-to-end encrypted</p>
-          <h1 class="display reveal" style="--delay: 60ms">
-            Every terminal you own.<br /><span class="soft">On every screen you carry.</span>
-          </h1>
+          <p class="eyebrow"><span class="num">Noise IK</span><span class="rule"></span>end-to-end encrypted</p>
+          <h1 class="display">your devices, one terminal.</h1>
+          <p class="hero__sub">
+            Every machine you own, linked through an <span class="nowrap">end-to-end</span> encrypted mesh.
+          </p>
           <div class="hero__row">
-            <p class="hero__lede reveal" style="--delay: 120ms">
+            <p class="hero__lede">
               doriterm puts the shells and coding agents on your machines in a browser tab, a phone and a desktop app.
               <strong>Each session is encrypted end to end with Noise.</strong> The relay in the middle forwards
               ciphertext and holds no key that opens it.
             </p>
-            <div class="hero__side reveal" style="--delay: 180ms">
+            <div class="hero__side">
               <div class="hero__cta">
-                <a class="btn btn--primary" href="https://github.com/sisyphuslabs/doriterm/releases"
-                  >Download doriterm</a
-                >
-                <a class="btn btn--ghost" href="#relay"
-                  >How the relay works <span class="arrow" aria-hidden="true">&rarr;</span></a
+                <a class="btn btn--primary" href="https://app.doriterm.com">Open the app</a>
+                <a class="btn btn--ghost" href="https://github.com/sisyphuslabs/doriterm/releases"
+                  >Download for desktop <span class="arrow" aria-hidden="true">&rarr;</span></a
                 >
               </div>
               <dl class="stats">
@@ -491,26 +493,32 @@
         <nav class="wrap index" aria-label="On this page">
           <ol>
             <li>
+              <a href="#app"
+                ><span class="n">01</span><span class="t">The app, live</span
+                ><span class="d">desktop and phone</span></a
+              >
+            </li>
+            <li>
               <a href="#relay"
-                ><span class="n">01</span><span class="t">The relay is a pipe</span
+                ><span class="n">02</span><span class="t">The relay is a pipe</span
                 ><span class="d">ciphertext in, ciphertext out</span></a
               >
             </li>
             <li>
               <a href="#pairing"
-                ><span class="n">02</span><span class="t">Pair a phone in one scan</span
+                ><span class="n">03</span><span class="t">Pair a phone in one scan</span
                 ><span class="d">QR, link or an 8-character code</span></a
               >
             </li>
             <li>
               <a href="#mesh"
-                ><span class="n">03</span><span class="t">Machines that vouch for each other</span
+                ><span class="n">04</span><span class="t">Machines that vouch for each other</span
                 ><span class="d">signed records, no open ports</span></a
               >
             </li>
             <li>
               <a href="#everywhere"
-                ><span class="n">04</span><span class="t">Desktop, browser and phone</span
+                ><span class="n">05</span><span class="t">Desktop, browser and phone</span
                 ><span class="d">rendered by libghostty</span></a
               >
             </li>
@@ -518,9 +526,54 @@
         </nav>
       </section>
 
+      <section class="section" id="app" aria-labelledby="app-title">
+        <div class="wrap">
+          <p class="eyebrow reveal"><span class="num">01</span><span class="rule"></span>App</p>
+          <h2 class="h2 reveal" id="app-title">
+            Every terminal on every machine.<br /><span class="soft">One sidebar for all of them.</span>
+          </h2>
+          <p class="section__lede reveal">
+            Spaces on the left, agents grouped by whether they need you, are working or are done, and split terminals on
+            the right. On a phone the same terminal gets a key bar with ctrl, esc and the arrows.
+            <strong>What you see here is the app's own components, live, with sample data.</strong>
+          </p>
+          <div class="app-stage reveal">
+            <figure class="frame app-desktop">
+              <div class="frame__bar">
+                <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="frame__title">doriterm, studio</span>
+                <span class="frame__meta">app.doriterm.com</span>
+              </div>
+              <div class="live" style="--w: 1280; --h: 780">
+                <iframe
+                  data-src="/mockup.html?view=desktop"
+                  title="The doriterm desktop workspace, drawn by the app's components with sample data"
+                  loading="lazy"
+                  tabindex="-1"
+                  width="1280"
+                  height="780"
+                ></iframe>
+              </div>
+            </figure>
+            <figure class="app-phone">
+              <div class="live" style="--w: 390; --h: 844">
+                <iframe
+                  data-src="/mockup.html?view=phone"
+                  title="The doriterm phone terminal with its key bar, drawn by the app's components with sample data"
+                  loading="lazy"
+                  tabindex="-1"
+                  width="390"
+                  height="844"
+                ></iframe>
+              </div>
+            </figure>
+          </div>
+        </div>
+      </section>
+
       <section class="section" id="relay" aria-labelledby="relay-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">01</span><span class="rule"></span>Relay</p>
+          <p class="eyebrow reveal"><span class="num">02</span><span class="rule"></span>Relay</p>
           <h2 class="h2 reveal" id="relay-title">
             The relay is a pipe.<br /><span class="soft">It cannot read what it carries.</span>
           </h2>
@@ -602,7 +655,7 @@
       <section class="section" id="pairing" aria-labelledby="pairing-title">
         <div class="wrap split">
           <div>
-            <p class="eyebrow reveal"><span class="num">02</span><span class="rule"></span>Pairing</p>
+            <p class="eyebrow reveal"><span class="num">03</span><span class="rule"></span>Pairing</p>
             <h2 class="h2 reveal" id="pairing-title">
               Pair a phone in one scan.<br /><span class="soft">The secret never leaves the link.</span>
             </h2>
@@ -1014,7 +1067,7 @@
 
       <section class="section" id="mesh" aria-labelledby="mesh-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">03</span><span class="rule"></span>Mesh</p>
+          <p class="eyebrow reveal"><span class="num">04</span><span class="rule"></span>Mesh</p>
           <h2 class="h2 reveal" id="mesh-title">
             Machines that vouch for each other.<br /><span class="soft">No ssh, no open port.</span>
           </h2>
@@ -1129,7 +1182,7 @@
 
       <section class="section" id="everywhere" aria-labelledby="everywhere-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">04</span><span class="rule"></span>Platforms</p>
+          <p class="eyebrow reveal"><span class="num">05</span><span class="rule"></span>Platforms</p>
           <h2 class="h2 reveal" id="everywhere-title">
             Desktop, browser, phone.<br /><span class="soft">The same terminal on each.</span>
           </h2>
@@ -1175,7 +1228,8 @@
               </div>
               <h3>Any modern browser</h3>
               <p>
-                Open a tab, pair, and every pane of every machine is there. Nothing to install on a borrowed computer.
+                Open app.doriterm.com, pair, and every pane of every machine is there. Nothing to install on a borrowed
+                computer.
               </p>
               <span class="meta">Chrome and Edge 119+, Safari 17.4+, Firefox 121+</span>
             </article>
@@ -1243,7 +1297,7 @@
             included.
           </p>
           <div class="hero__cta reveal">
-            <a class="btn btn--primary" href="https://github.com/sisyphuslabs/doriterm/releases">Download</a>
+            <a class="btn btn--primary" href="https://app.doriterm.com">Open the app</a>
             <a class="btn btn--ghost" href="https://github.com/sisyphuslabs/doriterm/blob/dev/docs/transport.md"
               >Read the transport contract <span class="arrow" aria-hidden="true">&rarr;</span></a
             >
@@ -1255,8 +1309,8 @@
     <footer class="footer">
       <div class="wrap footer__inner">
         <a class="brand" href="#top" aria-label="doriterm, back to top">
-          <img class="mark-dark" src="mark-dark.svg" alt="" width="28" height="28" />
-          <img class="mark-light" src="mark-light.svg" alt="" width="28" height="28" />
+          <img class="mark-dark" src="/mark-dark.svg" alt="" width="28" height="28" />
+          <img class="mark-light" src="/mark-light.svg" alt="" width="28" height="28" />
           <span>doriterm</span>
         </a>
         <nav aria-label="Footer">

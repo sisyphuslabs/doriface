@@ -4,7 +4,7 @@
 
 ### Website
 
-- A landing page for doriterm.com in `apps/landing` (static HTML, CSS and one module, no build step) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
+- A landing page for doriterm.com in `apps/landing` (a static Vite build) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the hero line "your devices, one terminal.", the app shown live from its own components, the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
 
 ### Web app and PWA
 

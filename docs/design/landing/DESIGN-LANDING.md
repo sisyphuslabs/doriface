@@ -1,6 +1,13 @@
 # doriterm.com landing: design system
 
-The marketing page for doriterm.com lives in `apps/landing/` as plain HTML, CSS and one ES module, with no build step. It extends the product's [DESIGN.md](../../../DESIGN.md): the colours are the app's Night and Day palettes, and the status grammar and hairline depth carry over. This file covers only what a landing page adds: display type, a looser spacing scale, motion that explains, and the components the page is built from. Captures are in this folder (`<width>-<theme>-<section>.png`).
+The marketing page for doriterm.com lives in `apps/landing/`: plain HTML, CSS and one ES module for the page, plus `mockup.html`, which renders the app's own components with sample data. `bun run --cwd apps/landing build` (Vite) writes a static `dist/` that any static host serves as it is. It extends the product's [DESIGN.md](../../../DESIGN.md): the colours are the app's Night and Day palettes, and the status grammar and hairline depth carry over. This file covers only what a landing page adds: display type, a looser spacing scale, motion that explains, and the components the page is built from. Captures are in this folder (`<width>-<theme>-<section>.png`).
+
+## Product rulings the page follows
+
+- doriterm is a terminal. The page makes no file-editing or IDE claim, and the sample data shows terminals and coding agents only.
+- The app lives at `https://app.doriterm.com`; doriterm.com is this page. Every primary button says **Open the app** and goes there; the desktop download is the secondary action.
+- Hero copy is the owner's: the headline `your devices, one terminal.` (lowercase, as written) and directly under it `Every machine you own, linked through an end-to-end encrypted mesh.`
+- Any view of the app inside a window or phone frame is the app's components rendered live, never a screenshot (section 5, "Live mockups").
 
 ## 0. Research
 
@@ -97,7 +104,7 @@ Every loop runs only while its scene is on screen and the tab is visible (Inters
 
 | Component        | Class                                      | Anatomy                                                                              | States                                                        |
 | ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| Nav              | `.nav`                                     | wordmark (mascot mark swaps per theme), section links, theme switch, Download        | sticky, translucent `--bg` with blur; links hide under 760 px |
+| Nav              | `.nav`                                     | wordmark (mascot mark swaps per theme), section links, theme switch, Open the app    | sticky, translucent `--bg` with blur; links hide under 760 px |
 | Theme switch     | `.theme-switch`                            | three icon buttons (System, Light, Dark) with visually hidden labels                 | `aria-pressed`; hover ink; 2 px focus ring                    |
 | Button           | `.btn--primary`, `.btn--ghost`, `.btn--sm` | pill, 44 px tall (34 px small)                                                       | hover tone, 0.97 press, arrow nudges 3 px on hover            |
 | Eyebrow          | `.eyebrow`                                 | mono number in accent, 28 px rule, uppercase label                                   | none                                                          |
@@ -111,6 +118,20 @@ Every loop runs only while its scene is on screen and the tab is visible (Inters
 | Relay wire       | `.wire`                                    | dashed amber container, two lanes of ciphertext chips (opposite directions), caption | marquee                                                       |
 | Mesh stage       | `.mesh`                                    | stage SVG, step list                                                                 | step highlight, danger step in red wash                       |
 | Footer           | `.footer`                                  | wordmark, four links                                                                 | hover ink                                                     |
+
+### Live mockups
+
+The window and phone in section 01 are `<iframe>`s of `mockup.html?view=desktop` (1280 x 780) and `?view=phone` (390 x 844). That page imports `@doriface/ui`, the component set `apps/web` is built from (SidebarSection, SpaceRow, AgentRow, TabBar, TerminalPreview, StatusBar, StatusChip, ExtraKeysBar), with Tailwind and the app's tokens, and renders them with the fixtures in `apps/landing/src/mockup/fixtures.ts`. The landing never loads React or the app's stylesheet itself:
+
+- Isolation: the iframe keeps Tailwind's preflight and the app's tokens off the landing, and the landing's styles off the app.
+- Size: `main.js` scales each frame to its box with a ResizeObserver (`--scale`), so the app keeps its own pixel layout at every width. Below 640 px only the phone is shown.
+- Loading: an iframe gets its `src` only when its box comes within half a screen of view (IntersectionObserver), so the 150 kB (gzip) mockup bundle never competes with the hero.
+- Theme: the mockup follows `prefers-color-scheme` like the page; when the switch pins Light or Dark, `main.js` posts `{ theme }` to each frame (same origin only), which pins the app's Day or Night preset.
+- Inert: the mockup's body is `inert` and the iframe has `tabindex="-1"`, so it takes no focus or input; each iframe has a `title` saying it is the app drawn with sample data.
+
+### Performance and headers
+
+Measured with Lighthouse 12 on the built page served with `public/_headers`' CSP: mobile 99 performance (FCP 1.5 s, LCP 2.1 s, CLS 0, TBT 0 ms), desktop 100; accessibility, best practices and SEO 100 on both. What keeps it there: the hero has no scroll reveal (its text is the LCP element), both fonts are preloaded so the swap moves nothing, and the mockups load lazily. `public/_headers` sets the CSP (`script-src 'self'`; the pre-paint theme script is the external `theme-init.js`), `X-Frame-Options: SAMEORIGIN` so the page can frame its own mockups, and long caching for hashed `/assets/*`. `og.png` and `robots.txt`/`sitemap.xml` come from #771.
 
 ## 6. Claims and their sources
 
