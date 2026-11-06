@@ -71,8 +71,12 @@ for (const { name: size, narrow, inset, ...use } of VIEWPORTS) {
         if (inset) await page.addStyleTag({ content: DESKTOP_INSET });
         const corner = await page.evaluate(cornerStarts, INSET);
         // Settings opens as a dialog over the workspace (#843), and the workspace behind it draws no titlebar: the
-        // dialog is the screen, so its own left edge is what has to clear the window buttons.
-        const dialog = await page.locator("[data-settings-dialog]").boundingBox();
+        // dialog is the screen, so its own left edge is what has to clear the window buttons. Measured in the page, not
+        // through a locator: every other screen has no dialog, and a locator would wait for one that never comes.
+        const dialog = await page.evaluate(() => {
+          const panel = document.querySelector("[data-settings-dialog]");
+          return panel === null ? null : { x: panel.getBoundingClientRect().x };
+        });
         const found = await page.evaluate(findOverflows, SKIP);
         if (OUT !== undefined) {
           const file = join(OUT, `${screen.name}-${size}-${theme}`);
