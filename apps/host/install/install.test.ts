@@ -137,13 +137,31 @@ describe("install.sh on Linux", () => {
     expect(script).toContain('release="__DORIFACE_RELEASE__"');
     const r = rig("Linux");
     const stamped = join(r.root, "install-v9.9.9.sh");
-    writeFileSync(stamped, script.replace('release="__DORIFACE_RELEASE__"', 'release="v9.9.9"'));
+    // Stamped exactly as the release workflow stamps it: its own sed line, run over the whole script.
+    const workflow = readFileSync(
+      join(import.meta.dir, "..", "..", "..", ".github", "workflows", "release.yml"),
+      "utf8",
+    );
+    const sedLine = /sed "(s\/__DORIFACE_RELEASE__\/\$TAG\/)"/.exec(workflow)?.[1];
+    expect(sedLine).toBeDefined();
+    const sed = Bun.spawnSync(["sed", (sedLine ?? "").replace("$TAG", "v9.9.9"), SCRIPT], { stdout: "pipe" });
+    writeFileSync(stamped, sed.stdout);
     const proc = Bun.spawnSync(["/bin/sh", stamped, "--no-service", "--no-pair"], {
       env: { HOME: r.home, PATH: [r.stubs, "/usr/bin", "/bin"].join(":"), TMPDIR: r.root },
       stdout: "pipe",
       stderr: "pipe",
     });
     expect(proc.stdout.toString() + proc.stderr.toString()).toContain("/releases/download/v9.9.9");
+  });
+
+  test("a path with a percent sign reaches systemd as itself, not as a specifier", () => {
+    const r = rig("Linux");
+    const bin = join(r.root, "100%bin");
+    const run = install(r, ["--no-pair", "--bin-dir", bin]);
+    expect(run.code).toBe(0);
+    const unit = readFileSync(join(r.home, ".config", "systemd", "user", "doriface-host.service"), "utf8");
+    expect(unit).toContain(`ExecStart="${join(r.root, "100%%bin", "doriface-host")}"`);
+    expect(unit).not.toMatch(/100%bin/);
   });
 
   test("keeps an hc already on PATH and runs the service with it", () => {
