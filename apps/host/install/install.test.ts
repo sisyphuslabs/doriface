@@ -146,12 +146,29 @@ describe("install.sh on Linux", () => {
     expect(sedLine).toBeDefined();
     const sed = Bun.spawnSync(["sed", (sedLine ?? "").replace("$TAG", "v9.9.9"), SCRIPT], { stdout: "pipe" });
     writeFileSync(stamped, sed.stdout);
-    const proc = Bun.spawnSync(["/bin/sh", stamped, "--no-service", "--no-pair"], {
+    // No network: a curl stub records the URL the stamped script asks for, then fails the download.
+    stub(r.stubs, "curl", `for a in "$@"; do case "$a" in http*) echo "curl $a" >> "${r.log}";; esac; done; exit 22`);
+    Bun.spawnSync(["/bin/sh", stamped, "--no-service", "--no-pair"], {
       env: { HOME: r.home, PATH: [r.stubs, "/usr/bin", "/bin"].join(":"), TMPDIR: r.root },
       stdout: "pipe",
       stderr: "pipe",
     });
-    expect(proc.stdout.toString() + proc.stderr.toString()).toContain("/releases/download/v9.9.9");
+    const asked = readFileSync(r.log, "utf8");
+    expect(asked).toContain(
+      "curl https://github.com/sisyphuslabs/doriface/releases/download/v9.9.9/doriface-host-linux-x64",
+    );
+    expect(asked).not.toContain("/latest/");
+
+    // The repository copy, never stamped, asks for the latest release.
+    writeFileSync(r.log, "");
+    Bun.spawnSync(["/bin/sh", SCRIPT, "--no-service", "--no-pair"], {
+      env: { HOME: r.home, PATH: [r.stubs, "/usr/bin", "/bin"].join(":"), TMPDIR: r.root },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(readFileSync(r.log, "utf8")).toContain(
+      "curl https://github.com/sisyphuslabs/doriface/releases/latest/download/doriface-host-linux-x64",
+    );
   });
 
   test("a path with a percent sign reaches systemd as itself, not as a specifier", () => {
