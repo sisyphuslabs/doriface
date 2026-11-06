@@ -10,6 +10,7 @@
 ### Settings
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
+- On a phone, the Settings tab strip's arrows that page to more sections are a full 44 pt tap each. (#900)
 
 ### Pairing from a phone
 
