@@ -36,6 +36,10 @@ export const Channel = {
   noticeClicked: "doriface:notice-clicked",
   /** Renderer to main: this computer's pairing offer (`open` for a fresh one, `state` for what stands). */
   pairOffer: "doriface:pair-offer",
+  /** Renderer to main: this computer's paired devices and this device's id. */
+  pairedDevices: "doriface:paired-devices",
+  /** Renderer to main: revoke one paired device by its short id. */
+  revokeDevice: "doriface:revoke-device",
   /** Renderer to main: the Direct address the page saved, checked by the shell before it forwards anything (chosen). */
   setDirectTarget: "doriface:set-direct-target",
   /** Renderer to main: one capability to forward bytes to the saved Direct address, or why not (#449). */
@@ -103,8 +107,7 @@ export interface PairedDevice {
   readonly pairedAt: string;
 }
 
-/**
- * What `pairOffer` answers: the offer to show, the device that used it, or why this app cannot ask its host
+/** What `pairOffer` answers: the offer to show, the device that used it, or why this app cannot ask its host
  * (`unavailable`, which is never a transient offer state).
  */
 export type PairOfferAnswer =
@@ -113,6 +116,50 @@ export type PairOfferAnswer =
   | { readonly state: "expired" }
   | { readonly state: "none" }
   | { readonly state: "unavailable"; readonly reason: string };
+
+/**
+ * What `pairedDevices` answers: every device this computer has stored, or why this app cannot ask its host.
+ */
+export type PairedDevicesAnswer =
+  | { readonly state: "listed"; readonly devices: readonly PairedDevice[] }
+  | { readonly state: "unavailable"; readonly reason: string };
+
+/** What `revokeDevice` answers: the list after the revoke, or why it did not happen. */
+export type RevokeDeviceAnswer =
+  | { readonly state: "revoked"; readonly device: PairedDevice; readonly devices: readonly PairedDevice[] }
+  | { readonly state: "not-found"; readonly devices: readonly PairedDevice[] }
+  | { readonly state: "unavailable"; readonly reason: string };
+
+export function isPairedDevice(value: unknown): value is PairedDevice {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof Reflect.get(value, "name") === "string" &&
+    typeof Reflect.get(value, "id") === "string" &&
+    typeof Reflect.get(value, "pairedAt") === "string"
+  );
+}
+
+const pairedDevices = (value: unknown): readonly PairedDevice[] | undefined =>
+  Array.isArray(value) && value.every(isPairedDevice) ? value : undefined;
+
+export function isPairedDevicesAnswer(value: unknown): value is PairedDevicesAnswer {
+  if (typeof value !== "object" || value === null) return false;
+  const state: unknown = Reflect.get(value, "state");
+  if (state === "unavailable") return typeof Reflect.get(value, "reason") === "string";
+  return state === "listed" && pairedDevices(Reflect.get(value, "devices")) !== undefined;
+}
+
+export function isRevokeDeviceAnswer(value: unknown): value is RevokeDeviceAnswer {
+  if (typeof value !== "object" || value === null) return false;
+  const state: unknown = Reflect.get(value, "state");
+  // `unavailable` is why the revoke did not happen and carries no list, so it is read before the list is required.
+  if (state === "unavailable") return typeof Reflect.get(value, "reason") === "string";
+  const list = pairedDevices(Reflect.get(value, "devices"));
+  if (list === undefined) return false;
+  if (state === "revoked") return isPairedDevice(Reflect.get(value, "device"));
+  return state === "not-found";
+}
 
 export function isPairOfferAnswer(value: unknown): value is PairOfferAnswer {
   if (typeof value !== "object" || value === null) return false;
@@ -214,6 +261,9 @@ export interface DorifaceBridge {
    * cannot answer is an `unavailable` answer.
    */
   pairOffer(request: "open" | "state"): Promise<PairOfferAnswer>;
+  /** This computer's paired devices; revoking one from here closes its sessions on the host. */
+  pairedDevices(): Promise<PairedDevicesAnswer>;
+  revokeDevice(id: string): Promise<RevokeDeviceAnswer>;
   /** Calls `listener` with an app path to show, e.g. `/settings` from the app menu. */
   onNavigate(listener: (path: string) => void): void;
   /** Paints the window, now and at the next launch, with the in-app theme's background (`#rrggbb`). */

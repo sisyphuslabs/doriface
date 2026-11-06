@@ -3,7 +3,7 @@ import type { Clock } from "./clock.ts";
 import type { DialPolicy } from "./dial-policy.ts";
 import type { Gossip } from "./gossip.ts";
 import type { MeshLiveFacts } from "./host-hooks.ts";
-import type { MeshEntry } from "./reconciler.ts";
+import type { LineStatus, MeshEntry } from "./reconciler.ts";
 import type { LineFacts, PeerFacts } from "./status-sources.ts";
 
 /** The running mesh parts `mesh status` reads its live facts from (design sections 8.2 and 8.6). */
@@ -13,7 +13,7 @@ export interface LiveParts {
     Gossip,
     "view" | "self" | "lastSync" | "owedCount" | "session" | "peerCounter" | "possiblyRevoked"
   >;
-  readonly reconciler: { lines(): readonly MeshEntry[] };
+  readonly reconciler: { lines(): readonly MeshEntry[]; readonly status: ReadonlyMap<string, LineStatus> };
   /** Whether an authenticated session from this Noise key (an hc line, say) is open on this host now. */
   readonly openFrom: (noisePub: string) => boolean;
 }
@@ -73,7 +73,9 @@ export function liveFactsOf(parts: LiveParts, clock: Clock, wallNow = Date.now()
     if (key === undefined) continue;
     const state = lineState(machine.state);
     const reason = MESH_LINE_STATES_WITH_REASON.includes(state) ? (machine.why ?? null) : null;
-    lines.set(key, { state, reason, stuck: null, helloCoreId: machine.id, replaced: null });
+    const status = parts.reconciler.status.get(hostId);
+    const replaced = status?.state === "ok" ? (status.replaced ?? null) : null;
+    lines.set(key, { state, reason, stuck: null, helloCoreId: machine.id, replaced });
   }
   const budget = { waiting: policy.waiting(), halvedUntil: wall(policy.halvedUntil()) };
   return { peers, lines, budget, possiblyRevoked: gossip.possiblyRevoked, peerCounter: gossip.peerCounter };

@@ -43,6 +43,9 @@ export type OfferSecret =
   | { readonly mode: "code"; readonly code: string }
   | { readonly mode: "link"; readonly linkSecret: Uint8Array };
 
+/** What a link admits: this browser as a device of the host, or a machine joining the host's mesh (`&m=1`). */
+export type PairingTarget = "device" | "mesh";
+
 export interface PairingOffer {
   readonly hostId: string;
   readonly noiseStaticPub: Uint8Array;
@@ -50,6 +53,7 @@ export interface PairingOffer {
   readonly secret: OfferSecret;
   readonly relayUrl: string;
   readonly fingerprint: string;
+  readonly target: PairingTarget;
 }
 
 export type PairingParse =
@@ -68,10 +72,11 @@ export function parsePairingFragment(hash: string): PairingParse {
   const link = params.get("p") ?? "";
   const linkSecret = link.length === 43 ? fromBase64Url(link) : null;
   const relayUrl = params.get("r") ?? "";
+  const target: PairingTarget = params.get("m") === "1" ? "mesh" : "device";
   if (noiseStaticPub === null || signPub === null) return { ok: false, reason: "The host's keys are missing." };
   if (linkSecret?.byteLength !== 32) return { ok: false, reason: "The pairing link's secret is malformed." };
   if (!/^wss?:\/\//.test(relayUrl)) return { ok: false, reason: "The relay address is not a WebSocket URL." };
-  return offerFrom({ hostId, noiseStaticPub, signPub }, { mode: "link", linkSecret }, relayUrl);
+  return offerFrom({ hostId, noiseStaticPub, signPub }, { mode: "link", linkSecret }, { relayUrl, target });
 }
 
 export interface HostKeys {
@@ -80,12 +85,18 @@ export interface HostKeys {
   readonly signPub: Uint8Array;
 }
 
+export interface OfferPlacement {
+  readonly relayUrl: string;
+  readonly target: PairingTarget;
+}
+
 /** Checks that hostId belongs to the signing key, then attaches the fingerprint to show. */
-export function offerFrom(keys: HostKeys, secret: OfferSecret, relayUrl: string): PairingParse {
+export function offerFrom(keys: HostKeys, secret: OfferSecret, placement: OfferPlacement): PairingParse {
+  const { relayUrl, target } = placement;
   if (keys.noiseStaticPub.byteLength !== 32 || keys.signPub.byteLength !== 32) {
     return { ok: false, reason: "The host's keys are malformed." };
   }
   if (hostIdOf(keys.signPub) !== keys.hostId)
     return { ok: false, reason: "The host ID does not match its signing key." };
-  return { ok: true, offer: { ...keys, secret, relayUrl, fingerprint: fingerprintOf(keys.noiseStaticPub) } };
+  return { ok: true, offer: { ...keys, secret, relayUrl, target, fingerprint: fingerprintOf(keys.noiseStaticPub) } };
 }
