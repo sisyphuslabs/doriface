@@ -104,14 +104,18 @@ export function DevicesSection() {
   const revoke = async (device: DesktopPairedDevice): Promise<void> => {
     setRevoking(null);
     if (devices === null) return;
-    const answer = await devices.revoke(device.id);
-    if (answer.state === "unavailable") return setNote(answer.reason);
-    setPaired({ state: "listed", devices: answer.devices });
-    setNote(
-      answer.state === "revoked"
-        ? `${answer.device.name} can no longer reach this computer.`
-        : "That device was already gone.",
-    );
+    try {
+      const answer = await devices.revoke(device.id);
+      if (answer.state === "unavailable") return setNote(answer.reason);
+      setPaired({ state: "listed", devices: answer.devices });
+      setNote(
+        answer.state === "revoked"
+          ? `${answer.device.name} can no longer reach this computer.`
+          : "That device was already gone.",
+      );
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : String(error));
+    }
   };
 
   return (
@@ -132,7 +136,7 @@ export function DevicesSection() {
       {view.kind === "unsupported" ? null : (
         <>
           <SettingRow
-            title={label(<Laptop aria-hidden />, "Paired devices")}
+            title={label(<Laptop aria-hidden />, "Other devices")}
             description={devicesDescription(view)}
             control={null}
           />
