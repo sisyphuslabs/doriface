@@ -12,14 +12,22 @@ export interface RowWithActionsProps {
    * items its "..." action holds, so a right-click finds what the button offers (#699).
    */
   readonly menu?: ReactNode;
+  /**
+   * Keeps the actions drawn on a coarse pointer, where there is no hover to reveal them, in place of the row's meta:
+   * only for a row whose trailing meta can give way (the agents list, #798). A row whose meta is its own signal, like a
+   * space's status dot and tab count, leaves this off and keeps its meta.
+   */
+  readonly coarseActions?: boolean;
   readonly className?: string;
 }
 
-/** Hover, keyboard focus or an open menu shows them, and so does a coarse pointer, which has no hover to give them (#798). */
 const SHOWN =
-  "group-hover/row:visible group-focus-within/row:visible group-has-[[data-popup-open]]/row:visible group-data-popup-open/row:visible coarse:visible";
+  "group-hover/row:visible group-focus-within/row:visible group-has-[[data-popup-open]]/row:visible group-data-popup-open/row:visible";
 const MASKED =
-  "[&:is(:hover,:focus-within,:has([data-popup-open]),[data-popup-open])_[data-row-meta]]:invisible coarse:[&_[data-row-meta]]:invisible data-popup-open:outline-2 data-popup-open:outline-solid data-popup-open:-outline-offset-2 data-popup-open:outline-ring";
+  "[&:is(:hover,:focus-within,:has([data-popup-open]),[data-popup-open])_[data-row-meta]]:invisible data-popup-open:outline-2 data-popup-open:outline-solid data-popup-open:-outline-offset-2 data-popup-open:outline-ring";
+/** The same two, held on a coarse pointer: the actions are drawn, and the meta they cover is not. */
+const COARSE_SHOWN = `${SHOWN} coarse:visible`;
+const COARSE_MASKED = `${MASKED} coarse:[&_[data-row-meta]]:invisible`;
 
 /** A touch keeps the row's own press (a held space row lifts for a drag): only a mouse, a pen or a key opens the menu. */
 function skipTouchMenu(event: MouseEvent<HTMLDivElement>): void {
@@ -41,18 +49,23 @@ function openFromKeys(event: KeyboardEvent<HTMLDivElement>): void {
 }
 
 /** A sidebar row with a few trailing actions that take the place of its meta (age, machine, count) when shown. */
-export function RowWithActions({ row, actions, menu, className }: RowWithActionsProps) {
+export function RowWithActions({ row, actions, menu, coarseActions = false, className }: RowWithActionsProps) {
   const box = useRef<HTMLDivElement | null>(null);
   const element = (
     <div
       ref={box}
-      className={cn("group/row relative min-w-0 rounded-md", MASKED, className)}
+      className={cn("group/row relative min-w-0 rounded-md", coarseActions ? COARSE_MASKED : MASKED, className)}
       {...(menu === undefined
         ? {}
         : { onTouchStart: skipMenuHandler, onContextMenu: skipTouchMenu, onKeyDown: openFromKeys })}
     >
       {row}
-      <span className={cn("invisible absolute inset-y-0 right-1 flex items-center gap-0.5 coarse:gap-6", SHOWN)}>
+      <span
+        className={cn(
+          "invisible absolute inset-y-0 right-1 flex items-center gap-0.5 coarse:gap-6",
+          coarseActions ? COARSE_SHOWN : SHOWN,
+        )}
+      >
         {actions}
       </span>
     </div>

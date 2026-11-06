@@ -12,7 +12,7 @@ const reached = (page: Page, points: readonly { readonly x: number; readonly y: 
     points,
   );
 
-test("an agent row's Pin and More are on the phone, and each takes a tap 10 px past its drawn box", async ({
+test("an agent row's Pin and More are on the phone, and each takes a tap just inside 10 px of its drawn box", async ({
   page,
 }) => {
   const address = startAgent("host", "tapme", "idle");
@@ -58,6 +58,10 @@ test("an agent row's Pin and More are on the phone, and each takes a tap 10 px p
 
     // The meta gives way to the actions, as it does on hover on a fine pointer, so nothing is drawn under them.
     await expect(row.locator("[data-row-meta]").first()).toHaveCSS("visibility", "hidden");
+
+    // A space row's meta is its own signal: its status dot and tab count stay in its name, and its "..." waits for a hover.
+    await expect(page.getByRole("button", { name: /\d+ tabs/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "More for api" })).toHaveCount(0);
 
     await pin.tap();
     await expect(page.getByRole("button", { name: "Unpin tapme" })).toBeVisible();
