@@ -1,5 +1,5 @@
 // Korean wraps between words, never inside one, and a row's icon sits on its text's first line: Settings >
-// Connections at 390 with the layout host's long Korean name (#480).
+// This device at 390 with the layout host's long Korean name (#480).
 import { STARTS } from "./layout-screens.ts";
 import { LAYOUT_CORE } from "./layout-seed.ts";
 import { expect, test } from "./fixtures.ts";

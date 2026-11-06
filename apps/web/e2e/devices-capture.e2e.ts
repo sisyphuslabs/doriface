@@ -19,7 +19,7 @@ test.skip(process.env["CAPTURE"] !== "1", "captures run only with CAPTURE=1");
 test.use({ page: async ({ page }, use) => use(page) });
 
 const pairedDevices = (page: Page) =>
-  page.locator("section").filter({ has: page.getByRole("heading", { name: "Paired devices" }) });
+  page.locator("section").filter({ has: page.getByRole("heading", { name: "Host", exact: true }) });
 
 /** Settings names the host while it answers, then the link drops: the row must still name it (#496). */
 async function openPairedDevices(page: Page): Promise<void> {

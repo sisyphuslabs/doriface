@@ -24,7 +24,7 @@ test("settings lists this computer's paired devices and asks before revoking one
   }, devices);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/settings");
-  const section = page.locator("section").filter({ has: page.getByRole("heading", { name: "Paired devices" }) });
+  const section = page.locator("section").filter({ has: page.getByRole("heading", { name: "Host", exact: true }) });
   await expect(section.getByText("3FA94C0E", { exact: false })).toBeVisible({ timeout: 20_000 });
   await expect(section.getByRole("button", { name: "Revoke" })).toHaveCount(2);
   await info.attach("paired-devices.png", { body: await page.screenshot(), contentType: "image/png" });

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so a connected machine shows how it is reached and whether it is there now. (#772)
+
 ### Setting up your machines
 
 - [docs/install.md](docs/install.md) and the README show how to run the host as a user service on every Linux and macOS machine you own, join them into one mesh, and pair phones and browsers. The [doriterm-setup skill](skills/doriterm-setup/SKILL.md) lets a coding agent do it with `apps/host/scripts/setup/cli.ts` (`install`, `verify`, `invite`, `join`, `pair`, `uninstall`), which is safe to re-run and never prints a join link or key. (#778)
