@@ -6,7 +6,9 @@
 //
 // Prints one `{"stage": <name>, "ms": <n>}` line per startup stage it finishes, then `{"bridge": <url>}` once its uplink
 // is answered (and, with --machine, its second core is added), then one `{"link": <pairing link>}` per line read on
-// stdin. Stops everything it started on SIGTERM, SIGINT or the end of stdin, whichever comes first, as before.
+// stdin. With --direct it also serves `/v1/e2ee` on a LAN listener and the bridge line carries `directUrl`, the address a
+// Direct-address spec sets (#446); no other spec pays for that listener. Stops everything it started on SIGTERM, SIGINT
+// or the end of stdin, whichever comes first, as before.
 import { startHost } from "@doriface/host";
 import { createHcSession, FakeRelay, RelayClientBridge } from "@doriface/host/testing";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -105,7 +107,10 @@ try {
     });
     stage("machine");
   }
-  say({ bridge: bridge.url, directUrl: host.e2ee?.lanUrls[0] ?? "" });
+  say({
+    bridge: bridge.url,
+    ...(process.argv.includes("--direct") ? { directUrl: host.e2ee?.lanUrls[0] ?? "" } : {}),
+  });
   for await (const _ of createInterface({ input: process.stdin })) say({ link: await pairingLink() });
 } catch (error) {
   // A start that fails, or a pairing that does, stops what it started, so no core outlives it, and exits with the

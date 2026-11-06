@@ -39,7 +39,7 @@ test.describe("a saved Direct address (#446)", () => {
   let host: FakeRelayHost;
   test.beforeAll(async () => {
     test.setTimeout(60_000);
-    host = await startFakeRelayHost();
+    host = await startFakeRelayHost({ direct: true });
   });
   test.afterAll(async () => host.stop());
 

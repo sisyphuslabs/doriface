@@ -12,7 +12,7 @@ import { E2E_WEB_PORT } from "./config.ts";
 export interface FakeRelayHost {
   /** A fresh pairing link: each one pairs one device, once. */
   readonly pairingLink: () => Promise<string>;
-  /** The host's LAN listener, the address a person sets as the Direct address (#446). */
+  /** The host's LAN listener, the address a person sets as the Direct address (#446); empty unless `direct` was asked. */
   readonly directUrl: string;
   /** Call before the page dials the relay: its `/v1/client/...` sockets go to the fake relay's client bridge. */
   readonly route: (page: Page) => Promise<void>;
@@ -65,6 +65,11 @@ interface Startup {
   readonly command: readonly string[];
   readonly cwd: string;
   readonly stageDeadlineMs: number;
+  /**
+   * The command also serves the LAN listener and prints `directUrl`: only the spec that sets a Direct address asks for
+   * that listener and reads the address (#446).
+   */
+  readonly direct?: boolean;
 }
 
 type Line = Record<string, unknown>;
@@ -209,10 +214,10 @@ async function startDriver(options: Startup): Promise<FakeRelayHost> {
     const bridge = first["bridge"];
     const directUrl = first["directUrl"];
     if (typeof bridge !== "string") throw new Error("the fake relay host printed no bridge");
-    if (typeof directUrl !== "string" || directUrl === "")
+    if (options.direct === true && (typeof directUrl !== "string" || directUrl === ""))
       throw new Error("the fake relay host printed no direct address");
     return {
-      directUrl,
+      directUrl: typeof directUrl === "string" ? directUrl : "",
       async pairingLink() {
         input.write("link\n");
         const { link } = await protocol.next("a pairing link");
@@ -231,18 +236,22 @@ async function startDriver(options: Startup): Promise<FakeRelayHost> {
 
 /**
  * `machine`: the host's core also has an added machine (the sidebar then lists machines with their state).
+ * `direct`: the host also serves `/v1/e2ee` on a LAN listener, the address a Direct-address spec sets (#446); without it
+ * no listener is started and `directUrl` is empty.
  * `stageDeadlineMs`: a shorter stage deadline, for a test that proves the bound without a blocked start running 10 s.
  */
 export function startFakeRelayHost(
-  options: { readonly machine?: boolean; readonly stageDeadlineMs?: number } = {},
+  options: { readonly machine?: boolean; readonly stageDeadlineMs?: number; readonly direct?: boolean } = {},
 ): Promise<FakeRelayHost> {
   return startDriver({
+    direct: options.direct === true,
     command: [
       "bun",
       join(import.meta.dirname, "fake-relay-host.ts"),
       `http://127.0.0.1:${E2E_WEB_PORT}`,
       FAKE_RELAY,
       ...(options.machine === true ? ["--machine"] : []),
+      ...(options.direct === true ? ["--direct"] : []),
     ],
     cwd: join(import.meta.dirname, ".."),
     stageDeadlineMs: options.stageDeadlineMs ?? STAGE_DEADLINE_MS,
