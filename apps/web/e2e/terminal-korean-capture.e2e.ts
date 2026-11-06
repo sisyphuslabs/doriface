@@ -97,12 +97,24 @@ for (const scheme of ["light", "dark"] as const) {
 
     test(`capture 390 ${scheme}`, async ({ page }) => {
       test.setTimeout(180_000);
+      // The reported configuration is set at a desktop width, where Settings lays out, and the window is narrowed after
+      // it is saved: the phone shot then shows that same stack wrapping, which is the half of the report a narrow
+      // viewport exercises.
+      await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto("/");
       await loadKoreanFonts(page);
-      await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
-      await page.getByRole("banner").getByRole("button", { name: "New tab" }).click();
-      const terminal = page.locator("[data-terminal]").first();
-      await expect(terminal).toContainText("$", { timeout: 15_000 });
+      await openNewTerminal(page);
+      await useReportedFont(page);
+      const focused = page.locator('[data-focused="true"] [data-terminal]');
+      const address = await focused.getAttribute("data-terminal");
+      if (address === null) throw new Error("no terminal address");
+      await page.setViewportSize({ width: 390, height: 844 });
+      const terminal = page.locator(`[data-terminal="${address}"]`);
+      const agents = page.locator("button:has([data-floor='name']):has(time)");
+      await expect(terminal.or(agents).first()).toBeVisible({ timeout: 20_000 });
+      // A narrow window may list the agents instead of showing the terminal; its row opens it again.
+      if (!(await terminal.isVisible())) await agents.first().click();
+      await expect(terminal).toBeVisible({ timeout: 20_000 });
       await print(page, terminal);
       await capture(terminal, `390-${scheme}`);
     });
