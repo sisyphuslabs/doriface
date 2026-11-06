@@ -30,14 +30,10 @@ test("a phone session through the production relay", async ({ browser }) => {
     // The prompt comes from the capture host's own rcfile, so nothing is typed here and no echo can satisfy the check
     // (#926). What is asserted is the state the shots depend on: the last line of the buffer IS the neutral prompt.
     const lastLine = async (): Promise<string> => {
-      const text = await terminal.innerText();
-      return (
-        text
-          .trimEnd()
-          .split("\n")
-          .filter((line) => line.trim() !== "")
-          .at(-1) ?? ""
-      ).trim();
+      const lines = (await terminal.innerText()).trimEnd().split("\n");
+      let last = "";
+      for (const line of lines) if (line.trim() !== "") last = line;
+      return last.trim();
     };
     await expect.poll(lastLine, { timeout: 90_000 }).toBe("demo@my-laptop:~/project$");
     await page.keyboard.type("printf 'relay-%s\\n' 'alpha-line more'\r");
