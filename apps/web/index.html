@@ -8,6 +8,12 @@
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Add to Home Screen on iOS Safari opens standalone. The status bar keeps its own bar (black text on the page's
+         own background) rather than overlaying the app, because the app has both a light and a dark theme. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="doriface" />
     <link rel="stylesheet" href="/src/styles.css" />
     <title>doriface</title>
   </head>
