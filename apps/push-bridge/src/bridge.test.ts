@@ -75,6 +75,7 @@ async function hostSends(endpoint: string, upstreamFetch: PushFetch, keys?: Rece
     NOTICE,
     await vapidKey(),
     post,
+    { now: () => NOW },
   );
   return { delivery, receiver };
 }
@@ -232,7 +233,11 @@ async function bridgeAnswer(init: {
 }
 
 /** A real host body and headers for the APNs path, captured from the host's own sender. */
-async function captured(): Promise<{ headers: Record<string, string>; body: Uint8Array }> {
+/**
+ * `now` is the clock the VAPID header is signed with. Every case here pairs it with the clock its bridge checks the
+ * header against, so no assertion depends on the wall clock (#750).
+ */
+async function captured(now: () => number = () => NOW): Promise<{ headers: Record<string, string>; body: Uint8Array }> {
   let headers: Record<string, string> = {};
   let body = new Uint8Array();
   const keys = await receiverKeys();
@@ -245,6 +250,7 @@ async function captured(): Promise<{ headers: Record<string, string>; body: Uint
       body = new Uint8Array(await new Response(init.body).arrayBuffer());
       return new Response(null, { status: 201 });
     },
+    { now },
   );
   return { headers, body };
 }
@@ -289,6 +295,28 @@ describe("what the bridge refuses before anything reaches APNs or FCM", () => {
       new Request(`https://push.example.net/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }),
     );
     expect(misaddressed.status).toBe(401);
+  });
+
+  // A token signed at `at` must be expired at `at + 13 h` and still good at `at`, for any `at`. The offsets include a
+  // past and a future one: signing from the real clock would pass only for instants close to the wall clock, which is
+  // how this case went red at 2026-11-06T08:00Z.
+  test.each([
+    ["three days before the anchor", -3 * 24 * 60 * 60 * 1000],
+    ["at the anchor", 0],
+    ["thirty-seven days after the anchor", 37 * 24 * 60 * 60 * 1000],
+  ])("the header's life is measured from the clock that signed it, %s (#750)", async (_where, offset) => {
+    const twelveHours = 12 * 60 * 60 * 1000;
+    const at = NOW + offset;
+    const { headers, body } = await captured(() => at);
+    const lapsed = createBridge(await config(), {
+      fetch: upstream().fetch,
+      now: () => at + twelveHours + 60 * 60 * 1000,
+    });
+    const late = await lapsed(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
+    expect(late.status).toBe(401);
+    const live = createBridge(await config(), { fetch: upstream().fetch, now: () => at });
+    const onTime = await live(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
+    expect(onTime.status).toBe(201);
   });
 
   test("a provider with no credentials answers 503, and the other still works", async () => {
