@@ -73,5 +73,9 @@ describe("an answer from the page", () => {
     expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=deny")?.answer).toBeUndefined();
     expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=option:x")?.answer).toBeUndefined();
     expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h")?.answer).toBeUndefined();
+    // Deny arrives only from an app's notification (#705), which cannot answer by itself; it is no page answer.
+    expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=deny")?.deny).toBe(true);
+    expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=deny")?.answer).toBeUndefined();
+    expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=allow")?.deny).toBe(false);
   });
 });
