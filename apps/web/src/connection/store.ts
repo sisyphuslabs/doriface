@@ -158,10 +158,12 @@ export class ConnectionStore {
 
   /**
    * A host names itself as it answers, and that name is the only way Settings can name it once it stops answering: keep
-   * it beside the paired host while it is known (#496).
+   * it beside the paired host while it is known (#496). A connection that carried no hello names nothing, and a session
+   * must not fail over a name it could not read: Settings shows the host by id instead.
    */
   #rememberName(connection: HcConnection): void {
-    const name = connection.hello.core.name;
+    const hello: { readonly core?: { readonly name?: string } } | undefined = connection.hello;
+    const name = hello?.core?.name ?? "";
     if (name === "" || name === this.#settings.hostName) return;
     this.#settings = { ...this.#settings, hostName: name };
     saveSettings(this.#settings);
