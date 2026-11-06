@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriface-mark-dark.svg" />
-    <img src="apps/web/brand/doriface-mark-light.svg" alt="Doriterm" width="128" height="128" />
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriterm-mark-dark.svg" />
+    <img src="apps/web/brand/doriterm-mark-light.svg" alt="Doriterm" width="128" height="128" />
   </picture>
 </p>
 
