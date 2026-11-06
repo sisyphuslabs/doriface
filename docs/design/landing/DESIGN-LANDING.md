@@ -62,7 +62,7 @@ Every headline is two-tone: a plain statement in `--ink`, then the consequence i
 
 4 px base: `--space-1..10` = 4, 8, 12, 16, 24, 32, 48, 64, 96, 144 px. Content width 1200 px plus a fluid gutter (`clamp(20px, 4vw, 40px)`). Sections are separated by 144 px (96 px under 760 px).
 
-Breakpoints: 640 (two-column lists; the mesh stage and the app section switch to their phone layouts), 900 (the hero scene draws its wide version from 900 px and its tall version below), 760 (nav links collapse), 900 (three-column cards, the relay pipe in one row, pairing side by side, mesh log beside the stage), 1080 (hero lede and actions side by side).
+Breakpoints: 640 (two-column lists; the mesh stage and the app section switch to their phone layouts), 760 (nav links collapse), 900 (the hero scene draws its wide version from here and its tall one below; three-column cards, the relay pipe in one row, pairing side by side, the mesh log beside the stage), 1080 (hero lede and actions side by side).
 
 | Radius          | Value  | Use                              |
 | --------------- | ------ | -------------------------------- |
