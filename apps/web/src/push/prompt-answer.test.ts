@@ -68,5 +68,8 @@ describe("Allow from the page", () => {
     expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=allow")?.allow).toBe(true);
     expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=deny")?.allow).toBe(false);
     expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h")?.allow).toBe(false);
+    // Deny arrives only from an app's notification (#705), which cannot answer by itself.
+    expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=deny")?.deny).toBe(true);
+    expect(at("?notice=AAAAAAAAAAAAAAAAAAAAAA&host=h&answer=allow")?.deny).toBe(false);
   });
 });

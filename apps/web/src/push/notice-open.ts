@@ -1,5 +1,6 @@
 import { isNoticeId } from "@doriface/protocol";
 import { useEffect, useSyncExternalStore } from "react";
+import { nativePush } from "../native/shell.ts";
 import { noticeBridge } from "./desktop-notices.ts";
 import { pushChannel } from "./push-channel.ts";
 import { allowFromPage, whenVisible } from "./prompt-answer.ts";
@@ -9,6 +10,11 @@ export interface PendingNotice {
   readonly host: string;
   /** Allow was tapped on the notification: the page sends it once visible, after the pane opens. */
   readonly allow: boolean;
+  /**
+   * Deny was tapped on an app's notification (#705): the apps hold no session to the host, so the page sends it once
+   * visible, through the same check as the service worker's Deny.
+   */
+  readonly deny: boolean;
 }
 
 /** A clicked desktop notification names its terminal itself: no host round trip. */
@@ -23,11 +29,29 @@ const set = (next: PendingNotice | ClickedTerminal | null): void => {
   for (const listener of listeners) listener();
 };
 
-/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow]`), or null. */
+/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow|deny]`), or null. */
 export function noticeOf(url: URL): PendingNotice | null {
   const id = url.searchParams.get("notice");
   if (!isNoticeId(id)) return null;
-  return { id, host: url.searchParams.get("host") ?? "", allow: url.searchParams.get("answer") === "allow" };
+  const answer = url.searchParams.get("answer");
+  return { id, host: url.searchParams.get("host") ?? "", allow: answer === "allow", deny: answer === "deny" };
+}
+
+/** A tap on an app's notification, as an address the page opens like a service worker's (`/?notice=...`). */
+function openTapped(url: string, toWorkspace: () => void): void {
+  if (!URL.canParse(url, location.origin)) return;
+  const notice = noticeOf(new URL(url, location.origin));
+  if (notice === null) return;
+  set(notice);
+  toWorkspace();
+}
+
+/** The iOS and Android apps hand a tapped notification to the page: the one that launched the app, then each later one. */
+export function listenForAppNotices(toWorkspace: () => void): void {
+  const plugin = nativePush();
+  if (plugin === null) return;
+  void plugin.addListener("noticeTap", (tap) => openTapped(tap.url, toWorkspace));
+  void plugin.takeLaunchTap().then(({ tap }) => (tap === null ? undefined : openTapped(tap.url, toWorkspace)));
 }
 
 /** Reads a tapped notice from the address once and takes it out of the address bar and history. */
@@ -51,11 +75,7 @@ export function listenForNotices(toWorkspace: () => void): void {
     const data = event.data;
     if (typeof data !== "object" || data === null || Reflect.get(data, "type") !== "doriface-notice") return;
     const url = Reflect.get(data, "url");
-    if (typeof url !== "string" || !URL.canParse(url, location.origin)) return;
-    const notice = noticeOf(new URL(url, location.origin));
-    if (notice === null) return;
-    set(notice);
-    toWorkspace();
+    if (typeof url === "string") openTapped(url, toWorkspace);
   });
 }
 
@@ -101,6 +121,11 @@ async function openNotice(notice: PendingNotice, open: (address: string) => void
   }
   if (terminal === null) return;
   open(terminal);
+  if (notice.deny) {
+    await whenVisible(document);
+    await pushChannel.requestOnce({ t: "answer", id: notice.id, answer: "deny" }).catch(() => undefined);
+    return;
+  }
   if (!notice.allow) return;
   await allowFromPage(
     terminal,
