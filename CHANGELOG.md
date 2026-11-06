@@ -46,6 +46,7 @@
 
 ### Settings
 
+- Settings holds machines and their membership on one screen: the computers this host reaches are listed with their own state, a machine added by hand keeps its own route, connecting a machine joins it to your mesh, and the joins that need your approval sit on the same screen; the advanced-connection settings move into This device. (#942)
 - Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
 
 ### Notifications
