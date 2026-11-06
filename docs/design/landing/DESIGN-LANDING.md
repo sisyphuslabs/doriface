@@ -1,6 +1,6 @@
 # doriterm.com landing: design system
 
-The marketing page for doriterm.com lives in `apps/landing/`: plain HTML, CSS and one ES module for the page, plus `mockup.html`, which renders the app's own components with sample data. `bun run --cwd apps/landing build` (Vite) writes a static `dist/` that any static host serves as it is. It extends the product's [DESIGN.md](../../../DESIGN.md): the colours are the app's Night and Day palettes, and the status grammar and hairline depth carry over. This file covers only what a landing page adds: display type, a looser spacing scale, motion that explains, and the components the page is built from. Full-page captures are in this folder (`<width>-<theme>.png`, Chromium, reduced motion).
+The marketing page for doriterm.com lives in `apps/landing/`: plain HTML, CSS and one ES module for the page, plus `mockup/index.html` (served at `/mockup/`, a folder index, so Workers static assets serve it without a redirect), which renders the app's own components with sample data. `bun run --cwd apps/landing build` (Vite) writes a static `dist/` that any static host serves as it is. It extends the product's [DESIGN.md](../../../DESIGN.md): the colours are the app's Night and Day palettes, and the status grammar and hairline depth carry over. This file covers only what a landing page adds: display type, a looser spacing scale, motion that explains, and the components the page is built from. Full-page captures are in this folder (`<width>-<theme>.png`, Chromium, reduced motion).
 
 ## Product rulings the page follows
 
@@ -121,7 +121,7 @@ Every loop runs only while its scene is on screen and the tab is visible (Inters
 
 ### Live mockups
 
-The window and phone in section 01 are `<iframe>`s of `mockup.html?view=desktop` (1280 x 780) and `?view=phone` (390 x 844). That page imports `@doriface/ui`, the component set `apps/web` is built from (SidebarSection, SpaceRow, AgentRow, TabBar, TerminalPreview, StatusBar, StatusChip, ExtraKeysBar), with Tailwind and the app's tokens, and renders them with the fixtures in `apps/landing/src/mockup/fixtures.ts`. The landing never loads React or the app's stylesheet itself:
+The window and phone in section 01 are `<iframe>`s of `/mockup/?view=desktop` (1280 x 780) and `?view=phone` (390 x 844). That page imports `@doriface/ui`, the component set `apps/web` is built from (SidebarSection, SpaceRow, AgentRow, TabBar, TerminalPreview, StatusBar, StatusChip, ExtraKeysBar), with Tailwind and the app's tokens, and renders them with the fixtures in `apps/landing/src/mockup/fixtures.ts`. The landing never loads React or the app's stylesheet itself:
 
 - Isolation: the iframe keeps Tailwind's preflight and the app's tokens off the landing, and the landing's styles off the app.
 - Size: `main.js` scales each frame to its box with a ResizeObserver (`--scale`), so the app keeps its own pixel layout at every width. Below 640 px only the phone is shown.

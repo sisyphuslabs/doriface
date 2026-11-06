@@ -6,7 +6,8 @@ type Step = { name?: string; run?: string; uses?: string };
 type Job = { needs?: string; if?: string; steps: Step[] };
 type Workflow = { on: { push: { branches: string[] } }; jobs: Record<string, Job> };
 type Route = { pattern: string; custom_domain?: boolean };
-type Wrangler = { routes: Route[]; env: { staging: { routes: Route[] } } };
+type Assets = { directory: string; html_handling?: string };
+type Wrangler = { assets: Assets; routes: Route[]; env: { staging: { assets: Assets; routes: Route[] } } };
 
 const ROOT = join(import.meta.dir, "..", "..");
 const workflow = Bun.YAML.parse(
@@ -45,4 +46,15 @@ test("production deploys only after app.doriterm.com, where every Open the app b
 test("the apex serves the landing and staging.doriterm.com its staging copy", () => {
   expect(wrangler.routes).toEqual([{ pattern: "doriterm.com", custom_domain: true }]);
   expect(wrangler.env.staging.routes).toEqual([{ pattern: "staging.doriterm.com", custom_domain: true }]);
+});
+
+test("the page frames the mockup at its folder index, which the host serves without a redirect", () => {
+  for (const assets of [wrangler.assets, wrangler.env.staging.assets])
+    expect(assets.html_handling).toBe("auto-trailing-slash");
+  const page = readFileSync(join(ROOT, "apps", "landing", "index.html"), "utf8");
+  const sources = [...page.matchAll(/data-src="([^"]+)"/g)].map((match) => match[1]);
+  expect(sources).toEqual(["/mockup/?view=desktop", "/mockup/?view=phone"]);
+  expect(readFileSync(join(ROOT, "apps", "landing", "mockup", "index.html"), "utf8")).toContain("/src/mockup/main.tsx");
+  const probe = readFileSync(join(ROOT, ".github", "scripts", "probe-landing.ts"), "utf8");
+  expect(probe).toContain('path: "/mockup/"');
 });

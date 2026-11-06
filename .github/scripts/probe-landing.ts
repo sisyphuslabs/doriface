@@ -2,8 +2,8 @@
 /**
  * Probes a deployed landing page (apps/landing/wrangler.jsonc) against the build in apps/landing/dist: the page at / is
  * this build's index.html byte for byte with its security headers, the app mockup page and one hashed script answer, and
- * the social card is served. It retries while the origin still serves something else, since a first deploy's custom
- * domain takes a while to answer.
+ * the social card is served. A probe that cannot connect, or gets anything but a 200 (redirects are not followed), is a
+ * failure; the whole set is retried, since a first deploy's custom domain takes a while to resolve and answer.
  *
  * Usage: bun .github/scripts/probe-landing.ts <origin> [attempts]
  */
@@ -35,7 +35,7 @@ function probes(index: string): readonly Probe[] {
       },
     },
     {
-      path: "/mockup.html",
+      path: "/mockup/",
       check: (response) => (header(response, "content-type").startsWith("text/html") ? undefined : "not text/html"),
     },
     {
@@ -52,10 +52,15 @@ function probes(index: string): readonly Probe[] {
 async function failuresAt(origin: string, list: readonly Probe[]): Promise<readonly string[]> {
   const results = await Promise.all(
     list.map(async (probe) => {
-      const response = await fetch(new URL(probe.path, origin), { redirect: "manual" });
-      const body = await response.text();
-      const problem = response.status === 200 ? probe.check(response, body) : `status ${response.status}`;
-      return problem === undefined ? undefined : `${probe.path}: ${problem}`;
+      try {
+        const response = await fetch(new URL(probe.path, origin), { redirect: "manual" });
+        const body = await response.text();
+        const problem = response.status === 200 ? probe.check(response, body) : `status ${response.status}`;
+        return problem === undefined ? undefined : `${probe.path}: ${problem}`;
+      } catch (error) {
+        // DNS not there yet, TLS not issued, connection refused: retried like any other failure.
+        return `${probe.path}: ${error instanceof Error ? error.message : String(error)}`;
+      }
     }),
   );
   return results.filter((line) => line !== undefined);
