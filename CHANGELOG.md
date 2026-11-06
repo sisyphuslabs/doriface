@@ -48,7 +48,7 @@
 
 ### Fonts, Korean text and the terminal
 
-- A latched Ctrl, Alt or Cmd reads a Hangul letter as its 2-set key, and a Ctrl chord whose key is a Hangul letter sends that physical key's control byte, so ctrl+ㅊ is ^C. (#661, #675, #714)
+- A latched Ctrl, Alt or Cmd reads a Hangul letter as its 2-set key, and a Ctrl chord whose key is a Hangul letter sends that physical key's control byte, so ctrl+ㅊ is ^C. (#675, #714)
 - A fallback Hangul face is sized to Ghostty's ideograph width, not the whole two cells. (#658)
 - Wide glyphs in a terminal that opened in a tab not shown are drawn once the tab is shown. (#649)
 - A press's selection is held by the terminal rather than the document, so IME composes after a drag-select. (#593)
