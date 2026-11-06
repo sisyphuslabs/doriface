@@ -8,22 +8,21 @@ import { keyboardIsIdle, mayTakeFocus } from "./terminal/may-take-focus.ts";
 import { capturePairingLink } from "./pair/link-capture.ts";
 import { PairRoute } from "./routes/pair-route.tsx";
 import { SettingsRoute } from "./routes/settings-route.tsx";
-import { SettingsDialog } from "./settings/settings-dialog.tsx";
-import { useNarrow } from "./workspace/use-narrow.ts";
+import { SettingsDialog, useSettingsSheet } from "./settings/settings-dialog.tsx";
 import { WorkspaceRoute } from "./routes/workspace-route.tsx";
 
 /**
  * The workspace stays mounted under Settings, inert, so leaving Settings shows its terminals as they were: no pane
  * attaches again and replays its history (seconds over the relay), the scroll stays where it was, and the keyboard goes
- * back to the focused pane's terminal, as it did when the workspace mounted again. On a wide screen Settings is a dialog
- * over the workspace, which stays in view and keeps drawing; on a phone it is a full-screen sheet and the workspace
- * under it is hidden.
+ * back to the focused pane's terminal, as it did when the workspace mounted again. On a wide, tall enough screen Settings
+ * is a dialog over the workspace, which stays in view and keeps drawing; on a phone, or a screen too short for the dialog,
+ * it is a full-screen sheet and the workspace under it is hidden.
  */
 function Root() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const settings = path === "/settings";
-  const narrow = useNarrow();
-  const sheet = settings && narrow;
+  const asSheet = useSettingsSheet();
+  const sheet = settings && asSheet;
   useEffect(() => {
     if (settings) return;
     // Back at the workspace while a reconnect waits out its back-off: try now, not up to 10 s on (#403).
@@ -55,7 +54,7 @@ function Root() {
       </div>
       {/* After the workspace, so the dialog paints over its layers at the same modal level; what Settings portals to
           the body comes after #root and paints over the dialog. */}
-      {settings && !narrow ? (
+      {settings && !asSheet ? (
         <SettingsDialog>
           <Outlet />
         </SettingsDialog>

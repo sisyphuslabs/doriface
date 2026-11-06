@@ -1,11 +1,29 @@
 import { cn } from "@doriface/ui";
-import { createContext, use, useLayoutEffect, useRef, type ReactNode } from "react";
+import { createContext, use, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { useSettingsClose } from "./use-close-settings.ts";
 
 /** Settings is drawn in the dialog over the workspace (the desktop layout), not as the full-screen sheet of a phone. */
 export const SettingsInDialog = createContext(false);
 
 export const useSettingsInDialog = (): boolean => use(SettingsInDialog);
+
+/** Narrower than md (the phone shell), or too short for the dialog, such as a phone held in landscape. */
+const SHEET_QUERY = "(max-width: 767.98px), (max-height: 599.98px)";
+
+/**
+ * Whether Settings takes the whole screen as a sheet instead of a dialog over the workspace: on a phone, and on any screen
+ * too short to hold the dialog, where the sheet also keeps its controls out of the safe-area insets.
+ */
+export function useSettingsSheet(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      const media = matchMedia(SHEET_QUERY);
+      media.addEventListener("change", listener);
+      return () => media.removeEventListener("change", listener);
+    },
+    () => matchMedia(SHEET_QUERY).matches,
+  );
+}
 
 /**
  * Settings over the workspace on a wide screen: the terminals stay in view behind a dimmed backdrop and keep drawing
