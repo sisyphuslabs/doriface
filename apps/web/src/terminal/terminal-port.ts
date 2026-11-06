@@ -9,6 +9,11 @@ export interface TerminalPort {
   readonly paste: (text: string) => void;
   /** Puts files on the terminal's machine and pastes their paths, as a pasted image does (#701). */
   readonly pasteFiles: (files: readonly File[]) => void;
+  /**
+   * Sends a syllable still composing in the terminal's field now, as typed, and ends that composition (#652): a
+   * modifier latched after it applies to the next key only. `send` and `paste` do this first themselves.
+   */
+  readonly commitComposition: () => void;
   readonly focus: () => void;
 }
 
@@ -25,18 +30,24 @@ export function useTerminalPort(
   onPort: ((port: TerminalPort | null) => void) | undefined,
   pasteFiles: (files: readonly File[]) => void,
 ): void {
-  const port = useMemo<TerminalPort>(
-    () => ({
+  const port = useMemo<TerminalPort>(() => {
+    const commitComposition = (): void => {
+      const preedit = handle.current?.instance?.takeComposition() ?? "";
+      if (preedit !== "") send(preedit);
+    };
+    return {
       send,
       paste: (text) => {
         const element = handle.current?.instance?.element;
-        if (element !== undefined) pasteInto(element, text);
+        if (element === undefined) return;
+        commitComposition();
+        pasteInto(element, text);
       },
       pasteFiles,
+      commitComposition,
       focus: () => handle.current?.focus(),
-    }),
-    [handle, send, pasteFiles],
-  );
+    };
+  }, [handle, send, pasteFiles]);
   useEffect(() => {
     onPort?.(port);
     return () => onPort?.(null);

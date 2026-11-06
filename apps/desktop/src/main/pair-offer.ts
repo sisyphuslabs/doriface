@@ -1,4 +1,4 @@
-import type { LocalHostEndpoint, PairOfferAnswer } from "../shared/bridge.ts";
+import type { LocalHostEndpoint, PairOffer, PairOfferAnswer } from "../shared/bridge.ts";
 
 /** Long enough for a host that is still opening its offer on the relay, short enough to keep the dialog responsive. */
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -68,6 +68,7 @@ function pairOffer(value: unknown): Extract<PairOfferAnswer, { state: "pending" 
   const code: unknown = Reflect.get(value, "code");
   const link: unknown = Reflect.get(value, "link");
   const opens: unknown = Reflect.get(value, "opens");
+  const phoneLink: unknown = Reflect.get(value, "phoneLink");
   const hostId: unknown = Reflect.get(value, "hostId");
   const fingerprint: unknown = Reflect.get(value, "fingerprint");
   const expiresAt: unknown = Reflect.get(value, "expiresAt");
@@ -78,7 +79,10 @@ function pairOffer(value: unknown): Extract<PairOfferAnswer, { state: "pending" 
     return undefined;
   if (opens !== "web" && opens !== "desktop") return undefined;
   if (slot !== "pending" && slot !== "registered" && slot !== "unavailable") return undefined;
-  return { code, link, opens, hostId, fingerprint, expiresAt, slot, codeUsable };
+  // A host from before #700 sends no phone link; the dialog's QR code then encodes `link`.
+  if (phoneLink !== undefined && typeof phoneLink !== "string") return undefined;
+  const offer: PairOffer = { code, link, opens, hostId, fingerprint, expiresAt, slot, codeUsable };
+  return phoneLink === undefined ? offer : { ...offer, phoneLink };
 }
 
 /** `false` refuses the answer; `null` is a device the host did not name (a pairing it cannot attribute). */
