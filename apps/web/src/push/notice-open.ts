@@ -2,14 +2,15 @@ import { isNoticeId } from "@doriface/protocol";
 import { useEffect, useSyncExternalStore } from "react";
 import { nativePush } from "../native/shell.ts";
 import { noticeBridge } from "./desktop-notices.ts";
+import type { PageAnswer } from "./notice-click.ts";
 import { pushChannel } from "./push-channel.ts";
-import { allowFromPage, whenVisible } from "./prompt-answer.ts";
+import { answerFromPage, whenVisible } from "./prompt-answer.ts";
 
 export interface PendingNotice {
   readonly id: string;
   readonly host: string;
-  /** Allow was tapped on the notification: the page sends it once visible, after the pane opens. */
-  readonly allow: boolean;
+  /** Allow, or one of the prompt's rows, was tapped on the notification: the page sends it once visible. */
+  readonly answer: PageAnswer | undefined;
   /**
    * Deny was tapped on an app's notification (#705): the apps hold no session to the host, so the page sends it once
    * visible, through the same check as the service worker's Deny.
@@ -29,12 +30,19 @@ const set = (next: PendingNotice | ClickedTerminal | null): void => {
   for (const listener of listeners) listener();
 };
 
-/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow|deny]`), or null. */
+/** The answer a tapped action left in the address: `allow`, or `option:<id>` for one of the prompt's rows. */
+function answerOf(value: string | null): PageAnswer | undefined {
+  if (value === "allow") return { kind: "allow" };
+  const option = /^option:(\d{1,3})$/.exec(value ?? "")?.[1];
+  return option === undefined ? undefined : { kind: "option", option };
+}
+
+/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow|deny|option:<id>]`), or null. */
 export function noticeOf(url: URL): PendingNotice | null {
   const id = url.searchParams.get("notice");
   if (!isNoticeId(id)) return null;
   const answer = url.searchParams.get("answer");
-  return { id, host: url.searchParams.get("host") ?? "", allow: answer === "allow", deny: answer === "deny" };
+  return { id, host: url.searchParams.get("host") ?? "", answer: answerOf(answer), deny: answer === "deny" };
 }
 
 /** A tap on an app's notification, as an address the page opens like a service worker's (`/?notice=...`). */
@@ -75,7 +83,11 @@ export function listenForNotices(toWorkspace: () => void): void {
     const data = event.data;
     if (typeof data !== "object" || data === null || Reflect.get(data, "type") !== "doriface-notice") return;
     const url = Reflect.get(data, "url");
-    if (typeof url === "string") openTapped(url, toWorkspace);
+    if (typeof url !== "string" || !URL.canParse(url, location.origin)) return;
+    const notice = noticeOf(new URL(url, location.origin));
+    if (notice === null) return;
+    set(notice);
+    toWorkspace();
   });
 }
 
@@ -126,10 +138,16 @@ async function openNotice(notice: PendingNotice, open: (address: string) => void
     await pushChannel.requestOnce({ t: "answer", id: notice.id, answer: "deny" }).catch(() => undefined);
     return;
   }
-  if (!notice.allow) return;
-  await allowFromPage(
+  const answer = notice.answer;
+  if (answer === undefined) return;
+  await answerFromPage(
     terminal,
-    () => pushChannel.requestOnce({ t: "answer", id: notice.id, answer: "allow" }),
+    () =>
+      pushChannel.requestOnce(
+        answer.kind === "allow"
+          ? { t: "answer", id: notice.id, answer: "allow" }
+          : { t: "choose", id: notice.id, option: answer.option },
+      ),
     () => whenVisible(document),
   );
 }

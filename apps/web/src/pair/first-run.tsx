@@ -85,7 +85,7 @@ export function FirstRun({ offline = false }: { readonly offline?: boolean }) {
         icon={<Server />}
         size="screen"
         title="Connect to a host"
-        description="doriface shows the terminals and agents running on a computer with herdr-core. Start the host there, then pair this device."
+        description="doriface shows the terminals and agents of a mesh. Open the invite link a member sent you, or start a host on a computer you control and pair the code it prints."
         actions={
           <>
             <PairAHost offline={offline} primary />
