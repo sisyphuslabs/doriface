@@ -70,6 +70,13 @@ export class MeshConnections {
    */
   #localHost: LocalHostStarter | null = null;
   /**
+   * Whether this app is dialling at all.
+   *
+   * Nothing is dialled when the settings are merely read: the boot path decides, because in the desktop app it must stop a stale
+   * saved port before the saved link is tried, and because starting here made every member dial twice (review of #994).
+   */
+  #running = false;
+  /**
    * The list `entries()` answers with. Rebuilt only when something changes, because it is read through
    * `useSyncExternalStore`, which compares snapshots by identity and would re-render forever on a fresh array per call.
    */
@@ -130,6 +137,8 @@ export class MeshConnections {
   #apply(settings: ConnectionSettings): void {
     this.#settings = normalizeSettings(settings);
     saveSettings(this.#settings);
+    // A settings change is the app asking to dial with them, which is how the boot path replaces a stale saved port.
+    this.#running = true;
     this.#sync();
     this.#notify();
   }
@@ -151,6 +160,7 @@ export class MeshConnections {
   }
 
   start(): void {
+    this.#running = true;
     for (const store of this.#stores.values()) store.start();
   }
 
@@ -169,6 +179,7 @@ export class MeshConnections {
   }
 
   stop(): void {
+    this.#running = false;
     for (const store of this.#stores.values()) store.stop();
   }
 
@@ -237,7 +248,7 @@ export class MeshConnections {
     // roster with one member.
     const store = this.#make(scoped, () => undefined);
     if (this.#localHost !== null) store.restartsLocalHost(this.#localHost);
-    store.start();
+    if (this.#running) store.start();
     this.#unsubscribes.set(
       member.hostId,
       store.subscribe(() => this.#onMember(member.hostId, store)),

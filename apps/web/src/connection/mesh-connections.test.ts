@@ -108,13 +108,28 @@ const harness = (initial: ConnectionSettings) => {
   return { mesh: new MeshConnections(initial, factory), made, saved, savers };
 };
 
+/** A mesh that is dialling, which is what the boot path does once the settings are known. */
+const running = (initial: ConnectionSettings) => {
+  const harnessed = harness(initial);
+  harnessed.mesh.start();
+  return harnessed;
+};
+
 afterEach(() => {
   globalThis.localStorage?.clear?.();
 });
 
 describe("one connection per member", () => {
+  it("dials nothing until it is started, so the boot path decides when and against which port", () => {
+    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    expect(made).toHaveLength(2);
+    expect(made.every((connection) => connection.started === 0)).toBe(true);
+    mesh.start();
+    expect(made.every((connection) => connection.started === 1)).toBe(true);
+  });
+
   it("dials every member of the roster, not only the selected one", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b"), member("c")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b"), member("c")]));
     expect(made).toHaveLength(3);
     expect(made.map((connection) => connection.settings.hostId)).toEqual(["a", "b", "c"]);
     expect(made.every((connection) => connection.started === 1)).toBe(true);
@@ -122,7 +137,7 @@ describe("one connection per member", () => {
   });
 
   it("keeps the other members open when one host stops", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b"), member("c")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b"), member("c")]));
     const [first, second, third] = made;
     first?.fail();
     expect(second?.state.phase).toBe("open");
@@ -131,7 +146,7 @@ describe("one connection per member", () => {
   });
 
   it("shows the selected member's state, and switching shows another without closing any", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")], "a"));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")], "a"));
     expect(mesh.state.phase).toBe("open");
     mesh.select("b");
     expect(mesh.settings.hostId).toBe("b");
@@ -140,7 +155,7 @@ describe("one connection per member", () => {
   });
 
   it("dials only the members the roster added, and stops one that left it", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")]));
     made[0]?.fail();
     mesh.update(settingsWith([member("a"), member("c")], "a"));
     expect(made).toHaveLength(3);
@@ -157,7 +172,7 @@ describe("one connection per member", () => {
   });
 
   it("folds a name a member answers with back into the roster", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")]));
     made[0]?.fail();
     const renamed = mesh.entries().find((entry) => entry.target.hostId === "a");
     expect(renamed?.target.hostName).toBe("renamed");
@@ -165,13 +180,13 @@ describe("one connection per member", () => {
   });
 
   it("still dials this computer's own host in loopback, which has no mesh id", () => {
-    const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "loopback", loopbackUrl: "ws://127.0.0.1:7766/v1/hc" });
+    const { mesh, made } = running({ ...DEFAULT_SETTINGS, mode: "loopback", loopbackUrl: "ws://127.0.0.1:7766/v1/hc" });
     expect(made).toHaveLength(1);
     expect(mesh.entries()).toHaveLength(1);
   });
 
   it("moves the shown machine off one that stopped, to a member that is still open", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")], "a"));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")], "a"));
     expect(mesh.settings.hostId).toBe("a");
     made[0]?.fail();
     expect(mesh.settings.hostId).toBe("b");
@@ -179,20 +194,20 @@ describe("one connection per member", () => {
   });
 
   it("does not move off a machine that is only connecting", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")], "a"));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")], "a"));
     made[0]?.connecting();
     expect(mesh.settings.hostId).toBe("a");
   });
 
   it("retries the machine whose row was clicked, not every member", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")]));
     mesh.retry("b");
     expect(made[1]?.retries).toBe(1);
     expect(made[0]?.retries).toBe(0);
   });
 
   it("keeps this computer's own-host starter for every connection built later", () => {
-    const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "relay" });
+    const { mesh, made } = running({ ...DEFAULT_SETTINGS, mode: "relay" });
     expect(made).toHaveLength(0);
     mesh.restartsLocalHost({ start: async () => ({ url: "ws://127.0.0.1:1", token: "t" }), failure: () => ({}) as never });
     mesh.pair({ ...settingsWith([member("c")], "c"), members: [] });
@@ -202,14 +217,14 @@ describe("one connection per member", () => {
 
   it("does not give a newly paired machine the name of the one before it", () => {
     const previous = settingsWith([member("a", "Air")], "a");
-    const { mesh } = harness(previous);
+    const { mesh } = running(previous);
     mesh.pair({ ...previous, hostId: "c", hostKey: "k-c", directUrl: "", members: [] });
     expect(mesh.settings.hostName).toBe("");
     expect(mesh.entries().map((entry) => entry.target.hostName)).toEqual([""]);
   });
 
   it("pairing replaces the roster, so a machine paired away from is not dialled again", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")]));
     mesh.pair({ ...settingsWith([member("c")], "c"), members: [member("a"), member("b")] });
     expect(mesh.entries().map((entry) => entry.target.hostId)).toEqual(["c"]);
     expect(made.map((connection) => connection.settings.hostId)).toContain("c");
@@ -218,14 +233,14 @@ describe("one connection per member", () => {
 
   it("an ordinary edit keeps the roster rather than replacing it", () => {
     const initial = settingsWith([member("a"), member("b")]);
-    const { mesh } = harness(initial);
+    const { mesh } = running(initial);
     mesh.update({ ...initial, relayUrl: "wss://relay.example" });
     expect(mesh.entries().map((entry) => entry.target.hostId)).toEqual(["a", "b"]);
   });
 
   it("a new relay reaches the members already dialled, and leaves the untouched ones alone", () => {
     const initial = settingsWith([member("a"), member("b")]);
-    const { mesh, made } = harness(initial);
+    const { mesh, made } = running(initial);
     const before = made.map((connection) => connection.settings.relayUrl);
     mesh.update({ ...initial, relayUrl: "wss://relay.example" });
     expect(made.map((connection) => connection.settings.relayUrl)).toEqual([
@@ -238,20 +253,20 @@ describe("one connection per member", () => {
 
   it("an edit that concerns no member does not touch their settings", () => {
     const initial = settingsWith([member("a"), member("b")]);
-    const { mesh, made } = harness(initial);
+    const { mesh, made } = running(initial);
     const held = made[0]?.settings;
     mesh.update({ ...initial, members: [...initial.members] });
     expect(made[0]?.settings).toBe(held);
   });
 
   it("reports unconfigured when there is no roster and nothing paired", () => {
-    const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "relay" });
+    const { mesh, made } = running({ ...DEFAULT_SETTINGS, mode: "relay" });
     expect(made).toHaveLength(0);
     expect(mesh.state.phase).toBe("unconfigured");
   });
 
   it("answers the same list until something changes, so a rendering store does not loop", () => {
-    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    const { mesh, made } = running(settingsWith([member("a"), member("b")]));
     const first = mesh.entries();
     expect(mesh.entries()).toBe(first);
     made[0]?.fail();
