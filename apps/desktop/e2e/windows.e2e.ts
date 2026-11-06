@@ -79,6 +79,16 @@ test("the app is named Doriterm", async () => {
   expect(name).toBe("Doriterm");
 });
 
+test("storage keeps the folder installs already use, unless a profile is named", async () => {
+  const storage = await running().evaluate(({ app }) => ({
+    path: app.getPath("userData"),
+    named: app.commandLine.hasSwitch("user-data-dir"),
+  }));
+  if (scratch === undefined) throw new Error("no scratch profile");
+  expect(storage.named).toBe(true);
+  expect(storage.path).toBe(scratch.profile);
+});
+
 test("a second launch and a Dock click bring back the one window", async () => {
   await appPage();
   if (scratch === undefined) throw new Error("no scratch profile");

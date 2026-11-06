@@ -31,6 +31,7 @@ test("the app is installable, serves its icons and registers its service worker"
     id: "/",
     lang: "en",
     name: "Doriterm",
+    short_name: "Doriterm",
     display: "standalone",
     start_url: "/",
     scope: "/",
