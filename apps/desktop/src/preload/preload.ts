@@ -9,7 +9,9 @@ import {
   isHcInstallAnswer,
   isLocalHostEndpoint,
   isLocalHostStartFailed,
+  isPairedDevicesAnswer,
   isPairOfferAnswer,
+  isRevokeDeviceAnswer,
   isUpdateReady,
   parsePlatform,
   VERSION_ARG,
@@ -69,6 +71,16 @@ const bridge: DorifaceBridge = {
   async pairOffer(request) {
     const answer: unknown = await ipcRenderer.invoke(Channel.pairOffer, request);
     if (!isPairOfferAnswer(answer)) throw new Error("the main process returned no pairing offer");
+    return answer;
+  },
+  async pairedDevices() {
+    const answer: unknown = await ipcRenderer.invoke(Channel.pairedDevices);
+    if (!isPairedDevicesAnswer(answer)) throw new Error("the main process returned no paired device list");
+    return answer;
+  },
+  async revokeDevice(id) {
+    const answer: unknown = await ipcRenderer.invoke(Channel.revokeDevice, id);
+    if (!isRevokeDeviceAnswer(answer)) throw new Error("the main process returned no revoke answer");
     return answer;
   },
   onNavigate(listener) {
