@@ -1,7 +1,28 @@
 import { Button, Notice } from "@doriface/ui";
 import { Camera } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { openCamera, scanOnce, type ScanHandles } from "./scan.ts";
+import { ScanError, startScan } from "./scan.ts";
+
+interface ScanFailureNotice {
+  readonly title: string;
+  readonly body: string;
+}
+
+function noticeOf(cause: unknown): ScanFailureNotice {
+  if (cause instanceof ScanError) {
+    if (cause.failure === "timeout") return { title: "No QR code was read", body: cause.message };
+    if (cause.failure === "unsupported") return { title: "This browser cannot scan codes", body: cause.message };
+    return { title: "The camera could not read the code", body: cause.message };
+  }
+  return {
+    title: "The camera did not start",
+    body: cause instanceof Error ? cause.message : String(cause),
+  };
+}
+
+function isStopped(cause: unknown, signal: AbortSignal): boolean {
+  return signal.aborted || (cause instanceof ScanError && cause.failure === "stopped");
+}
 
 /**
  * Returns the QR's raw text and leaves validation to the caller: the camera is untrusted input, so nothing here parses
@@ -9,49 +30,40 @@ import { openCamera, scanOnce, type ScanHandles } from "./scan.ts";
  */
 export function ScanButton({ onText }: { readonly onText: (text: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ScanFailureNotice | null>(null);
   const video = useRef<HTMLVideoElement | null>(null);
-  const camera = useRef<ScanHandles | null>(null);
   const deliver = useRef(onText);
   deliver.current = onText;
 
   const stop = useCallback((): void => {
-    camera.current?.stop();
-    camera.current = null;
     setOpen(false);
+    setFailure(null);
   }, []);
 
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    const element = video.current;
-    const start = async (): Promise<void> => {
-      const handles = await openCamera();
-      camera.current = handles;
-      if (element === null) return;
-      element.srcObject = handles.stream;
-      await element.play();
-      const text = await scanOnce(element, { signal: controller.signal });
-      deliver.current(text);
-      setOpen(false);
+    const run = async (): Promise<void> => {
+      try {
+        const text = await startScan({ video: video.current, signal: controller.signal });
+        deliver.current(text);
+        setOpen(false);
+      } catch (cause) {
+        if (isStopped(cause, controller.signal)) return;
+        setFailure(noticeOf(cause));
+        setOpen(false);
+      }
     };
-    start().catch((cause: unknown) => {
-      setError(cause instanceof Error ? cause.message : String(cause));
-      setOpen(false);
-    });
-    return () => {
-      controller.abort();
-      camera.current?.stop();
-      camera.current = null;
-    };
+    void run();
+    return () => controller.abort();
   }, [open]);
 
   if (!open) {
     return (
       <div className="flex flex-col gap-2">
-        {error === null ? null : (
-          <Notice tone="error" title="The camera did not start">
-            {error}
+        {failure === null ? null : (
+          <Notice tone="error" title={failure.title}>
+            {failure.body}
           </Notice>
         )}
         <Button size="lg" onClick={() => setOpen(true)}>

@@ -6,6 +6,7 @@ import type { PairingOffer } from "./fragment.ts";
 import { parsePairingFragment } from "./fragment.ts";
 import { lookupCode } from "./lookup.ts";
 import { ScanButton } from "./scan-button.tsx";
+import { offerFromScan } from "./scan.ts";
 import { Steps } from "./steps.tsx";
 
 /** Takes the 8-character code doriface-host pair shows (or its link) and moves to Verify. */
@@ -34,11 +35,9 @@ export function PairStep({
   };
   const submit = (): Promise<void> => apply(text);
   const scanned = (scannedText: string): void => {
-    setText(scannedText);
-    setError(null);
-    apply(scannedText).catch((cause: unknown) => {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    });
+    const parsed = offerFromScan(scannedText);
+    setError(parsed.ok ? null : parsed.reason);
+    if (parsed.ok) onOffer(parsed.offer);
   };
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-5 px-6 py-10">
