@@ -119,6 +119,19 @@ naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
 
 ### A host, on the machine with the terminals
 
+On Linux or macOS, one command installs it:
+
+```sh
+curl -fsSL https://github.com/sisyphuslabs/doriterm/releases/latest/download/install.sh | sh
+```
+
+It downloads `doriface-host` into `~/.local/bin` and checks it against the release's `SHA256SUMS.txt`, installs
+herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have
+(systemd `--user` on Linux, an `Interactive` LaunchAgent on macOS), then prints a QR code, a link and an 8-character
+code to pair your first device. `sh -s -- --help` lists the options; `--uninstall` removes the service and the binary and
+keeps the host's keys and paired devices. To add a computer to a host you already use, open **Add a machine** in the app: it shows this same line with `--join '<link>'`, which installs the host there and joins it to this host's mesh, so its terminals show in the app. On Windows, the desktop app carries the host. The installer ships from the first
+release after v0.1.2.
+
 From this repository, with [Bun](https://bun.sh) installed:
 
 ```sh
@@ -130,6 +143,12 @@ bun run --cwd apps/host start --print-token   # the gateway on 127.0.0.1:7766, a
 `doriface-host --install-hc` installs or updates herdr-core in `~/.local/bin` from its checksummed release, then exits. The host
 keeps its keys and the devices it paired in `$XDG_STATE_HOME/doriface-host` (or `--state-dir`), and `doriface-host devices
 list` and `doriface-host devices revoke <id>` manage what is paired.
+
+To keep a host running on every machine you own, as a systemd user unit on Linux or a LaunchAgent on macOS that survives
+logouts and reboots, follow [docs/install.md](docs/install.md), or hand the
+[doriterm-setup skill](skills/doriterm-setup/SKILL.md) to a coding agent. Its `bun apps/host/scripts/setup/cli.ts install`
+writes the service, installs herdr-core if needed, waits for the relay and is safe to re-run. The service keeps its own state
+dir (`~/.local/state/doriface-host-mesh`), so it never shares keys or devices with the desktop app's own host.
 
 ## Pairing, and how the relay fits
 
@@ -179,6 +198,9 @@ doriface-host mesh status                     # who is in the mesh (--json for s
 doriface-host mesh revoke <member>            # remove a member on every machine
 doriface-host mesh revoke --compromised <member>   # …and everyone it admitted
 ```
+
+The setup skill's `invite --out <file>` and `join --from <file>` wrap `mesh pair --auto` and `mesh join` and keep the
+single-use link in a 0600 file instead of on screen ([docs/install.md](docs/install.md)).
 
 A machine joins only after you approve it on the member it dialed — in that member's terminal, or on a device paired to it —
 unless the invite was opened with `--auto`. Membership is a grow-only set of signed, hash-linked records; every member keeps
