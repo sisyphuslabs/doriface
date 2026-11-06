@@ -46,6 +46,7 @@
 ### Machine mesh
 
 - A machine you had already added over ssh or with a via is replaced by its mesh line under the same name, and mesh status and the Mesh panel say what kind of entry it replaced. Its open tabs and layout carry over. (#710)
+- A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 45 s without it, as a laptop that went to sleep still does. (#909)
 
 ### Website
 
