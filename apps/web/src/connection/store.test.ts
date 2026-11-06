@@ -306,3 +306,38 @@ test("a direct link that drops sends the next attempt to the relay at once, once
   expect(store.state).toMatchObject({ phase: "open", path: "relay" });
   store.stop();
 });
+
+test("one host stopping moves the attempt to the next member of the roster (#942)", async () => {
+  const asked: string[] = [];
+  const roster = {
+    ...SETTINGS,
+    hostId: "a",
+    hostName: "studio",
+    hostKey: "ka",
+    members: [
+      { hostId: "a", hostName: "studio", hostKey: "ka", directUrl: "" },
+      { hostId: "b", hostName: "laptop", hostKey: "kb", directUrl: "" },
+    ],
+  };
+  const store = new ConnectionStore(roster, ((settings: ConnectionSettings) => {
+    asked.push(settings.hostId);
+    throw new Error("no answer");
+  }) as never);
+  store.start();
+  await Bun.sleep(1400);
+  store.stop();
+  expect(asked[0]).toBe("a");
+  expect(asked.slice(1)).toContain("b");
+});
+
+test("a single member is never rotated away from, so one host behaves as it always did", async () => {
+  const asked: string[] = [];
+  const store = new ConnectionStore({ ...SETTINGS, hostId: "only" }, ((settings: ConnectionSettings) => {
+    asked.push(settings.hostId);
+    throw new Error("no answer");
+  }) as never);
+  store.start();
+  await Bun.sleep(700);
+  store.stop();
+  expect(new Set(asked)).toEqual(new Set(["only"]));
+});

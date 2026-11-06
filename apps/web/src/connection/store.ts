@@ -194,6 +194,8 @@ export class ConnectionStore {
       });
     } catch (error) {
       if (this.#abort !== abort) return;
+      // One host stopping must not end the app: the next attempt asks the next member this app knows (design of #942).
+      this.#rotateMember();
       if (error instanceof AttemptTimeoutError) {
         this.#budget.timedOut();
         this.#retry(error, attempt + 1);
@@ -202,6 +204,28 @@ export class ConnectionStore {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * Moves the selection to the next member of the roster, when there is one to move to.
+   *
+   * The roster is what the saved settings carry; with one member this does nothing, so a single-host app behaves exactly as
+   * it did. Each rotation is saved, because the host this app is bound to is then the one it is reaching for.
+   */
+  #rotateMember(): void {
+    const { members } = this.#settings;
+    if (members.length < 2) return;
+    const at = members.findIndex((member) => member.hostId === this.#settings.hostId);
+    const next = members[(at + 1) % members.length];
+    if (next === undefined || next.hostId === this.#settings.hostId) return;
+    this.#settings = {
+      ...this.#settings,
+      hostId: next.hostId,
+      hostName: next.hostName,
+      hostKey: next.hostKey,
+      directUrl: next.directUrl,
+    };
+    saveSettings(this.#settings);
   }
 
   /**
