@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { DEFAULT_RELAY_URL } from "@doriface/crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -107,6 +108,31 @@ describe("LocalHost against the workspace doriface-host and a real hc", () => {
     } finally {
       gate.stop(true);
     }
+  });
+});
+
+describe("the host the desktop app starts (#596)", () => {
+  test("the host keeps its loopback listener and is told to dial the release relay, never --no-relay", async () => {
+    const lines: string[] = [];
+    const started = new LocalHost({
+      command: { file: process.execPath, args: [join(import.meta.dir, "fixtures", "spawn-args.fixture.ts")] },
+      hc: () => undefined,
+      env: process.env,
+      log: (line) => lines.push(line),
+    });
+    try {
+      await started.start();
+    } finally {
+      await started.stop();
+    }
+    const printed = lines.find((line) => line.includes("SPAWN-ARGS "));
+    if (printed === undefined) throw new Error(`the host printed no arguments: ${lines.join("\n")}`);
+    const args: string[] = JSON.parse(printed.slice(printed.indexOf("SPAWN-ARGS ") + "SPAWN-ARGS ".length));
+    const valueOf = (flag: string): string | undefined => args[args.indexOf(flag) + 1];
+    expect(args).not.toContain("--no-relay");
+    expect(valueOf("--listen")).toBe("127.0.0.1:0");
+    expect(args).toContain("--relay");
+    expect(valueOf("--relay")).toBe(DEFAULT_RELAY_URL);
   });
 });
 
