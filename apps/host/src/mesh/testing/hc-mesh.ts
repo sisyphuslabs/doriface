@@ -37,7 +37,7 @@ export async function startCore(name: string): Promise<Core> {
     control,
     member,
     dispose: async () => {
-      control.close();
+      await control.stop();
       await session.dispose();
     },
   };
