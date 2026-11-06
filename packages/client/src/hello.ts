@@ -1,15 +1,17 @@
 import {
   encodeRequest,
+  HC_VERSION_FLOOR,
   HcRpcError,
   isJsonObject,
   JsonRpcParseError,
   LineDecoder,
+  meetsHcFloor,
   parseJson,
   parseJsonRpc,
   type HelloResult,
   type JsonValue,
 } from "@doriface/protocol";
-import { HcHandshakeError } from "./errors.ts";
+import { HcCoreMismatchError, HcHandshakeError } from "./errors.ts";
 
 const HELLO_ID = 0;
 const GENERATION = 1;
@@ -55,10 +57,19 @@ function helloFromLine(line: string): HelloResult | undefined {
   if (message.kind === "failure") throw new HcRpcError(message.error);
   const result = message.result;
   const generation = isJsonObject(result) ? result["generation"] : undefined;
+  if (typeof generation === "number" && generation > GENERATION) {
+    throw new HcCoreMismatchError({ kind: "core-newer", generation });
+  }
+  if (typeof generation === "number" && generation < GENERATION) {
+    throw new HcCoreMismatchError({ kind: "core-older", generation, need: HC_VERSION_FLOOR });
+  }
   if (generation !== GENERATION) {
     throw new HcHandshakeError(`core speaks protocol generation ${String(generation)}, this client ${GENERATION}`);
   }
   if (!isHelloResult(result)) throw new HcHandshakeError("hello reply is not a HelloResult");
+  if (!meetsHcFloor(result.version)) {
+    throw new HcCoreMismatchError({ kind: "core-too-old", version: result.version, need: HC_VERSION_FLOOR });
+  }
   if (!result.framed) throw new HcHandshakeError("core did not switch to framed mode");
   return result;
 }

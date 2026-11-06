@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { HC_METHODS, HcRpcError, parseJsonRpc, type Frame, type JsonRpcNotification } from "@doriface/protocol";
 import { HcConnection } from "./connection.ts";
-import { HcConnectionClosedError, HcHandshakeError } from "./errors.ts";
+import { HcConnectionClosedError, HcCoreMismatchError, HcHandshakeError } from "./errors.ts";
 import { FakeCore } from "./testing/fake-core.ts";
 import { bytes, concatBytes, CORE_ID, CORE_NAME, frame, HELLO_REPLY_LINE } from "./testing/fixtures.ts";
 
@@ -89,6 +89,33 @@ describe("HcConnection hello", () => {
     await core.waitHello();
     core.push(`${reply}\n`);
     await expect(opening).rejects.toThrow(message);
+  });
+
+  test.each([
+    [
+      "a newer protocol generation",
+      '{"id":0,"jsonrpc":"2.0","result":{"generation":2}}',
+      { kind: "core-newer", generation: 2 },
+    ],
+    [
+      "an older protocol generation",
+      '{"id":0,"jsonrpc":"2.0","result":{"generation":0}}',
+      { kind: "core-older", generation: 0, need: "0.1.17" },
+    ],
+    [
+      "a core older than the floor",
+      HELLO_REPLY_LINE.replace('"version":"0.1.17"', '"version":"0.1.15"'),
+      { kind: "core-too-old", version: "0.1.15", need: "0.1.17" },
+    ],
+  ] as const)("names %s as a core mismatch, which side to update included (#651)", async (_name, reply, mismatch) => {
+    const core = new FakeCore();
+    const opening = HcConnection.open(core.client);
+    await core.waitHello();
+    core.push(`${reply}\n`);
+    const error: unknown = await opening.catch((caught: unknown) => caught);
+    if (!(error instanceof HcCoreMismatchError)) throw new Error(`expected HcCoreMismatchError, got ${String(error)}`);
+    expect(error).toBeInstanceOf(HcHandshakeError);
+    expect(error.mismatch).toEqual(mismatch);
   });
 
   test("rejects a core that stayed in plain mode", async () => {
