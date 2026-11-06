@@ -99,6 +99,8 @@ export function TerminalView(props: TerminalViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
   const [ended, setEnded] = useState(false);
+  /** Whether this view is on screen: a pane out of view waits to re-attach until it is shown, so a hidden tab does not fetch a replay nobody looks at (#639). */
+  const [shown, setShown] = useState(true);
   const toasts = useToastManager();
   /** Why attaching failed, in plain words; Try again clears it, which mounts the terminal and attaches again. */
   const [unopened, setUnopened] = useState<string | null>(null);
@@ -223,6 +225,7 @@ export function TerminalView(props: TerminalViewProps) {
     if (wt === null) return undefined;
     const seen = new IntersectionObserver((entries) => {
       const visible = entries.at(-1)?.isIntersecting ?? true;
+      setShown(visible);
       pacer.setVisible(visible);
       wt.setRenderingPaused(!visible);
     });
@@ -392,8 +395,8 @@ export function TerminalView(props: TerminalViewProps) {
   };
 
   useEffect(() => {
-    if (wt !== null && attachedTo.current !== connection) attach(wt);
-  }, [wt, connection]);
+    if (wt !== null && shown && attachedTo.current !== connection) attach(wt);
+  }, [wt, connection, shown]);
 
   if (error !== null) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (restarting) {
