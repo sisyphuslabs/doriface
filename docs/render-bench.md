@@ -1,6 +1,6 @@
 # Render bench and the release gate
 
-#670. herdr profiles full rendering at 1, 15 and 50 panes and runs a release smoke bench against the current stable binary before every release; doriface does the same for its web client, which is what the desktop app and the PWA draw terminals with.
+#670. herdr profiles full rendering at 1, 15 and 50 panes and runs a release smoke bench against the current stable binary before every release; Doriterm does the same for its web client, which is what the desktop app and the PWA draw terminals with.
 
 ## Running it
 
@@ -36,7 +36,7 @@ Each program starts one `sleep` per tick; at 50 panes that is 500 short processe
 - the candidate's web app is built from the release commit, and the baseline's from the tag of the last published release (`gh release view`: never a draft or a prerelease);
 - the candidate's bench drives both builds on the same runner (same spec, host and core: only the web app differs), every round running each build once and alternating which goes first, so drift on the runner falls on both;
 - `bench/run.ts --compare` takes each gated metric's median over the rounds per pane count and fails when the candidate passes its limit in `apps/web/bench/thresholds.json`: a metric that grows when worse fails past `ratio` times the baseline **and** `floor` above it; drawn bytes per second fails under `ratio` times the baseline;
-- a failure fails the release before the draft exists, so nothing is published; the table and every run are attached to the release as `doriface-<version>-render-bench.md` and `.json`.
+- a failure fails the release before the draft exists, so nothing is published; the table and every run are attached to the release as `Doriterm-<version>-render-bench.md` and `.json`.
 
 ## Noise floor
 
