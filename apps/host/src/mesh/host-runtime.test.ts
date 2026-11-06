@@ -20,6 +20,7 @@ function counting() {
         list: () => Promise.resolve([]),
         add: () => Promise.reject(new Error("unused")),
         rm: () => Promise.resolve(),
+        restore: () => Promise.resolve(),
         rename: () => Promise.reject(new Error("unused")),
         connect: () => Promise.reject(new Error("unused")),
       },

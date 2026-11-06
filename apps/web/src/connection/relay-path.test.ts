@@ -31,7 +31,7 @@ async function newOffer(): Promise<{ readonly link: PairingOffer; readonly code:
 }
 
 function codeOffer(link: PairingOffer, code: string): PairingOffer {
-  const parsed = offerFrom(link, { mode: "code", code }, bridge.url);
+  const parsed = offerFrom(link, { mode: "code", code }, { relayUrl: bridge.url, target: "device" });
   if (!parsed.ok) throw new Error(parsed.reason);
   return parsed.offer;
 }
