@@ -72,7 +72,7 @@ export function serveMeshOffers(
   };
 
   // The offer admits once: the first join on it replaces the link with who joined, so the asking client can say so.
-  const follow = (connection: HcConnection, request: string): void => {
+  const follow = (connection: HcConnection, request: string): (() => void) => {
     const stop = onAdmitted((join) => {
       stop();
       follows.delete(stop);
@@ -83,6 +83,10 @@ export function serveMeshOffers(
       })().catch((error: unknown) => log(`mesh offer: cannot write the join: ${String(error)}`));
     });
     follows.add(stop);
+    return () => {
+      stop();
+      follows.delete(stop);
+    };
   };
 
   const answer = async (connection: HcConnection): Promise<void> => {
@@ -93,10 +97,13 @@ export function serveMeshOffers(
     answering = request;
     try {
       const offer = await open();
+      // Followed before the link is out: a machine can join the moment a client reads it.
+      const unfollow = follow(connection, request);
       if (await write(connection, { request, link: offer.link, expiresAt: offer.expiresAt }, doc.version)) {
         log(`mesh offer: opened a single-use join for request ${request}`);
         expire(connection, request, offer.expiresAt);
-        follow(connection, request);
+      } else {
+        unfollow();
       }
     } catch (error) {
       await write(connection, { request, error: error instanceof Error ? error.message : String(error) }, doc.version);
