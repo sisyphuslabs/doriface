@@ -183,7 +183,11 @@ test("the From zero workflow checks the user guide through the hosted relay with
   expect(steps.some((step) => step.run?.includes("bun run pack"))).toBe(true);
   const smoke = steps.find((step) => step.run?.includes(HOSTED_SPEC));
   expect(smoke?.env?.["DORIFACE_HOSTED_RELAY_SMOKE"]).toBe("1");
-  expect(smoke?.env?.["DORIFACE_E2E_EXECUTABLE"]).toContain("linux-unpacked/doriface");
+  // The packed Linux app is named by electron-builder's executableName, so a rename moves the path and this test with it.
+  const { executableName } = JSON.parse(read("apps/desktop/electron-builder.json")) as { executableName: string };
+  expect(smoke?.env?.["DORIFACE_E2E_EXECUTABLE"]).toBe(
+    `\${{ github.workspace }}/apps/desktop/dist/release/linux-unpacked/${executableName}`,
+  );
   expect(workflow.on.pull_request?.paths).toEqual(
     expect.arrayContaining(["docs/getting-started.md", "apps/desktop/e2e/hosted-relay-pair.e2e.ts"]),
   );
