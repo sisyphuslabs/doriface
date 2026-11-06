@@ -469,7 +469,8 @@ describe("provider tokens: reuse, expiry and renewal (#717 review)", () => {
     await send(fcm, NOW);
     await send(fcm, NOW + 58 * MINUTE);
     expect(sent.filter((request) => request.url === "https://oauth2.googleapis.com/token")).toHaveLength(1);
-    await send(fcm, NOW + 60 * MINUTE);
+    // Inside the last minute before `expires_in` (3600 s): a new grant, not the token about to lapse.
+    await send(fcm, NOW + 59.5 * MINUTE);
     expect(sent.filter((request) => request.url === "https://oauth2.googleapis.com/token")).toHaveLength(2);
   });
 
