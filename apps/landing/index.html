@@ -22,7 +22,6 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="./fonts/TimelessSansVF.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="./fonts/TimelessSerifVF.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
     <script src="/theme-init.js"></script>
@@ -39,10 +38,10 @@
         </a>
         <nav aria-label="Sections">
           <ul class="nav__links">
+            <li><a href="#mesh">Mesh</a></li>
             <li><a href="#app">App</a></li>
             <li><a href="#relay">Relay</a></li>
             <li><a href="#pairing">Pairing</a></li>
-            <li><a href="#mesh">Mesh</a></li>
             <li><a href="#everywhere">Platforms</a></li>
             <li><a href="https://github.com/sisyphuslabs/doriterm">GitHub</a></li>
           </ul>
@@ -103,168 +102,79 @@
 
     <main id="main">
       <section class="hero" id="top">
-        <div class="wrap">
-          <div class="hero__copy">
-            <p class="eyebrow">
-              <span class="num">doriterm</span><span class="rule"></span>end-to-end encrypted terminal
-            </p>
-            <h1 class="display">Your devices.<br />One terminal.</h1>
-            <p class="hero__sub">
-              Every machine you own, linked through an <span class="nowrap">end-to-end</span> encrypted mesh.
-            </p>
-            <div class="hero__cta">
-              <a class="btn btn--primary" href="https://app.doriterm.com">Open the app</a>
-              <a class="btn btn--ghost" href="https://github.com/sisyphuslabs/doriterm/releases"
-                >Download for desktop <span class="arrow" aria-hidden="true">&rarr;</span></a
-              >
-            </div>
-            <p class="hero__proof">
-              <span>Noise IK sessions</span> &middot; <span>ChaCha20-Poly1305</span> &middot;
-              <span>the relay holds no key</span>
-            </p>
+        <div class="hero__bg" aria-hidden="true"></div>
+        <div class="wrap hero__inner">
+          <h1 class="display">Your devices.<br /><span class="display__accent">One terminal.</span></h1>
+          <p class="hero__sub">
+            Every machine you own, linked through an <span class="nowrap">end-to-end</span> encrypted mesh. Start OmO on
+            the mac mini at home and answer it from your phone.
+          </p>
+          <div class="hero__cta">
+            <a class="btn btn--primary" href="https://app.doriterm.com">Open the app</a>
+            <a class="btn btn--ghost" href="https://github.com/sisyphuslabs/doriterm/releases"
+              >Download for desktop <span class="arrow" aria-hidden="true">&rarr;</span></a
+            >
           </div>
+          <p class="hero__makers">
+            From <a href="#makers">Sisyphus Labs</a>, the people who made <a href="https://sisyphuslabs.ai">Dori</a> and
+            <a href="https://omo.dev">OmO</a>.
+          </p>
 
-          <figure class="frame meshwin" data-meshwin aria-labelledby="meshwin-caption">
-            <div class="frame__bar">
-              <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="frame__title">one terminal &middot; 4 machines</span>
-              <span class="frame__meta">e2ee mesh</span>
-            </div>
-            <div class="meshwin__body">
-              <div class="meshwin__links" aria-hidden="true" data-links></div>
-              <section class="mpane" data-pane="laptop" aria-label="laptop terminal">
-                <header class="mpane__bar">
-                  <span class="mpane__icon"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <rect x="2.5" y="3.5" width="11" height="7.5" rx="1" />
-                      <path d="M1 13h14" /></svg
-                  ></span>
-                  <span class="mpane__name">laptop</span>
-                  <span class="mpane__os">macOS</span>
-                  <span class="mpane__key" title="Noise key on this machine"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <circle cx="5" cy="8" r="2.6" />
-                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
-                  ></span>
-                </header>
-                <div class="mpane__body">
-                  <p class="mline"><span class="p">~/api main $</span> bun test</p>
-                  <p class="mline ok">✓ 412 pass &nbsp;0 fail &nbsp;<span class="d">3.1s</span></p>
-                  <p class="mline"><span class="p">~/api main $</span> <span class="cur"></span></p>
-                  <p class="mline ok" data-step="l-healthy">● cloud-box: api@4f2c healthy</p>
-                </div>
-              </section>
-              <section class="mpane" data-pane="mini" aria-label="mac mini terminal">
-                <header class="mpane__bar">
-                  <span class="mpane__icon"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <rect x="2" y="5" width="12" height="6" rx="2" />
-                      <path d="M5 9.5h1.5" /></svg
-                  ></span>
-                  <span class="mpane__name">mac mini</span>
-                  <span class="mpane__os">OmO</span>
-                  <span class="mpane__key" title="Noise key on this machine"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <circle cx="5" cy="8" r="2.6" />
-                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
-                  ></span>
-                </header>
-                <div class="mpane__body">
-                  <p class="mline"><span class="p">mini:~/api $</span> omo</p>
-                  <p class="mline d">● Reading migrations/0042_keys.sql</p>
-                  <p class="mline warn">! Needs you: apply to staging?</p>
-                  <p class="mline ok" data-step="m-applied">✓ Applied. 41 tests pass</p>
-                </div>
-              </section>
-              <div class="relay-node" data-relay>
-                <span class="relay-node__ring" aria-hidden="true"></span>
-                <span class="relay-node__lock"
-                  ><svg viewBox="0 0 16 16" aria-hidden="true">
-                    <rect x="3" y="7" width="10" height="7" rx="1.5" />
-                    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg
-                ></span>
-                <span class="relay-node__name">relay</span>
-                <span class="relay-node__note">ciphertext only</span>
+          <div class="app-stage hero__stage">
+            <figure class="frame app-desktop">
+              <div class="frame__bar">
+                <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="frame__title">doriterm, studio</span>
+                <span class="frame__meta">app.doriterm.com</span>
               </div>
-              <section class="mpane" data-pane="cloud" aria-label="cloud-box terminal">
-                <header class="mpane__bar">
-                  <span class="mpane__icon"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <rect x="2" y="2.5" width="12" height="4.5" rx="1" />
-                      <rect x="2" y="9" width="12" height="4.5" rx="1" />
-                      <path d="M4.5 4.75h.01M4.5 11.25h.01" /></svg
-                  ></span>
-                  <span class="mpane__name">cloud-box</span>
-                  <span class="mpane__os">ubuntu</span>
-                  <span class="mpane__key" title="Noise key on this machine"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <circle cx="5" cy="8" r="2.6" />
-                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
-                  ></span>
-                </header>
-                <div class="mpane__body">
-                  <p class="mline"><span class="p">ubuntu@cloud-box:~ $</span> tail -f deploy.log</p>
-                  <p class="mline d">pull api@4f2c &nbsp;migrate &nbsp;restart</p>
-                  <p class="mline ok" data-step="c-healthy">api@4f2c healthy in 41s</p>
-                </div>
-              </section>
-              <section class="mpane" data-pane="phone" aria-label="phone terminal">
-                <header class="mpane__bar">
-                  <span class="mpane__icon"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <rect x="4.5" y="1.5" width="7" height="13" rx="1.6" />
-                      <path d="M7 12.5h2" /></svg
-                  ></span>
-                  <span class="mpane__name">phone</span>
-                  <span class="mpane__os">iOS</span>
-                  <span class="mpane__key" title="Noise key on this machine"
-                    ><svg viewBox="0 0 16 16" aria-hidden="true">
-                      <circle cx="5" cy="8" r="2.6" />
-                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
-                  ></span>
-                </header>
-                <div class="mpane__body">
-                  <p class="mline d">attached to OmO on mac mini</p>
-                  <p class="mline warn">! apply to staging?</p>
-                  <p class="mline" data-step="p-answer">
-                    <span class="p">›</span> 1 &nbsp;<span class="d">yes, apply it</span>
-                  </p>
-                </div>
-              </section>
-              <div class="meshwin__packets" aria-hidden="true" data-packets></div>
-            </div>
-            <figcaption class="scene-legend" id="meshwin-caption">
-              <span><i class="plain"></i>plaintext, only on your machines</span>
-              <span><i></i>sealed with Noise in transit</span>
-              <span><i class="key"></i>each machine keeps its own key</span>
-            </figcaption>
-          </figure>
+              <div class="live" style="--w: 1280; --h: 780">
+                <iframe
+                  data-src="/mockup/?view=desktop"
+                  title="The doriterm desktop workspace, drawn by the app's components with sample data"
+                  tabindex="-1"
+                  width="1280"
+                  height="780"
+                ></iframe>
+              </div>
+            </figure>
+            <figure class="app-phone">
+              <div class="live" style="--w: 390; --h: 844">
+                <iframe
+                  data-src="/mockup/?view=phone"
+                  title="The doriterm phone terminal with its key bar, drawn by the app's components with sample data"
+                  tabindex="-1"
+                  width="390"
+                  height="844"
+                ></iframe>
+              </div>
+            </figure>
+          </div>
         </div>
 
         <nav class="wrap index" aria-label="On this page">
           <ol>
             <li>
+              <a href="#mesh"
+                ><span class="n">01</span><span class="t">Every machine you own, one mesh</span
+                ><span class="d">signed records, no open ports</span></a
+              >
+            </li>
+            <li>
               <a href="#app"
-                ><span class="n">01</span><span class="t">The app, live</span
+                ><span class="n">02</span><span class="t">The app, live</span
                 ><span class="d">desktop and phone</span></a
               >
             </li>
             <li>
               <a href="#relay"
-                ><span class="n">02</span><span class="t">The relay is a pipe</span
+                ><span class="n">03</span><span class="t">The relay is a pipe</span
                 ><span class="d">ciphertext in, ciphertext out</span></a
               >
             </li>
             <li>
               <a href="#pairing"
-                ><span class="n">03</span><span class="t">Pair a phone in one scan</span
+                ><span class="n">04</span><span class="t">Pair a phone in one scan</span
                 ><span class="d">QR, link or an 8-character code</span></a
-              >
-            </li>
-            <li>
-              <a href="#mesh"
-                ><span class="n">04</span><span class="t">Machines that vouch for each other</span
-                ><span class="d">signed records, no open ports</span></a
               >
             </li>
             <li>
@@ -277,54 +187,148 @@
         </nav>
       </section>
 
+      <section class="section" id="mesh" aria-labelledby="mesh-title">
+        <div class="wrap">
+          <p class="eyebrow reveal"><span class="num">01</span><span class="rule"></span>Mesh</p>
+          <h2 class="h2 reveal" id="mesh-title">
+            Every machine you own, one mesh.<br /><span class="soft">No ssh, no open port.</span>
+          </h2>
+          <p class="section__lede reveal">
+            Each machine keeps its own key and signs the membership records it writes with Ed25519. The records sync
+            over the same encrypted relay as your terminals.
+            <strong>The relay stores none of it and can forge none of it.</strong>
+          </p>
+          <figure class="fleet reveal" data-fleet aria-labelledby="fleet-title">
+            <div class="fleet__steps" role="group" aria-label="Fleet scenes">
+              <button type="button" data-fleet-step="0" aria-pressed="true">
+                <span class="fleet__n">01</span>One mesh
+              </button>
+              <button type="button" data-fleet-step="1" aria-pressed="false">
+                <span class="fleet__n">02</span>Work
+              </button>
+              <button type="button" data-fleet-step="2" aria-pressed="false">
+                <span class="fleet__n">03</span>Join
+              </button>
+              <button type="button" data-fleet-step="3" aria-pressed="false">
+                <span class="fleet__n">04</span>Revoke
+              </button>
+            </div>
+            <canvas class="fleet__canvas" aria-hidden="true"></canvas>
+            <figcaption class="fleet__caption">
+              <p data-fleet-text="0">
+                <strong id="fleet-title">Three machines, one mesh.</strong> Your laptop, the mac mini at home and a
+                cloud box share one mesh, and each one lists the others in its sidebar. The phone you paired sees all
+                three.
+              </p>
+              <p data-fleet-text="1" hidden>
+                <strong>Work runs where you start it.</strong> Start OmO on the mac mini and answer it from your phone.
+                Each record is sealed with Noise on the machine that sends it and opens only on the machine it is for.
+              </p>
+              <p data-fleet-text="2" hidden>
+                <strong>A new machine asks to join.</strong> <code>mesh pair</code> on the laptop invites pi. You
+                approve it on the laptop, the signed admit record syncs, and every member dials pi.
+              </p>
+              <p data-fleet-text="3" hidden>
+                <strong>One record removes one.</strong> <code>mesh revoke cloud-box --compromised</code> reaches every
+                member as one signed record. Each closes its sessions with cloud-box and refuses its keys.
+              </p>
+            </figcaption>
+          </figure>
+          <div class="mesh-facts">
+            <div class="card reveal">
+              <div class="card__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              </div>
+              <h3>Approved, then admitted</h3>
+              <p>
+                A machine joins after you approve it on a member, unless you opened the invite with <code>--auto</code>.
+                For seven days every member shows who joined, who invited it and its fingerprint.
+              </p>
+            </div>
+            <div class="card reveal" style="--delay: 60ms">
+              <div class="card__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="6" cy="6" r="2.5" />
+                  <circle cx="18" cy="6" r="2.5" />
+                  <circle cx="12" cy="18" r="2.5" />
+                  <path d="M8.5 6h7M7.2 8.2l3.6 7.6M16.8 8.2l-3.6 7.6" />
+                </svg>
+              </div>
+              <h3>One sidebar, every machine</h3>
+              <p>
+                Each member adds every other member as a herdr machine on its own, so their spaces and agents appear
+                under their names.
+              </p>
+            </div>
+            <div class="card reveal" style="--delay: 120ms">
+              <div class="card__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M5.6 5.6l12.8 12.8" />
+                </svg>
+              </div>
+              <h3>Revoke in one record</h3>
+              <p>
+                With <code>--compromised</code>, one record removes a member and every machine it admitted. Its sessions
+                close and its keys are refused on every path.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="section" id="app" aria-labelledby="app-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">01</span><span class="rule"></span>App</p>
+          <p class="eyebrow reveal"><span class="num">02</span><span class="rule"></span>App</p>
           <h2 class="h2 reveal" id="app-title">
             Every terminal on every machine.<br /><span class="soft">One sidebar for all of them.</span>
           </h2>
           <p class="section__lede reveal">
             Spaces on the left, agents grouped by whether they need you, are working or are done, and split terminals on
             the right. On a phone the same terminal gets a key bar with ctrl, esc and the arrows.
-            <strong>What you see here is the app's own components, live, with sample data.</strong>
+            <strong>The window at the top of the page is the app's own components, live, with sample data.</strong>
           </p>
-          <div class="app-stage reveal">
-            <figure class="frame app-desktop">
-              <div class="frame__bar">
-                <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="frame__title">doriterm, studio</span>
-                <span class="frame__meta">app.doriterm.com</span>
-              </div>
-              <div class="live" style="--w: 1280; --h: 780">
-                <iframe
-                  data-src="/mockup/?view=desktop"
-                  title="The doriterm desktop workspace, drawn by the app's components with sample data"
-                  loading="lazy"
-                  tabindex="-1"
-                  width="1280"
-                  height="780"
-                ></iframe>
-              </div>
-            </figure>
-            <figure class="app-phone">
-              <div class="live" style="--w: 390; --h: 844">
-                <iframe
-                  data-src="/mockup/?view=phone"
-                  title="The doriterm phone terminal with its key bar, drawn by the app's components with sample data"
-                  loading="lazy"
-                  tabindex="-1"
-                  width="390"
-                  height="844"
-                ></iframe>
-              </div>
-            </figure>
-          </div>
+          <ul class="facts reveal">
+            <li>
+              <strong>Close the tab. The work keeps going.</strong> Agents run in herdr-core on their own machine, and
+              the window is only a view of them. Close the browser or put the phone away, and every terminal is where
+              you left it.
+            </li>
+            <li>
+              <strong>Any agent that runs in a terminal.</strong> OmO, Claude Code, Codex or your own script. Agents
+              that report their state over OSC 7501 also show whether they need you.
+            </li>
+          </ul>
         </div>
       </section>
 
       <section class="section" id="relay" aria-labelledby="relay-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">02</span><span class="rule"></span>Relay</p>
+          <p class="eyebrow reveal"><span class="num">03</span><span class="rule"></span>Relay</p>
           <h2 class="h2 reveal" id="relay-title">
             The relay is a pipe.<br /><span class="soft">It cannot read what it carries.</span>
           </h2>
@@ -405,7 +409,7 @@
       <section class="section" id="pairing" aria-labelledby="pairing-title">
         <div class="wrap split">
           <div>
-            <p class="eyebrow reveal"><span class="num">03</span><span class="rule"></span>Pairing</p>
+            <p class="eyebrow reveal"><span class="num">04</span><span class="rule"></span>Pairing</p>
             <h2 class="h2 reveal" id="pairing-title">
               Pair a phone in one scan.<br /><span class="soft">The secret never leaves the link.</span>
             </h2>
@@ -815,121 +819,6 @@
         </div>
       </section>
 
-      <section class="section" id="mesh" aria-labelledby="mesh-title">
-        <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">04</span><span class="rule"></span>Mesh</p>
-          <h2 class="h2 reveal" id="mesh-title">
-            Machines that vouch for each other.<br /><span class="soft">No ssh, no open port.</span>
-          </h2>
-          <p class="section__lede reveal">
-            Put your laptop, a build box and a VPS in one mesh and each one shows the others in its sidebar. Membership
-            is a set of records every member signs with its Ed25519 key and syncs over the same encrypted relay.
-            <strong>The relay stores none of it and can forge none of it.</strong>
-          </p>
-
-          <div class="mesh reveal" data-mesh>
-            <div class="mesh__stage">
-              <svg viewBox="0 0 720 420" role="img" aria-labelledby="mesh-caption">
-                <g data-edges></g>
-                <g data-sparks aria-hidden="true"></g>
-                <g data-hosts></g>
-              </svg>
-            </div>
-            <ol class="mesh__log" id="mesh-caption" aria-label="How a mesh grows and how a member is removed">
-              <li data-step="0">
-                <span>01</span
-                ><span
-                  >Four machines share one mesh. Each one's <code>hc</code> lists the other three as machines.</span
-                >
-              </li>
-              <li data-step="1">
-                <span>02</span
-                ><span><code>mesh pair</code> on laptop invites a fifth machine; <code>pi</code> asks to join.</span>
-              </li>
-              <li data-step="2">
-                <span>03</span
-                ><span
-                  >You approve on laptop. The signed <code>admit</code> record syncs, and every member dials
-                  <code>pi</code>.</span
-                >
-              </li>
-              <li data-step="3" class="danger">
-                <span>04</span
-                ><span
-                  ><code>mesh revoke vps --compromised</code>: every member closes its sessions and refuses its
-                  keys.</span
-                >
-              </li>
-            </ol>
-          </div>
-
-          <div class="mesh-facts">
-            <div class="card reveal">
-              <div class="card__icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z" />
-                  <path d="M9 12l2 2 4-4" />
-                </svg>
-              </div>
-              <h3>Approved, then admitted</h3>
-              <p>
-                A machine joins after you approve it on a member, unless you opened the invite with <code>--auto</code>.
-                For seven days every member shows who joined, who invited it and its fingerprint.
-              </p>
-            </div>
-            <div class="card reveal" style="--delay: 60ms">
-              <div class="card__icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="6" cy="6" r="2.5" />
-                  <circle cx="18" cy="6" r="2.5" />
-                  <circle cx="12" cy="18" r="2.5" />
-                  <path d="M8.5 6h7M7.2 8.2l3.6 7.6M16.8 8.2l-3.6 7.6" />
-                </svg>
-              </div>
-              <h3>One sidebar, every machine</h3>
-              <p>
-                Each member adds every other member as a herdr machine on its own, so their spaces and agents appear
-                under their names.
-              </p>
-            </div>
-            <div class="card reveal" style="--delay: 120ms">
-              <div class="card__icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M5.6 5.6l12.8 12.8" />
-                </svg>
-              </div>
-              <h3>Revoke in one record</h3>
-              <p>
-                With <code>--compromised</code>, one record removes a member and every machine it admitted. Its sessions
-                close and its keys are refused on every path.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="section" id="everywhere" aria-labelledby="everywhere-title">
         <div class="wrap">
           <p class="eyebrow reveal"><span class="num">05</span><span class="rule"></span>Platforms</p>
@@ -1033,6 +922,33 @@
 <span class="p">$ </span>doriface-host mesh pair                <span class="c"># invite another machine into your mesh</span>
 <span class="p">$ </span>doriface-host mesh join &lt;code&gt;         <span class="c"># on that machine: ask to join</span>
 <span class="p">$ </span>doriface-host mesh revoke &lt;member&gt;     <span class="c"># remove a member everywhere</span></code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section makers" id="makers" aria-labelledby="makers-title">
+        <div class="wrap">
+          <h2 class="h2 reveal" id="makers-title">
+            Made by Sisyphus Labs.<br /><span class="soft">The people behind Dori and OmO.</span>
+          </h2>
+          <div class="makers__grid reveal">
+            <a class="maker" href="https://sisyphuslabs.ai">
+              <span class="maker__name">Dori</span>
+              <span class="maker__what"
+                >An engineer who lives in your chat. Tell him what to do in Slack, Discord or Telegram; he gives each
+                job its own coding-agent session and reports back when it is merged.</span
+              >
+              <span class="maker__url">sisyphuslabs.ai <span class="arrow" aria-hidden="true">&rarr;</span></span>
+            </a>
+            <a class="maker" href="https://omo.dev">
+              <span class="maker__name">OmO</span>
+              <span class="maker__what"
+                >The agent in the terminal above. Add <code>ultrawork</code> to a prompt and it plans, proves each step
+                and checks the result; type <code>mass ulw</code> and one job becomes a graph of agents, each on the
+                model that fits it.</span
+              >
+              <span class="maker__url">omo.dev <span class="arrow" aria-hidden="true">&rarr;</span></span>
+            </a>
           </div>
         </div>
       </section>

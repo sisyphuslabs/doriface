@@ -1,7 +1,9 @@
 import { DEFAULT_PUSH_PREFS, type PushHostLine, type PushPrefs } from "@doriface/protocol";
 import { type ConnectionSettings, isConfigured } from "../connection/settings.ts";
 import { connectionStore } from "../connection/store.ts";
+import { MoveQueue } from "./move-queue.ts";
 import { pushChannel } from "./push-channel.ts";
+import { recordPushMove } from "./push-move-probe.ts";
 import {
   loadPushPrefs,
   loadPushRoute,
@@ -15,9 +17,18 @@ import { browserScope, type PushSupport, pushSupport } from "./push-support.ts";
 import { reconcile } from "./reconcile.ts";
 import { pushRegistrar } from "./registrar.ts";
 
+/** A feed the desktop app could not follow and tries again: why, and how long until the next try. */
+export interface FeedRetry {
+  readonly reason: string;
+  readonly inMs: number;
+}
+
 export interface PushView {
   readonly support: PushSupport;
-  /** The browser's notification permission; null where there is none. */
+  /**
+   * The browser's notification permission, or the OS's authorization of the desktop app as the browser would name it
+   * (`default` while the OS has not asked yet); null where none can be read.
+   */
   readonly permission: NotificationPermission | null;
   readonly on: boolean;
   readonly prefs: PushPrefs;
@@ -25,6 +36,10 @@ export interface PushView {
   readonly error: string | null;
   /** Set once a test notice was handed to the push service. */
   readonly tested: boolean;
+  /** Desktop only: the feed subscription that failed and is being retried; null while it stands or is not wanted. */
+  readonly retry: FeedRetry | null;
+  /** Desktop only: agents already in a state this device asked to hear about, which the feed announces no more. */
+  readonly waiting: number | null;
 }
 
 const INITIAL: PushView = {
@@ -35,6 +50,8 @@ const INITIAL: PushView = {
   busy: true,
   error: null,
   tested: false,
+  retry: null,
+  waiting: null,
 };
 
 function expect(reply: PushHostLine, what: string): void {
@@ -45,6 +62,8 @@ function expect(reply: PushHostLine, what: string): void {
 class PushSettings {
   #view: PushView = INITIAL;
   readonly #listeners = new Set<() => void>();
+  /** Moves run one at a time (see `retarget`). */
+  readonly #moves = new MoveQueue();
 
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
@@ -115,9 +134,17 @@ class PushSettings {
 
   /**
    * The connection moved to another host or token: the old host stops notifying this browser, the saved route (and the
-   * loopback token in it) is dropped, and notifications that were on are registered with the new host.
+   * loopback token in it) is dropped, and notifications that were on are registered with the new host. One move runs
+   * at a time: one connection change can change the settings twice (the new host's name arrives with its hello), and a
+   * second move that read the saved route while the first was still registering redid the whole move beside it (#780).
    */
-  async retarget(next: ConnectionSettings): Promise<void> {
+  retarget(settings: ConnectionSettings): Promise<void> {
+    const moved = this.#moves.run(() => this.#retarget(settings));
+    recordPushMove(this.#moves.idle);
+    return moved;
+  }
+
+  async #retarget(next: ConnectionSettings): Promise<void> {
     const route = await loadPushRoute().catch(() => undefined);
     if (route === undefined) return;
     const target = isConfigured(next) ? routeOf(next) : undefined;
