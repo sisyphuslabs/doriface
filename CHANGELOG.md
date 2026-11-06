@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## v0.1.3
 
 ### This computer on the relay, and pairing from a phone
@@ -16,12 +18,14 @@
 ### Answering agents from the card
 
 - The card pinned over a waiting agent answers every prompt shape Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, and the diff or file it touches, and a file it names opens read-only. Every answer is still checked against the live screen first. (#736)
+- A notification offers its prompt's own rows: a one-question prompt's rows become the notification's actions, the No row answers from the notification, any other row opens the app and its page sends the answer, and the answer is still checked against the live screen. Several steps or a typed answer offer no rows, and a tap opens the card. (#745)
 
 ### A browser on the mesh, and the installed web app
 
 - A browser with no account and no pairing opens the web app, follows an invite link a member sent, checks the host's fingerprint and lands on the mesh's terminals; a revisit needs no new invite. (#716)
 - A mesh invite (`&m=1`) is no longer read as a device invite: the web app says it adds a machine, with the command that does, instead of reporting a link that was already used. (#716)
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#715)
+- The hosted web app sends a Content Security Policy: its own scripts and the terminal's wasm, this origin and the relay, nothing else, and every deploy probes for the header. (#743)
 
 ### Machine mesh
 
@@ -34,10 +38,14 @@
 - A one-tap ^C sits after Esc in the phone key row. (#678)
 - A syllable still composing is finished before a key-bar key, a chord or a paste, so the bar never eats it and never sends the syllable twice. (#718, #738)
 - The phone draws its sort control only when an agent can be sorted. (#657)
+- The phone's list says it is loading until the host's first list answers, instead of showing "No terminals yet" on every load. (#807)
+- A held touch's menu stays open when the finger lifts, and the selection it made survives: the tap a lift would make belongs to the hold, not to the menu. (#845)
+- An agent row's Pin and More are drawn on a touch screen, 24 px apart, so each takes a 44 px tap instead of waiting for a hover that never comes. (#808)
 
 ### Native apps
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#717)
+- An Android app around the same web build, with its notifications through the bridge and Allow and Deny on the notification itself. (#810)
 
 ### Spaces, tabs and the sidebar
 
@@ -47,6 +55,7 @@
 - A tab's menu hands the keyboard to the question its item opened, so a rename typed at once is kept. (#591, #632)
 - Right-clicking a sidebar row opens its menu, so Rename is there without the "..." button. (#720)
 - The sidebar toggle takes a click on macOS with the sidebar hidden or in a rail, a click on it is not a window drag, and the tab strip still moves the window beside it. (#646, #659, #690)
+- A filter in the sidebar narrows machines, spaces and agents to the ones whose labels match, and the filter key opens the sidebar at its field. (#820)
 
 ### Fonts, Korean text and the terminal
 
@@ -54,6 +63,7 @@
 - A fallback Hangul face is sized to Ghostty's ideograph width, not the whole two cells. (#658)
 - Wide glyphs in a terminal that opened in a tab not shown are drawn once the tab is shown. (#649)
 - A press's selection is held by the terminal rather than the document, so IME composes after a drag-select. (#593)
+- A resize keeps the terminal's view: a following terminal keeps following through a divider drag or the phone keyboard, a program's redraw during one is written whole instead of paced, and only a scroll of your own stops it following. (#811)
 
 ### Connection and offline wording
 
@@ -82,9 +92,9 @@
 
 - A launch still opening when the host stops is ended, so its core cannot outlive the host. (#599)
 - The host reads one typed plan document that is open unless it names a limit or a feature, and a document that cannot be read as one stops the host instead of reading as an open plan. (#606)
-- Many test, CI and documentation fixes, so problems are caught before a release instead of after. The phone keys bar's keys, packs and custom keys are now a stored model, and a modifier held in the bar now covers Home, End, Page Up, Page Down, Delete and F1 to F12 as well as the arrows, so a keyboard attached to a phone carries the modifier too. (#605, #608, #613, #617, #624, #681, #683, #685, #687, #695, #711, #725, #763, #765, #785)
+- Many test, CI and documentation fixes, so problems are caught before a release instead of after. The phone keys bar's keys, packs and custom keys are now a stored model, and a modifier held in the bar now covers Home, End, Page Up, Page Down, Delete and F1 to F12 as well as the arrows, so a keyboard attached to a phone carries the modifier too. (#605, #608, #613, #617, #624, #681, #683, #685, #687, #695, #711, #725, #741, #762, #763, #765, #785, #788, #815, #847)
 
-## v0.1.2
+## v0.1.2 - 2026-11-06
 
 ### Tabs and spaces
 
@@ -148,3 +158,47 @@
 - On phones, the app, its header, its status bar and its sheets keep clear of the notch, the rounded corners and the home indicator on every side. (#561, #565)
 - An older browser gets an Update your browser screen instead of a page that does not work. (#563)
 - Many test and CI fixes, so problems are caught before a release instead of after. (#444, #450, #453, #457, #467, #471, #490, #491, #492, #494, #498, #501, #505, #506, #507, #508, #511, #513, #514, #519, #523, #531, #536, #538, #541, #543, #546, #549, #558, #564, #569, #571, #574, #575, #585, #588)
+
+## v0.1.1 - 2026-11-05
+
+### Signed macOS app and Windows
+
+- The macOS app is signed with a Developer ID certificate and notarized by Apple, and the dmg is stapled, so it opens without a Gatekeeper warning. (#382)
+- On Windows, the host keeps its keys and private state readable only by you, and it refuses a herdr-core older than 0.1.17. (#433)
+- The app installs herdr-core for you when it is missing or too old: a verified download, installed for your user only. (#417)
+- Release builds connect only to the production relay. (#411)
+
+### Panes, spaces and the terminal
+
+- Drag a pane by its header to move it within its tab, as in herdr-app, or swap panes from the keyboard. (#442)
+- A space row shows its branch, ahead or behind, uncommitted changes or a detached head, only when one of them is unusual. (#380)
+- Cmd/Ctrl + and - and 0 size the terminal text instead of zooming the whole window. (#413)
+- A selection covers whole cells and stays contiguous across wide characters. (#437)
+- Keys you type while a terminal opens on its own are kept, and a terminal that answers after you moved on no longer takes the keyboard. (#414, #375)
+- A terminal started again with Try again gets its focus back. (#386)
+- The sidebar list and the tab strip show no classic scrollbars while their content fits. (#374)
+- The browser's theme colour follows the theme you are looking at. (#371)
+
+### Updates and Settings
+
+- An update that is ready lights a dot on Settings, and Settings restarts or reloads into it; the phone's Settings gear shows the dot too. (#394, #425)
+- Voice input says what dictation does and where its microphone is, and why it cannot listen when it cannot. (#398)
+
+### Hosts and the mesh
+
+- Stopping a host ends the handshakes in flight instead of waiting for them to time out. (#438)
+- A link opened while its device is being revoked is closed. (#439)
+- Re-pairing a host compares and saves it in one step, so two pairings at once cannot mix. (#396)
+- Adding a machine reserves both of its relay connections together. (#373)
+- Many test fixes, so problems are caught before a release instead of after. (#363, #370, #377, #378, #399, #400, #405, #407, #423, #428, #431, #432, #434, #436, #443)
+
+## v0.1.0 - 2026-11-05
+
+The first release: an end-to-end encrypted web, PWA and desktop face for herdr-core.
+
+- The desktop app for macOS, Windows and Linux starts a host and herdr-core on your computer and shows its terminals; the same client runs in a browser and installs as a PWA.
+- Every herdr-core method works unchanged: the host passes herdr-core's own protocol straight through.
+- Terminals render with libghostty, built from Ghostty v1.4.0.
+- Traffic between your devices and a host is end-to-end encrypted with Noise and carried by a public relay that only ever sees ciphertext.
+- Pair a device with an 8-character code or a one-tap link, and add other machines through the relay with `hc machine add --via 'doriface-host connect <host>'`, with no ssh and no open port.
+- Everything up to and including #367.
