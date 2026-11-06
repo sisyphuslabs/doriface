@@ -31,8 +31,11 @@ export default defineConfig({
       filename: "sw.ts",
       includeAssets: ["icon.svg", "favicon.svg", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png"],
       manifest: {
+        // `id` pins the installed app to the origin root, so a later start_url change does not register as a second app.
+        id: "/",
         name: "doriface",
         short_name: "doriface",
+        lang: "en",
         description: "Your terminals and agents, from any device.",
         display: "standalone",
         start_url: "/",
@@ -43,6 +46,8 @@ export default defineConfig({
         icons: [
           { src: "icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+          // A maskable icon at each of the two sizes a launcher asks for, so neither is upscaled into the safe zone.
+          { src: "icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
           { src: "icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
           { src: "icon.svg", sizes: "any", type: "image/svg+xml" },
         ],
