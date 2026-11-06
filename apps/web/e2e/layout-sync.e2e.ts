@@ -25,8 +25,8 @@ async function secondDevice(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
-/** The tab bar's own Split right: split panes carry one each in their header too. */
-const splitRight = (page: Page) => page.locator("[data-titlebar]").getByRole("button", { name: "Split right" });
+/** The tab bar's own Split right: split panes carry one each in their header too, after the strip in the document. */
+const splitRight = (page: Page) => page.getByRole("button", { name: "Split right" }).first();
 const tabs = (page: Page) => page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
 const panesIn = (page: Page, tab: string) =>
   page.locator(
