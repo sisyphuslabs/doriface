@@ -140,8 +140,8 @@ export function SettingsRoute() {
               <>
                 <Lead>
                   A mesh is a group of computers that trust each other, so this app uses all of them without pairing
-                  each one. A machine added by hand is reachable on its own. Every machine is here, with how this host
-                  reaches it.
+                  each one. A machine added by hand is reachable on its own. Every machine is here, with whether this
+                  host has a session open to it.
                 </Lead>
                 <Group title="In your mesh">
                   <MeshSection />
