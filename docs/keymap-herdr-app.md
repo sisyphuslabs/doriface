@@ -71,7 +71,7 @@ every chord. Keys a person rebinds in Settings > Keybindings stay theirs.
 | `cmd-f` | `terminal.search` | unbound | same | no find bar in a terminal yet (#732) |
 | `cmd-c` | `terminal.copy` | same | same |  |
 | `cmd-v` | `terminal.paste` | same | same |  |
-| `ctrl-v` | `terminal.paste_image` | unbound | same | no image paste yet (#701); Ctrl+V reaches the terminal program, which reads it as ^V |
+| `ctrl-v` | `terminal.paste_image` | unbound | same | no image paste action yet (#701); Ctrl+V is left to the terminal's own key handling |
 | `alt-left` | `send:\u001bb` | same | same |  |
 | `alt-right` | `send:\u001bf` | same | same |  |
 | `alt-backspace` | `send:\u0017` | same | same |  |
@@ -148,6 +148,6 @@ every chord. Keys a person rebinds in Settings > Keybindings stay theirs.
 | `ctrl-shift-c` | `terminal.copy` | same | same |  |
 | `ctrl-shift-v` | `terminal.paste` | same | same |  |
 | `ctrl-shift-f` | `terminal.search` | unbound | same | no find bar in a terminal yet (#732) |
-| `ctrl-v` | `terminal.paste_image` | unbound | same | no image paste yet (#701); Ctrl+V reaches the terminal program, which reads it as ^V |
+| `ctrl-v` | `terminal.paste_image` | unbound | same | no image paste action yet (#701); Ctrl+V is left to the terminal's own key handling |
 | `ctrl-insert` | `terminal.copy` | same | same |  |
 | `shift-insert` | `terminal.paste` | same | same |  |
