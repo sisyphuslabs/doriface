@@ -144,6 +144,22 @@ function along(points) {
   });
 }
 
+/** The point at a fraction of a polyline's length, from its `along()` offsets. */
+function pointAt(points, at) {
+  const end = points.findIndex(({ offset }) => offset >= at);
+  if (end <= 0) return points[Math.max(end, 0)].point;
+  const {
+    point: [x0, y0],
+    offset: o0,
+  } = points[end - 1];
+  const {
+    point: [x1, y1],
+    offset: o1,
+  } = points[end];
+  const t = (at - o0) / (o1 - o0 || 1);
+  return [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t];
+}
+
 /**
  * The hero: one terminal window tiled from four machines around the relay. Links form, each machine's key lights, and
  * packets leave a pane as plaintext, travel sealed, and open only in the pane they reach. Transform and opacity only.
@@ -312,21 +328,34 @@ function setupMeshWindow() {
     measure();
     for (const pane of panes.values()) pane.classList.add("keyed");
     for (const step of steps.keys()) show(step);
-    // The still frame (reduced motion, or off screen) shows two records sealed halfway along their routes.
+    // The still frame (reduced motion, or off screen) shows two records sealed partway along their routes.
     for (const [from, to, plain] of [
       ["phone", "mini", "1"],
       ["cloud", "laptop", "healthy"],
     ]) {
-      const points = along(packetRoute(from, to));
-      const middle = points.find(({ offset }) => offset >= 0.3) ?? points[0];
       const element = packet(plain, randomHex(4).replaceAll(" ", ""));
-      element.style.transform = `translate(${middle.point[0]}px, ${middle.point[1]}px)`;
+      element.classList.add("mpacket--still");
+      element.dataset.route = `${from} ${to}`;
       element.querySelector(".plain").style.opacity = "0";
+    }
+    placeStill();
+  };
+
+  /** Puts the still frame's sealed records on their routes again, after a resize or a layout change. */
+  const placeStill = () => {
+    for (const element of packetLayer.querySelectorAll(".mpacket--still")) {
+      const [from, to] = element.dataset.route.split(" ");
+      const [x, y] = pointAt(along(packetRoute(from, to)), 0.14);
+      element.style.transform = `translate(${x}px, ${y}px)`;
     }
   };
 
-  new ResizeObserver(() => measure()).observe(body);
-  narrowMesh.addEventListener("change", measure);
+  const relayout = () => {
+    measure();
+    placeStill();
+  };
+  new ResizeObserver(relayout).observe(body);
+  narrowMesh.addEventListener("change", relayout);
 
   loopWhileVisible(
     root,

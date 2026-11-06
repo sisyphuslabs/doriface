@@ -224,6 +224,13 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+/* Code inside a block stays in the block's terminal face, so space-aligned columns line up. */
+pre code,
+pre kbd {
+  font-family: inherit;
+  font-weight: inherit;
+}
+
 ::selection {
   background: var(--accent-wash);
   color: var(--ink);
@@ -1998,7 +2005,7 @@ kbd {
     transform: none;
   }
 
-  .mpacket,
+  .mpacket:not(.mpacket--still),
   .qr .scan,
   .mesh .spark {
     display: none;
