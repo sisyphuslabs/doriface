@@ -22,6 +22,9 @@ public class NoticeMessagingService extends FirebaseMessagingService {
     static final String CHANNEL = "notices";
     static final String EXTRA_URL = "dev.omo.doriface.NOTICE_URL";
     static final String EXTRA_TAG = "dev.omo.doriface.NOTICE_TAG";
+    static final String EXTRA_NONCE = "dev.omo.doriface.NOTICE_NONCE";
+    /** Rides on every notice intent this app makes; an intent from another app cannot know it. */
+    static final String NONCE = java.util.UUID.randomUUID().toString();
     static final int NOTICE_ID = 1;
     private static final String TAG = "doriface-push";
 
@@ -56,6 +59,7 @@ public class NoticeMessagingService extends FirebaseMessagingService {
             .setAction(Intent.ACTION_VIEW)
             .putExtra(EXTRA_URL, url)
             .putExtra(EXTRA_TAG, tag)
+            .putExtra(EXTRA_NONCE, NONCE)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return PendingIntent.getActivity(context, request, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }

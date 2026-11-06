@@ -91,8 +91,14 @@ final class NoticeKeys {
         String sealedAuth = prefs.getString("auth", null);
         String pub = prefs.getString("pub", null);
         if (sealedKey != null && sealedAuth != null && pub != null) {
-            PrivateKey privateKey = KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(open(sealedKey)));
-            return new NoticeKeys(privateKey, b64(pub), open(sealedAuth));
+            try {
+                PrivateKey privateKey = KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(open(sealedKey)));
+                return new NoticeKeys(privateKey, b64(pub), open(sealedAuth));
+            } catch (GeneralSecurityException unsealable) {
+                // Keys this device's Keystore cannot open (restored from another device, or its key was lost): make new
+                // ones and forget the token, so the page subscribes again with keys the host can encrypt to.
+                prefs.edit().clear().commit();
+            }
         }
         KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
         generator.initialize(new ECGenParameterSpec("secp256r1"));

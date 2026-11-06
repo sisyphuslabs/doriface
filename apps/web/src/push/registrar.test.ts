@@ -58,7 +58,9 @@ describe("an app's subscription points at the push bridge (#705)", () => {
     const registrar = nativeRegistrar(fakePlugin({ platform: "android", token: "t", sandbox: false, ...KEYS }));
     expect(await registrar?.current()).toBeNull();
     await registrar?.subscribe("k1");
-    expect((await registrar?.current())?.matches("another host key")).toBe(true);
+    const held = await registrar?.current();
+    expect(held?.matches("another host key")).toBe(true);
+    expect(held?.endpoint).toBe("https://push-doriface.omo.dev/v1/fcm/t");
     await registrar?.unsubscribe();
     expect(await registrar?.current()).toBeNull();
   });

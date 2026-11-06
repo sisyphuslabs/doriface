@@ -5,7 +5,8 @@ import { keysOf, sameKey } from "./subscription-keys.ts";
 
 /** The push subscription this device holds, and whether the host's current VAPID key can post to it. */
 export interface HeldKeys {
-  readonly keys: PushSubscriptionKeys;
+  /** Where the host posts this device's notices; the keys are read only when subscribing. */
+  readonly endpoint: string;
   matches(vapidKey: string): boolean;
 }
 
@@ -31,7 +32,7 @@ export const browserRegistrar: PushRegistrar = {
   async current() {
     const subscription = await (await manager()).getSubscription();
     if (subscription === null) return null;
-    return { keys: keysOf(subscription), matches: (vapidKey) => sameKey(subscription, vapidKey) };
+    return { endpoint: subscription.endpoint, matches: (vapidKey) => sameKey(subscription, vapidKey) };
   },
   async subscribe(vapidKey) {
     const pushManager = await manager();
@@ -77,7 +78,7 @@ export function nativeRegistrar(plugin = nativePush()): PushRegistrar | null {
     requestPermission: async () => (await plugin.requestPermissions()).receive,
     async current() {
       const held = await plugin.current();
-      return held.registration === null ? null : { keys: keysOfRegistration(held.registration), matches: () => true };
+      return held.registration === null ? null : { endpoint: nativeEndpoint(held.registration), matches: () => true };
     },
     subscribe: async () => keysOfRegistration(await plugin.register()),
     unsubscribe: () => plugin.unregister(),
