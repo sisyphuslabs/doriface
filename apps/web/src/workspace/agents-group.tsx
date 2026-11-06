@@ -14,10 +14,12 @@ import {
 import { Clock, Ellipsis, Layers, Pencil, Pin, PinOff, Power } from "lucide-react";
 import { useMemo } from "react";
 import { useAskSession } from "./session-context.ts";
+import { filterAgentGroups } from "./sidebar-filter.ts";
 import { agentGroups, type AgentSort } from "./sidebar-model.ts";
 import { useAgentSort } from "./sidebar-prefs.ts";
 import { usePin } from "./use-pin.ts";
 import { useNow } from "./use-now.ts";
+import { useTodoOf } from "./todo-progress.ts";
 
 export interface AgentsGroupProps {
   readonly terminals: readonly Terminal[];
@@ -26,6 +28,8 @@ export interface AgentsGroupProps {
   readonly rail?: boolean;
   /** False where the screen's own title already says "Agents" (the phone): the group is labelled, not headed. */
   readonly heading?: boolean;
+  /** The sidebar filter's query; the selected agent stays listed whatever it is. */
+  readonly query?: string;
 }
 
 function SortMenu({ size }: { readonly size?: "md" }) {
@@ -115,10 +119,23 @@ function AgentActions({ agent }: { readonly agent: Agent }) {
  * The agents, first in the sidebar: Pinned, then Needs you, Working, Idle, Done and Offline with counts (or one group
  * per space), each its own list. On the rail the rows are glyphs and the group titles are left to their labels.
  */
-export function AgentsGroup({ terminals, active, onOpen, rail = false, heading = true }: AgentsGroupProps) {
+export function AgentsGroup({ terminals, active, onOpen, rail = false, heading = true, query = "" }: AgentsGroupProps) {
   const now = useNow();
   const [sort] = useAgentSort();
-  const groups = useMemo(() => agentGroups(terminals, now, sort), [terminals, now, sort]);
+  const todoOf = useTodoOf();
+  const all = useMemo(
+    () =>
+      agentGroups(terminals, now, sort).map((group) =>
+        Object.assign({}, group, {
+          agents: group.agents.map((agent) => {
+            const todo = todoOf(agent.id);
+            return todo === undefined ? agent : Object.assign({}, agent, { todo });
+          }),
+        }),
+      ),
+    [terminals, now, sort, todoOf],
+  );
+  const groups = useMemo(() => filterAgentGroups(all, query, active), [all, query, active]);
   const list = (
     <div className="flex flex-col gap-3">
       {groups.map((group) => (
