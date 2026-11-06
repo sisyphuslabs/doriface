@@ -107,6 +107,8 @@ bun run --cwd packages/ui showcase    # every component and screen mockup
 
 `bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`. `bun run relay:test` runs `tests/relay` against the private relay at the commit `relay-pin.json` names: it clones it into `.relay` when `RELAY_REPO` names the relay's repository and your git credentials can read it, and otherwise says so and stops. `bun run check` does not need it. `bun run relay:dev` serves that relay locally.
 
+Pull requests into `dev` are gated by `Check`, `Relay e2e` and `Web e2e`. [CONTRIBUTING.md](CONTRIBUTING.md) covers what each one runs, and what a pull request from a fork does about `Relay e2e`, which needs a secret that forks never receive.
+
 ## Releases
 
 [Releases](https://github.com/sisyphuslabs/doriface/releases) carry the desktop app for macOS (Apple silicon and Intel: dmg and zip), Windows (x64 and arm64: installer exe) and Linux (x64 and arm64: AppImage and deb), the web client and PWA as a zip of static files, and `SHA256SUMS.txt`.

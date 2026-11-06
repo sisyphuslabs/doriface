@@ -23,8 +23,20 @@ export interface ClientConnectOptions {
   readonly pairSlot?: string;
   readonly pingIntervalMs?: number;
   readonly createSocket?: CreateSocket;
+  /** How long the socket has to open, so a relay that never answers cannot hold a connect open; default {@link RELAY_CONNECT_TIMEOUT_MS}. */
+  readonly timeoutMs?: number | undefined;
+  /** The caller's own cancellation: the socket is closed and the connect rejects with its reason. */
+  readonly signal?: AbortSignal | undefined;
   /** A host's relay passes (contract v1.6): the session carries a proof when one is available. */
   readonly proofs?: Pick<RelayProofs, "proof" | "refused"> | undefined;
+}
+
+/** How long a client session's socket has to open, in step with the 10 s the handshakes after it allow. */
+export const RELAY_CONNECT_TIMEOUT_MS = 10_000;
+
+function cancelledBy(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  return reason instanceof Error ? reason : new Error("the relay session was cancelled");
 }
 
 /**
@@ -35,6 +47,8 @@ export async function connectRelayClient(options: ClientConnectOptions): Promise
   const { hostId, pairSlot } = options;
   if (!HOST_ID_PATTERN.test(hostId)) throw new Error(`invalid hostId ${hostId}`);
   if (pairSlot !== undefined && !PAIR_SLOT_PATTERN.test(pairSlot)) throw new Error(`invalid pairing slot ${pairSlot}`);
+  const { signal } = options;
+  if (signal?.aborted === true) throw cancelledBy(signal);
   const query = new URLSearchParams(pairSlot === undefined ? [] : [["pair", pairSlot]]);
   query.set(...CREDIT_QUERY);
   const relayOrigin = relayOriginOf(relaySocketUrl(options.relayUrl, "/"));
@@ -49,10 +63,40 @@ export async function connectRelayClient(options: ClientConnectOptions): Promise
         options.proofs?.refused(relayOrigin, proof);
     });
   }
+  // The URL may carry a proof: errors (and so logs) name the path only.
+  const path = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}`);
+  const timeoutMs = options.timeoutMs ?? RELAY_CONNECT_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
-    ws.addEventListener("open", () => resolve(link), { once: true });
-    // The URL may carry a proof: errors (and so logs) name the path only.
-    const path = relaySocketUrl(options.relayUrl, `/v1/client/${hostId}`);
-    link.onClose((error) => reject(error ?? new Error(`relay socket to ${path} closed before opening`)));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    function settle(): boolean {
+      if (settled) return false;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      return true;
+    }
+    function fail(error: Error): void {
+      if (!settle()) return;
+      if (ws.readyState === WebSocket.CONNECTING) ws.close();
+      link.close();
+      reject(error);
+    }
+    function onAbort(): void {
+      if (signal !== undefined) fail(cancelledBy(signal));
+    }
+    timer = setTimeout(() => fail(new Error(`relay socket to ${path} did not open within ${timeoutMs} ms`)), timeoutMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    ws.addEventListener(
+      "open",
+      () => {
+        if (settle()) resolve(link);
+      },
+      { once: true },
+    );
+    link.onClose((error) => {
+      if (!settle()) return;
+      reject(error ?? new Error(`relay socket to ${path} closed before opening`));
+    });
   });
 }

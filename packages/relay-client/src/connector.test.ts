@@ -34,6 +34,82 @@ function closedNormallyBeforeOpen(url: string): WebSocket {
   return ws;
 }
 
+/** A listener that accepts the TCP connection and never answers the upgrade, so the socket stays CONNECTING. */
+function aRelayThatNeverAnswers(): { readonly port: number; readonly stop: () => void } {
+  const server = Bun.listen<undefined>({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined, open: () => undefined, close: () => undefined },
+  });
+  return { port: server.port, stop: () => void server.stop(true) };
+}
+
+describe("a relay that never answers the upgrade", () => {
+  test("fails at its bound, closing the socket, instead of holding the connect open", async () => {
+    const relay = aRelayThatNeverAnswers();
+    const settled = Promise.withResolvers<WebSocket>();
+    const createSocket = (url: string): WebSocket => {
+      const socket = new WebSocket(url);
+      socket.addEventListener("close", () => settled.resolve(socket), { once: true });
+      socket.addEventListener("error", () => settled.resolve(socket), { once: true });
+      return socket;
+    };
+    try {
+      const error = await Promise.race([
+        connectRelayClient({
+          relayUrl: `http://127.0.0.1:${relay.port}`,
+          hostId,
+          timeoutMs: 80,
+          createSocket,
+        }).then(
+          () => "opened",
+          (caught: unknown) => caught,
+        ),
+        Bun.sleep(2_000).then(() => "still dialing"),
+      ]);
+      expect(String(error)).toContain(`did not open within 80 ms`);
+      const socket = await Promise.race([settled.promise, Bun.sleep(2_000).then(() => undefined)]);
+      expect(socket?.readyState).not.toBe(WebSocket.CONNECTING);
+    } finally {
+      relay.stop();
+    }
+  });
+
+  test("is abandoned at once when the caller cancels, and its socket is closed", async () => {
+    const relay = aRelayThatNeverAnswers();
+    const cancelled = new AbortController();
+    const closed = Promise.withResolvers<string>();
+    const createSocket = (url: string): WebSocket => {
+      const socket = new WebSocket(url);
+      socket.addEventListener("close", () => closed.resolve("close"), { once: true });
+      socket.addEventListener("error", () => closed.resolve("error"), { once: true });
+      return socket;
+    };
+    try {
+      const dialing = connectRelayClient({
+        relayUrl: `http://127.0.0.1:${relay.port}`,
+        hostId,
+        createSocket,
+        signal: cancelled.signal,
+      });
+      cancelled.abort(new Error("the person changed the settings"));
+      const error = await Promise.race([
+        dialing.then(
+          () => "opened",
+          (caught: unknown) => caught,
+        ),
+        Bun.sleep(2_000).then(() => "still dialing"),
+      ]);
+      expect(String(error)).toContain("the person changed the settings");
+      expect(await Promise.race([closed.promise, Bun.sleep(2_000).then(() => "still connecting")])).not.toBe(
+        "still connecting",
+      );
+    } finally {
+      relay.stop();
+    }
+  });
+});
+
 describe("relay URLs", () => {
   test("a relay URL without a scheme is reported as such", () => {
     expect(() => relaySocketUrl("relay.example", "/v1/client/x")).toThrow("relay URL must be http(s) or ws(s)");
