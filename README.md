@@ -85,6 +85,8 @@ app; and the **relay** between them, which is already deployed. The shortest pat
 3. **Pair it** with the host — scan the QR code the host prints, or open the link it prints, and confirm the fingerprint it
    shows. [Pairing, and how the relay fits](#pairing-and-how-the-relay-fits) is the whole of it.
 
+[Getting started](docs/getting-started.md) walks these steps with the desktop app and a phone, button by button.
+
 ### The desktop app
 
 [Releases](https://github.com/sisyphuslabs/doriterm/releases/latest) carries the app for every supported platform:
@@ -118,6 +120,19 @@ Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older b
 naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
 
 ### A host, on the machine with the terminals
+
+On Linux or macOS, one command installs it:
+
+```sh
+curl -fsSL https://github.com/sisyphuslabs/doriterm/releases/latest/download/install.sh | sh
+```
+
+It downloads `doriface-host` into `~/.local/bin` and checks it against the release's `SHA256SUMS.txt`, installs
+herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have
+(systemd `--user` on Linux, an `Interactive` LaunchAgent on macOS), then prints a QR code, a link and an 8-character
+code to pair your first device. `sh -s -- --help` lists the options; `--uninstall` removes the service and the binary and
+keeps the host's keys and paired devices. To add a computer to a host you already use, open **Add a machine** in the app: it shows this same line with `--join '<link>'`, which installs the host there and joins it to this host's mesh, so its terminals show in the app. On Windows, the desktop app carries the host. The installer ships from the first
+release after v0.1.2.
 
 From this repository, with [Bun](https://bun.sh) installed:
 
@@ -237,7 +252,9 @@ This table describes `dev`. The latest release is [v0.1.2](https://github.com/si
 ## Development
 
 Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on
-`PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests.
+`PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests. Starting on a machine with neither,
+follow [CONTRIBUTING.md, "From zero"](CONTRIBUTING.md#from-zero): every step is public, and the `From zero` workflow
+runs it as written on a clean runner with no secrets.
 
 ```sh
 bun install

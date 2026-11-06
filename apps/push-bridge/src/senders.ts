@@ -211,10 +211,10 @@ export class FcmSender {
       await response.body?.cancel();
       return { kind: "sent" };
     }
+    // Only FCM's own UNREGISTERED says the token is gone: a bare 404 (a wrong project id) must not make the host drop
+    // every Android subscription.
     const error: unknown = await response.json().catch(() => undefined);
-    return response.status === 404 || errorCodes(error).includes("UNREGISTERED")
-      ? { kind: "gone" }
-      : { kind: "failed", status: response.status };
+    return errorCodes(error).includes("UNREGISTERED") ? { kind: "gone" } : { kind: "failed", status: response.status };
   }
 }
 

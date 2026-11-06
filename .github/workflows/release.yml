@@ -218,6 +218,10 @@ jobs:
             cp "${found[0]}" "$out/"
           done
           ls -la "$out"
+      # install.sh (#668) downloads this binary on Linux and macOS; Windows gets the host inside the desktop installer.
+      - name: Collect the standalone host
+        if: matrix.os != 'win'
+        run: cp "apps/desktop/dist/host/${{ matrix.os }}-${{ matrix.arch }}/doriface-host" "$RUNNER_TEMP/out/doriface-host-${{ matrix.os }}-${{ matrix.arch }}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-${{ matrix.os }}-${{ matrix.arch }}
@@ -322,6 +326,9 @@ jobs:
         with:
           path: assets
           merge-multiple: true
+      # Stamped with this tag, so the installer from a release installs that release rather than whatever is latest.
+      - name: The host installer
+        run: sed "s/__DORIFACE_RELEASE__/$TAG/" apps/host/install/install.sh > assets/install.sh
       - name: SHA256SUMS.txt
         working-directory: assets
         run: |
@@ -439,6 +446,16 @@ jobs:
           DORIFACE_E2E_EXECUTABLE: ${{ env.APPIMAGE }}
           DEBUG: pw:browser
         run: xvfb-run --auto-servernum bun run test:e2e e2e/launch.e2e.ts e2e/terminal.e2e.ts
+      # docs/getting-started.md through the hosted relay (#672): this AppImage's host dials relay-doriface.omo.dev, and a
+      # fresh browser opens the QR code's hosted pair page, pairs and types into a terminal on this runner.
+      # It depends on relay-doriface.omo.dev and doriface.omo.dev being up and has no retries, so an outage of either holds
+      # Publish until this job is re-run.
+      - name: The user guide pairs through the hosted relay
+        working-directory: apps/desktop
+        env:
+          DORIFACE_E2E_EXECUTABLE: ${{ env.APPIMAGE }}
+          DORIFACE_HOSTED_RELAY_SMOKE: "1"
+        run: xvfb-run --auto-servernum bun run test:e2e e2e/hosted-relay-pair.e2e.ts
       - name: Workflow summary
         if: always()
         run: |
@@ -449,7 +466,7 @@ jobs:
             echo "| --- | --- |"
             echo "| Job status | ${{ job.status }} |"
             echo "| File | doriface-$VERSION-x86_64.AppImage |"
-            echo "| Checks | launch.e2e.ts, terminal.e2e.ts against the downloaded file |"
+            echo "| Checks | launch.e2e.ts, terminal.e2e.ts and hosted-relay-pair.e2e.ts (pairs through relay-doriface.omo.dev) against the downloaded file |"
           } >> "$GITHUB_STEP_SUMMARY"
 
   smoke-mac:
