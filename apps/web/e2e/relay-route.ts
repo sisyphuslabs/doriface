@@ -89,7 +89,6 @@ function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next
   const queued: Line[] = [];
   const done: string[] = [];
   let stage = "its first stage";
-  let since = Date.now();
   let ended: Error | undefined;
 
   const where = (): string => `it is in ${stage}${done.length === 0 ? "" : ` (done: ${done.join(", ")})`}`;
@@ -113,7 +112,6 @@ function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next
       if (typeof reported === "string") {
         done.push(`${reported} ${String(parsed["ms"] ?? 0)} ms`);
         stage = reported;
-        since = Date.now();
         continue;
       }
       const waiter = waiting.shift();
@@ -151,19 +149,16 @@ function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next
         waiter.reject(ended);
         return;
       }
-      timer = setTimeout(
-        () => {
-          const at = waiting.indexOf(waiter);
-          if (at < 0) return;
-          waiting.splice(at, 1);
-          reject(
-            new Error(
-              `the fake relay host did not finish ${what} within ${deadlineMs} ms: ${where()}, and it printed no error`,
-            ),
-          );
-        },
-        Math.max(0, since + deadlineMs - Date.now()),
-      );
+      timer = setTimeout(() => {
+        const at = waiting.indexOf(waiter);
+        if (at < 0) return;
+        waiting.splice(at, 1);
+        reject(
+          new Error(
+            `the fake relay host did not finish ${what} within ${deadlineMs} ms: ${where()}, and it printed no error`,
+          ),
+        );
+      }, deadlineMs);
       waiting.push(waiter);
     });
 

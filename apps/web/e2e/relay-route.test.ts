@@ -35,13 +35,23 @@ test("a start blocked on hc fails inside the stage deadline, saying which stage 
   expect(failure).toMatch(/it is in session \(done: relay \d+ ms, session \d+ ms\)/);
   expect(Date.now() - started).toBeLessThan(8_000);
 }, 10_000);
-
 test("a start that dies fails at once with its exit, not with a timeout (#502)", async () => {
   const started = Date.now();
   const failure = await withHcBin(join(here, "no-such-hc"), () => failureOf(startFakeRelayHost({ machine: true })));
   expect(failure).toContain("exited (code 1)");
   expect(Date.now() - started).toBeLessThan(8_000);
 }, 10_000);
+
+test("a pairing link asked for long after the start gets its own deadline, not the start's (#502)", async () => {
+  const host = await startFakeRelayHost({ machine: true, stageDeadlineMs: 1_500 });
+  try {
+    // The time between the start and this ask is the condition: a window left over from the startup would be spent.
+    await Bun.sleep(1_800);
+    expect(await host.pairingLink()).toContain("/pair#");
+  } finally {
+    await host.stop();
+  }
+}, 60_000);
 
 test("a start that reports its stages resolves, and a pairing link comes back over the same channel", async () => {
   const host = await startFakeRelayHost({ machine: true });
