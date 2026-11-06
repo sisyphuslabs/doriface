@@ -100,7 +100,7 @@ Scenes:
 - Relay pipe: the phone types a command, the wire carries ciphertext chips both ways, the server prints the result.
 - Pairing: the QR is scanned, the fingerprint groups are compared one by one, then turn green.
 
-Every loop runs only while its scene is on screen and the tab is visible (IntersectionObserver plus `visibilitychange`); With `prefers-reduced-motion: reduce`, no loop starts, packets and scan lines are hidden, reveals show at once, and each scene shows a complete still frame: the pipe with its command and result, the fingerprint matched, the mesh with five members.
+Every loop runs only while its scene is on screen and the tab is visible (IntersectionObserver plus `visibilitychange`). With `prefers-reduced-motion: reduce`, no loop starts, packets and scan lines are hidden, reveals show at once, and each scene shows a complete still frame: the pipe with its command and result, the fingerprint matched, the mesh with five members.
 
 ## 5. Components
 
@@ -127,7 +127,7 @@ The window and phone in the hero are `<iframe>`s of `/mockup/?view=desktop` (128
 
 - Isolation: the iframe keeps Tailwind's preflight and the app's tokens off the landing, and the landing's styles off the app.
 - Size: `main.js` scales each frame to its box with a ResizeObserver (`--scale`), so the app keeps its own pixel layout at every width. Below 640 px only the phone is shown.
-- Loading: the frames sit in the hero, so each iframe gets its `src` at page start (the IntersectionObserver with a half-screen margin fires at once). The headline text stays the LCP element, and the 150 kB (gzip) mockup bundle loads in the frames after it.
+- Loading: the frames sit in the hero but start loading only after the page's `load` event and an idle callback (a 1 ms timeout where the browser has none, as in Safari), and a frame the layout hides (the desktop window on phones) never loads. The headline text stays the LCP element, and the 150 kB (gzip) mockup bundle loads in the frames after it.
 - Theme: the mockup follows `prefers-color-scheme` like the page; when the switch pins Light or Dark, `main.js` posts `{ theme }` to each frame (same origin only), which pins the app's Day or Night preset.
 - Inert: the mockup's body is `inert` and the iframe has `tabindex="-1"`, so it takes no focus or input; each iframe has a `title` saying it is the app drawn with sample data.
 

@@ -87,7 +87,9 @@ function setupLive() {
     { rootMargin: "50% 0px" },
   );
   const boxes = [...document.querySelectorAll(".live")];
-  const start = () => requestIdleCallback(() => boxes.forEach((box) => load.observe(box)), { timeout: 1500 });
+  // Safari has no requestIdleCallback; a timeout keeps the same "after the page" order there.
+  const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 1));
+  const start = () => idle(() => boxes.forEach((box) => load.observe(box)), { timeout: 1500 });
   if (document.readyState === "complete") start();
   else addEventListener("load", start, { once: true });
   for (const box of boxes) {
