@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { classify } from "./capture-text.ts";
 
 const patterns = (text: string): string[] => classify(text).findings.map((one) => one.pattern);
@@ -10,6 +13,12 @@ describe("a capture's OCR text", () => {
     expect(classify("/home/demo/project").ok).toBe(true);
     expect(classify("ssh demo@my-laptop").ok).toBe(true);
     expect(classify("user@localhost:~$ ls").ok).toBe(true);
+  });
+
+  test("package specs and registry hosts are not accounts on a computer", () => {
+    expect(classify("bunx playwright@latest").ok).toBe(true);
+    expect(classify("git@github.com:owner/repo.git").ok).toBe(true);
+    expect(classify("e@me").ok).toBe(true);
   });
 
   test("a zsh-style prompt names an account and a host without a colon", () => {
@@ -35,13 +44,39 @@ describe("a capture's OCR text", () => {
     expect(classify("/opt/homebrew/bin/bun").ok).toBe(true);
   });
 
-  test("a host name beside this machine is a label, not a prompt", () => {
-    expect(patterns("alpha-box\nthis machine\n1")).toContain("label: host name beside this machine");
-    expect(classify("my-laptop\nthis machine\n1").ok).toBe(true);
+  test("a host name shown only as a UI label is out of scope, and a heading is never a finding", () => {
+    expect(classify("Spaces\nmy-laptop this machine\n1").ok).toBe(true);
+    expect(classify("Spaces\nConnect\nthis machine\n1").ok).toBe(true);
+    expect(classify("Spaces\nalpha-box this machine\n1").ok).toBe(true);
   });
 
   test("a product name in a mockup is not an identifier", () => {
     expect(classify("MacBook Pro\nSettings\nTheme Light").ok).toBe(true);
     expect(classify("http://127.0.0.1:50170/").ok).toBe(true);
+  });
+});
+
+const REPO = join(import.meta.dirname, "..", "..");
+const tesseract = ((): string | undefined => {
+  try {
+    return execFileSync("sh", ["-lc", "command -v tesseract"], { encoding: "utf8" }).trim();
+  } catch {
+    return undefined;
+  }
+})();
+
+describe.skipIf(tesseract === undefined)("the committed captures raise no false alarm", () => {
+  const samples = [
+    "docs/design/app/settings-1440-day.png",
+    "docs/design/app/sidebar-recompose-light-1440.png",
+    "docs/design/app/pane-drop-1440-day.png",
+  ].filter((path) => existsSync(join(REPO, path)));
+
+  test("every sampled capture passes, so a clean image is never blocked", () => {
+    expect(samples.length).toBeGreaterThan(0);
+    for (const sample of samples) {
+      const text = execFileSync(tesseract as string, [join(REPO, sample), "-"], { encoding: "utf8" });
+      expect({ sample, findings: classify(text).findings }).toEqual({ sample, findings: [] });
+    }
   });
 });

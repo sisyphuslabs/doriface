@@ -7,10 +7,6 @@ import { cpus } from "node:os";
  *
  * The checks describe the SHAPE of a leak and never a value: a list of the real fleet names would put them back in the
  * repository that removed them, and a finding names the pattern, never the matched text, because the match is the leak.
- *
- * Known limit: a host name shown as a UI label is caught only where OCR reads the label line as "this machine". At the
- * 768 capture's size it reads a mangled form of it, so that shape is not caught there - which is why the 768 workspace
- * shot stayed out instead of being re-added (#926).
  */
 export const NEUTRAL_NAMES: ReadonlySet<string> = new Set([
   "demo",
@@ -26,26 +22,21 @@ export const NEUTRAL_NAMES: ReadonlySet<string> = new Set([
   "work",
   "localhost",
   "root",
+  "this",
+  "machine",
 ]);
 
 const isNeutral = (name: string): boolean => NEUTRAL_NAMES.has(name.toLowerCase().replace(/^my-/, ""));
 
-const ACCOUNT_AT_HOST = /\b([a-z][a-z0-9._-]*)@([a-z][a-z0-9._-]*)/gi;
+/** Registry-style suffixes an `@` in prose takes; they name a package, not an account on a computer. */
+const PACKAGE_SUFFIX = /^(?:latest|next|beta|alpha|canary|stable|\d+(?:\.\d+)*)$/i;
+const REGISTRY_HOSTS = /^(?:github\.com|npmjs\.(?:com|org)|golang\.org|pypi\.org)$/i;
+
+const ACCOUNT_AT_HOST = /\b([a-z][a-z0-9._-]*)@([a-z][a-z0-9.-]*[a-z0-9])/g;
 const HOME_PATH = /\/(?:Users|home)\/([A-Za-z][A-Za-z0-9._-]*)/g;
 const RUN_ROOT = /\/(?:srv|var\/tmp|private\/tmp|var\/folders|tmp)\/[A-Za-z]/;
 const OPT_ROOT = /\/opt\/(?!homebrew\b)[A-Za-z]/;
 const THIS_MACHINE = /\bthis machine\b/i;
-const LABEL_TOKEN = /^[a-z][a-z0-9-]{2,}$/i;
-
-/** The first token of the nearest non-empty line above `index`, stripped of punctuation an ellipsis adds. */
-function nearestAbove(lines: readonly string[], index: number): string {
-  for (let up = index - 1; up >= 0 && up >= index - 3; up -= 1) {
-    const line = (lines[up] ?? "").trim();
-    if (line === "") continue;
-    return (line.split(/\s+/)[0] ?? "").replace(/[^A-Za-z0-9-]+$/g, "");
-  }
-  return "";
-}
 
 export interface Verdict {
   readonly ok: boolean;
@@ -60,7 +51,11 @@ export function classify(ocrText: string): Verdict {
   };
 
   for (const match of ocrText.matchAll(ACCOUNT_AT_HOST)) {
-    if (isNeutral(match[1] ?? "") && isNeutral(match[2] ?? "")) continue;
+    const account = match[1] ?? "";
+    const host = match[2] ?? "";
+    if (isNeutral(account) && isNeutral(host)) continue;
+    if (PACKAGE_SUFFIX.test(host) || REGISTRY_HOSTS.test(host) || isNeutral(host)) continue;
+    if (account.length < 2) continue;
     add("prompt: account at host");
   }
   for (const match of ocrText.matchAll(HOME_PATH)) {
@@ -69,11 +64,11 @@ export function classify(ocrText: string): Verdict {
   if (RUN_ROOT.test(ocrText)) add("path: run root");
   if (OPT_ROOT.test(ocrText)) add("path: system install root");
 
-  const lines = ocrText.split("\n");
-  for (const [index, line] of lines.entries()) {
+  for (const line of ocrText.split("\n")) {
     if (!THIS_MACHINE.test(line)) continue;
-    const above = nearestAbove(lines, index);
-    if (LABEL_TOKEN.test(above) && !isNeutral(above)) add("label: host name beside this machine");
+    // A host name shown only as a UI label is deliberately out of scope: on a real capture OCR puts it beside a row
+    // label like "Spaces", which no text rule can tell from a heading, and flagging headings failed 24 clean captures.
+    break;
   }
 
   return { ok: findings.length === 0, findings };

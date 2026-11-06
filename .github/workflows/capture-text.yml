@@ -4,7 +4,8 @@ name: Capture text
 # and a reviewer's eye missed five of them for weeks, so the check is mechanical: OCR the images a pull request changes
 # and fail on the shapes a leak takes (tests/ci/capture-text.ts).
 #
-# Runs only when an image under docs/ or .github/assets changes, so a normal pull request never pays for it.
+# Runs only when an image under docs/ or .github/assets changes, or when this check itself changes, so a normal pull
+# request never pays for it.
 on:
   pull_request:
     paths:
@@ -12,7 +13,16 @@ on:
       - "docs/**/*.jpg"
       - "docs/**/*.jpeg"
       - "docs/**/*.webp"
-      - ".github/assets/**"
+      - ".github/assets/**/*.png"
+      - ".github/assets/**/*.jpg"
+      - ".github/assets/**/*.jpeg"
+      - ".github/assets/**/*.webp"
+      - "tests/ci/capture-text.ts"
+      - "tests/ci/capture-text.test.ts"
+      - ".github/workflows/capture-text.yml"
+
+permissions:
+  contents: read
 
 concurrency:
   group: capture-text-${{ github.event.pull_request.number }}
@@ -26,7 +36,10 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
       - name: Install tesseract
         run: |
           set -euo pipefail
@@ -38,10 +51,12 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only --diff-filter=AM "$BASE...HEAD" -- '*.png' '*.jpg' '*.jpeg' '*.webp')
+          mapfile -t changed < <(git diff --name-only --no-renames --diff-filter=AM "$BASE...HEAD" -- '*.png' '*.jpg' '*.jpeg' '*.webp')
           if [ "${#changed[@]}" -eq 0 ]; then
             echo "no changed images"
             exit 0
           fi
           printf 'checking %d image(s)\n' "${#changed[@]}"
           bun tests/ci/capture-text.ts "${changed[@]}"
+      - name: The check itself
+        run: bun test tests/ci/capture-text.test.ts
