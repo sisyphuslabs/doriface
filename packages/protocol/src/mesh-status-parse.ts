@@ -23,6 +23,7 @@ import {
   type MeshMemberStatus,
   type MeshNotice,
   type MeshPendingJoin,
+  type MeshReplacedMachine,
   type MeshRemovedStatus,
   type MeshRevokedStatus,
   type MeshStatus,
@@ -76,6 +77,7 @@ const isLineState: Guard<MeshLineState> = oneOf(
 );
 const isText = (value: unknown): value is string => isString(value) && value.length > 0;
 const isGate = objectOf<MeshGate>({ kind: oneOf("offline"), refusals: isCount, nextProbeAt: isTime });
+const isReplaced = objectOf<MeshReplacedMachine>({ name: isName, kind: oneOf("ssh", "connect", "command") });
 const isMember = objectOf<MeshMemberStatus>({
   hostId: isId,
   name: nullable(isName),
@@ -86,7 +88,7 @@ const isMember = objectOf<MeshMemberStatus>({
   line: isLineState,
   lineReason: nullable(isText),
   helloCoreId: nullable(isText),
-  replacedMachine: nullable(isName),
+  replacedMachine: nullable(isReplaced),
   presence: isBoolean,
   lastSync: nullable(isTime),
   owed: isCount,
