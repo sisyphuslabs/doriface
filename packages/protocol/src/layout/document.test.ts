@@ -7,6 +7,7 @@ import {
   moveSpace,
   moveTab,
   readDocument,
+  removeSpace,
   renameSpace,
   renameTab,
   tabsOf,
@@ -253,6 +254,14 @@ describe("spaces and their tabs' order (#404)", () => {
     const spaces = renamed?.["spaces"];
     expect(Array.isArray(spaces) ? spaces[1] : null).toBe(Array.isArray(two["spaces"]) ? two["spaces"][1] : null);
     expect([renameTab(two, "a1", ""), renameTab(two, "gone", "x")]).toEqual([null, null]);
+  });
+
+  test("a closed space leaves with every tab in it, and the other spaces are the objects that were read", () => {
+    const closed = removeSpace(two, "spc-a");
+    expect(order(closed)).toEqual([["spc-b", ["b1"]]]);
+    const spaces = closed?.["spaces"];
+    expect(Array.isArray(spaces) ? spaces[0] : null).toBe(Array.isArray(two["spaces"]) ? two["spaces"][1] : null);
+    expect(removeSpace(two, "gone")).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ export {
   moveSpace,
   moveTab,
   readDocument,
+  removeSpace,
   removeTab,
   renameSpace,
   renameTab,

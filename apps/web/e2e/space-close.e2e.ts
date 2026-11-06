@@ -18,7 +18,9 @@ const ask = (page: Page) => page.getByRole("dialog", { name: "Close space?" });
 /** The space row's "..." menu, open; its Close space... item. */
 async function openSpaceMenu(page: Page, name: string): Promise<void> {
   await spaceRow(page, name).hover();
-  await sidebar(page).getByRole("button", { name: `More for ${name}` }).click();
+  await sidebar(page)
+    .getByRole("button", { name: `More for ${name}` })
+    .click();
 }
 
 const started: string[] = [];
@@ -58,7 +60,8 @@ test("a space closed from its menu asks first, naming its tabs; Escape and Cance
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const name = `cl612-${test.info().repeatEachIndex}`;
-  const shells = [startIn(name, "cl-one"), startIn(name, "cl-two")];
+  startIn(name, "cl-one");
+  startIn(name, "cl-two");
   const other = await secondDevice(browser);
   await Promise.all([page.goto("/"), other.goto("/")]);
   await expect(spaceRow(page, name)).toBeVisible({ timeout: 20_000 });
@@ -101,11 +104,21 @@ test("a space closed from its menu asks first, naming its tabs; Escape and Cance
   await expect(spaceRow(other, name)).toHaveCount(0, { timeout: 15_000 });
   await expect(page.getByRole("tab")).toHaveCount(0, { timeout: 15_000 });
   await expect(other.getByRole("tab")).toHaveCount(0, { timeout: 15_000 });
-  for (const device of [page, other])
-    await expect(device.getByRole("contentinfo")).toContainText(`${running - 2} terminal`, { timeout: 20_000 });
-  const doc = getCoreDoc("herdr-app") as { readonly spaces?: readonly { readonly name?: string }[] };
-  expect((doc.spaces ?? []).map((space) => space.name)).not.toContain(name);
-  // The shells started for the test are the two that ended: nothing is left for a later spec to adopt.
-  expect(shells).toHaveLength(2);
+  await Promise.all(
+    [page, other].map((device) =>
+      expect(device.getByRole("contentinfo")).toContainText(`${running - 2} terminal`, { timeout: 20_000 }),
+    ),
+  );
+  const doc: unknown = getCoreDoc("herdr-app");
+  const spaces = typeof doc === "object" && doc !== null && "spaces" in doc ? doc.spaces : undefined;
+  const named = Array.isArray(spaces)
+    ? spaces.map((space: unknown) =>
+        typeof space === "object" && space !== null && "name" in space ? space.name : null,
+      )
+    : [];
+  expect(named).not.toContain(name);
+  // Their programs ended with the space, so the cleanup has nothing left to end; a run that fails above still leaves them
+  // to it.
+  started.splice(0);
   await other.context().close();
 });

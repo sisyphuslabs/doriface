@@ -12,6 +12,7 @@ import { DesktopShell } from "./desktop-shell.tsx";
 import { Palette } from "./palette.tsx";
 import { SessionContext, type SessionAsk } from "./session-context.ts";
 import { SessionDialogs } from "./session-dialogs.tsx";
+import { SpaceClose } from "./space-close-dialog.tsx";
 import { SpaceRename } from "./space-rename-dialog.tsx";
 import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
@@ -146,6 +147,7 @@ export function Workspace({ connection }: WorkspaceProps) {
   const [palette, setPalette] = useState(false);
   const [ask, setAsk] = useState<SessionAsk | null>(null);
   const [spaceAsk, setSpaceAsk] = useState<string | null>(null);
+  const [spaceClosing, setSpaceClosing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   useActionHandler("app", (action) => {
     if (action !== "app.palette") return false;
@@ -317,38 +319,47 @@ export function Workspace({ connection }: WorkspaceProps) {
                 ask={spaceAsk}
                 onAsk={setSpaceAsk}
               >
-                {narrow ? (
-                  <PhoneShell
-                    connection={connection}
-                    terminals={sessions}
-                    open={phoneOpen}
-                    panes={phonePanes}
-                    tabTitle={phoneTitle}
-                    onOpen={showOnPhone}
-                    onBack={() => setPhoneKey(null)}
-                    onNew={() => newTerminal()}
-                    onPalette={onPalette}
-                    onSession={onSession}
-                  />
-                ) : (
-                  <DesktopShell
-                    connection={connection}
-                    terminals={sessions}
-                    loaded={fed.loaded}
-                    layout={layout}
-                    spaceKeys={spaceKeys}
-                    onSelectSpace={selectSpace}
-                    onNew={() => newTerminal()}
-                    onNewAgent={(template) => newTerminal(template)}
-                    onNewSpace={() => runs.start({}, inNewSpace)}
-                    onSplit={split}
-                    onCloseTab={closeTab}
-                    onClosePane={closePane}
-                    onEnd={onEnd}
-                    onPalette={onPalette}
-                    onSession={onSession}
-                  />
-                )}
+                <SpaceClose
+                  connection={connection}
+                  terminals={terminals}
+                  layouts={layouts}
+                  spaces={spaces}
+                  ask={spaceClosing}
+                  onAsk={setSpaceClosing}
+                >
+                  {narrow ? (
+                    <PhoneShell
+                      connection={connection}
+                      terminals={sessions}
+                      open={phoneOpen}
+                      panes={phonePanes}
+                      tabTitle={phoneTitle}
+                      onOpen={showOnPhone}
+                      onBack={() => setPhoneKey(null)}
+                      onNew={() => newTerminal()}
+                      onPalette={onPalette}
+                      onSession={onSession}
+                    />
+                  ) : (
+                    <DesktopShell
+                      connection={connection}
+                      terminals={sessions}
+                      loaded={fed.loaded}
+                      layout={layout}
+                      spaceKeys={spaceKeys}
+                      onSelectSpace={selectSpace}
+                      onNew={() => newTerminal()}
+                      onNewAgent={(template) => newTerminal(template)}
+                      onNewSpace={() => runs.start({}, inNewSpace)}
+                      onSplit={split}
+                      onCloseTab={closeTab}
+                      onClosePane={closePane}
+                      onEnd={onEnd}
+                      onPalette={onPalette}
+                      onSession={onSession}
+                    />
+                  )}
+                </SpaceClose>
               </SpaceRename>
             </SessionContext>
           </PinContext>

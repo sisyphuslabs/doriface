@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
 import { agentRow, endAgent, startAgent, startShell } from "./agents.ts";
+import { SPACE_CLOSE_SHOTS } from "./capture-space-close-shots.ts";
 import { SPACE_RENAME_SHOTS } from "./capture-space-rename-shots.ts";
 import { VOICE_SHOTS } from "./capture-voice-shots.ts";
 import { seedSpaces } from "./layout-doc.ts";
@@ -285,6 +286,7 @@ export const SHOTS: readonly Shot[] = [
   },
   ...VOICE_SHOTS,
   ...SPACE_RENAME_SHOTS,
+  ...SPACE_CLOSE_SHOTS,
   {
     // herdr-app's attention on one screen: an agent that finished while its tab was not the one on screen keeps herdr's
     // dot and its Done row, and the agent this screen opened reads Idle here (#611).

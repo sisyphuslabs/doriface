@@ -198,3 +198,13 @@ export function removeTab(doc: JsonObject, tabId: string): JsonObject | null {
   const next = tabs.length === 0 ? spaces.filter((_, index) => index !== at) : spaces.with(at, { ...space, tabs });
   return { ...doc, spaces: next };
 }
+
+/**
+ * The document without space `spaceId` and every tab in it, as herdr-app's `remove_space` takes a whole space away; null
+ * when the space is gone already, so nothing is written. Every other space is the object that was read.
+ */
+export function removeSpace(doc: JsonObject, spaceId: string): JsonObject | null {
+  const spaces = spacesOf(doc);
+  const kept = spaces.filter((space) => text(space["id"]) !== spaceId);
+  return kept.length === spaces.length ? null : { ...doc, spaces: kept };
+}

@@ -10,7 +10,7 @@ import {
   cn,
   type Space,
 } from "@doriface/ui";
-import { ArrowDown, ArrowUp, Ellipsis, Pencil, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Ellipsis, Pencil, Plus, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
@@ -20,6 +20,7 @@ import { useConnectionNotice } from "./reconnect-status.tsx";
 import { RetryButton } from "./retry-button.tsx";
 import { SpaceList, type SpaceReorder } from "./space-list.tsx";
 import { SpaceNameInput } from "./space-name-input.tsx";
+import { useSpaceClosing } from "./space-close-context.ts";
 import { useSpaceRenaming } from "./space-rename-context.ts";
 import { machineGroups } from "./sidebar-model.ts";
 import { useCollapsed, useSpaceColors } from "./sidebar-prefs.ts";
@@ -50,11 +51,12 @@ function MachineNotice({ name }: { readonly name: string }) {
 }
 
 /**
- * A space row's "..." menu: Rename space asks for the new name; a double-click on the row edits it in place. Move up and
- * Move down are the list's single-pointer path (WCAG 2.5.7), with the move keys the rows themselves take.
+ * A space row's "..." menu: Rename space asks for the new name; Close space asks before it ends the space's tabs. Move
+ * up and Move down are the list's single-pointer path (WCAG 2.5.7), with the move keys the rows themselves take.
  */
 function SpaceActions({ space, reorder }: { readonly space: Space; readonly reorder: SpaceReorder | undefined }) {
   const renaming = useSpaceRenaming();
+  const closing = useSpaceClosing();
   return (
     <Menu align="end" trigger={<IconButton label={`More for ${space.name}`} icon={<Ellipsis />} className="size-6" />}>
       <MenuItem icon={<Pencil />} onClick={() => renaming.ask(space.id)}>
@@ -80,6 +82,9 @@ function SpaceActions({ space, reorder }: { readonly space: Space; readonly reor
           </MenuItem>
         </>
       )}
+      <MenuItem icon={<X />} destructive onClick={() => closing.ask(space.id)}>
+        Close space…
+      </MenuItem>
     </Menu>
   );
 }
