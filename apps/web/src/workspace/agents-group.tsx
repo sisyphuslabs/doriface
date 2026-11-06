@@ -18,6 +18,7 @@ import { agentGroups, type AgentSort } from "./sidebar-model.ts";
 import { useAgentSort } from "./sidebar-prefs.ts";
 import { usePin } from "./use-pin.ts";
 import { useNow } from "./use-now.ts";
+import { useTodoOf } from "./todo-progress.ts";
 
 export interface AgentsGroupProps {
   readonly terminals: readonly Terminal[];
@@ -118,7 +119,19 @@ function AgentActions({ agent }: { readonly agent: Agent }) {
 export function AgentsGroup({ terminals, active, onOpen, rail = false, heading = true }: AgentsGroupProps) {
   const now = useNow();
   const [sort] = useAgentSort();
-  const groups = useMemo(() => agentGroups(terminals, now, sort), [terminals, now, sort]);
+  const todoOf = useTodoOf();
+  const groups = useMemo(
+    () =>
+      agentGroups(terminals, now, sort).map((group) =>
+        Object.assign({}, group, {
+          agents: group.agents.map((agent) => {
+            const todo = todoOf(agent.id);
+            return todo === undefined ? agent : Object.assign({}, agent, { todo });
+          }),
+        }),
+      ),
+    [terminals, now, sort, todoOf],
+  );
   const list = (
     <div className="flex flex-col gap-3">
       {groups.map((group) => (
