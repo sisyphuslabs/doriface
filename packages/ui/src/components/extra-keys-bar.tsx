@@ -32,7 +32,7 @@ const latchedKey =
 const idleKey = "text-foreground active:bg-selected";
 
 /** How long a key is held before the hold counts; a shorter press is the tap it always was. */
-export const HOLD_MS = 400;
+const HOLD_MS = 400;
 
 const symbol = (entry: ExtraKey): boolean => typeof entry.label === "string" && entry.label.length === 1;
 

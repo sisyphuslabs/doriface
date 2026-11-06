@@ -3,7 +3,6 @@ import { RotateCcw } from "lucide-react";
 import { currentPlatform } from "../keys/trigger.ts";
 import { resetKeys } from "../keybar/operations.ts";
 import { useKeyBarError, useKeyBarSettings, keyBarStore } from "../keybar/store.ts";
-import type { HostPlatform } from "../terminal/keys.ts";
 import { asSentence } from "../storage/sentence.ts";
 import { FavoriteKeys } from "./favorite-keys.tsx";
 import { KeyBarPreview } from "./key-bar-preview.tsx";
@@ -39,7 +38,7 @@ function Group({
 export function KeyboardSection() {
   const settings = useKeyBarSettings();
   const error = useKeyBarError();
-  const host = currentPlatform() as HostPlatform;
+  const host = currentPlatform();
   const readOnly = error !== null;
   return (
     <div className="flex flex-col gap-5">

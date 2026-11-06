@@ -17,7 +17,6 @@ export { EmptyState, type EmptyStateProps } from "./components/empty-state.tsx";
 export { DirectionPad, type DirectionPadProps } from "./components/direction-pad.tsx";
 export {
   ExtraKeysBar,
-  HOLD_MS,
   KeyboardButton,
   type ExtraKey,
   type ExtraKeysBarProps,
