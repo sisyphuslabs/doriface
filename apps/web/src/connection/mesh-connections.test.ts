@@ -233,7 +233,10 @@ describe("one connection per member", () => {
   it("keeps this computer's own-host starter for every connection built later", () => {
     const { mesh, made } = running({ ...DEFAULT_SETTINGS, mode: "relay" });
     expect(made).toHaveLength(0);
-    mesh.restartsLocalHost({ start: async () => ({ url: "ws://127.0.0.1:1", token: "t" }), failure: () => ({}) as never });
+    mesh.restartsLocalHost({
+      start: async () => ({ url: "ws://127.0.0.1:1", token: "t" }),
+      failure: () => ({}) as never,
+    });
     mesh.pair({ ...settingsWith([member("c")], "c"), members: [] });
     expect(made).toHaveLength(1);
     expect(made[0]?.starters).toBe(1);
