@@ -60,7 +60,7 @@ test.describe("phone", () => {
     await expect.poll(added).toBeGreaterThan(0);
     const before = await added();
     // Each tap of the latching ctrl key re-renders the phone terminal screen and its terminal view.
-    const ctrl = page.getByRole("button", { name: "Control" });
+    const ctrl = page.getByRole("button", { name: "Control", exact: true });
     const tap = async (pressed: "true" | "false"): Promise<void> => {
       await ctrl.click();
       await expect(ctrl).toHaveAttribute("aria-pressed", pressed);
