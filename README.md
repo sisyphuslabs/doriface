@@ -1,38 +1,114 @@
+<h1>
+  <p align="center">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriface-mark-dark.svg" />
+      <img src="apps/web/brand/doriface-mark-light.svg" alt="Doriterm" width="128" height="128" />
+    </picture>
+    <br />
+    Doriterm
+  </p>
+</h1>
+
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriface-mark-dark.svg" />
-    <img src="apps/web/brand/doriface-mark-light.svg" alt="doriface" width="128" height="128" />
-  </picture>
+  Your terminals and coding agents, on every screen.
+  <br />
+  End-to-end encrypted, through a relay that never sees them.
 </p>
 
-# doriface
+<p align="center">
+  <a href="https://doriterm.com">doriterm.com</a> ·
+  <a href="#install">install</a> ·
+  <a href="#pairing-and-the-relay">how the relay fits</a> ·
+  <a href="#security">security</a> ·
+  <a href="CONTRIBUTING.md">contributing</a> ·
+  <a href="docs/architecture.md">architecture</a>
+</p>
 
-An end-to-end encrypted web, PWA and desktop face for [herdr-core](https://github.com/herdrdev/herdr-core).
+<p align="center">
+  <a href="https://github.com/sisyphuslabs/doriterm/actions/workflows/ci.yml"><img src="https://github.com/sisyphuslabs/doriterm/actions/workflows/ci.yml/badge.svg?branch=dev" alt="Check on dev" /></a>
+  <a href="https://github.com/sisyphuslabs/doriterm/releases/latest"><img src="https://img.shields.io/github/v/release/sisyphuslabs/doriterm?label=release&labelColor=333333&color=666666" alt="latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/sisyphuslabs/doriterm?labelColor=333333&color=666666" alt="license" /></a>
+</p>
 
-doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted with Noise and carried through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
+![The workspace at 1440 wide in the night theme: spaces and a list of agents on the left, one of them waiting for an answer, and two terminals side by side.](docs/design/app/workspace-1440-night.png)
 
-| Workspace (night, 1440)                                             | Workspace (day, 1440)                                           |
-| ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| ![Workspace, night theme](docs/design/app/workspace-1440-night.png) | ![Workspace, day theme](docs/design/app/workspace-1440-day.png) |
+---
 
-## Status
+**Doriterm is a browser, PWA and desktop client for the terminals and coding agents running on your own machines.** It runs
+`doriface-host` beside [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) and passes herdr-core's own JSON-RPC and
+framed terminal protocol through byte for byte, so every `hc` method works without Doriterm re-implementing it — and what
+crosses the network is a Noise session, not a remote-desktop stream.
 
-| Piece                                        | State                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Host gateway, byte-for-byte `hc` passthrough | works                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Web client and installable PWA               | works: through the relay once paired, hosted at [doriface.omo.dev](https://doriface.omo.dev) ([#700](https://github.com/sisyphuslabs/doriface/issues/700)); a phone scans the pairing QR code to open its pair page. A development build (`bun run --cwd apps/web dev`) also offers "Loopback dev" in Settings > Connections, with the token from `doriface-host --print-token`; a release build connects through the relay only                                                                  |
-| Desktop app ("Use this computer")            | works: starts the host and `hc` on this computer and attaches terminals, starts the host again if it stops ([#525](https://github.com/sisyphuslabs/doriface/pull/525)), can install herdr-core from the app, for this user only, when it is missing or too old ([#417](https://github.com/sisyphuslabs/doriface/pull/417)), and offers this computer to a phone or another computer from Settings > Connections > **Pair a device** ([#614](https://github.com/sisyphuslabs/doriface/issues/614)) |
-| Terminal rendering with libghostty           | works (Ghostty v1.4.0)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| End-to-end encryption                        | works: Noise IK / IKpsk2 between every client and host ([#7](https://github.com/sisyphuslabs/doriface/pull/7))                                                                                                                                                                                                                                                                                                                                                                                    |
-| Pairing a device                             | works: an 8-character code protected by CPace, or a one-tap link ([#7](https://github.com/sisyphuslabs/doriface/pull/7))                                                                                                                                                                                                                                                                                                                                                                          |
-| Public relay `relay-doriface.omo.dev`        | deployed: every `hc` method family and bulk traffic, ciphertext only ([#17](https://github.com/sisyphuslabs/doriface/issues/17), [#26](https://github.com/sisyphuslabs/doriface/pull/26), [#28](https://github.com/sisyphuslabs/doriface/pull/28))                                                                                                                                                                                                                                                |
-| Other machines through the relay             | works: `hc machine add --via 'doriface-host connect <host>'`, one machine per pairing ([#30](https://github.com/sisyphuslabs/doriface/pull/30))                                                                                                                                                                                                                                                                                                                                                   |
+## What you get
 
-This table describes `dev`. The latest release is [v0.1.1](https://github.com/sisyphuslabs/doriface/releases/tag/v0.1.1).
+- **Your terminals, on every screen.** One workspace in a browser tab, on a phone as an installed PWA, and in the desktop app:
+  the same tabs, panes and layout.
+- **Agents that say when they need you.** The sidebar keeps every session under _needs you_, _working_ or _idle_, so you read
+  the list instead of cycling through panes looking for the one that stopped.
+- **One window, many machines.** A host added over ssh, or through the relay with `hc machine add --via`, appears next to your
+  local ones as `b/t1`, `b/t2`, … with its own reconnect.
+- **An encrypted pipe, not a proxy.** Each client holds its own Noise session with the host: IKpsk2 with the pairing code's
+  preshared key for the first one, IK from then on. The relay forwards records it cannot read.
+- **A real terminal.** libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with the wasm build's provenance checked in
+  CI, so cells, fonts and escape sequences behave like the terminal you already use.
+- **Installs and stays installed.** The desktop app starts the host and `hc` on the computer it runs on, starts the host again
+  if it stops, and installs herdr-core for this user when it is missing or too old.
 
-Browsers: Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older browser gets an "Update your browser" screen naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
+| Needs you, day theme                                                                                              | The same workspace on a phone                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![The agent list in the day theme, one agent waiting for approval](docs/design/app/agents-attention-1440-day.png) | <img src="docs/design/app/mobile-keys-bar-390-night.png" width="260" alt="A terminal on a phone, with a key bar for ctrl, shift, tab, esc, arrows and paste" /> |
 
-## How it fits together
+## Install
+
+Three pieces: a **host**, the machine whose terminals you want; a **client**, which is the browser, a phone or the desktop
+app; and the **relay** between them, which is already deployed. Install the client first — it walks you through the host.
+
+### The desktop app
+
+[Releases](https://github.com/sisyphuslabs/doriterm/releases/latest) carries the app for every supported platform:
+
+| Platform                          | File                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------- |
+| macOS, Apple silicon              | `doriface-<version>-arm64.dmg`, or `.zip`                                           |
+| macOS, Intel                      | `doriface-<version>-x64.dmg`, or `.zip`                                             |
+| Windows, x64 and arm64            | `doriface-<version>-x64-setup.exe`, `doriface-<version>-arm64-setup.exe`            |
+| Linux, x64 and arm64              | `doriface-<version>-x86_64.AppImage`, `-arm64.AppImage`, `_amd64.deb`, `_arm64.deb` |
+| The web client, to serve yourself | `doriface-web-<version>.zip`                                                        |
+
+The macOS app has been signed with a Developer ID certificate and notarized since v0.1.1, and its disk image is stapled. The
+Windows installers are not code signed yet, so SmartScreen warns about an unknown publisher: choose **More info**, then
+**Run anyway**. `SHA256SUMS.txt` sits beside every asset.
+
+The desktop app starts a host on the computer it runs on, so that computer's terminals appear as soon as it opens.
+
+### In a browser
+
+The web client is the same app. Open [doriterm.com](https://doriterm.com), and use your browser's "install" or "add to home
+screen" if you want it in a window of its own; an installed PWA opens full screen and precaches its shell, so a dropped
+network does not empty the window. A release build reaches your machines through the relay only — a development build
+(`bun run --cwd apps/web dev`) also offers "Loopback dev" in Settings > Connections, with the token from
+`doriface-host --print-token`.
+
+Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older browser gets an "Update your browser" screen
+naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
+
+### A host, on the machine with the terminals
+
+From this repository, with [Bun](https://bun.sh) installed:
+
+```sh
+git clone https://github.com/sisyphuslabs/doriterm && cd doriterm
+bun install
+bun run --cwd apps/host start --print-token   # the gateway on 127.0.0.1:7766, and its client token
+```
+
+`doriface-host --install-hc` installs herdr-core into `~/.local/bin` from its checksummed release when the machine has none.
+The host keeps its keys and the devices it paired in `$XDG_STATE_HOME/doriface-host` (or `--state-dir`), and
+`doriface-host devices list` and `doriface-host devices revoke <id>` manage what is paired.
+
+## Pairing, and how the relay fits
+
+A client reaches a host through the relay, in a Noise session the relay cannot read:
 
 ```
 browser / PWA / desktop ──┐                         ┌── doriface-host ── hc connect ── herdr-core
@@ -40,91 +116,119 @@ browser / PWA / desktop ──┐                         ┌── doriface-hos
      relay-doriface.omo.dev (sees ciphertext only) ─┘
 ```
 
-Every client reaches a host through the relay. The host also serves the contract's direct path (`/v1/e2ee` on its LAN listener), but no shipped client dials it, and the Direct address setting is hidden ([#458](https://github.com/sisyphuslabs/doriface/issues/458)).
-
-On the same machine the host also serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`. The desktop app talks to its own local host this way, and a development build's Settings offers it as "Loopback dev".
-
-The host never parses what `hc` says; it pipes the stream. The client SDK speaks herdr-core's protocol itself, so a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire format every package is built against is the [transport contract](docs/transport.md).
-
-## Other machines through the relay
-
-`hc machine add` reaches other machines over ssh, or over any command given with `--via` that pipes `hc connect`. `doriface-host connect` is that command for a machine running `doriface-host`: it pipes stdin and stdout to that host's `hc connect`, end-to-end encrypted through the relay, so the machine needs no ssh and no open port.
+Pairing is one step on the host and one on the client:
 
 ```sh
-doriface-host pair                                         # on machine B: prints a link and a code
-doriface-host connect '<link>' < /dev/null                 # on machine A, once: pairs A as a device of B
-#   or, with the typed code: doriface-host connect <code> --fingerprint '<first 4 groups B printed>' < /dev/null
-#   re-pairing a host whose key or relay changed is refused unless you add --replace after checking the change
-hc machine add --via 'doriface-host connect <B hostId>' --name b   # on A: B's terminals appear as b/t1, ...
+doriface-host pair                                     # prints a link, a QR code, a typed code and the fingerprint
+# on the phone: scan the QR code, or open the link
+doriface-host connect '<link>' < /dev/null             # on another computer, once
+#   with the typed code instead: doriface-host connect <code> --fingerprint '<first 4 groups the host printed>'
 ```
 
-## Layout
+The typed code is 8 characters, single use, and dies after 10 minutes; the first session confirms the host's fingerprint
+before the device is trusted. Re-pairing a host whose key or relay changed is refused unless you add `--replace` after
+checking the change.
 
-| Path                    | What it is                                                                 |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `packages/protocol`     | herdr-core wire codec: frames and JSON-RPC types                           |
-| `packages/client`       | client SDK for web, desktop and future native apps                         |
-| `packages/relay-client` | relay uplink and session client                                            |
-| `packages/ghostty-wasm` | libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with provenance |
-| `packages/ui`           | design system: tokens, themes and components                               |
-| `apps/host`             | `doriface-host`, the Bun + Hono gateway that runs beside `hc`              |
-| `apps/web`              | React web client and installable PWA                                       |
-| `apps/desktop`          | Electron shell                                                             |
-| `tests/relay`           | the host and client against the relay, end to end                          |
+Other machines join the same way, through the same relay:
 
-The relay server (Cloudflare Workers + Durable Objects, `relay-doriface.omo.dev`) is deployed separately. Its public
-contract is the relay section of [docs/transport.md](docs/transport.md), which every package here is built against, so
-any server that follows it can stand in. The read-only token CI uses to fetch that private relay expires, and
-[docs/relay-token-rotation.md](docs/relay-token-rotation.md) is how it is rotated.
+```sh
+hc machine add --via 'doriface-host connect <B hostId>' --name b   # B's terminals appear as b/t1, b/t2, …
+```
 
-## CI
+Every client reaches a host through the relay, and the host also serves the contract's direct path (`/v1/e2ee` on its LAN
+listener), though no shipped client dials it. On the same machine the host serves a token-gated, loopback-only
+`ws://127.0.0.1:7766/v1/hc`, which is how the desktop app talks to its own local host. The host never parses what `hc` says —
+it pipes the stream — so the client SDK speaks herdr-core's protocol itself and a future native app can reuse it. The full
+design is in [docs/architecture.md](docs/architecture.md), and the wire contract every package is built against is
+[docs/transport.md](docs/transport.md).
 
-A pull request into `dev` runs three checks, and they are the required ones: `Check` (type checker, linter, formatter
-check, API codegen check and tests), `Relay e2e` (this repository's host and client against the relay at
-`relay-pin.json`, plus a two-host pairing spec) and `Web e2e` (the browser suite against a real `hc`).
+## Security
 
-The platform jobs run after the merge instead, on the push to `dev`, and never on a pull request: `Desktop` (the
-packaged app on Linux with its Electron suite), `Desktop (macOS)` (the same suite on a Mac, where the titlebar, app-menu
-and shortcut specs actually run, and only when the change can reach the app) and `Windows private state (x64)` and
-`Windows private state (arm64)` (host key custody on real Windows ACLs, both supported architectures).
-`Ghostty wasm provenance` runs on every event.
+Every byte past loopback is Noise-authenticated: `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` when the pairing code's preshared key
+is used, `Noise_IK_25519_ChaChaPoly_BLAKE2s` after that, with a ChaCha20-Poly1305 record layer that rekeys every 2^20
+messages.
 
-On a pull request those four jobs are skipped: they report as `skipped`, and none of them is a required check, so they
-never hold a merge. A push that breaks one of them leaves `dev` red until it is fixed.
+- **The relay forwards records it cannot read.** It can drop, delay, replay or reorder them, and the session fails; it cannot
+  read or forge `hc` bytes, impersonate either side, or splice two sessions.
+- **What the relay does see:** the `hostId`, source addresses, timing and sizes, session ids, the pairing slots and their
+  public keys, the device name in the first IKpsk2 message, and — for a paired session — which host dialled which, so it learns
+  the shape of your mesh. Nothing a terminal prints.
+- **Keys stay on your machines.** The host's Ed25519 identity and X25519 static live in its state directory, mode 0600, beside
+  the paired-device store; the web client's device key is non-extractable wherever WebCrypto allows, which stops export but not
+  same-origin use of the key.
+- **No plaintext listener.** `/v1/hc` is loopback-only unless you pass `--unsafe-listen`, and its token is compared in constant
+  time. The LAN listener serves `/v1/e2ee` and never plaintext `/v1/hc`.
+- **No telemetry in the default build.**
+- **Out of scope:** a host or a client compromised while it runs, and keystroke timing — traffic is not padded.
+
+The boundaries, and the citation for each, are in [docs/architecture.md §12](docs/architecture.md#12-security-model).
+
+## Status
+
+This table describes `dev`. The latest release is [v0.1.2](https://github.com/sisyphuslabs/doriterm/releases/tag/v0.1.2).
+
+| Piece                                        | State                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host gateway, byte-for-byte `hc` passthrough | works                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Web client and installable PWA               | works: through the relay once paired, and installable to a home screen; a phone scans the pairing QR code to open its pair page. A development build also offers "Loopback dev" in Settings > Connections, with the token from `doriface-host --print-token`; a release build connects through the relay only                                                                                                                                                                                     |
+| Desktop app ("Use this computer")            | works: starts the host and `hc` on this computer and attaches terminals, starts the host again if it stops ([#525](https://github.com/sisyphuslabs/doriterm/pull/525)), can install herdr-core from the app, for this user only, when it is missing or too old ([#417](https://github.com/sisyphuslabs/doriterm/pull/417)), and offers this computer to a phone or another computer from Settings > Connections > **Pair a device** ([#614](https://github.com/sisyphuslabs/doriterm/issues/614)) |
+| Terminal rendering with libghostty           | works (Ghostty v1.4.0)                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| End-to-end encryption                        | works: Noise IK / IKpsk2 between every client and host ([#7](https://github.com/sisyphuslabs/doriterm/pull/7))                                                                                                                                                                                                                                                                                                                                                                                    |
+| Pairing a device                             | works: an 8-character code protected by CPace, or a one-tap link ([#7](https://github.com/sisyphuslabs/doriterm/pull/7))                                                                                                                                                                                                                                                                                                                                                                          |
+| Public relay `relay-doriface.omo.dev`        | deployed: every `hc` method family and bulk traffic, ciphertext only ([#17](https://github.com/sisyphuslabs/doriterm/issues/17), [#26](https://github.com/sisyphuslabs/doriterm/pull/26), [#28](https://github.com/sisyphuslabs/doriterm/pull/28))                                                                                                                                                                                                                                                |
+| Other machines through the relay             | works: `hc machine add --via 'doriface-host connect <host>'`, one machine per pairing ([#30](https://github.com/sisyphuslabs/doriterm/pull/30))                                                                                                                                                                                                                                                                                                                                                   |
 
 ## Development
 
-Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on `PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests.
+Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on
+`PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests.
 
 ```sh
 bun install
-bun run check                         # typecheck, lint, format check, API codegen check, tests
+bun run check                                 # typecheck, lint, format check, API codegen check, tests
 bun run --cwd apps/host start --print-token   # the host gateway on 127.0.0.1:7766; prints the client token
-bun run --cwd apps/web dev            # the web client
-bun run --cwd apps/desktop start      # the desktop app
-bun run --cwd packages/ui showcase    # every component and screen mockup
+bun run --cwd apps/web dev                    # the web client
+bun run --cwd apps/desktop start              # the desktop app
+bun run --cwd packages/ui showcase            # every component and screen mockup
+bun run capture:readme                        # recapture the screenshots in this file, from the real build
 ```
 
-`bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`. `bun run relay:test` runs `tests/relay` against the private relay at the commit `relay-pin.json` names: it clones it into `.relay` when `RELAY_REPO` names the relay's repository and your git credentials can read it, and otherwise says so and stops. `bun run check` does not need it. `bun run relay:dev` serves that relay locally.
+`bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`.
+`bun run relay:test` runs `tests/relay` against the private relay at the commit `relay-pin.json` names: it clones it into
+`.relay` when `RELAY_REPO` names the relay's repository and your git credentials can read it, and otherwise says so and stops.
+`bun run check` does not need it. `bun run relay:dev` serves that relay locally.
 
-Pull requests into `dev` are gated by `Check`, `Relay e2e` and `Web e2e`. [CONTRIBUTING.md](CONTRIBUTING.md) covers what each one runs, and what a pull request from a fork does about `Relay e2e`, which needs a secret that forks never receive.
+Pull requests into `dev` are gated by `Check`, `Relay e2e` and `Web e2e`. [CONTRIBUTING.md](CONTRIBUTING.md) covers what each
+one runs, and what a pull request from a fork does about `Relay e2e`, which needs a secret that forks never receive.
+
+## Contributing
+
+Issues and pull requests are welcome. Changes land on `dev` through a pull request that passes `Check`, `Relay e2e` and
+`Web e2e`; commits carry one meaning each, in the imperative (`fix(web): …`). Read [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening one — it explains what each check runs, how a pull request from a fork gets its `Relay e2e` run inside this
+repository, and why a change to `.github/workflows/` needs to be its own pull request.
 
 ## Releases
 
-[Releases](https://github.com/sisyphuslabs/doriface/releases) carry the desktop app for macOS (Apple silicon and Intel: dmg and zip), Windows (x64 and arm64: installer exe) and Linux (x64 and arm64: AppImage and deb), the web client and PWA as a zip of static files, and `SHA256SUMS.txt`.
+[Releases](https://github.com/sisyphuslabs/doriterm/releases) carry the desktop app for macOS (Apple silicon and Intel: dmg
+and zip), Windows (x64 and arm64: installer exe) and Linux (x64 and arm64: AppImage and deb), the web client and PWA as a zip
+of static files, and `SHA256SUMS.txt`.
 
-From v0.1.1 the macOS app is signed with a Developer ID certificate and notarized, and the dmg is stapled. The v0.1.0 macOS app is only ad-hoc signed, so macOS blocks its first open: choose **Open Anyway** in System Settings > Privacy & Security, or run `xattr -dr com.apple.quarantine /Applications/doriface.app`. The Windows installers are not code signed yet: SmartScreen warns about an unknown publisher, so choose **More info**, then **Run anyway**. The release workflow signs with the repository secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`, and stops before building when one is missing.
-
-The [release workflow](.github/workflows/release.yml) builds every file on GitHub-hosted runners. The version comes from `apps/desktop/package.json`:
+The [release workflow](.github/workflows/release.yml) builds every file on GitHub-hosted runners. The version comes from
+`apps/desktop/package.json`:
 
 1. Set `version` there and merge it.
-2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the uploaded Linux AppImage and macOS app, then publishes the release. Notes come from the `## X.Y.Z` section of `CHANGELOG.md` when there is one.
+2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the
+   uploaded Linux AppImage and macOS app, then publishes the release.
 
-A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with a version such as `X.Y.Z-rc.1`: it builds the same files into a draft release and leaves it a draft.
+A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is
+accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with a
+version such as `X.Y.Z-rc.1`: it builds the same files into a draft release and leaves it a draft.
 
 ## Design
 
-The design system lives in [DESIGN.md](DESIGN.md): herdr-compatible themes, tokens, the component set in `packages/ui`, the accessibility rules every theme is tested against, and a brief for every screen. Screen mockups are in [docs/design/mockups](docs/design/mockups), and captures of the real app in [docs/design/app](docs/design/app).
+The design system lives in [DESIGN.md](DESIGN.md): herdr-compatible themes, tokens, the component set in `packages/ui`, the
+accessibility rules every theme is tested against, and a brief for every screen.
 
 ## License
 
