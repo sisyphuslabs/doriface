@@ -45,7 +45,8 @@ export function fixtureFontWithAdvance(units: number): Buffer {
   };
   const hhea = table("hhea").offset;
   font.writeUInt16BE(units, hhea + 10);
-  for (let glyph = 0; glyph < font.readUInt16BE(hhea + 34); glyph++) font.writeUInt16BE(units, table("hmtx").offset + 4 * glyph);
+  for (let glyph = 0; glyph < font.readUInt16BE(hhea + 34); glyph++)
+    font.writeUInt16BE(units, table("hmtx").offset + 4 * glyph);
   font.writeInt16BE(units, table("OS/2").offset + 2);
   const head = table("head").offset;
   font.writeUInt32BE(0, head + 8);
