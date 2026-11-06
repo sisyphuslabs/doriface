@@ -53,17 +53,17 @@ control of every machine it can reach, and the approval copy says so.
 
 The stream matrix is explicit, and the `??` fallthrough is removed:
 
-| Stream | machine | client | paired device |
-|---|---|---|---|
-| `"mesh"` | accepted | refused: a client never dials | refused |
-| `"push"` | refused: a machine has no browser | accepted only through its own **role-aware** push association, never through the member key | accepted |
-| `"hc"` | accepted | accepted | accepted |
-| loopback gateway | unchanged: token-authenticated local owner | same | same |
+| Stream           | machine                                    | client                                                                                      | paired device |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------- | ------------- |
+| `"mesh"`         | accepted                                   | refused: a client never dials                                                               | refused       |
+| `"push"`         | refused: a machine has no browser          | accepted only through its own **role-aware** push association, never through the member key | accepted      |
+| `"hc"`           | accepted                                   | accepted                                                                                    | accepted      |
+| loopback gateway | unchanged: token-authenticated local owner | same                                                                                        | same          |
 
 Two details the previous revision left ambiguous, now decided:
 
 - **Push for a client is a separate association, and the roster wins.** The cleanup that removes paired devices whose keys
-  belong to a mesh member (`apps/host/src/state/mesh.ts:190-195`) must recognise a client member's *session* key as its own
+  belong to a mesh member (`apps/host/src/state/mesh.ts:190-195`) must recognise a client member's _session_ key as its own
   push identity and keep it, while `admitPairing`'s refusal of a `claimsKey` match (`apps/host/src/e2ee/accept.ts:193-196`)
   must keep refusing a **machine's** keys. Roster refusal overrides the association in both directions.
 - **The loopback gateway authenticates a token, not an X25519 identity.** It keeps `checkHandshake` and `checkBearer`
@@ -131,8 +131,8 @@ Tests, from the gate verbatim, adopted as acceptance:
 - Codec and view: proof of possession, replay rejection, denied record and vote authority, mixed-kind admission at 12 and
   13, no client dialing or witness participation.
 - Compatibility, against the **actual old parsers** and on a complete persisted file, not a card in isolation: a reader on
-the current outer version given a new-format `mesh.json` must fail at the version guard, never silently drop an index
-version or a member kind; downgrade never erases a revocation; the unchanged v1 status projection still parses.
+  the current outer version given a new-format `mesh.json` must fail at the version guard, never silently drop an index
+  version or a member kind; downgrade never erases a revocation; the unchanged v1 status projection still parses.
 - Cohort gating: a new client admission followed by a revoke of an **existing machine**, offered to a cohort that contains
-one host that has not demonstrated support — the admission must not be emitted, and the revoke must still be applicable
-once that host upgrades or leaves.
+  one host that has not demonstrated support — the admission must not be emitted, and the revoke must still be applicable
+  once that host upgrades or leaves.
