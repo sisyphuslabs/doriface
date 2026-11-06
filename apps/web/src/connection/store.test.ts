@@ -341,3 +341,48 @@ test("a single member is never rotated away from, so one host behaves as it alwa
   store.stop();
   expect(new Set(asked)).toEqual(new Set(["only"]));
 });
+
+test("a live link that drops moves the next attempt to another member (#942)", async () => {
+  const asked: string[] = [];
+  const roster = {
+    ...SETTINGS,
+    hostId: "a",
+    hostName: "studio",
+    hostKey: "ka",
+    members: [
+      { hostId: "a", hostName: "studio", hostKey: "ka", directUrl: "" },
+      { hostId: "b", hostName: "laptop", hostKey: "kb", directUrl: "" },
+    ],
+  };
+  const live = standIn("studio");
+  let opened = 0;
+  const store = new ConnectionStore(roster, (async (settings: ConnectionSettings) => {
+    asked.push(settings.hostId);
+    opened += 1;
+    if (opened === 1) return { connection: live.connection, path: "loopback" } as OpenConnection;
+    throw new Error("no answer");
+  }) as never);
+  store.start();
+  await Bun.sleep(200);
+  expect(asked).toEqual(["a"]);
+  // The host stops answering: the live link drops, which arrives through onClose rather than through a failed attempt.
+  for (const close of live.closes) close();
+  await Bun.sleep(1400);
+  store.stop();
+  expect(asked.slice(1)).toContain("b");
+});
+
+test("pairing with another host puts it in the in-memory roster at once, not only in the file (#994 review)", () => {
+  const store = new ConnectionStore(SETTINGS, (async () => {
+    throw new Error("not dialed in this test");
+  }) as never);
+  store.update({
+    ...SETTINGS,
+    hostId: "new",
+    hostName: "laptop",
+    hostKey: "kn",
+    members: [{ hostId: "old", hostName: "studio", hostKey: "ko", directUrl: "" }],
+  });
+  expect(store.settings.members.map((member) => member.hostId)).toEqual(["new", "old"]);
+  store.stop();
+});

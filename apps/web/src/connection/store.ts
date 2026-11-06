@@ -10,6 +10,7 @@ import {
   isConfigured,
   loadSettings,
   lockRelay,
+  normalizeSettings,
   saveSettings,
   staysOnThisComputer,
 } from "./settings.ts";
@@ -107,9 +108,11 @@ export class ConnectionStore {
 
   /** Saves and connects with `settings`; a release build keeps the production relay whatever relay they name. */
   update(settings: ConnectionSettings): void {
-    const next = lockRelay(settings);
+    const locked = lockRelay(settings);
     // A name belongs to the host that said it: another paired host starts without one, and its own hello fills it in.
-    this.#settings = next.hostId === this.#settings.hostId ? next : { ...next, hostName: "" };
+    const cleared = locked.hostId === this.#settings.hostId ? locked : { ...locked, hostName: "" };
+    // The file and what the app keeps in memory obey the same roster rule, or pairing shows one list and saves another.
+    this.#settings = normalizeSettings(cleared);
     saveSettings(this.#settings);
     this.start();
   }
@@ -194,8 +197,6 @@ export class ConnectionStore {
       });
     } catch (error) {
       if (this.#abort !== abort) return;
-      // One host stopping must not end the app: the next attempt asks the next member this app knows (design of #942).
-      this.#rotateMember();
       if (error instanceof AttemptTimeoutError) {
         this.#budget.timedOut();
         this.#retry(error, attempt + 1);
@@ -294,6 +295,10 @@ export class ConnectionStore {
       this.#set({ phase: "failed", error, retryInMs: null, retryAt: null, stale: null });
       return;
     }
+    // One host stopping must not end the app: the next attempt asks the next member this app knows (design of #942).
+    // This is the single place a retry is decided, so it covers a failed attempt AND a live link that dropped - the case
+    // the first version missed, because a drop arrives through `onClose` and never through the attempt's `catch`.
+    this.#rotateMember();
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
     this.#set({ phase: "failed", error, retryInMs: delay, retryAt: Date.now() + delay, stale: this.#stale });
     this.#wait(attempt);

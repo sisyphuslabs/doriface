@@ -130,15 +130,24 @@ export function loadSettings(
 }
 
 export function saveSettings(settings: ConnectionSettings, storage: StorageLike = guardedLocalStorage()): void {
-  // The roster is written from the same rule that reads it, so a caller that spread a partial settings object still leaves
-  // a file whose roster holds the host it is bound to (design of #942, stage 3).
+  storage.setItem(KEY, JSON.stringify(normalizeSettings(settings)));
+}
+
+/**
+ * The settings with the roster rule applied, for the file AND for what the app keeps in memory.
+ *
+ * `saveSettings` alone was not enough: the store kept the caller's object as it arrived, so a settings object built by
+ * pairing (which spreads the old one and changes the selected host) carried a roster without that host until a reload, while
+ * the file it wrote carried one with it. One rule, applied once, for both (review of #994).
+ */
+export function normalizeSettings(settings: ConnectionSettings): ConnectionSettings {
   const selected: MemberTarget = {
     hostId: settings.hostId,
     hostName: settings.hostName,
     hostKey: settings.hostKey,
     directUrl: settings.directUrl,
   };
-  storage.setItem(KEY, JSON.stringify({ ...settings, members: rosterOf(settings.members, selected) }));
+  return { ...settings, members: rosterOf(settings.members, selected) };
 }
 
 /**
