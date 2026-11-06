@@ -131,7 +131,7 @@ const machinesOf = async (entry: Running): Promise<readonly string[]> => {
       .map((m) => meshHostOf(m.target, entry.program, entry.dir) ?? "")
       .toSorted();
   } finally {
-    control.close();
+    await control.stop();
   }
 };
 
