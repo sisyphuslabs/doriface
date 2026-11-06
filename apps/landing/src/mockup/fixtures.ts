@@ -43,8 +43,7 @@ export const OMO_LINES: readonly TerminalLine[] = [
     { text: "  ❯ ", color: 6 },
     { text: "1. Yes, apply it", color: 6 },
   ],
-  [{ text: "    2. Yes, and don't ask again for migrations" }],
-  [{ text: "    3. No, explain the rollback first" }],
+  [{ text: "    2. No, explain the rollback first" }],
 ];
 
 export const CODEX_LINES: readonly TerminalLine[] = [
