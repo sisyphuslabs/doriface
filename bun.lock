@@ -45,6 +45,17 @@
         "@doriface/protocol": "workspace:*",
       },
     },
+    "apps/push-bridge": {
+      "name": "@doriface/push-bridge",
+      "version": "0.1.0",
+      "dependencies": {
+        "@doriface/crypto": "workspace:*",
+      },
+      "devDependencies": {
+        "@doriface/host": "workspace:*",
+        "@doriface/protocol": "workspace:*",
+      },
+    },
     "apps/web": {
       "name": "@doriface/web",
       "version": "0.1.0",
@@ -387,6 +398,8 @@
     "@doriface/policy": ["@doriface/policy@workspace:packages/policy"],
 
     "@doriface/protocol": ["@doriface/protocol@workspace:packages/protocol"],
+
+    "@doriface/push-bridge": ["@doriface/push-bridge@workspace:apps/push-bridge"],
 
     "@doriface/relay-client": ["@doriface/relay-client@workspace:packages/relay-client"],
 

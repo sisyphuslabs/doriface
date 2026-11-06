@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Native apps
+
+- A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#705)
+
 ### Desktop local host and pairing by code
 
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
