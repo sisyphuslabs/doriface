@@ -35,6 +35,7 @@ import { TerminalLinks } from "./terminal-links.tsx";
 import { useTerminalActions } from "./use-terminal-actions.ts";
 import { useTerminalFont } from "./use-terminal-font.ts";
 import { wideGlyphScaler } from "./face-scales.ts";
+import { usePreedit } from "./use-preedit.ts";
 import { GlyphWarmup } from "./glyph-warmup.ts";
 
 /** Typed text, or the bytes a bound key sends. */
@@ -206,6 +207,7 @@ export function TerminalView(props: TerminalViewProps) {
   useTerminalPort(handle, typed, onPort);
   useBehaviors(wt, stream, options, onUnsafePaste);
   useTerminalFont(wt, config);
+  usePreedit(wt);
   // Wide characters in the output are laid out in idle time, so scrolling back to them is not the first time (#286).
   const warmup = useRef<GlyphWarmup | null>(null);
   useEffect(() => {
