@@ -136,13 +136,15 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      - name: Install Chromium
+      # apt retries an unreachable mirror for as long as it is allowed: on doriterm#914 that spent a whole 30-minute
+      # job inside this step and the suite never started. That is a Linux problem, and so are apt and `timeout`.
+      # This job also runs on macOS and Windows, where neither exists and browsers live somewhere else again, so the
+      # bound here is the step's own timeout-minutes and the install is plain.
+      - name: Install Chromium, bounded on Linux
+        if: runner.os == 'Linux'
         working-directory: apps/web
         timeout-minutes: 12
         run: |
-          # apt retries an unreachable mirror for as long as it is allowed: on doriterm#914 that spent a whole
-          # 30-minute job inside this step and the suite never started. A warm browser cache skips apt; a cold one
-          # bounds the update and the install, so a mirror blip fails here in minutes instead of eating the job.
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
             echo "browser cache hit: installing engines without system packages"
             timeout 300 bunx playwright install chromium
@@ -150,6 +152,11 @@ jobs:
             sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
             timeout 600 bunx playwright install --with-deps chromium
           fi
+      - name: Install Chromium on macOS and Windows
+        if: runner.os != 'Linux'
+        working-directory: apps/web
+        timeout-minutes: 12
+        run: bunx playwright install chromium
       - name: Build the web app
         working-directory: apps/web
         run: bunx --bun vite build --outDir "$RUNNER_TEMP/web-dist" --emptyOutDir
