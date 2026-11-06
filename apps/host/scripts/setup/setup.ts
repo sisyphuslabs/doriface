@@ -468,7 +468,16 @@ export async function uninstall(context: SetupContext, paths: SetupPaths): Promi
     rmSync(paths.serviceFile, { force: true });
     await context.run(["systemctl", "--user", "daemon-reload"]);
   } else {
-    await context.run(["launchctl", "bootout", `${await macDomain(context)}/${paths.label}`]);
+    const target = `${await macDomain(context)}/${paths.label}`;
+    await context.run(["launchctl", "bootout", target]);
+    // bootout returns before launchd has stopped the job; wait for the label to go before calling it removed.
+    for (let attempt = 0; ; attempt += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- each check reads launchd as it is now
+      if ((await context.run(["launchctl", "print", target])).code !== 0) break;
+      if (attempt >= 20) throw new SetupError("uninstall", `${target} is still loaded 10 s after bootout`);
+      // oxlint-disable-next-line no-await-in-loop -- as above
+      await Bun.sleep(500);
+    }
     rmSync(paths.serviceFile, { force: true });
   }
   context.report("uninstall", "changed", `removed ${paths.serviceFile}; ${paths.stateDir} and ${paths.src} stay`);
