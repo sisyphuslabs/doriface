@@ -31,6 +31,7 @@ const setup = (
   let starts = 0;
   let closes = 0;
   const pairs: ("open" | "state")[] = [];
+  const revokes: string[] = [];
   const menus: ReadonlyMap<string, string>[] = [];
   const notices: DesktopNotice[] = [];
   const targets: string[] = [];
@@ -51,6 +52,11 @@ const setup = (
     pairOffer: async (request) => {
       pairs.push(request);
       return { state: "none" };
+    },
+    pairedDevices: async () => ({ state: "listed", devices: [] }),
+    revokeDevice: async (id) => {
+      revokes.push(id);
+      return { state: "not-found", devices: [] };
     },
     openExternal: async (url) => {
       opened.push(url);
@@ -88,6 +94,7 @@ const setup = (
     menus,
     notices,
     pairs,
+    revokes,
     targets,
     starts: () => starts,
     closes: () => closes,
@@ -115,6 +122,8 @@ describe("IPC sender gate", () => {
         expect(handlers.openLink(event, "https://example.com/")).rejects.toThrow("refused IPC"),
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
         expect(handlers.pairOffer(event, "open")).rejects.toThrow("refused IPC"),
+        expect(handlers.pairedDevices(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.revokeDevice(event, "3FA94C0E")).rejects.toThrow("refused IPC"),
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
@@ -303,5 +312,16 @@ describe("IPC sender gate", () => {
       refused.map(() => null),
     );
     expect(pairs).toEqual(["open", "state"]);
+  });
+
+  test("a revoke takes a short device id only, so a hand-edited page cannot address a path", async () => {
+    const { handlers, revokes } = setup();
+    expect(await handlers.revokeDevice(app, "3fa94c0e")).toEqual({ state: "not-found", devices: [] });
+    expect(revokes).toEqual(["3FA94C0E"]);
+    const refused = ["3FA94C0", "3FA94C0E1", "../../etc/passwd", "3FA9 4C0E", "", null, 7, { id: "3FA94C0E" }];
+    expect(await Promise.all(refused.map((candidate) => handlers.revokeDevice(app, candidate)))).toEqual(
+      refused.map(() => null),
+    );
+    expect(revokes).toEqual(["3FA94C0E"]);
   });
 });
