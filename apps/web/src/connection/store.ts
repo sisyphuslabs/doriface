@@ -109,10 +109,15 @@ export class ConnectionStore {
   /** Saves and connects with `settings`; a release build keeps the production relay whatever relay they name. */
   update(settings: ConnectionSettings): void {
     const locked = lockRelay(settings);
+    const sameHost = locked.hostId === this.#settings.hostId;
     // A name belongs to the host that said it: another paired host starts without one, and its own hello fills it in.
-    const cleared = locked.hostId === this.#settings.hostId ? locked : { ...locked, hostName: "" };
+    const cleared = sameHost ? locked : { ...locked, hostName: "" };
+    // Pairing REPLACES the host this app is bound to; it does not quietly keep the one the user paired away from, or every
+    // later failure alternates the attempt onto a host that is gone and saves that as the selection (review of #994). A mesh
+    // join is what ADDS a member, and that path does not come through here.
+    const replaced = sameHost ? cleared : { ...cleared, members: [] };
     // The file and what the app keeps in memory obey the same roster rule, or pairing shows one list and saves another.
-    this.#settings = normalizeSettings(cleared);
+    this.#settings = normalizeSettings(replaced);
     saveSettings(this.#settings);
     this.start();
   }
@@ -217,6 +222,9 @@ export class ConnectionStore {
     const { members } = this.#settings;
     if (members.length < 2) return;
     const at = members.findIndex((member) => member.hostId === this.#settings.hostId);
+    // A selected host that is not in the roster cannot be moved on from: the roster rule puts it there, so its absence means
+    // the two disagree, and picking members[0] would bind the app to a host nobody selected.
+    if (at === -1) return;
     const next = members[(at + 1) % members.length];
     if (next === undefined || next.hostId === this.#settings.hostId) return;
     this.#settings = {
@@ -296,9 +304,11 @@ export class ConnectionStore {
       return;
     }
     // One host stopping must not end the app: the next attempt asks the next member this app knows (design of #942).
-    // This is the single place a retry is decided, so it covers a failed attempt AND a live link that dropped - the case
-    // the first version missed, because a drop arrives through `onClose` and never through the attempt's `catch`.
-    this.#rotateMember();
+    // This is the single place a retry is decided, so it covers a failed attempt AND a live link that dropped. It runs only
+    // after the final-error check, so a failure no retry can help never moves the selection out from under the message the
+    // user is reading, and never in loopback mode, where the address is this computer's own gateway rather than a member
+    // (review of #994).
+    if (this.#settings.mode !== "loopback") this.#rotateMember();
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
     this.#set({ phase: "failed", error, retryInMs: delay, retryAt: Date.now() + delay, stale: this.#stale });
     this.#wait(attempt);
