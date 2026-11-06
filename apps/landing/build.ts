@@ -1,13 +1,17 @@
-// Builds dist/ for doriterm.com: hashed images and stylesheet, the page, and the files Cloudflare serves verbatim.
+// Builds dist/ for doriterm.com: the page with its live mocks rendered from the app's own components, one hashed
+// stylesheet per surface, hashed images, and the files Cloudflare serves verbatim.
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { extname, join } from "node:path";
+import { renderMocks, type Mocks } from "./src/mock/render.tsx";
 
 const root = import.meta.dir;
 const source = join(root, "src");
 const assetDir = join(source, "assets");
 const staticDir = join(source, "static");
 const dist = join(root, "dist");
+const scratch = join(dist, ".mock-css");
 
 const digest = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex").slice(0, 8);
 
@@ -58,12 +62,46 @@ function rewriteAssetPaths(text: string, emitted: ReadonlyMap<string, string>, s
   return output;
 }
 
+function injectMocks(html: string, mocks: Mocks): string {
+  let output = html;
+  const entries: readonly (readonly [string, { readonly day: string; readonly night: string }])[] =
+    Object.entries(mocks);
+  for (const [name, theme] of entries) {
+    const placeholder = `<!-- mock:${name} -->`;
+    if (!output.includes(placeholder)) throw new Error(`the page has no ${placeholder} placeholder`);
+    output = output.replaceAll(placeholder, `${theme.day}${theme.night}`);
+  }
+  const leftover = output.match(/<!-- mock:[a-z]+ -->/);
+  if (leftover !== null) throw new Error(`the page asks for a mock that does not exist: ${leftover[0]}`);
+  return output;
+}
+
 function requireSizedImages(html: string): void {
   const tags = html.match(/<img\b[^>]*>/g) ?? [];
   const unsized = tags.filter((tag) => !/\swidth="/.test(tag) || !/\sheight="/.test(tag));
   if (unsized.length > 0) {
     throw new Error(`an image has no width and height, so the page would shift while loading:\n${unsized.join("\n")}`);
   }
+}
+
+/** Tailwind v4 over the app's tokens and the mock's own sources, so the real components keep their classes. */
+async function compileMocks(markup: string): Promise<string> {
+  await rm(scratch, { recursive: true, force: true });
+  await mkdir(scratch, { recursive: true });
+  await writeFile(join(scratch, "markup.html"), markup);
+  const tailwind = [
+    join(root, "node_modules/.bin/tailwindcss"),
+    join(root, "../../node_modules/.bin/tailwindcss"),
+  ].find((path) => existsSync(path));
+  if (tailwind === undefined) throw new Error("the tailwind CLI is not installed");
+  const run = Bun.spawn([tailwind, "-i", join(source, "mock.css"), "-o", join(scratch, "mock.css"), "--minify"], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const stderr = await new Response(run.stderr).text();
+  if ((await run.exited) !== 0) throw new Error(`tailwind failed: ${stderr}`);
+  return readFile(join(scratch, "mock.css"), "utf8");
 }
 
 async function build(): Promise<void> {
@@ -74,7 +112,8 @@ async function build(): Promise<void> {
   const emitted = await emitAssets();
   const seen = new Map<string, number>();
 
-  const html = rewriteAssetPaths(await readFile(join(source, "index.html"), "utf8"), emitted, seen);
+  const mocks = renderMocks({ light: "/assets/mark-light.svg", dark: "/assets/mark-dark.svg" });
+  const html = rewriteAssetPaths(injectMocks(await readFile(join(source, "index.html"), "utf8"), mocks), emitted, seen);
   const css = rewriteAssetPaths(await readFile(join(source, "styles.css"), "utf8"), emitted, seen);
 
   const unused = [...emitted.keys()].filter((original) => !seen.has(original));
@@ -87,13 +126,27 @@ async function build(): Promise<void> {
     throw new Error(`og.png is ${String(card.width)}x${String(card.height)}; the social card must be 1200x630`);
   }
 
+  const mockCss = await compileMocks(
+    Object.values(mocks)
+      .map((theme) => `${theme.day}${theme.night}`)
+      .join(""),
+  );
+  const mockCssName = `assets/mock.${digest(new TextEncoder().encode(mockCss))}.css`;
+  await writeFile(join(dist, mockCssName), mockCss);
+
   const cssName = `styles.${digest(new TextEncoder().encode(css))}.css`;
-  const page = html.replace("/styles.css", `/${cssName}`);
+  const page = html
+    .replace(
+      '<link rel="stylesheet" href="/styles.css" />',
+      `<link rel="stylesheet" href="/${mockCssName}" /><link rel="stylesheet" href="/${cssName}" />`,
+    )
+    .replace("/styles.css", `/${cssName}`);
   if (page.includes("/styles.css")) throw new Error("the stylesheet link was not rewritten");
   await writeFile(join(dist, cssName), css);
   await writeFile(join(dist, "index.html"), page);
+  await rm(scratch, { recursive: true, force: true });
 
-  const names = [...copied, cssName, "index.html", ...emitted.values()].toSorted();
+  const names = [...copied, cssName, mockCssName, "index.html", ...emitted.values()].toSorted();
   const sizes = await Promise.all(names.map(async (name) => (await readFile(join(dist, name))).byteLength));
   const total = sizes.reduce((sum, bytes) => sum + bytes, 0);
   console.log(`dist/ ${(total / 1024).toFixed(1)} KiB across ${String(names.length)} files`);

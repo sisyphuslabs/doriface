@@ -3,7 +3,14 @@
   "compilerOptions": {
     "outDir": "types",
     "rootDir": ".",
-    "types": ["bun"]
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun", "react", "react-dom"]
   },
-  "include": ["build.ts"]
+  "include": ["build.ts", "src/mock"],
+  "references": [
+    {
+      "path": "../../packages/ui"
+    }
+  ]
 }

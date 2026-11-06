@@ -1,9 +1,10 @@
 name: Deploy landing
 
 # Serves apps/landing at doriterm.com as Workers static assets (apps/landing/wrangler.jsonc), with no Worker code.
-# Run by hand: the doriterm.com zone record and the custom domain are created once, in the Cloudflare account the
-# repository secrets belong to, and only then does this job have somewhere to deploy to. It builds, deploys and probes
-# the live page; a failed probe leaves the previous deployment serving.
+# Run by hand: the doriterm.com zone record and custom domain are created once, in the Cloudflare account the repository
+# secrets belong to. The page's primary action opens https://app.doriterm.com, so the job refuses to deploy until that
+# origin answers. The probe after the deploy fails the job but cannot undo it: `wrangler rollback` restores the previous
+# version.
 on:
   workflow_dispatch:
 
@@ -24,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Require the app origin
+        run: curl -fsS --max-time 10 -o /dev/null https://app.doriterm.com/
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:

@@ -56,30 +56,9 @@
     <link
       rel="preload"
       as="image"
-      href="/assets/phone-night.webp"
-      type="image/webp"
-      media="(max-width: 720px) and (prefers-color-scheme: dark)"
-    />
-    <link
-      rel="preload"
-      as="image"
-      href="/assets/phone-day.webp"
-      type="image/webp"
-      media="(max-width: 720px) and (prefers-color-scheme: light)"
-    />
-    <link
-      rel="preload"
-      as="image"
-      href="/assets/workspace-night.webp"
-      type="image/webp"
-      media="(min-width: 721px) and (prefers-color-scheme: dark)"
-    />
-    <link
-      rel="preload"
-      as="image"
-      href="/assets/workspace-day.webp"
-      type="image/webp"
-      media="(min-width: 721px) and (prefers-color-scheme: light)"
+      href="/assets/mark-dark.svg"
+      type="image/svg+xml"
+      media="(prefers-color-scheme: dark)"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -125,7 +104,7 @@
               </svg>
             </a>
             <a class="button" href="https://github.com/sisyphuslabs/doriterm/releases/latest">Download</a>
-            <a class="text-link" href="https://github.com/sisyphuslabs/doriterm">GitHub</a>
+            <a class="button button-quiet" href="https://github.com/sisyphuslabs/doriterm">GitHub</a>
           </div>
           <p class="meta">
             <span>macOS</span><span>Windows</span><span>Linux</span><span>or any browser</span><span>AGPL-3.0</span>
@@ -134,28 +113,9 @@
 
         <div class="wrap stage">
           <div class="stage-inner">
-            <figure class="frame">
-              <picture>
-                <source srcset="/assets/workspace-night.webp" type="image/webp" media="(prefers-color-scheme: dark)" />
-                <img
-                  src="/assets/workspace-day.webp"
-                  alt="The Doriterm workspace at 1440 wide: spaces and a list of agents on the left, one of them waiting for an answer, and two terminals side by side."
-                  width="1440"
-                  height="900"
-                />
-              </picture>
-            </figure>
+            <figure class="frame"><!-- mock:desktop --></figure>
             <figure class="phone">
-              <picture>
-                <source srcset="/assets/phone-night.webp" type="image/webp" media="(prefers-color-scheme: dark)" />
-                <img
-                  src="/assets/phone-day.webp"
-                  alt="A terminal on a phone, below it a key bar for ctrl, shift, tab, esc, the arrows and paste."
-                  width="1170"
-                  height="2532"
-                  decoding="async"
-                />
-              </picture>
+              <div class="phone-viewport"><!-- mock:phone --></div>
             </figure>
           </div>
         </div>
@@ -180,18 +140,8 @@
                 app. Start something at your desk and answer it from the train.
               </p>
             </div>
-            <figure class="feature-media feature-media-narrow">
-              <picture>
-                <source srcset="/assets/phone-night.webp" type="image/webp" media="(prefers-color-scheme: dark)" />
-                <img
-                  src="/assets/phone-day.webp"
-                  alt="A terminal on a phone with the key bar, showing a shell command and its output."
-                  width="1170"
-                  height="2532"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </picture>
+            <figure class="feature-media feature-media-phone">
+              <div class="phone-viewport phone-viewport-sm"><!-- mock:phone --></div>
             </figure>
           </article>
 
@@ -204,19 +154,7 @@
                 one that stopped.
               </p>
             </div>
-            <figure class="feature-media">
-              <picture>
-                <source srcset="/assets/agents-night.webp" type="image/webp" media="(prefers-color-scheme: dark)" />
-                <img
-                  src="/assets/agents-day.webp"
-                  alt="The agent list in the day theme: one agent under Needs you, two working, three idle, each row naming the terminal and its machine."
-                  width="1440"
-                  height="900"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </picture>
-            </figure>
+            <figure class="feature-media feature-media-list"><!-- mock:agents --></figure>
           </article>
 
           <article class="feature reveal">
@@ -228,19 +166,7 @@
                 the same list.
               </p>
             </div>
-            <figure class="feature-media">
-              <picture>
-                <source srcset="/assets/machines-night.webp" type="image/webp" media="(prefers-color-scheme: dark)" />
-                <img
-                  src="/assets/machines-day.webp"
-                  alt="The machines list: this machine, and a second machine called build-box marked connected, with one of its terminals open."
-                  width="1440"
-                  height="900"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </picture>
-            </figure>
+            <figure class="feature-media feature-media-list"><!-- mock:machines --></figure>
           </article>
 
           <article class="feature feature-flip reveal">

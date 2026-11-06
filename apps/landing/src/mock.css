@@ -1,0 +1,31 @@
+@import "tailwindcss" source(none);
+@import "@doriface/ui/styles/tokens.css";
+
+@source "../dist/.mock-css/markup.html";
+@source "../../../packages/ui/src/components/agent-row.tsx";
+@source "../../../packages/ui/src/components/status.tsx";
+@source "../../../packages/ui/src/components/space-row.tsx";
+@source "../../../packages/ui/src/components/space-avatar.tsx";
+@source "../../../packages/ui/src/components/sidebar-section.tsx";
+@source "../../../packages/ui/src/components/machine-header.tsx";
+@source "../../../packages/ui/src/components/icon-button.tsx";
+@source "../../../packages/ui/src/components/tooltip.tsx";
+@source "../../../packages/ui/src/components/tab-bar.tsx";
+@source "../../../packages/ui/src/components/tab-drop.tsx";
+@source "../../../packages/ui/src/components/status-bar.tsx";
+@source "../../../packages/ui/src/components/extra-keys-bar.tsx";
+@source "../../../packages/ui/src/components/button.tsx";
+
+.mock {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-ui);
+  font-size: var(--type-base);
+  line-height: 1.5;
+}
+
+.mock *,
+.mock *::before,
+.mock *::after {
+  border-color: var(--border);
+}
