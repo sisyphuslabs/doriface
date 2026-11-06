@@ -8,6 +8,7 @@ import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { openControl } from "./host-control.ts";
 import { e2eeDeps } from "./host-e2ee.ts";
 import { PairOffers } from "./pair-surface.ts";
+import { DeviceSurface } from "./device-surface.ts";
 import { type GitFactsPublisher, publishGitFacts } from "./git-facts.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { retireLock } from "./host-lock.ts";
@@ -124,6 +125,18 @@ async function serve(
             devices: e2ee.devices,
             open: () => e2ee.hostMesh.pairDevice(),
             relayUrl: options.relay?.url ?? DEFAULT_RELAY_URL,
+          }),
+    // A revoke from the app is the same act as `devices revoke` on the control socket: the file loses the device, the
+    // sessions of its key close, and its push subscription goes.
+    devices:
+      e2ee === undefined
+        ? undefined
+        : new DeviceSurface({
+            devices: e2ee.devices,
+            changed: async () => {
+              await e2ee.sessions.closeRevoked();
+              push?.prune();
+            },
           }),
     token: options.token,
     hostVersion: HOST_VERSION,

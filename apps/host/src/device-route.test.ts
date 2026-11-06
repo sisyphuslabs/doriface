@@ -1,0 +1,88 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { generateX25519 } from "@doriface/crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { generateToken } from "./auth.ts";
+import { DeviceSurface, UnknownDeviceError } from "./device-surface.ts";
+import { type Host, startHost } from "./host.ts";
+import { DeviceStore, deviceIdOf } from "./state/devices.ts";
+import { createHcSession, type HcSession } from "./testing/hc-session.ts";
+
+const token = generateToken();
+let session: HcSession;
+let host: Host;
+let stateDir: string;
+
+beforeAll(async () => {
+  stateDir = mkdtempSync(join(tmpdir(), "dh-device-route-"));
+  session = createHcSession("doriface-device-route-test");
+  host = await startHost({
+    listen: { hostname: "127.0.0.1", port: 0 },
+    token,
+    hc: session.hc,
+    session: session.name,
+    env: session.env,
+    stateDir,
+    log: () => {},
+  });
+});
+
+afterAll(async () => {
+  await host.stop();
+  await session.dispose();
+  rmSync(stateDir, { recursive: true, force: true });
+});
+
+const devicesUrl = (id?: string): string =>
+  `http://127.0.0.1:${host.port}/v1/devices${id === undefined ? "" : `/${id}`}`;
+
+/** `null` sends no `Authorization` header at all; the default sends this host's token. */
+const request = (method: "GET" | "DELETE", id?: string, auth: string | null = `Bearer ${token}`): Promise<Response> =>
+  fetch(devicesUrl(id), { method, ...(auth === null ? {} : { headers: { authorization: auth } }) });
+
+describe("this computer's paired devices on the loopback gateway", () => {
+  test("a request without the host's token is refused, for reading and for revoking", async () => {
+    expect((await request("GET", undefined, null)).status).toBe(401);
+    expect((await request("DELETE", "3FA94C0E", "Bearer wrong-token-wrong-token-xxx")).status).toBe(401);
+  });
+
+  test("a device the store holds is listed with the id a person can read out", async () => {
+    const device = new DeviceStore(stateDir).add(generateX25519().publicKey, "phone");
+    const answer: unknown = await (await request("GET")).json();
+    expect(answer).toEqual({ devices: [{ name: "phone", id: deviceIdOf(device), pairedAt: device.pairedAt }] });
+  });
+
+  test("revoking answers what was revoked and leaves the store without it", async () => {
+    const device = new DeviceStore(stateDir).list()[0];
+    if (device === undefined) throw new Error("no device was paired");
+    const answer: unknown = await (await request("DELETE", deviceIdOf(device))).json();
+    expect(answer).toEqual({ revoked: [{ name: device.name, id: deviceIdOf(device), pairedAt: device.pairedAt }] });
+    expect(new DeviceStore(stateDir).list()).toEqual([]);
+  });
+
+  test("an id no device has is refused as not found, naming the id", async () => {
+    const short = "AB12CD34";
+    const answer = await request("DELETE", short);
+    expect(answer.status).toBe(404);
+    expect(await answer.json()).toEqual({ error: `no paired device has the id ${JSON.stringify(short)}` });
+  });
+});
+
+describe("the device surface a revoke goes through", () => {
+  test("a revoke runs the host's after-changes step once, and an unknown id runs none", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-device-surface-"));
+    try {
+      const devices = new DeviceStore(dir);
+      const phone = devices.add(generateX25519().publicKey, "phone");
+      let changes = 0;
+      const surface = new DeviceSurface({ devices, changed: async () => void (changes += 1) });
+      expect(await surface.revoke(deviceIdOf(phone))).toHaveLength(1);
+      expect(changes).toBe(1);
+      await expect(surface.revoke(deviceIdOf(phone))).rejects.toBeInstanceOf(UnknownDeviceError);
+      expect(changes).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

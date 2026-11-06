@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Paired devices
+
+- Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
+
 ### Desktop local host and pairing by code
 
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
