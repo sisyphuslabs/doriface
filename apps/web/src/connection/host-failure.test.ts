@@ -26,6 +26,10 @@ describe("why the host cannot be reached, in plain words (#477)", () => {
       "Your host's herdr-core is too old for doriface, which needs 0.1.17 or newer. Run hc update on that computer.",
     ],
     [
+      { kind: "core-missing", methods: ["terminal.keys"], need: "0.1.17" } as const,
+      "Your host's herdr-core is missing terminal.keys, which doriface needs. Run hc update on that computer.",
+    ],
+    [
       { kind: "core-newer", generation: 2 } as const,
       "Your host's herdr-core is newer than this doriface understands. Update doriface.",
     ],
