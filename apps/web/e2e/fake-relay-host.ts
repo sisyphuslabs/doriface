@@ -84,6 +84,8 @@ async function pairingLink(): Promise<string> {
 try {
   host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
+    // #446: the LAN listener a direct address names; it serves only /v1/e2ee, admitted by the Noise handshake.
+    lanListen: { hostname: "127.0.0.1", port: 0 },
     token: `fake-relay-host-${crypto.randomUUID()}`,
     hc: hc.hc,
     session: hc.name,
@@ -103,7 +105,7 @@ try {
     });
     stage("machine");
   }
-  say({ bridge: bridge.url });
+  say({ bridge: bridge.url, directUrl: host.e2ee?.lanUrls[0] ?? "" });
   for await (const _ of createInterface({ input: process.stdin })) say({ link: await pairingLink() });
 } catch (error) {
   // A start that fails, or a pairing that does, stops what it started, so no core outlives it, and exits with the

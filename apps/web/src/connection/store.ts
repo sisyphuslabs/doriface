@@ -1,7 +1,8 @@
 import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
-import { connect, DeviceNotPairedError } from "./connect.ts";
+import { connect, type ConnectionPath, DeviceNotPairedError, type OpenConnection } from "./connect.ts";
+import type { DirectReason } from "./direct-attempt.ts";
 import { LoopbackAddressError } from "./loopback-address.ts";
 import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSettings } from "./settings.ts";
 
@@ -12,7 +13,12 @@ import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSet
 export type ConnectionState =
   | { readonly phase: "unconfigured" }
   | { readonly phase: "connecting"; readonly attempt: number; readonly stale: HcConnection | null }
-  | { readonly phase: "open"; readonly connection: HcConnection }
+  | {
+      readonly phase: "open";
+      readonly connection: HcConnection;
+      readonly path: ConnectionPath;
+      readonly directReason?: DirectReason | undefined;
+    }
   /** This computer's host did not start: nothing is tried until a start succeeds. */
   | { readonly phase: "host-failed"; readonly failure: HostStartFailure }
   | {
@@ -42,6 +48,8 @@ export class ConnectionStore {
   #stale: HcConnection | null = null;
   /** The attempt the pending retry timer will make, so `retryNow` can make it at once. */
   #pending: number | null = null;
+  /** The next attempt goes to the relay at once: the one before it was a direct link that dropped (#446 §4). */
+  #relayFirst = false;
   /** Asked before each retry of a loopback link: this computer's host, started again if it died (the desktop app). */
   #localHost: LocalHostStarter | null = null;
   readonly #connect: typeof connect;
@@ -66,7 +74,9 @@ export class ConnectionStore {
 
   /** Saves and connects with `settings`; a release build keeps the production relay whatever relay they name. */
   update(settings: ConnectionSettings): void {
-    this.#settings = lockRelay(settings);
+    const next = lockRelay(settings);
+    // A name belongs to the host that said it: another paired host starts without one, and its own hello fills it in.
+    this.#settings = next.hostId === this.#settings.hostId ? next : { ...next, hostName: "" };
     saveSettings(this.#settings);
     this.start();
   }
@@ -94,6 +104,7 @@ export class ConnectionStore {
 
   start(): void {
     this.stop();
+    this.#relayFirst = false;
     if (!isConfigured(this.#settings)) {
       this.#set({ phase: "unconfigured" });
       return;
@@ -113,21 +124,47 @@ export class ConnectionStore {
   async #attempt(attempt: number): Promise<void> {
     const abort = new AbortController();
     this.#abort = abort;
+    const relayFirst = this.#relayFirst;
+    this.#relayFirst = false;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const connection = await this.#connect(this.#settings, abort.signal);
+      const opened: OpenConnection = await this.#connect(
+        this.#settings,
+        abort.signal,
+        undefined,
+        relayFirst ? { skipDirect: true } : {},
+      );
+      const { connection } = opened;
       if (abort.signal.aborted) return connection.close();
+      this.#rememberName(connection);
       connection.onClose((error) => {
         if (this.#abort !== abort) return;
+        if (opened.path === "direct") this.#relayFirst = true;
         this.#stale = connection;
         this.#retry(error ?? new Error("the host closed the connection"), 0);
       });
       this.#stale = null;
-      this.#set({ phase: "open", connection });
+      this.#set({
+        phase: "open",
+        connection,
+        path: opened.path,
+        ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
+      });
     } catch (error) {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * A host names itself as it answers, and that name is the only way Settings can name it once it stops answering: keep
+   * it beside the paired host while it is known (#496).
+   */
+  #rememberName(connection: HcConnection): void {
+    const name = connection.hello.core.name;
+    if (name === "" || name === this.#settings.hostName) return;
+    this.#settings = { ...this.#settings, hostName: name };
+    saveSettings(this.#settings);
   }
 
   #retry(error: Error, attempt: number): void {

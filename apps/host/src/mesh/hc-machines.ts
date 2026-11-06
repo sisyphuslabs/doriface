@@ -89,7 +89,21 @@ class ChildLink implements ChildByteLink {
 export interface HcControl {
   readonly machines: HcMachines;
   readonly coreId: string;
-  close(): void;
+  /**
+   * Ends this control's `hc connect` child and settles once it has exited: a launch stopped this way can start no core
+   * afterwards. One that ignores a closed stdin is killed after the stop's grace.
+   */
+  stop(): Promise<void>;
+  /** Kills the child if it has not exited (one that ignores a closed stdin); the pids it killed. */
+  kill(): readonly number[];
+}
+
+/** How long a stopped launch has to exit on a closed stdin before it is killed: `hc connect` exits at once. */
+export const HC_STOP_GRACE_MS = 2_000;
+
+/** The options a control's handshake takes: stopping the host ends a hello the core never answers. */
+export interface OpenHcControlOptions {
+  readonly signal?: AbortSignal | undefined;
 }
 
 export interface HcTarget {
@@ -110,8 +124,49 @@ export function spawnHcLink(target: HcTarget): ChildByteLink {
   return new ChildLink(child);
 }
 
-/** Opens a control connection to this host's own core, as the gateway's pipes do. */
-export async function openHcControl(target: HcTarget): Promise<HcControl> {
-  const connection = await HcConnection.open(spawnHcLink(target));
-  return { machines: hcMachines(connection), coreId: connection.hello.core.id, close: () => connection.close() };
+/**
+ * Opens a control connection to this host's own core, as the gateway's pipes do, over one `hc connect` child this
+ * control owns: every `hc` call starts its session's core when none runs, so a launch that outlived its owner would
+ * start the core again after the host stopped (#441). A launch whose handshake fails is ended here, not left behind.
+ */
+export async function openHcControl(target: HcTarget, options: OpenHcControlOptions = {}): Promise<HcControl> {
+  const link = spawnHcLink(target);
+  let running = true;
+  const exited = new Promise<void>((resolve) =>
+    link.onClose(() => {
+      running = false;
+      resolve();
+    }),
+  );
+  const stop = async (): Promise<void> => {
+    link.close();
+    const grace = setTimeout(() => {
+      if (running) link.kill("SIGKILL");
+    }, HC_STOP_GRACE_MS);
+    try {
+      await exited;
+    } finally {
+      clearTimeout(grace);
+    }
+  };
+  let connection: HcConnection;
+  try {
+    connection = await HcConnection.open(link, options.signal === undefined ? {} : { signal: options.signal });
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+  return {
+    machines: hcMachines(connection),
+    coreId: connection.hello.core.id,
+    stop: async () => {
+      connection.close();
+      await stop();
+    },
+    kill: () => {
+      if (!running) return [];
+      link.kill("SIGKILL");
+      return [link.pid];
+    },
+  };
 }
