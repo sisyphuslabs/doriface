@@ -76,7 +76,7 @@ function isEndpoint(value: unknown): value is LocalHostEndpoint {
 }
 
 /** The desktop shell's method `name`, or null outside the desktop app or in a build without it. */
-function bridgeMethod(name: string, scope: object): ((...args: unknown[]) => unknown) | null {
+export function bridgeMethod(name: string, scope: object): ((...args: unknown[]) => unknown) | null {
   const bridge: unknown = Reflect.get(scope, "doriface");
   if (typeof bridge !== "object" || bridge === null) return null;
   const method: unknown = Reflect.get(bridge, name);
