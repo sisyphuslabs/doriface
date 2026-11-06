@@ -8,7 +8,7 @@
 <h1 align="center">Doriterm</h1>
 
 <p align="center">
-  Your terminals and coding agents, on every screen.
+  Your terminals and coding agents, <strong>on every screen</strong>.
   <br />
   End-to-end encrypted, through a relay that never sees them.
 </p>
@@ -48,6 +48,8 @@ crosses the network is a Noise session, not a remote-desktop stream.
   preshared key for the first one, IK from then on. The relay forwards records it cannot read.
 - **A real terminal.** libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with the wasm build's provenance checked in
   CI, so cells, fonts and escape sequences behave like the terminal you already use.
+- **A phone that can drive a terminal.** A key bar for ctrl, shift, tab, esc and the arrows, a paste button, and IME composition
+  that reaches the terminal ahead of any key, chord or paste, so a syllable still being composed is not split by it.
 - **Installs and stays installed.** The desktop app starts the host and `hc` on the computer it runs on, starts the host again
   if it stops, and installs herdr-core for this user when it is missing or too old.
 
@@ -58,7 +60,13 @@ crosses the network is a Noise session, not a remote-desktop stream.
 ## Install
 
 Three pieces: a **host**, the machine whose terminals you want; a **client**, which is the browser, a phone or the desktop
-app; and the **relay** between them, which is already deployed. Install the client first — it walks you through the host.
+app; and the **relay** between them, which is already deployed. The shortest path is three steps:
+
+1. **Start a host** on the machine whose terminals you want. The desktop app does it for you when it opens, or run
+   [`doriface-host`](#a-host-on-the-machine-with-the-terminals) from this repository.
+2. **Open a client**: the desktop app, or the web app at [doriface.omo.dev](https://doriface.omo.dev).
+3. **Pair it** with the host — scan the QR code the host prints, or open the link it prints, and confirm the fingerprint it
+   shows. [Pairing, and how the relay fits](#pairing-and-how-the-relay-fits) is the whole of it.
 
 ### The desktop app
 
