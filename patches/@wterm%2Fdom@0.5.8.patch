@@ -23,7 +23,7 @@ index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02
      private handleCompositionEnd;
      private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..8963de57e37a787a3fbedd570592ba28f8e913e2 100644
+index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..a578c63e4934de3df6348b992399de6ab97fe249 100644
 --- a/dist/input.js
 +++ b/dist/input.js
 @@ -86,6 +86,8 @@ export class InputHandler {
@@ -43,7 +43,7 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..8963de57e37a787a3fbedd570592ba28
          this.prepareComposition();
          this.composing = true;
          this.recentCompositionCommit = null;
-@@ -472,11 +475,18 @@ export class InputHandler {
+@@ -472,11 +475,22 @@ export class InputHandler {
          this.positionTextarea();
          const s = this.textarea.style;
          s.opacity = "1";
@@ -59,13 +59,17 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..8963de57e37a787a3fbedd570592ba28
      handleCompositionEnd(e) {
 +        const taken = this.takenComposition;
 +        this.takenComposition = null;
-+        // A composition the host already took ends with the text it took (WebKit) or none (Blink); either was sent.
-+        if (taken !== null && !this.composing && (!e.data || e.data === taken))
++        // The end of a composition the host already took carries the text it took, or none: that text was sent. The
++        // field is still cleared, in case the input method put the text back before ending.
++        if (taken !== null && !this.composing && (!e.data || e.data === taken)) {
++            this.hideComposition();
++            this.resetInputValue();
 +            return;
++        }
          this.composing = false;
          this.hideComposition();
          this.resetInputValue();
-@@ -485,6 +495,26 @@ export class InputHandler {
+@@ -485,6 +499,26 @@ export class InputHandler {
              this.onData(e.data);
          }
      }
