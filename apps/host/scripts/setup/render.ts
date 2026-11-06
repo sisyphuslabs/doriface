@@ -205,7 +205,13 @@ export function renderService(paths: SetupPaths): string {
 }
 
 export type ExistingService =
-  | { readonly kind: "checkout"; readonly stateDir: string | undefined; readonly logFile: string | undefined }
+  | {
+      readonly kind: "checkout";
+      readonly stateDir: string | undefined;
+      readonly listen: string | undefined;
+      readonly session: string | undefined;
+      readonly logFile: string | undefined;
+    }
   | { readonly kind: "other"; readonly program: string };
 
 /**
@@ -221,11 +227,20 @@ export function readExistingService(text: string, src: string, home: string): Ex
   if (!args.includes(join(src, "apps", "host", "src", "cli.ts"))) {
     return { kind: "other", program: args.join(" ") || "(no program)" };
   }
-  const at = args.indexOf("--state-dir");
+  const flag = (name: string): string | undefined => {
+    const at = args.indexOf(name);
+    return at >= 0 ? args[at + 1] : undefined;
+  };
   const log = text.includes("<plist")
     ? /<key>StandardOutPath<\/key>\s*<string>([^<]*)<\/string>/.exec(text)?.[1]
     : /^StandardOutput=append:(\S+)$/m.exec(text)?.[1];
-  return { kind: "checkout", stateDir: at >= 0 ? args[at + 1] : undefined, logFile: log };
+  return {
+    kind: "checkout",
+    stateDir: flag("--state-dir"),
+    listen: flag("--listen"),
+    session: flag("--session"),
+    logFile: log,
+  };
 }
 
 function unitArgs(text: string): string[] {

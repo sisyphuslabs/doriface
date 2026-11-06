@@ -195,6 +195,8 @@ export function resolvePaths(context: SetupContext, hc: string): SetupPaths {
     ...context.options,
     src: first.src,
     stateDir: context.options.stateDir ?? existing.stateDir,
+    listen: context.options.listen ?? existing.listen,
+    session: context.options.session ?? existing.session,
     logFile: existing.logFile,
   });
 }
