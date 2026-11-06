@@ -37,8 +37,10 @@ function Root() {
         </div>
       ) : null}
       {/* The view on screen is #root's first child: the desktop window waits for `#root > *` to paint, and the
-          workspace kept under Settings is invisible, so it must not come first. */}
-      <div className={settings ? "invisible contents" : "contents"} inert={settings}>
+          workspace kept under Settings is invisible, so it must not come first. Every element in it is hidden, not
+          only the wrapper: visibility is inherited, so a part that reveals itself (a touch screen's row actions) would
+          otherwise be drawn over Settings, which paints after it in no layer of its own (#879). */}
+      <div className={settings ? "invisible contents [&_*]:invisible!" : "contents"} inert={settings}>
         <ActionsPaused.Provider value={settings}>
           <TerminalsOnScreen.Provider value={!settings}>
             <WorkspaceRoute />
