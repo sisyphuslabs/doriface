@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-### Korean text on Android
+### Web app
 
-- The terminal draws Hangul on Android again: the font stack named only Latin faces, and a device that has none of them fell through to a generic monospace with no Korean glyphs, so every syllable was blank space while Latin text was fine. The stack now names the CJK faces Android and Windows ship (Noto Sans Mono CJK, Nanum Gothic Coding, Malgun Gothic) before the generic fallback, and they come after the Latin faces so nothing changes on a machine that has them. (#959)
+- A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
 
 ### Settings
 

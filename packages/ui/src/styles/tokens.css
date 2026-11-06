@@ -109,10 +109,7 @@
 :root {
   --font-ui:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-term:
-    "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK KR",
-    "Noto Sans Mono CJK JP", "Noto Sans CJK KR", "Nanum Gothic Coding", "Malgun Gothic", "Apple SD Gothic Neo",
-    system-ui, monospace;
+  --font-term: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Pointer-precise sizes (desktop). Coarse pointers override below. */
   --type-2xs: 0.6875rem;
