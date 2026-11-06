@@ -6,6 +6,10 @@
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
 
+### Pairing from a phone
+
+- The pairing link a phone opens points at **https://app.doriterm.com**, the app's own host, instead of the old `doriface.omo.dev` address; a link from either host still opens the pair page while the move completes. The desktop app accepts a pair link on both hosts for the same reason. (#759)
+
 ### The brand files are named for Doriterm
 
 - The web app's brand art and the script that turns it into icons name the product that ships, `doriterm-*`; the files the app serves keep their paths, so nothing a browser loads changes. (#917)
