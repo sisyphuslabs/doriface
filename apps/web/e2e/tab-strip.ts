@@ -20,11 +20,11 @@ export const selectedIndex = (page: Page) =>
   tabs(page).evaluateAll((els) => els.findIndex((el) => el.getAttribute("aria-selected") === "true"));
 
 /**
- * The number chord that selects a tab by its place: Cmd+N on a Mac, Alt+N elsewhere, since Ctrl+N selects a space there.
+ * The number chord that selects a tab by its place, as herdr-app binds it: Cmd+N on a Mac, Ctrl+N elsewhere (#702).
  */
 export async function tabNumberChord(page: Page, place: number): Promise<string> {
   const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
-  return `${mac ? "Meta" : "Alt"}+${place}`;
+  return `${mac ? "Meta" : "Control"}+${place}`;
 }
 
 /** The strip's order as the platform's number chords select each tab, then the tab that was selected is selected again. */
