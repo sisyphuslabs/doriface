@@ -104,7 +104,13 @@ describe("asking this computer's host for its pairing offer", () => {
       pairOfferAnswer({ state: "paired", device: { name: "phone", id: "3FA94C0E", pairedAt: "2026-01-01" } }),
     ).toEqual({ state: "paired", device: { name: "phone", id: "3FA94C0E", pairedAt: "2026-01-01" } });
     expect(pairOfferAnswer({ state: "pending", offer: OFFER })).toEqual({ state: "pending", offer: OFFER });
+    const phoneLink = "https://doriface.omo.dev/pair#h=1&k=x";
+    expect(pairOfferAnswer({ state: "pending", offer: { ...OFFER, phoneLink } })).toEqual({
+      state: "pending",
+      offer: { ...OFFER, phoneLink },
+    });
     for (const bad of [
+      { state: "pending", offer: { ...OFFER, phoneLink: 7 } },
       null,
       {},
       { state: "pending" },

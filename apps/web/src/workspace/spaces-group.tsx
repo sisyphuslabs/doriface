@@ -55,10 +55,19 @@ function MachineNotice({ name }: { readonly name: string }) {
  * up and Move down are the list's single-pointer path (WCAG 2.5.7), with the move keys the rows themselves take.
  */
 function SpaceActions({ space, reorder }: { readonly space: Space; readonly reorder: SpaceReorder | undefined }) {
+  return (
+    <Menu align="end" trigger={<IconButton label={`More for ${space.name}`} icon={<Ellipsis />} className="size-6" />}>
+      <SpaceMenuItems space={space} reorder={reorder} />
+    </Menu>
+  );
+}
+
+/** What can be done with a space: its "..." menu and its right-click menu hold the same items. */
+function SpaceMenuItems({ space, reorder }: { readonly space: Space; readonly reorder: SpaceReorder | undefined }) {
   const renaming = useSpaceRenaming();
   const closing = useSpaceClosing();
   return (
-    <Menu align="end" trigger={<IconButton label={`More for ${space.name}`} icon={<Ellipsis />} className="size-6" />}>
+    <>
       <MenuItem icon={<Pencil />} onClick={() => renaming.ask(space.id)}>
         Rename space…
       </MenuItem>
@@ -85,7 +94,7 @@ function SpaceActions({ space, reorder }: { readonly space: Space; readonly reor
       <MenuItem icon={<X />} destructive onClick={() => closing.ask(space.id)}>
         Close space…
       </MenuItem>
-    </Menu>
+    </>
   );
 }
 
@@ -170,6 +179,7 @@ function SpacesLists({
             <SpaceActions space={space} reorder={reorder} />
           </span>
         }
+        menu={<SpaceMenuItems space={space} reorder={reorder} />}
       />
     );
   };

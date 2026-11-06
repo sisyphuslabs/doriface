@@ -54,9 +54,14 @@ export function slotNote(offer: DesktopPairOffer): string | undefined {
     : "Typing the code needs the relay, which has no slot for it yet. Scan the QR code or open the link instead.";
 }
 
-/** What opens the link, said plainly: the app has no hosted web page by default (#594). */
+/** What opens the link, said plainly: the link is for another computer, the QR code for a phone. */
 export function linkOpens(opens: DesktopPairOffer["opens"]): string {
   return opens === "web"
     ? "Opens the doriface web app on the device you pair."
-    : "Opens the doriface desktop app on another computer. On a phone, type the code above.";
+    : "Opens the doriface desktop app on another computer. On a phone, scan the QR code or type the code above.";
+}
+
+/** What the QR code encodes: the phone's web link, or `link` from a host older than #700 that sends none. */
+export function qrLink(offer: DesktopPairOffer): string {
+  return offer.phoneLink ?? offer.link;
 }
