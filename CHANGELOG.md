@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- The sidebar filter (#820) is removed for now; it returns once its button no longer truncates the app name (#881).
+
 ### Paired devices
 
 - Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
