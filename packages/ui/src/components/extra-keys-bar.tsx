@@ -1,4 +1,15 @@
-import { ClipboardPaste, GamepadDirectional, Keyboard, KeyboardOff, List } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ClipboardPaste,
+  GamepadDirectional,
+  Keyboard,
+  KeyboardOff,
+  List,
+  TextCursorInput,
+} from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -34,12 +45,24 @@ export function extraKeys(command: boolean): readonly ExtraKey[] {
 
 export const DEFAULT_EXTRA_KEYS: readonly ExtraKey[] = extraKeys(false);
 
+/**
+ * The arrow keys, one key each, in the bar's own row (the owner's phone keys bar, #195): up, down, left and right are
+ * the keys people reach for while the soft keyboard covers the terminal. They read "Arrow left" and so on because the
+ * arrow pad over the terminal names the same keys "Left arrow" (#238); one of the two would otherwise answer twice.
+ */
+export const ARROW_KEYS: readonly ExtraKey[] = [
+  { id: "left", label: <ArrowLeft aria-hidden />, name: "Arrow left" },
+  { id: "up", label: <ArrowUp aria-hidden />, name: "Arrow up" },
+  { id: "down", label: <ArrowDown aria-hidden />, name: "Arrow down" },
+  { id: "right", label: <ArrowRight aria-hidden />, name: "Arrow right" },
+];
+
 export const SWIPE_KEYS: readonly ExtraKey[] = [
+  { id: "alt", label: "alt", name: "Option", modifier: true },
   { id: "tilde", label: "~", name: "Tilde" },
   { id: "pipe", label: "|", name: "Vertical bar" },
   { id: "slash", label: "/", name: "Slash" },
   { id: "dash", label: "-", name: "Hyphen" },
-  { id: "alt", label: "alt", name: "Option", modifier: true },
 ];
 
 /** A mousedown that would move focus off the terminal would also drop the soft keyboard. */
@@ -54,6 +77,10 @@ const latchedKey =
 const idleKey = "text-foreground active:bg-selected";
 
 const symbol = (entry: ExtraKey): boolean => typeof entry.label === "string" && entry.label.length === 1;
+
+const divider = (height: string): ReactElement => (
+  <span aria-hidden className={cn("mx-1 w-px shrink-0 bg-border", height)} />
+);
 
 type Fade = "none" | "start" | "end" | "both";
 
@@ -94,6 +121,12 @@ export interface ExtraKeysBarProps {
   readonly padOpen?: boolean;
   readonly onPad?: () => void;
   readonly onPaste?: () => void;
+  /**
+   * The input field's toggle: a slot of its own, fixed beside the keyboard key so the two never scroll away. Unset
+   * where there is no field to open (the desktop's keys never show it).
+   */
+  readonly inputBox?: boolean;
+  readonly onInputBox?: () => void;
   readonly onHideKeyboard?: () => void;
   /** The hide button's name: Hide keyboard by default; Hide keys where the bar shows without a soft keyboard. */
   readonly hideLabel?: string;
@@ -104,13 +137,22 @@ export interface ExtraKeysBarProps {
 }
 
 /**
- * The phone's terminal keys, one rounded pill riding on the soft keyboard: modifiers and Tab/Esc on the left (swipe for
- * more, behind an edge fade), then the arrow pad toggle, Paste, Switch session and Hide keyboard. Every key is a 44 pt
- * target, and pressing one leaves the text focus (and so the keyboard) where it was. A latched modifier inverts to
- * solid ink with a bar under its label, so it reads as on in both themes.
+ * The phone's terminal keys, one rounded pill riding on the soft keyboard. Everything that scrolls sits in the row on
+ * the left: the modifiers and Tab/Esc, the arrow keys, the arrow-pad toggle, Switch session and Paste, then the
+ * characters behind a swipe (an edge fade says which way more keys hide). The two slots on the right never scroll:
+ * the input field's toggle and the keyboard's. Every key is a 44 pt target, and pressing one leaves the text focus
+ * (and so the keyboard) where it was. A latched modifier inverts to solid ink with a bar under its label, so it reads
+ * as on in both themes.
  */
 export function ExtraKeysBar(props: ExtraKeysBarProps) {
-  const { keys = DEFAULT_EXTRA_KEYS, swipeKeys = SWIPE_KEYS, latched = [], onKey, padOpen = false } = props;
+  const {
+    keys = DEFAULT_EXTRA_KEYS,
+    swipeKeys = SWIPE_KEYS,
+    latched = [],
+    onKey,
+    padOpen = false,
+    inputBox = false,
+  } = props;
   const [fade, scroller] = useEdgeFade();
   const textKey = (entry: ExtraKey) => {
     const on = latched.includes(entry.id);
@@ -160,11 +202,8 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
           )}
         >
           {keys.map(textKey)}
-          <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-          {swipeKeys.map(textKey)}
-        </div>
-        <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-border" />
-        <div className="flex shrink-0 items-center">
+          {divider("h-5")}
+          {ARROW_KEYS.map(textKey)}
           <button
             type="button"
             aria-label="Arrow keys"
@@ -175,6 +214,7 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
           >
             <GamepadDirectional />
           </button>
+          {props.renderSessions === undefined ? sessions : props.renderSessions(sessions)}
           <button
             type="button"
             aria-label="Paste"
@@ -184,7 +224,23 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
           >
             <ClipboardPaste />
           </button>
-          {props.renderSessions === undefined ? sessions : props.renderSessions(sessions)}
+          {divider("h-5")}
+          {swipeKeys.map(textKey)}
+        </div>
+        {divider("h-6")}
+        <div className="flex shrink-0 items-center">
+          {props.onInputBox === undefined ? null : (
+            <button
+              type="button"
+              aria-label="Type in a field"
+              aria-pressed={inputBox}
+              onMouseDown={keepFocus}
+              onClick={props.onInputBox}
+              className={cn(key, inputBox ? latchedKey : idleKey)}
+            >
+              <TextCursorInput />
+            </button>
+          )}
           <button
             type="button"
             aria-label={props.hideLabel ?? "Hide keyboard"}

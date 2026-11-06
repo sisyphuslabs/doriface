@@ -23,8 +23,12 @@ const FIXED = ["Type in a field", "Hide keyboard"] as const;
 
 test("the row scrolls every key, and the two slots beside it never do", async ({ page }) => {
   await openPhoneTerminal(page);
-  for (const name of SCROLLED) await expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(1);
-  for (const name of FIXED) await expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(0);
+  await Promise.all(
+    SCROLLED.map((name) => expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(1)),
+  );
+  await Promise.all(
+    FIXED.map((name) => expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(0)),
+  );
   await expectTouchTargets(keysBar(page));
 
   const row = scroller(page);

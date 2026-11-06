@@ -1,8 +1,9 @@
 import type { HcConnection, TerminalStream } from "@doriface/client";
-import { cn, useToastManager } from "@doriface/ui";
+import { cn, MenuItem, PointMenu, useToastManager } from "@doriface/ui";
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
 import type { GhosttyCore } from "@wterm/ghostty";
 import { Terminal, type TerminalHandle, type WTerm } from "@wterm/react";
+import { ClipboardPaste, Copy } from "lucide-react";
 import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useScreenAwake } from "../device/keep-awake.ts";
 import { terminalConfigStore, useTerminalConfig } from "../ghostty/config-store.ts";
@@ -12,17 +13,21 @@ import { keyboardIsIdle, mayTakeFocus } from "./may-take-focus.ts";
 import { openFailure } from "./open-failure.ts";
 import { PasteDialog } from "./paste-dialog.tsx";
 import { CursorResets } from "./cursor-reset.ts";
+import { copiedText } from "./copied-text.ts";
+import { heldSelection } from "./held-selection.ts";
+import { type Point } from "./long-press.ts";
 import { KittyPngTranscoder } from "./kitty-png.ts";
 import { OutputPacer } from "./output-pacer.ts";
 import { readThemeColors } from "./theme-colors.ts";
 import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
+import { useLongPressSelect } from "./use-long-press-select.ts";
 import { useSelectionCells } from "./use-selection-cells.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import { Ended } from "./ended.tsx";
-import { type TerminalPort, useTerminalPort } from "./terminal-port.ts";
+import { type TerminalPort, pasteInto, useTerminalPort } from "./terminal-port.ts";
 import { Unopened } from "./unopened.tsx";
 import { JumpToBottom, scrollTerminal, TerminalScrollbar, useTerminalScroll } from "./terminal-scroll.tsx";
 import { QuietBusy } from "./quiet-busy.tsx";
@@ -100,6 +105,8 @@ export function TerminalView(props: TerminalViewProps) {
   /** The first attach is unanswered: the pane says it is opening, not a ready shell with nothing in it (#483). */
   const [opening, setOpening] = useState(false);
   const [paste, setPaste] = useState<PendingPaste | null>(null);
+  /** Where a held touch lifted, while its menu of Copy and Paste is open. */
+  const [selectAt, setSelectAt] = useState<Point | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
   const stream = useRef<TerminalStream | null>(null);
   // The program's output reaches the core through this: Kitty images sent as PNG are decoded to RGBA on the way.
@@ -226,7 +233,32 @@ export function TerminalView(props: TerminalViewProps) {
     };
   }, [wt, pacer]);
   useFocusAfterSelect(wt, options.trimCopy);
+  useLongPressSelect(wt, setSelectAt);
   useSelectionCells(wt);
+  const trimCopy = options.trimCopy;
+  const copySelection = useCallback((): void => {
+    const instance = handle.current?.instance;
+    if (instance === null || instance === undefined) return;
+    const held = heldSelection(instance.element);
+    const text = held === null ? (instance.getSelectionText() ?? "") : held.text;
+    if (text === "") return;
+    void navigator.clipboard?.writeText(copiedText(text, trimCopy)).catch(() => undefined);
+  }, [trimCopy]);
+  const pasteClipboard = useCallback((): void => {
+    const instance = handle.current?.instance;
+    if (instance === null || instance === undefined) return;
+    // A browser without the clipboard API throws instead of rejecting, so the call runs inside the promise chain.
+    void Promise.resolve()
+      .then(() => navigator.clipboard.readText())
+      .then(
+        (text) => pasteInto(instance.element, text),
+        () => toasts.add({ type: "warning", title: "Paste needs access to the clipboard" }),
+      );
+  }, [toasts]);
+  const closeSelectionMenu = useCallback((): void => {
+    setSelectAt(null);
+    handle.current?.focus();
+  }, []);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
   const program = useRef(pid);
@@ -439,6 +471,26 @@ export function TerminalView(props: TerminalViewProps) {
           setPaste(null);
         }}
       />
+      <PointMenu at={selectAt} onClose={closeSelectionMenu} label="Selected text">
+        <MenuItem
+          icon={<Copy aria-hidden />}
+          onClick={() => {
+            copySelection();
+            closeSelectionMenu();
+          }}
+        >
+          Copy
+        </MenuItem>
+        <MenuItem
+          icon={<ClipboardPaste aria-hidden />}
+          onClick={() => {
+            pasteClipboard();
+            closeSelectionMenu();
+          }}
+        >
+          Paste
+        </MenuItem>
+      </PointMenu>
     </div>
   );
 }

@@ -10,7 +10,7 @@ export interface TerminalPort {
   readonly focus: () => void;
 }
 
-function pasteInto(element: HTMLElement, text: string): void {
+export function pasteInto(element: HTMLElement, text: string): void {
   const data = new DataTransfer();
   data.setData("text/plain", text);
   const target = element.querySelector("textarea") ?? element;

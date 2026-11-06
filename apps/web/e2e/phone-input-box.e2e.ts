@@ -10,7 +10,7 @@ const value = (page: Page) => page.locator("[data-terminal]").evaluate((el) => e
 /** Types a Hangul syllable the way the phone's keyboard composes one: the input method owns it until it commits. */
 async function compose(page: Page, syllable: string): Promise<void> {
   await page.evaluate((text) => {
-    const input = document.querySelector("form textarea");
+    const input = document.querySelector('textarea[aria-label="Type into the terminal"]');
     if (!(input instanceof HTMLTextAreaElement)) throw new Error("the input field is not on the page");
     input.focus();
     input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "" }));
@@ -22,7 +22,9 @@ async function compose(page: Page, syllable: string): Promise<void> {
   }, syllable);
 }
 
-test("the field takes Korean through the input method, and Send writes the line and presses Return", async ({ page }) => {
+test("the field takes Korean through the input method, and Send writes the line and presses Return", async ({
+  page,
+}) => {
   const terminal = await openPhoneTerminal(page);
   await key(page, "Type in a field").click();
   await expect(field(page)).toBeVisible();
@@ -31,8 +33,8 @@ test("the field takes Korean through the input method, and Send writes the line 
   await page.keyboard.type("echo 인사-$((6*7))");
   await expect(field(page)).toHaveValue("echo 인사-$((6*7))");
   await key(page, "Send").click();
-  await expect(terminal).toContainText("인사-42", { timeout: 15_000 });
   await expect(field(page)).toHaveValue("");
+  await expect(terminal).toContainText("인사-42", { timeout: 15_000 });
   await expect(field(page)).toBeFocused();
 });
 

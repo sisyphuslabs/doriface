@@ -167,6 +167,13 @@ function selectionRules(config: TerminalConfig): string[] {
   if (foreground !== "") declarations["color"] = cellColor(foreground, "");
   return [
     block(`${T} ::selection`, declarations),
+    // A held finger selects the word under it (long-press.ts, #195), and the browser's own long-press selection and
+    // callout would take the same gesture: under a coarse pointer the rows are not natively selectable, and the app
+    // builds, paints and copies the range itself. A mouse keeps its drag selection.
+    block(`@media (pointer: coarse) { ${T} .term-row`, {
+      "user-select": "none",
+      "-webkit-touch-callout": "none",
+    }).replace(/\n$/, " }\n"),
     // Inside rows the selected cells are painted whole by use-selection-cells.ts, as Ghostty does; the browser's
     // highlight would follow each glyph's box instead (#410). A cell with a background of its own is drawn over that
     // layer, so it keeps the browser's highlight.

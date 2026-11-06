@@ -9,6 +9,7 @@ import { TerminalView } from "../terminal/terminal-view.tsx";
 import { DictateButton } from "../voice/dictate-button.tsx";
 import { useDictation } from "../voice/use-dictation.ts";
 import { VoiceDock } from "../voice/voice-dock.tsx";
+import { InputBox, INPUT_BOX_HEIGHT } from "./input-box.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
@@ -53,6 +54,7 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
   const [keysShown, setKeysShown] = useState(false);
   const [menu, setMenu] = useState(false);
   const [pad, setPad] = useState(false);
+  const [inputBox, setInputBox] = useState(false);
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
   const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
   // The view that showed its program had already ended; the keys have nothing to send to under it.
@@ -79,6 +81,11 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
   const keysOpen = !ended && !dictating && (keyboard.up || menu || (mouseOnly && keysShown));
+  // The field rides with the keys: with the bar gone there is nothing to type into it through, so it goes too.
+  useEffect(() => {
+    if (!keysOpen) setInputBox(false);
+  }, [keysOpen]);
+  const inputOpen = keysOpen && inputBox;
   // The tabs bar takes the bottom while nothing rides there: the keys bar, with the soft keyboard, and dictation do.
   const tabs = useSpaceTabs(terminals, terminal.address);
   const tabsBar = !keysOpen && !dictating && tabs.some((tab) => tab.includes(terminal.address));
@@ -110,7 +117,15 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
       <div
         ref={setScope}
         className="relative flex min-h-0 flex-1 flex-col"
-        style={keysOpen ? { paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})` } : undefined}
+        style={
+          keysOpen
+            ? {
+                paddingBottom: inputOpen
+                  ? `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT} + ${INPUT_BOX_HEIGHT})`
+                  : `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})`,
+              }
+            : undefined
+        }
       >
         {offline ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
         {offline ? (
@@ -134,6 +149,15 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
             onEnded={() => setEndedView(viewKey)}
           />
         )}
+        {inputOpen ? (
+          // Inside the scope the soft keyboard's own detection sees this field, so the bar stays with the keyboard it
+          // opened: a field outside it reads as the terminal losing the keyboard (#664).
+          <InputBox
+            className="absolute inset-x-0 z-10"
+            style={{ bottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})` }}
+            onSend={(text) => port.current?.send(`${text}\r`)}
+          />
+        ) : null}
       </div>
       {tabsBar ? (
         <PhoneTabSwitcher
@@ -159,20 +183,24 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
           {...(keyboard.inset > 0 ? { style: { marginBottom: `${keyboard.inset}px` } } : {})}
         />
       ) : offline || ended ? null : (
-        <PhoneKeys
-          port={port}
-          open={keysOpen}
-          inset={keyboard.inset}
-          host={host}
-          sticky={sticky}
-          terminals={terminals}
-          current={terminal.address}
-          onOpen={onOpen}
-          onMenu={setMenu}
-          pad={pad}
-          onPad={setPad}
-          {...(mouseOnly ? { onKeys: setKeysShown } : {})}
-        />
+        <>
+          <PhoneKeys
+            port={port}
+            open={keysOpen}
+            inset={keyboard.inset}
+            host={host}
+            sticky={sticky}
+            terminals={terminals}
+            current={terminal.address}
+            onOpen={onOpen}
+            onMenu={setMenu}
+            pad={pad}
+            onPad={setPad}
+            inputBox={inputBox}
+            onInputBox={setInputBox}
+            {...(mouseOnly ? { onKeys: setKeysShown } : {})}
+          />
+        </>
       )}
     </div>
   );

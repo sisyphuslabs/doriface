@@ -2,6 +2,7 @@ import type { WTerm } from "@wterm/react";
 import { useEffect } from "react";
 import { copiedText } from "./copied-text.ts";
 import { heldSelection, holdSelection, releaseSelection } from "./held-selection.ts";
+import { longPressed } from "./long-press.ts";
 import { mayTakeFocus } from "./may-take-focus.ts";
 
 /** Keys that leave the held selection for a copy that is about to read it. */
@@ -23,6 +24,8 @@ function copies(event: KeyboardEvent): boolean {
  *
  * A double or triple click selects a word or line in wterm's own click handler, after that mouseup, and wterm blurs its
  * input as it does: the same restore runs again on that click (#516). wterm's handler was added first, so it has run.
+ * A held finger's selection (use-long-press-select.ts, #195) is not the press's to drop: the mouse events a tap
+ * synthesizes after it arrive with the range already held, and they leave it alone.
  */
 export function useFocusAfterSelect(wt: WTerm | null, trimCopy: boolean): void {
   useEffect(() => {
@@ -34,6 +37,7 @@ export function useFocusAfterSelect(wt: WTerm | null, trimCopy: boolean): void {
       const selection = document.getSelection();
       const range = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
       wt.focus();
+      if (longPressed(element)) return;
       keepPressSelection(document.getSelection(), element, range);
     };
     const press = (event: MouseEvent): void => {
@@ -44,7 +48,14 @@ export function useFocusAfterSelect(wt: WTerm | null, trimCopy: boolean): void {
     };
     const drop = (): void => releaseSelection(element);
     const buttonDown = (event: MouseEvent): void => {
-      if (event.button === 0) drop();
+      if (event.button !== 0 || longPressed(element)) return;
+      // A press in a menu or a dialog is acting on the selection its items show, not leaving it.
+      if (
+        event.target instanceof Element &&
+        event.target.closest("[role=menu],[role=dialog],[role=alertdialog]") !== null
+      )
+        return;
+      drop();
     };
     const copy = (event: ClipboardEvent): void => {
       const held = heldSelection(element);
