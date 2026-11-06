@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.5 - 2026-11-07
+
 ### Desktop window
 
 - The desktop window reopens where it was left even after a crash, a force quit or a kill: its position and size are saved once a move or a resize comes to rest, not only when the window closes. (#803)
