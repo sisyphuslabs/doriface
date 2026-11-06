@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { connectionStore } from "./connection/store.ts";
+import { CrashScreen } from "./crash/crash-screen.tsx";
 import { TerminalsOnScreen } from "./device/keep-awake.ts";
 import { ActionsPaused } from "./keys/dispatcher.ts";
 import { keyboardIsIdle, mayTakeFocus } from "./terminal/may-take-focus.ts";
@@ -60,7 +61,11 @@ const routes = [
 capturePairingLink();
 addEventListener("hashchange", () => capturePairingLink());
 
-export const router = createRouter({ routeTree: root.addChildren(routes) });
+// A screen that throws while it renders shows the crash screen with Try again, instead of the router's bare fallback.
+export const router = createRouter({
+  routeTree: root.addChildren(routes),
+  defaultErrorComponent: ({ error, reset }) => <CrashScreen error={error} onRetry={reset} />,
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

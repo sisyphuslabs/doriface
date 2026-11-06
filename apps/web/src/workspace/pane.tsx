@@ -5,6 +5,7 @@ import type { Axis } from "@doriface/protocol/layout";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
+import { RegionBoundary } from "../crash/region-boundary.tsx";
 import type { TerminalEnd } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
@@ -137,25 +138,31 @@ export function Pane(props: PaneProps) {
       ) : null}
       {/* The terminal's own box: the approval banner pins to its top, under a split pane's header, never over it. */}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        {terminal.offline === true ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
-        {terminal.offline === true && machine !== undefined ? (
-          <MachineOffline machine={machine} />
-        ) : (
-          // A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh.
-          <TerminalView
-            key={terminal.pid ?? undefined}
-            connection={connection}
-            address={terminal.address}
-            pid={terminal.pid ?? null}
-            live={terminal.state === "live"}
-            focused={focused}
-            claimed={claimed}
-            label={`${title} output`}
-            onEnd={onEnd}
-            onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
-            onPort={onPort}
-          />
-        )}
+        <RegionBoundary
+          region={`pane:${terminal.address}`}
+          title="This terminal could not be drawn"
+          detail="The program keeps running on the host."
+        >
+          {terminal.offline === true ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
+          {terminal.offline === true && machine !== undefined ? (
+            <MachineOffline machine={machine} />
+          ) : (
+            // A restarted program (a kept terminal's loss) has a new pid: its view attaches to it afresh.
+            <TerminalView
+              key={terminal.pid ?? undefined}
+              connection={connection}
+              address={terminal.address}
+              pid={terminal.pid ?? null}
+              live={terminal.state === "live"}
+              focused={focused}
+              claimed={claimed}
+              label={`${title} output`}
+              onEnd={onEnd}
+              onEnded={() => onEnded(terminal.address, terminal.pid ?? null)}
+              onPort={onPort}
+            />
+          )}
+        </RegionBoundary>
       </div>
       {dock}
     </section>

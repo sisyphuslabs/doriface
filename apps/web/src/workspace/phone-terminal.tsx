@@ -1,6 +1,7 @@
 import type { HcConnection } from "@doriface/client";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
+import { RegionBoundary } from "../crash/region-boundary.tsx";
 import { useMouseOnly, useSoftKeyboard } from "../terminal/keyboard-inset.ts";
 import { useHostPlatform } from "../terminal/host-os.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
@@ -127,28 +128,34 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
             : undefined
         }
       >
-        {offline ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
-        {offline ? (
-          <MachineOffline machine={machine} />
-        ) : (
-          <TerminalView
-            key={viewKey}
-            connection={connection}
-            address={terminal.address}
-            pid={terminal.pid ?? null}
-            live={terminal.state === "live"}
-            focused
-            label={`${title} output`}
-            transformInput={sticky.transform}
-            onPort={onPort}
-            // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
-            onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
-            // The header already has Back to agents; this one closes the ended session.
-            closeLabel="Close"
-            {...(keysControls === null ? {} : { jumpClearance: keysControls })}
-            onEnded={() => setEndedView(viewKey)}
-          />
-        )}
+        <RegionBoundary
+          region={`pane:${terminal.address}`}
+          title="This terminal could not be drawn"
+          detail="The program keeps running on the host."
+        >
+          {offline ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
+          {offline ? (
+            <MachineOffline machine={machine} />
+          ) : (
+            <TerminalView
+              key={viewKey}
+              connection={connection}
+              address={terminal.address}
+              pid={terminal.pid ?? null}
+              live={terminal.state === "live"}
+              focused
+              label={`${title} output`}
+              transformInput={sticky.transform}
+              onPort={onPort}
+              // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
+              onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}
+              // The header already has Back to agents; this one closes the ended session.
+              closeLabel="Close"
+              {...(keysControls === null ? {} : { jumpClearance: keysControls })}
+              onEnded={() => setEndedView(viewKey)}
+            />
+          )}
+        </RegionBoundary>
         {inputOpen ? (
           // Inside the scope the soft keyboard's own detection sees this field, so the bar stays with the keyboard it
           // opened: a field outside it reads as the terminal losing the keyboard (#664).

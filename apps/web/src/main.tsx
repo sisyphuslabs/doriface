@@ -5,6 +5,9 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { appearanceStore, startAppearance } from "./appearance/appearance.ts";
 import { checkBaseline } from "./baseline.ts";
+import { CrashProbe } from "./crash/crash-probe.ts";
+import { CrashScreen } from "./crash/crash-screen.tsx";
+import { RenderBoundary } from "./crash/render-boundary.tsx";
 import { connectionStore } from "./connection/store.ts";
 import {
   closeDesktopWindow,
@@ -115,15 +118,19 @@ function Keys() {
   return null;
 }
 
+// Outside every provider: a render error that reaches here, from a provider too, shows the crash screen, not a blank window.
 createRoot(container).render(
   <StrictMode>
-    <TooltipProvider>
-      <ToastProvider>
-        <TerminalStyle />
-        <Keys />
-        <RouterProvider router={router} />
-        <ToastViewport />
-      </ToastProvider>
-    </TooltipProvider>
+    <RenderBoundary fallback={(error) => <CrashScreen error={error} />}>
+      <CrashProbe region="app" />
+      <TooltipProvider>
+        <ToastProvider>
+          <TerminalStyle />
+          <Keys />
+          <RouterProvider router={router} />
+          <ToastViewport />
+        </ToastProvider>
+      </TooltipProvider>
+    </RenderBoundary>
   </StrictMode>,
 );

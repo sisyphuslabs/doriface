@@ -13,6 +13,8 @@ import { MachinesSection } from "../settings/machines-section.tsx";
 import { NotificationsSection } from "../settings/notifications-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 import { UpdateRow } from "../settings/update-row.tsx";
+import { CrashProbe } from "../crash/crash-probe.ts";
+import { RegionBoundary } from "../crash/region-boundary.tsx";
 import { usePendingUpdate } from "../update/update-store.ts";
 import { useCloseSettings } from "../settings/use-close-settings.ts";
 import { VoiceSection } from "../settings/voice-section.tsx";
@@ -54,6 +56,7 @@ export function SettingsRoute() {
   );
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-background pt-(--safe-top) pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) md:flex-row">
+      <CrashProbe region="settings" />
       <Tabs value={section} onValueChange={(value: SectionId) => setSection(value)} className="md:hidden">
         <div data-titlebar className="flex items-center gap-1 pt-3 pr-2 pb-1 pl-[var(--titlebar-inset-start,0.5rem)]">
           {back}
@@ -96,53 +99,60 @@ export function SettingsRoute() {
       </nav>
       <ScrollArea slot="settings-body" className="flex-1">
         <div className="flex max-w-2xl flex-col gap-8 px-4 py-6 md:px-8">
-          {update === null ? null : (
-            <Group title="Update">
-              <UpdateRow update={update} />
-            </Group>
-          )}
-          {section === "connections" ? (
-            <>
-              <Group title="Connection">
-                <ConnectionSection />
+          <RegionBoundary
+            key={section}
+            region="settings-section"
+            title="This section could not be drawn"
+            detail="The other sections still open from the list."
+          >
+            {update === null ? null : (
+              <Group title="Update">
+                <UpdateRow update={update} />
               </Group>
-              <Group title="Paired devices">
-                <DevicesSection />
+            )}
+            {section === "connections" ? (
+              <>
+                <Group title="Connection">
+                  <ConnectionSection />
+                </Group>
+                <Group title="Paired devices">
+                  <DevicesSection />
+                </Group>
+              </>
+            ) : section === "mesh" ? (
+              <Group title="Mesh">
+                <MeshSection />
               </Group>
-            </>
-          ) : section === "mesh" ? (
-            <Group title="Mesh">
-              <MeshSection />
-            </Group>
-          ) : section === "machines" ? (
-            <Group title="Machines">
-              <MachinesSection />
-            </Group>
-          ) : section === "appearance" ? (
-            <Group title="Appearance">
-              <AppearanceSection />
-            </Group>
-          ) : section === "device" ? (
-            <Group title="This device">
-              <DeviceSection />
-            </Group>
-          ) : section === "terminal" ? (
-            <Group title="Terminal">
-              <TerminalSection />
-            </Group>
-          ) : section === "notifications" ? (
-            <Group title="Notifications">
-              <NotificationsSection />
-            </Group>
-          ) : section === "keybindings" ? (
-            <Group title="Keybindings">
-              <KeybindingsSection />
-            </Group>
-          ) : (
-            <Group title="Voice input">
-              <VoiceSection />
-            </Group>
-          )}
+            ) : section === "machines" ? (
+              <Group title="Machines">
+                <MachinesSection />
+              </Group>
+            ) : section === "appearance" ? (
+              <Group title="Appearance">
+                <AppearanceSection />
+              </Group>
+            ) : section === "device" ? (
+              <Group title="This device">
+                <DeviceSection />
+              </Group>
+            ) : section === "terminal" ? (
+              <Group title="Terminal">
+                <TerminalSection />
+              </Group>
+            ) : section === "notifications" ? (
+              <Group title="Notifications">
+                <NotificationsSection />
+              </Group>
+            ) : section === "keybindings" ? (
+              <Group title="Keybindings">
+                <KeybindingsSection />
+              </Group>
+            ) : (
+              <Group title="Voice input">
+                <VoiceSection />
+              </Group>
+            )}
+          </RegionBoundary>
         </div>
       </ScrollArea>
     </div>

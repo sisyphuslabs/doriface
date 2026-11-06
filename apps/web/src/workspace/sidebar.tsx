@@ -3,6 +3,7 @@ import { IconButton, SidebarFooter, SidebarFooterItem, cn } from "@doriface/ui";
 import { Link } from "@tanstack/react-router";
 import { PanelLeftOpen, Plus, Search, Settings } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { RegionBoundary } from "../crash/region-boundary.tsx";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { usePendingUpdate } from "../update/update-store.ts";
 import { SidebarLists } from "./agent-lists.tsx";
@@ -76,9 +77,15 @@ export function Sidebar({ terminals, active, onOpen, onPalette }: SidebarProps) 
           </>
         )}
       </div>
-      <RovingLists className="flex min-h-0 flex-1 flex-col">
-        <SidebarLists terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
-      </RovingLists>
+      <RegionBoundary
+        region="sidebar"
+        title="The sidebar could not be drawn"
+        detail="Your terminals keep running and take input."
+      >
+        <RovingLists className="flex min-h-0 flex-1 flex-col">
+          <SidebarLists terminals={terminals} active={active} onOpen={onOpen} rail={rail} />
+        </RovingLists>
+      </RegionBoundary>
       <SidebarFooter rail={rail}>
         {rail ? (
           <SidebarFooterItem
