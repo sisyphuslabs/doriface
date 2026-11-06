@@ -66,10 +66,7 @@ test("right-clicking an agent row in the app opens its menu, and Rename… asks 
   const sidebar = page.getByRole("complementary", { name: "Workspace" });
   await expect(sidebar).toBeVisible({ timeout: 30_000 });
   await pressNewTab(page, { timeout: 30_000 });
-  const row = sidebar
-    .getByRole("region", { name: "Agents", exact: true })
-    .locator("button:not([aria-label])")
-    .first();
+  const row = sidebar.getByRole("region", { name: "Agents", exact: true }).locator("button:not([aria-label])").first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   const box = await row.boundingBox();
   if (box === null) throw new Error("no agent row on screen");
