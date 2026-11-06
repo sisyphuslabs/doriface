@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "@doriface/ui/styles/tokens.css";
+@import "@doriface/ui/styles/base.css";
+
+@source "../../../../packages/ui/src";
+@source "./";
+
+/* An iPhone 14's portrait safe areas, as the showcase's phone frames use. */
+[data-insets="phone"] {
+  --safe-top: 47px;
+  --safe-bottom: 34px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}

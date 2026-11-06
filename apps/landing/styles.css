@@ -220,6 +220,10 @@ pre {
   border-radius: var(--radius-sm);
 }
 
+.nowrap {
+  white-space: nowrap;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -761,6 +765,17 @@ pre {
   text-wrap: balance;
 }
 
+.hero__sub {
+  max-width: 30ch;
+  margin: var(--space-5) 0 0;
+  font-size: clamp(1.375rem, 1.05rem + 1.3vw, 2.125rem);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--ink-2);
+  text-wrap: balance;
+}
+
 .hero__lede {
   max-width: 36rem;
   margin: 0;
@@ -968,6 +983,71 @@ pre {
   height: 6px;
   border-radius: 50%;
   background: var(--ok);
+}
+
+/* 4.1b Live app mockups: the app's components in lazy iframes, scaled to fit */
+.app-stage {
+  position: relative;
+  margin-top: var(--space-8);
+}
+
+.app-desktop {
+  margin: 0;
+}
+
+.live {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--w) / var(--h);
+  overflow: hidden;
+  background: var(--term-bg);
+}
+
+.live iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--w) * 1px);
+  height: calc(var(--h) * 1px);
+  border: 0;
+  transform: scale(var(--scale, 1));
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.app-phone {
+  width: min(300px, 78vw);
+  margin: var(--space-6) auto 0;
+  padding: 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 46px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-frame);
+}
+
+.app-phone .live {
+  border-radius: 37px;
+}
+
+@media (min-width: 900px) {
+  .app-stage {
+    padding-right: 120px;
+    padding-bottom: 64px;
+  }
+
+  .app-phone {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 280px;
+    margin: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-desktop {
+    display: none;
+  }
 }
 
 /* 4.2 Section index (herdr's README.md list) */
@@ -1633,9 +1713,10 @@ pre {
 
 @media (min-width: 1080px) {
   .hero__row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 34rem) auto;
+    justify-content: space-between;
     align-items: end;
-    gap: var(--space-9);
+    gap: var(--space-8);
   }
 
   .hero__side .stats {

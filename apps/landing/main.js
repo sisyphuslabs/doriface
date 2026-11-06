@@ -62,9 +62,43 @@ function loopWhileVisible(element, scene, reset) {
   reset();
 }
 
+/** Tells a live mockup which theme the page pins; "system" lets it follow prefers-color-scheme like the page. */
+function postTheme(frame, choice) {
+  frame.contentWindow?.postMessage({ theme: choice === "system" ? null : choice }, location.origin);
+}
+
+function setupLive() {
+  const resize = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const box = entry.target;
+      const width = Number(getComputedStyle(box).getPropertyValue("--w"));
+      box.style.setProperty("--scale", String(entry.contentRect.width / width));
+    }
+  });
+  // The mockups carry React and the app's stylesheet: start loading one only when it comes within a screen of view.
+  const load = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const frame = entry.target.querySelector("iframe");
+        frame.src = frame.dataset.src;
+        load.unobserve(entry.target);
+      }
+    },
+    { rootMargin: "50% 0px" },
+  );
+  for (const box of document.querySelectorAll(".live")) {
+    resize.observe(box);
+    load.observe(box);
+    const frame = box.querySelector("iframe");
+    frame.addEventListener("load", () => postTheme(frame, document.documentElement.dataset.theme ?? "system"));
+  }
+}
+
 function setupTheme() {
   const buttons = [...document.querySelectorAll("[data-theme-choice]")];
   const apply = (choice) => {
+    for (const frame of document.querySelectorAll(".live iframe")) postTheme(frame, choice);
     if (choice === "system") {
       delete document.documentElement.dataset.theme;
       localStorage.removeItem(STORAGE_KEY);
@@ -383,6 +417,7 @@ function setupCopy() {
 }
 
 setupTheme();
+setupLive();
 setupReveal();
 setupHeroScene();
 setupWire();
