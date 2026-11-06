@@ -6,20 +6,34 @@
 
 - A phone can join a host by pointing its camera at the invite QR instead of typing the code: only a pairing link is accepted, an unrecognised code says so instead of looking for a host, and the camera stops as soon as the scan ends, is cancelled, or the page is left. (#855)
 
+### Workspace
+
+- An agent row shows how far its own todo list has got, as done/total (2/4), read from the list the agent draws: Claude Code's task list when its task tools are on (a long list's folded line counts too), and omp's TODO list with its phases added up. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
+- The sidebar has a filter: the funnel button, Cmd+Alt+F on macOS or Ctrl+Alt+F elsewhere opens a field that narrows machines, spaces and agents to the rows whose shown labels match what is typed (letters in order, any case). The selected space and agent stay as context, a folded machine opens to show its matches, and Escape clears the query, then closes the field and returns to the terminal. (#673)
+
 ### Phone
 
 - On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
 - On a phone, an agent row shows its "..." alone, with Pin to top as its first item, so the summary, machine and age have room. (#950)
+
+### The pairing pages name the app host
+
+- Every page that tells someone where a phone lands after scanning the pairing QR code now names **https://app.doriterm.com**: the getting-started and install guides, the setup skill's instruction, and the landing page's illustrated panel, which still showed the older `doriface.omo.dev` address, one that keeps serving the same build. The desktop app and the web app already hand out the new one. (#977)
 
 ### Web app
 
 - A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
 - A machine's terminal count and a space's tab count stay on one line however many digits they have: on a phone, "19" no longer breaks into "1" above "9" in the Spaces list. (#899)
 
+### Korean input after selecting text
+
+- Typing Hangul right after dragging across a terminal's text composes again on macOS instead of arriving one bare jamo per keystroke: the terminal's input took focus while the drag's selection was still in place, and emptying it afterwards left the input focused with no caret, which is the state the Korean input method refuses to compose in. The selection is emptied first now, and the input's caret comes back with the focus. The selection stays held and painted, and Cmd+C still copies it. (#953)
+
 ### Settings
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
 - On a phone, the Settings tab strip's arrows that page to more sections are a full 44 pt tap each. (#900)
+- With Settings open as a dialog, the band over the window's buttons still moves the desktop window, even when Settings is the first screen and the workspace behind has drawn nothing yet. (#969)
 
 ### Pairing from a phone
 
