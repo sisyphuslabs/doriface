@@ -80,8 +80,8 @@ test.describe("an Android phone with a Mac host", () => {
     // The runner may be a Linux machine: name the host's OS so this asserts the host's keys, not the runner's.
     await fakeHostOs(page, "darwin");
     await openSettings(page);
-    const names = await barNames(hero(page));
-    expect(names).toContain("Command");
+    // The host's OS arrives over the connection after the page draws; until then the bar is the generic one.
+    await expect.poll(() => barNames(hero(page)), { timeout: 10_000 }).toContain("Command");
     await page.getByRole("button", { name: /^Keys/ }).click();
     const picker = page.getByRole("dialog", { name: "Add keys" });
     await expect(picker.getByRole("button", { name: "Command" })).toBeVisible();
