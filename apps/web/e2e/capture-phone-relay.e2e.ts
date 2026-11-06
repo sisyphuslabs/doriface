@@ -22,8 +22,9 @@ test("a phone session through the production relay", async ({ browser }) => {
   try {
     await page.goto(`/pair${link}`);
     await page.getByRole("button", { name: "They match" }).click({ timeout: 60_000 });
+    await page.getByRole("link", { name: "Open terminals" }).click({ timeout: 90_000 });
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 60_000 });
-    await page.getByRole("banner").getByRole("button", { name: "New tab" }).click();
+    await page.getByRole("button", { name: "New tab" }).click({ timeout: 30_000 });
     const terminal = page.locator("[data-terminal]");
     await expect(terminal).toContainText("$", { timeout: 90_000 });
     await page.keyboard.type("printf 'relay-%s\\n' 'alpha-line more'\r");
@@ -50,10 +51,16 @@ test("a phone session through the production relay", async ({ browser }) => {
     await shot("select");
     await page.getByRole("menu", { name: "Selected text" }).getByRole("menuitem", { name: "Copy" }).click();
 
-    await page.evaluate(() => navigator.clipboard.writeText("붙여넣기-확인"));
+    await page.evaluate(() => navigator.clipboard.writeText("한글붙여넣기"));
     await key(page, "Paste").click();
-    await expect(terminal).toContainText("붙여넣기-확인", { timeout: 30_000 });
     await shot("paste");
+    await page.keyboard.press("Enter");
+    await expect(terminal).toContainText("command not found", { timeout: 30_000 });
+    await page.keyboard.type("printf '<%s>\\n' ");
+    await key(page, "Paste").click();
+    await page.keyboard.press("Enter");
+    await expect(terminal).toContainText("<한글붙여넣기>", { timeout: 30_000 });
+    await shot("paste-split");
   } finally {
     await context.close();
   }
