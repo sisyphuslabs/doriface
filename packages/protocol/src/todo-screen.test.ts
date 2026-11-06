@@ -55,6 +55,15 @@ describe("readTodoProgress: Claude Code's task list", () => {
     expect(readTodoProgress("claude-code", screen.join("\n"))).toEqual({ done: 2, total: 3 });
   });
 
+  test.each([
+    "✻ Doing step 6… (1m 21s · ↓ 3.2k tokens)",
+    "✻ Doing step 6… (1h 2m 3s · ↓ 3.2k tokens)",
+    "✻ Doing step 6… (esc to interrupt · 1m 43s · ↓ 3.2k tokens)",
+  ])("a turn past a minute keeps its list: %s", (spinner) => {
+    const screen = [spinner, "  ⎿  ✔ First", "     ✔ Second", "     ◼ Third", "     ◻ Fourth", "─".repeat(20), "❯ "];
+    expect(readTodoProgress("claude-code", screen.join("\n"))).toEqual({ done: 2, total: 4 });
+  });
+
   test("check marks in the agent's reply are not a task list", () => {
     const screen = [
       "❯ Do the task.",

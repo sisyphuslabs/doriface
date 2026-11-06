@@ -12,8 +12,11 @@ const CLAUDE_ROW = /^\s*(?:⎿\s+)?([✔◼◻])\s+\S/u;
 const CLAUDE_FOLD = /^\s*…\s*\+(.+)$/u;
 /** The count line over the list once the turn is over: `4 tasks (2 done, 1 in progress, 1 open)`. */
 const CLAUDE_COUNT = /^\s*(\d+) tasks? \((\d+) done\b/u;
-/** The spinner line the list hangs off while the agent works: `✶ Running the suite… (13s · ↓ 162 tokens)`. */
-const CLAUDE_SPINNER = /^\S\s.*…\s*\(\d+s\b/u;
+/**
+ * The spinner line the list hangs off while the agent works: `✶ Running the suite… (13s · ↓ 162 tokens)`. Its timer can
+ * sit anywhere in the parentheses and grows past a minute: `(1m 21s · …)`, `(esc to interrupt · 1h 2m 3s · …)`.
+ */
+const CLAUDE_SPINNER = /^\S\s.*…\s*\([^)]*\b\d+s\b/u;
 /** The list's first row while the agent works, hung off the spinner line. */
 const CLAUDE_HUNG_ROW = /^\s*⎿\s+[✔◼◻]\s/u;
 const DONE_WORDS = /^(?:completed|done)$/u;
