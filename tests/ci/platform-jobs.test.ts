@@ -29,10 +29,12 @@ test("the desktop, Windows and macOS jobs run only on a push to dev", () => {
     expect.arrayContaining(["desktop", "desktop-macos", "windows-private-state"]),
   );
   for (const [id, job] of platformJobs) {
-    expect({ id, runsOnPush: job.if?.includes("github.event_name == 'push'") ?? false }).toEqual({
-      id,
-      runsOnPush: true,
-    });
+    const condition = job.if ?? "";
+    const onlyOnPush =
+      condition.includes("github.event_name == 'push'") &&
+      !condition.includes("||") &&
+      !/pull_request|merge_group/.test(condition);
+    expect({ id, onlyOnPush }).toEqual({ id, onlyOnPush: true });
   }
 });
 
