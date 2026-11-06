@@ -27,7 +27,13 @@ function useBarHost() {
       : state.phase === "connecting" || state.phase === "failed"
         ? state.stale
         : null;
-  return useHostPlatform(live, settings.hostId === "" ? undefined : settings.hostId, state.phase !== "open");
+  // With a live line the core's own record answers, so ask for no machine in particular. Only when there is none does the
+  // name guess run, and it takes the host's name, never its relay id: hostId is derived from a key, not a machine name.
+  return useHostPlatform(
+    live,
+    live === null && settings.hostName !== "" ? settings.hostName : undefined,
+    state.phase !== "open",
+  );
 }
 
 function LinkRow({

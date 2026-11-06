@@ -1,9 +1,10 @@
 import { IconButton, RowDropCaret, RowDropIndicator, rowPlacement, useListDrag } from "@doriface/ui";
-import { ChevronDown, ChevronUp, GripVertical, Minus, Plus } from "lucide-react";
-import { useRef } from "react";
+import { GripVertical, Minus, Plus } from "lucide-react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { specialKeysOn } from "../keybar/catalog.ts";
 import { specialEntries } from "../keybar/entries.ts";
-import { moveKey, removeKey, restoreKey } from "../keybar/operations.ts";
+import { removeKey, restoreKey } from "../keybar/operations.ts";
+import { inVisibleOrder } from "./key-order.ts";
 import type { KeyBarSettings } from "../keybar/settings.ts";
 import { keyBarStore } from "../keybar/store.ts";
 import type { HostPlatform } from "../terminal/keys.ts";
@@ -14,26 +15,61 @@ export interface KeyboardEditProps {
   readonly readOnly: boolean;
 }
 
-const move = (id: string, to: number): void => {
-  void keyBarStore.update((current) => moveKey(current, id, to));
-};
-
-/**
- * Edit mode, as an iOS list editor: the keys in the bar with a red minus and a grip to drag, and the keys left out with
- * a green plus. Nothing here exists while the page is not editing. The earlier and later buttons are the reorder path
- * for anyone who cannot drag, since a row that only moves under a pointer is not reachable by keyboard or switch control.
- */
 export function KeyboardEdit({ settings, host, readOnly }: KeyboardEditProps) {
   const list = useRef<HTMLUListElement | null>(null);
   const shown = specialEntries(settings, host);
   const ids = shown.map((entry) => entry.id);
   const { drag, settle, onPointerDown, onClickCapture } = useListDrag(list, ids, {
-    onMove: readOnly ? undefined : move,
+    onMove: readOnly ? undefined : (id, to) => reorder(id, to),
   });
   const removed = specialKeysOn(host).filter((entry) => !settings.keys.includes(entry.id));
+  const [picked, setPicked] = useState<string | null>(null);
+  const [said, setSaid] = useState("");
+  const grips = useRef(new Map<string, HTMLButtonElement>());
+  const reorder = (id: string, to: number): void => {
+    const ordered = shown.map((entry) => entry.id);
+    const from = ordered.indexOf(id);
+    if (from < 0 || to < 0 || to >= ordered.length || from === to) return;
+    const next = [...ordered];
+    next.splice(from, 1);
+    next.splice(to, 0, id);
+    void keyBarStore.update((current) => inVisibleOrder(current, next));
+    // The row this grip belongs to moved in the DOM, which can drop focus: put it back so the next arrow key still lands
+    // on the grip the person was holding, and Escape keeps cancelling the move instead of closing Settings.
+    requestAnimationFrame(() => grips.current.get(id)?.focus());
+  };
+  const onGripKey = (event: KeyboardEvent<HTMLButtonElement>, id: string, index: number, name: string): void => {
+    if (event.key === "Escape") {
+      if (picked === null) return;
+      event.preventDefault();
+      setPicked(null);
+      setSaid(`${name} put down at position ${index + 1} of ${shown.length}`);
+      return;
+    }
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      if (picked === null) {
+        setPicked(id);
+        setSaid(`${name} picked up. Use the arrow keys to move it, Space to drop it.`);
+      } else if (picked === id) {
+        setPicked(null);
+        setSaid(`${name} dropped at position ${index + 1} of ${shown.length}`);
+      }
+      return;
+    }
+    if (picked !== id) return;
+    const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+    if (step === 0) return;
+    const to = index + step;
+    if (to < 0 || to >= shown.length) return;
+    event.preventDefault();
+    reorder(id, to);
+    setSaid(`${name} moved to position ${to + 1} of ${shown.length}`);
+  };
   return (
     <div className="flex flex-col gap-4">
-      <section aria-label="In the bar" className="flex flex-col">
+      {/* While a key is picked up this list owns Escape, so the screen's own close shortcut cannot fire under the move. */}
+      <section aria-label="In the bar" data-captures-keys={picked === null ? undefined : ""} className="flex flex-col">
         <h3 className="px-1 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">In the bar</h3>
         <ul ref={list} className="relative overflow-hidden rounded-lg border border-border bg-card">
           {shown.map((entry, index) => {
@@ -57,25 +93,22 @@ export function KeyboardEdit({ settings, host, readOnly }: KeyboardEditProps) {
                   onClick={() => void keyBarStore.update((current) => removeKey(current, entry.id))}
                 />
                 <span className="min-w-0 flex-1 truncate text-base text-foreground">{entry.label}</span>
-                <IconButton
-                  data-drag-ignore
-                  label={`Move ${entry.name} earlier`}
-                  icon={<ChevronUp />}
-                  className="size-8 rounded-full text-muted-foreground hover:bg-selected"
-                  disabled={readOnly || index === 0}
-                  onClick={() => move(entry.id, index - 1)}
-                />
-                <IconButton
-                  data-drag-ignore
-                  label={`Move ${entry.name} later`}
-                  icon={<ChevronDown />}
-                  className="size-8 rounded-full text-muted-foreground hover:bg-selected"
-                  disabled={readOnly || index === shown.length - 1}
-                  onClick={() => move(entry.id, index + 1)}
-                />
-                <span aria-hidden className="text-muted-foreground">
-                  <GripVertical className="size-4" />
-                </span>
+                <button
+                  type="button"
+                  ref={(element) => {
+                    if (element === null) grips.current.delete(entry.id);
+                    else grips.current.set(entry.id, element);
+                  }}
+                  aria-label={`Reorder ${entry.name}`}
+                  aria-pressed={picked === entry.id}
+                  disabled={readOnly}
+                  onKeyDown={(event) => onGripKey(event, entry.id, index, entry.name)}
+                  className={`flex size-11 items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring ${
+                    picked === entry.id ? "bg-selected text-foreground" : "text-muted-foreground"
+                  }`}
+                >
+                  <GripVertical className="size-4" aria-hidden />
+                </button>
               </li>
             );
           })}
@@ -85,6 +118,9 @@ export function KeyboardEdit({ settings, host, readOnly }: KeyboardEditProps) {
           {drag === null ? null : <RowDropIndicator drag={drag} />}
           {drag === null ? null : <RowDropCaret drag={drag} />}
         </ul>
+        <p aria-live="polite" className="sr-only">
+          {said}
+        </p>
       </section>
       <section aria-label="More keys" className="flex flex-col">
         <h3 className="px-1 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">More keys</h3>

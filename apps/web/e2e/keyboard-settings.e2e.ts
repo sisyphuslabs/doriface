@@ -85,23 +85,45 @@ test.describe("an Android phone with a Mac host", () => {
   });
 });
 
-test("the earlier and later buttons move a key, so a drag is not the only way to reorder", async ({ page }) => {
+test("the grip moves a key with the keyboard, so a drag is not the only way to reorder", async ({ page }) => {
   await openSettings(page);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   const order = async (): Promise<readonly string[]> =>
     page.locator("[data-edit-key]").evaluateAll((rows) => rows.map((row) => row.getAttribute("data-edit-key") ?? ""));
   const before = await order();
   const at = before.indexOf("esc");
-  expect(at).toBeGreaterThan(-1);
-  await page.getByRole("button", { name: "Move Escape earlier" }).click();
-  const earlier = await order();
-  expect(earlier.indexOf("esc")).toBe(at - 1);
-  await page.getByRole("button", { name: "Move Escape later" }).click();
-  expect(await order()).toEqual(before);
+  expect(at).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Reorder Escape" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator('p[aria-live="polite"]')).toContainText("Escape picked up");
+  await page.keyboard.press("ArrowUp");
+  expect((await order()).indexOf("esc")).toBe(at - 1);
+  await page.keyboard.press("Enter");
+  await expect(page.locator('p[aria-live="polite"]')).toContainText(
+    `Escape dropped at position ${at} of ${before.length}`,
+  );
   await page.getByRole("button", { name: "Done", exact: true }).click();
   const names = await barNames(hero(page));
-  // The residual assertion the drag test cannot make: the hero draws the order the list holds.
-  expect(names[before.indexOf("esc")]).toBe("Escape");
+  expect(names[at - 1]).toBe("Escape");
+});
+
+test("Escape puts a picked-up key back where it was", async ({ page }) => {
+  await openSettings(page);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const order = async (): Promise<readonly string[]> =>
+    page.locator("[data-edit-key]").evaluateAll((rows) => rows.map((row) => row.getAttribute("data-edit-key") ?? ""));
+  const before = await order();
+  const at = before.indexOf("esc");
+  const grip = page.getByRole("button", { name: "Reorder Escape" });
+  await grip.focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowUp");
+  await expect(grip).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator('p[aria-live="polite"]')).toContainText("Escape put down");
+  expect((await order()).indexOf("esc")).toBe(at - 1);
+  await page.keyboard.press("ArrowDown");
+  expect((await order()).indexOf("esc")).toBe(at - 1);
 });
 
 test("a pack added from the Add keys sheet leads the hero and the terminal's bar", async ({ page }) => {
