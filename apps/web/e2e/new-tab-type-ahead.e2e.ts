@@ -174,8 +174,9 @@ test("a run that answers while Settings hides the workspace arms no observer or 
 
   release();
   await expect.poll(() => runAnswers(page), { timeout: 15_000 }).toBeGreaterThan(answers);
-  // The late answer armed nothing: no observer waits for the new terminal's view, and no budget timer runs out.
-  expect(await bodyObservers(page)).toBe(observers);
+  // The late answer left nothing armed: the new terminal's pane mounts when its run answers, so the observer that
+  // waits for that mount disconnects once it has handed the keys over, and the count returns to its earlier value.
+  await expect.poll(() => bodyObservers(page), { timeout: 15_000 }).toBe(observers);
   await page.clock.runFor(16_000);
   await expect(page.getByText("What you typed was not sent")).toHaveCount(0);
   await expect(page.getByText(/did not start/)).toHaveCount(0);
