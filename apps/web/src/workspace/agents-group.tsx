@@ -28,10 +28,16 @@ export interface AgentsGroupProps {
   readonly heading?: boolean;
 }
 
-function SortMenu() {
+function SortMenu({ size }: { readonly size?: "md" }) {
   const [sort, setSort] = useAgentSort();
+  const trigger =
+    size === undefined ? (
+      <IconButton label="Sort agents" icon={<Clock />} className="-mr-1" />
+    ) : (
+      <IconButton label="Sort agents" icon={<Clock />} size={size} />
+    );
   return (
-    <Menu align="end" trigger={<IconButton label="Sort agents" icon={<Clock />} className="-mr-1" />}>
+    <Menu align="end" trigger={trigger}>
       <MenuRadioGroup
         label="Sort agents"
         value={sort}
@@ -46,6 +52,17 @@ function SortMenu() {
       </MenuRadioGroup>
     </Menu>
   );
+}
+
+/**
+ * The phone's sort control, in the Agents screen's header beside its other actions rather than on a row of its own
+ * above the list; like the sidebar's, it is there only while there are agents to sort.
+ */
+export function PhoneSortMenu({ terminals }: { readonly terminals: readonly Terminal[] }) {
+  const now = useNow();
+  const [sort] = useAgentSort();
+  const any = useMemo(() => agentGroups(terminals, now, sort).length > 0, [terminals, now, sort]);
+  return any ? <SortMenu size="md" /> : null;
 }
 
 /** What can be done with an agent: its "..." menu and its right-click menu hold the same items. */
@@ -138,11 +155,6 @@ export function AgentsGroup({ terminals, active, onOpen, rail = false, heading =
   if (!heading)
     return (
       <section aria-label="Agents" className="flex flex-col gap-px">
-        {groups.length === 0 ? null : (
-          <div className="flex justify-end px-2">
-            <SortMenu />
-          </div>
-        )}
         {list}
       </section>
     );
