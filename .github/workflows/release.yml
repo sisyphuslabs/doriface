@@ -402,12 +402,21 @@ jobs:
           sha256sum --check --ignore-missing --strict SHA256SUMS.txt
           chmod +x "doriface-$VERSION-x86_64.AppImage"
           echo "APPIMAGE=$RUNNER_TEMP/dl/doriface-$VERSION-x86_64.AppImage" >> "$GITHUB_ENV"
-      # The AppImage runtime mounts itself with FUSE 2; Ubuntu's AppArmor blocks the user namespaces Chromium's sandbox
-      # needs, and the app keeps its sandbox on.
-      - name: FUSE and the Chromium sandbox
+      # The AppImage carries its own statically linked FUSE 2 runtime, so it needs no libfuse.so.2: stock Ubuntu 24.04
+      # ships FUSE 3 only, and a missing libfuse.so.2 is the "dlopen(): error loading libfuse.so.2" users hit. This step
+      # fails when the library is present, so the launch below can never pass on a machine that hides the dependency.
+      # Ubuntu's AppArmor also blocks the user namespaces Chromium's sandbox needs, and the app keeps its sandbox on.
+      - name: No FUSE 2 on this runner, and the Chromium sandbox
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libfuse2t64
+          if ldconfig -p | grep -q 'libfuse\.so\.2'; then
+            echo "::error title=libfuse.so.2 is installed::the AppImage launch would not prove it carries its own runtime"
+            ldconfig -p | grep 'libfuse\.so\.2'
+            exit 1
+          fi
+          if [ ! -e /dev/fuse ]; then
+            echo "::error title=No /dev/fuse::the AppImage runtime mounts its payload through the kernel's FUSE"
+            exit 1
+          fi
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: The AppImage launches and attaches a terminal
         working-directory: apps/desktop

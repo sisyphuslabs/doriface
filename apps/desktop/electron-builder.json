@@ -4,6 +4,7 @@
   "productName": "doriface",
   "executableName": "doriface",
   "electronVersion": "45.2.1",
+  "toolsets": { "appimage": "1.0.3" },
   "directories": { "output": "dist/release", "buildResources": "build" },
   "files": ["dist/app/**", "package.json"],
   "extraResources": [
@@ -44,6 +45,6 @@
       { "target": "deb", "arch": ["x64", "arm64"] }
     ]
   },
-  "appImage": { "artifactName": "${productName}-${version}-${arch}.${ext}" },
+  "appImage": { "artifactName": "${productName}-${version}-${arch}.${ext}", "executableArgs": ["--no-sandbox"] },
   "deb": { "artifactName": "${productName}_${version}_${arch}.${ext}" }
 }
