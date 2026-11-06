@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Machine mesh
+
+- A mesh takes any number of machines: the 12-member cap is gone, so adding a thirteenth machine no longer fails and mesh status no longer reports a limit. (#814)
+
 ### Joining a mesh
 
 - A phone can join a host by pointing its camera at the invite QR instead of typing the code: only a pairing link is accepted, an unrecognised code says so instead of looking for a host, and the camera stops as soon as the scan ends, is cancelled, or the page is left. (#855)
