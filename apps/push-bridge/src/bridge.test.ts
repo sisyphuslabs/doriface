@@ -231,6 +231,20 @@ async function bridgeAnswer(init: {
   return { status: reply.status, forwarded: sent.length };
 }
 
+/**
+ * When the VAPID token in a captured header expires. The token is signed from the real clock, so an expiry case has to
+ * read its deadline from the token itself. A fixed anchor plus thirteen hours held only for an hour after it was written,
+ * which is why this case failed on every runner from 2026-11-06T08:00Z (#750).
+ */
+function vapidExpiresAt(authorization: string): number {
+  const payload = /t=[^.]+\.([^.]+)\.[\w-]+/.exec(authorization)?.[1];
+  if (payload === undefined) throw new Error("the captured header carries no VAPID token");
+  const claims: unknown = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  const exp = typeof claims === "object" && claims !== null ? Reflect.get(claims, "exp") : undefined;
+  if (typeof exp !== "number") throw new Error("the VAPID token carries no exp");
+  return exp * 1000;
+}
+
 /** A real host body and headers for the APNs path, captured from the host's own sender. */
 async function captured(): Promise<{ headers: Record<string, string>; body: Uint8Array }> {
   let headers: Record<string, string> = {};
@@ -281,7 +295,10 @@ describe("what the bridge refuses before anything reaches APNs or FCM", () => {
       status: 401,
       forwarded: 0,
     });
-    const lapsed = createBridge(await config(), { fetch: upstream().fetch, now: () => NOW + 13 * 60 * 60 * 1000 });
+    const lapsed = createBridge(await config(), {
+      fetch: upstream().fetch,
+      now: () => vapidExpiresAt(auth) + 1_000,
+    });
     const late = await lapsed(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
     expect(late.status).toBe(401);
     const elsewhere = createBridge(await config(), { fetch: upstream().fetch, now: () => NOW });
