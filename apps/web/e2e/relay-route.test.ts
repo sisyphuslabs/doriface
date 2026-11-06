@@ -28,8 +28,10 @@ async function withHcBin<T>(bin: string, body: () => Promise<T>): Promise<T> {
 
 test("a start blocked on hc fails inside the stage deadline, saying which stage it is in (#502)", async () => {
   const started = Date.now();
+  // The deadline runs from the session report: the start is blocked on hc after it, so the deadline lands there however
+  // long a loaded host takes to reach it (#692).
   const failure = await withHcBin(join(here, "fake-hc.ts"), () =>
-    failureOf(startFakeRelayHost({ machine: true, stageDeadlineMs: 300 })),
+    failureOf(startFakeRelayHost({ machine: true, stageDeadlineMs: 300, stageDeadlineFrom: "session" })),
   );
   expect(failure).toContain("did not finish the bridge within 300 ms");
   expect(failure).toMatch(/it is in session \(done: relay \d+ ms, session \d+ ms\)/);
