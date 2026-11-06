@@ -11,7 +11,9 @@ import {
   isDesktopNotice,
   type LocalHostEndpoint,
   type LocalHostStartFailed,
+  type PairedDevicesAnswer,
   type PairOfferAnswer,
+  type RevokeDeviceAnswer,
   type UpdateReady,
 } from "../shared/bridge.ts";
 import { LocalHostStartError } from "./local-host.ts";
@@ -34,6 +36,9 @@ export interface IpcDeps {
   readonly startLocalHost: () => Promise<LocalHostEndpoint>;
   /** This computer's pairing offer: `open` replaces a pending one, `state` reads what stands. */
   readonly pairOffer: (request: "open" | "state") => Promise<PairOfferAnswer>;
+  /** Every device this computer has stored, and revoking one of them from here. */
+  readonly pairedDevices: () => Promise<PairedDevicesAnswer>;
+  readonly revokeDevice: (id: string) => Promise<RevokeDeviceAnswer>;
   readonly openExternal: (url: string) => Promise<void>;
   readonly setWindowBackground: (color: string) => void;
   readonly closeWindow: () => void;
@@ -66,6 +71,9 @@ export interface IpcHandlers {
    * replaces a pending offer and `state` reads it.
    */
   pairOffer(event: IpcSender, candidate: unknown): Promise<PairOfferAnswer | null>;
+  pairedDevices(event: IpcSender): Promise<PairedDevicesAnswer>;
+  /** A short id only: anything else is refused here, so a hand-edited renderer cannot address a path. */
+  revokeDevice(event: IpcSender, candidate: unknown): Promise<RevokeDeviceAnswer | null>;
   /** Paints the window and the next launch with the in-app theme's background; only `#rrggbb` is taken. */
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
@@ -141,6 +149,23 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
       if (candidate !== "open" && candidate !== "state") return null;
       try {
         return await deps.pairOffer(candidate);
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    async pairedDevices(event) {
+      assertAppFrame(event, deps.origin);
+      try {
+        return await deps.pairedDevices();
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    async revokeDevice(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (typeof candidate !== "string" || !/^[0-9A-F]{8}$/i.test(candidate)) return null;
+      try {
+        return await deps.revokeDevice(candidate.toUpperCase());
       } catch (error) {
         return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
       }
