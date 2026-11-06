@@ -176,3 +176,18 @@ test("readClipboardImage is null without an image, so terminal.paste_image sends
   const image = await readClipboardImage({ read: () => Promise.resolve([item({ "image/webp": png() })]) });
   expect(image?.type).toBe("image/webp");
 });
+
+test("readClipboardImage is null, so the key itself is sent, when reading the clipboard fails in any way", async () => {
+  const throwing = {
+    read: (): Promise<ClipboardItem[]> => {
+      throw new DOMException("denied", "NotAllowedError");
+    },
+  };
+  expect(await readClipboardImage(throwing)).toBeNull();
+  expect(await readClipboardImage({ read: denied })).toBeNull();
+  const broken = {
+    types: ["image/png"],
+    getType: () => Promise.reject(new DOMException("gone", "NotFoundError")),
+  } as never;
+  expect(await readClipboardImage({ read: reads([broken]) })).toBeNull();
+});

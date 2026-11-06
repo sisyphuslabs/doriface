@@ -88,9 +88,10 @@ export interface Sendable {
 }
 
 /**
- * The file as it is sent: an image of a type programs may not read becomes PNG, and a clipboard image named nothing in
- * particular is named `doriface-paste-<time>.<ext>`, as herdr-app names `herdr-paste-<time>.<ext>`. A dropped or copied
- * file keeps its name; the core adds a suffix when the name is taken.
+ * The file as it is sent: an image of a type programs may not read becomes PNG, and an image with no name or the name a
+ * browser gives every clipboard image (`image.<ext>`) is named `doriface-paste-<time>.<ext>`, as herdr-app names
+ * `herdr-paste-<time>.<ext>`; a dropped file with that very name is renamed the same way. Every other file keeps its
+ * name; the core adds a suffix when the name is taken.
  */
 export async function sendable(file: File, toPng: ToPng, now: () => number = Date.now): Promise<Sendable> {
   const image = file.type.startsWith("image/");
@@ -162,13 +163,17 @@ export async function putFiles(
 
 const imageType = (item: ClipboardItem): string | undefined => item.types.find((kind) => kind.startsWith("image/"));
 
-/** The clipboard's image, for `terminal.paste_image`; null when it holds none or cannot be read. */
+/** The clipboard's image, for `terminal.paste_image`; null when it holds none or cannot be read in any way. */
 export async function readClipboardImage(clipboard: Partial<Pick<Clipboard, "read">>): Promise<File | null> {
-  const items = (await clipboard.read?.().catch(() => null)) ?? [];
-  const item = items.find((one) => imageType(one) !== undefined);
-  const type = item === undefined ? undefined : imageType(item);
-  if (item === undefined || type === undefined) return null;
-  return new File([await item.getType(type)], "", { type });
+  try {
+    const items = (await clipboard.read?.()) ?? [];
+    const item = items.find((one) => imageType(one) !== undefined);
+    const type = item === undefined ? undefined : imageType(item);
+    if (item === undefined || type === undefined) return null;
+    return new File([await item.getType(type)], "", { type });
+  } catch {
+    return null;
+  }
 }
 
 /**
