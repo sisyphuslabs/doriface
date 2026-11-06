@@ -8,7 +8,7 @@ type Workflow = {
   on: { push: { branches: string[]; paths: string[] }; pull_request: { paths?: string[] } };
   jobs: Record<string, Job>;
 };
-type Route = { pattern: string; custom_domain?: boolean };
+type Route = { pattern: string; custom_domain?: boolean; zone_id?: string };
 type Assets = { directory: string; html_handling?: string };
 type Wrangler = { assets: Assets; routes: Route[]; env: { staging: { assets: Assets; routes: Route[] } } };
 
@@ -46,9 +46,13 @@ test("production deploys only after app.doriterm.com, where every Open the app b
   expect(steps.at(-1)).toBe("bun .github/scripts/probe-landing.ts https://doriterm.com");
 });
 
-test("the apex serves the landing and staging.doriterm.com its staging copy", () => {
-  expect(wrangler.routes).toEqual([{ pattern: "doriterm.com", custom_domain: true }]);
-  expect(wrangler.env.staging.routes).toEqual([{ pattern: "staging.doriterm.com", custom_domain: true }]);
+test("the apex and www serve the landing and staging.doriterm.com its staging copy, each pinned to the zone", () => {
+  const zone_id = "79ae74d5937b2858a42f6261887e436e";
+  expect(wrangler.routes).toEqual([
+    { pattern: "doriterm.com", custom_domain: true, zone_id },
+    { pattern: "www.doriterm.com", custom_domain: true, zone_id },
+  ]);
+  expect(wrangler.env.staging.routes).toEqual([{ pattern: "staging.doriterm.com", custom_domain: true, zone_id }]);
 });
 
 test("the page frames the mockup at its folder index, which the host serves without a redirect", () => {

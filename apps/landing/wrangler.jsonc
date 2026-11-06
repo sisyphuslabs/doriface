@@ -9,14 +9,20 @@
   "assets": { "directory": "./dist", "html_handling": "auto-trailing-slash" },
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "doriterm.com", "custom_domain": true }],
+  // zone_id lets a Workers-only API token attach the custom domains without zone listing rights.
+  "routes": [
+    { "pattern": "doriterm.com", "custom_domain": true, "zone_id": "79ae74d5937b2858a42f6261887e436e" },
+    { "pattern": "www.doriterm.com", "custom_domain": true, "zone_id": "79ae74d5937b2858a42f6261887e436e" },
+  ],
   "env": {
     "staging": {
       "name": "doriterm-landing-staging",
       "assets": { "directory": "./dist", "html_handling": "auto-trailing-slash" },
       "workers_dev": false,
       "preview_urls": false,
-      "routes": [{ "pattern": "staging.doriterm.com", "custom_domain": true }],
+      "routes": [
+        { "pattern": "staging.doriterm.com", "custom_domain": true, "zone_id": "79ae74d5937b2858a42f6261887e436e" },
+      ],
     },
   },
 }
