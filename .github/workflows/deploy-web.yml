@@ -1,8 +1,9 @@
 name: Deploy web
 
 # Serves apps/web with Workers static assets (apps/web/wrangler.jsonc, #700). One build is deployed to staging
-# (https://doriface-staging.omo.dev) and probed (.github/scripts/probe-web.ts), and only then the same bytes go to
-# production (https://doriface.omo.dev) and are probed again. A push on dev that touches the web build runs both; a
+# (https://staging.app.doriterm.com and https://doriface-staging.omo.dev) and every host is probed
+# (.github/scripts/probe-web.ts), and only then the same bytes go to production (https://app.doriterm.com and
+# https://doriface.omo.dev) and are probed again. A push on dev that touches the web build runs both; a
 # manual run on dev can stop at staging. A pull request from this repository labelled deploy-staging deploys its head to
 # staging only, so a change can be seen live before it merges. The repository secrets CLOUDFLARE_API_TOKEN and
 # CLOUDFLARE_ACCOUNT_ID are the Cloudflare account that serves relay-doriface.omo.dev.
@@ -70,7 +71,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx "$WRANGLER" deploy --env staging
       - name: Probe staging
-        run: bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev
+        run: |
+          bun .github/scripts/probe-web.ts https://staging.app.doriterm.com
+          bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev
 
   production:
     name: Production
@@ -98,4 +101,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx "$WRANGLER" deploy --env ""
       - name: Probe production
-        run: bun .github/scripts/probe-web.ts https://doriface.omo.dev
+        run: |
+          bun .github/scripts/probe-web.ts https://app.doriterm.com
+          bun .github/scripts/probe-web.ts https://doriface.omo.dev
