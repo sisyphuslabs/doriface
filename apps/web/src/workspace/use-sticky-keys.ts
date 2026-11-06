@@ -34,6 +34,8 @@ export function useStickyKeys(port: RefObject<TerminalPort | null>, host: HostPl
   };
   const press = (id: string): void => {
     if (MODIFIERS.has(id)) {
+      // A syllable still composing was typed before the modifier: it goes now, without it (#652).
+      port.current?.commitComposition();
       setLatched((prev) => {
         const next = new Set(prev);
         if (!next.delete(id)) next.add(id);
