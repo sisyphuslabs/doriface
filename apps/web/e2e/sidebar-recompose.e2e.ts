@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
-import { endAgent } from "./agents.ts";
+import { agentRow, endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn } from "./machine-switch.ts";
@@ -51,6 +51,9 @@ test("the agents group sits below the spaces (#383), and its status groups and c
   page,
 }) => {
   const agent = startFlipping("rc-flip", "working", "done");
+  // A second agent, so the person can be looking at another pane when rc-flip finishes: herdr-app's done is a finish you
+  // were not looking at, so the one that lands on the pane in view asks for nobody (#611).
+  const away = startFlipping("rc-away", "working", "working");
   await page.goto("/");
   const lists = sidebar(page).locator("[data-sidebar-pane] > * > * > * > section");
   await expect(lists.first()).toHaveAccessibleName("Spaces", { timeout: 20_000 });
@@ -59,6 +62,10 @@ test("the agents group sits below the spaces (#383), and its status groups and c
   const done = group(page, "Done");
   await expect(rows(working).filter({ hasText: "rc-flip" })).toBeVisible({ timeout: 20_000 });
   const doneBefore = (await done.count()) === 0 ? 0 : Number(await count(done).textContent());
+  await agentRow(page, "rc-away", false).click();
+  await expect(page.locator('[data-focused="true"] [data-terminal]')).toHaveAttribute("data-terminal", away.address, {
+    timeout: 15_000,
+  });
   agent.flip();
   await expect(rows(done).filter({ hasText: "rc-flip" })).toBeVisible({ timeout: 15_000 });
   await expect(rows(working).filter({ hasText: "rc-flip" })).toHaveCount(0);
