@@ -183,7 +183,7 @@ test("the From zero workflow checks the user guide through the hosted relay with
   expect(steps.some((step) => step.run?.includes("bun run pack"))).toBe(true);
   const smoke = steps.find((step) => step.run?.includes(HOSTED_SPEC));
   expect(smoke?.env?.["DORIFACE_HOSTED_RELAY_SMOKE"]).toBe("1");
-  expect(smoke?.env?.["DORIFACE_E2E_EXECUTABLE"]).toContain("linux-unpacked/doriface");
+  expect(smoke?.env?.["DORIFACE_E2E_EXECUTABLE"]).toContain("linux-unpacked/Doriterm");
   expect(workflow.on.pull_request?.paths).toEqual(
     expect.arrayContaining(["docs/getting-started.md", "apps/desktop/e2e/hosted-relay-pair.e2e.ts"]),
   );
