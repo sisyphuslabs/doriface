@@ -4,6 +4,9 @@ import { parsePlacement, type Area } from "../config/window-state.ts";
 
 export type Log = (line: string) => void;
 
+/** How long a move or resize rests before its bounds are written: a drag writes once, when it stops. */
+export const PLACEMENT_SETTLE_MS = 500;
+
 const isMissing = (error: unknown): boolean =>
   typeof error === "object" && error !== null && Reflect.get(error, "code") === "ENOENT";
 
@@ -48,7 +51,23 @@ export function placedWindow(window: BrowserWindow): PlacedWindow {
   };
 }
 
-/** Saves the window's normal bounds when it closes, so the next launch reopens it there. */
-export function rememberPlacement(window: PlacedWindow, file: string): void {
-  window.onClose(() => writeSaved(file, window.normalBounds()));
+/** Saves the window's normal bounds when it moves, resizes and closes, so the next launch reopens it there. */
+export function rememberPlacement(window: PlacedWindow, file: string, log: Log = console.error): void {
+  let settling: ReturnType<typeof setTimeout> | undefined;
+  const save = (): void => {
+    settling = undefined;
+    writeSaved(file, window.normalBounds(), log);
+  };
+  // A drag or a live resize fires this many times a second: the last one writes once the window rests, so a crash or a
+  // kill keeps the place it was left at even though the close that used to be the only writer never came.
+  const settle = (): void => {
+    clearTimeout(settling);
+    settling = setTimeout(save, PLACEMENT_SETTLE_MS);
+  };
+  window.onMove(settle);
+  window.onResize(settle);
+  window.onClose(() => {
+    clearTimeout(settling);
+    save();
+  });
 }
