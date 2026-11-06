@@ -445,3 +445,28 @@ test("pairing with another host puts it in the in-memory roster at once, not onl
   expect(store.settings.members.map((member) => member.hostId)).toEqual(["new"]);
   store.stop();
 });
+
+test("a freshly paired host survives its first failure; the app does not fall back to the one before it (#994 HIGH)", async () => {
+  const asked: string[] = [];
+  const store = new ConnectionStore({ ...RELAY_SETTINGS, hostId: "a", hostKey: "ka", members: TWO_MEMBERS }, ((
+    settings: ConnectionSettings,
+  ) => {
+    asked.push(settings.hostId);
+    throw new Error("no answer");
+  }) as never);
+  // The reviewer's scene: pair with c while the roster still names a and b.
+  store.update({
+    ...RELAY_SETTINGS,
+    hostId: "c",
+    hostName: "studio-c",
+    hostKey: "kc",
+    members: TWO_MEMBERS,
+  } as ConnectionSettings);
+  const failed = untilPhase(store, "failed");
+  store.start();
+  await failed;
+  store.stop();
+  expect(store.settings.hostId).toBe("c");
+  expect(store.settings.members.map((member) => member.hostId)).toEqual(["c"]);
+  expect(asked).not.toContain("a");
+});
