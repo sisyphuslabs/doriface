@@ -4,6 +4,7 @@
     { "path": "packages/protocol" },
     { "path": "packages/crypto" },
     { "path": "packages/mesh" },
+    { "path": "packages/policy" },
     { "path": "packages/client" },
     { "path": "packages/relay-client" },
     { "path": "apps/host" },

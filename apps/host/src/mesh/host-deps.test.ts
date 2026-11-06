@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CloseCode, type SecureLink, SessionKind } from "@doriface/crypto";
 import { memoryLinkPair } from "@doriface/crypto/testing";
+import { OPEN_POLICY } from "@doriface/policy";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +33,7 @@ describe("the running host's presence in mesh status (section 8.2)", () => {
       mesh,
       slots,
       sessions,
+      policy: OPEN_POLICY,
       hc: { hc: "hc-not-installed" },
       relay: { url: undefined },
       program: "/opt/doriface-host",
@@ -68,7 +70,17 @@ describe("a join the running host approves (section 10.1, #154)", () => {
     const slots = new PairingSlots(new PairingStore(dir, log), a.machine.identity.noise.publicKey, undefined, log);
     const sessions = new LiveSessions(new DeviceStore(dir), log, mesh);
     const hooks = { ...IDLE_MESH_HOOKS, floor: () => ({ n: 9, peer: "b" }) };
-    const deps = meshDeps({ stateDir: dir, identity: a.machine.identity, mesh, slots, sessions, hooks, log, ...NO_HC });
+    const deps = meshDeps({
+      stateDir: dir,
+      identity: a.machine.identity,
+      mesh,
+      slots,
+      sessions,
+      policy: OPEN_POLICY,
+      hooks,
+      log,
+      ...NO_HC,
+    });
     try {
       await deps.hostMesh.pair(true);
       const joiner = side("gamma");

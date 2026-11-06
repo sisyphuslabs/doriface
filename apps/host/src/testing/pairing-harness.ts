@@ -9,6 +9,7 @@ import {
   secureLink,
 } from "@doriface/crypto";
 import { type MemoryEnd, memoryLinkPair } from "@doriface/crypto/testing";
+import { OPEN_POLICY, type PlanPolicy } from "@doriface/policy";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +20,15 @@ import { PairingStore } from "../state/pairing.ts";
 
 /** A host with a fresh state dir and one open offer, and a way to run one client session against it. */
 export function pairingHost(
-  options: { readonly mesh?: (dir: string) => MeshStore; readonly meshOffer?: boolean; readonly dir?: string } = {},
+  options: {
+    readonly mesh?: (dir: string) => MeshStore;
+    readonly meshOffer?: boolean;
+    readonly dir?: string;
+    /** The plan the host runs under; open when a test names none. */
+    readonly policy?: PlanPolicy;
+    /** How many sessions the host is serving already, for a plan's session limit. */
+    readonly live?: number;
+  } = {},
 ) {
   const dir = options.dir ?? mkdtempSync(join(tmpdir(), "dh-accept-"));
   const logs: string[] = [];
@@ -33,6 +42,8 @@ export function pairingHost(
     mesh: options.mesh?.(dir),
     log,
     lanUrls: [],
+    policy: options.policy ?? OPEN_POLICY,
+    live: { count: () => options.live ?? 0 },
   };
   const relay: E2eeTransport = { kind: "relay", openSlot: pairingSlotOf(offer.code) };
   return { dir, logs, pairing, offer, deps, relay };

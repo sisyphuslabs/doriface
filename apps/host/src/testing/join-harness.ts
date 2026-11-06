@@ -1,5 +1,6 @@
 import { memoryLinkPair, type MemoryEnd } from "@doriface/crypto/testing";
 import { hashOf, parseRecord, type Signed, signRecord } from "@doriface/mesh";
+import { OPEN_POLICY, type PlanPolicy } from "@doriface/policy";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,10 +34,24 @@ export function removeSides(): void {
 
 export const ownOf = (s: Side) => ({ name: s.m.name, hcId: s.m.hcId });
 
-export function inviteDeps(inviter: Side, pending = new PendingJoins(), expiresAt = Date.now() + 60_000): InviteDeps {
+export function inviteDeps(
+  inviter: Side,
+  pending = new PendingJoins(),
+  expiresAt = Date.now() + 60_000,
+  policy: PlanPolicy = OPEN_POLICY,
+): InviteDeps {
   const log = (line: string): void => void inviter.logs.push(line);
   const own = async () => ownOf(inviter);
-  return { identity: inviter.m.identity, mesh: inviter.mesh, pending, own, expiresAt, floor: () => undefined, log };
+  return {
+    identity: inviter.m.identity,
+    mesh: inviter.mesh,
+    pending,
+    own,
+    expiresAt,
+    floor: () => undefined,
+    policy,
+    log,
+  };
 }
 
 export function joinerContext(

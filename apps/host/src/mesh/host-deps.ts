@@ -1,4 +1,5 @@
 import type { HostIdentity, SecureLink } from "@doriface/crypto";
+import type { PlanPolicy } from "@doriface/policy";
 import type { CreateSocket, RelayProofs } from "@doriface/relay-client";
 import type { LiveSessions } from "../e2ee/sessions.ts";
 import type { PairingSlots } from "../pairing-slots.ts";
@@ -18,6 +19,8 @@ export interface MeshDepsOptions {
   readonly mesh: MeshStore;
   readonly slots: PairingSlots;
   readonly sessions: LiveSessions;
+  /** The plan this host runs under: the mesh and its joins read it. */
+  readonly policy: PlanPolicy;
   readonly hc: {
     readonly hc: string;
     readonly session?: string | undefined;
@@ -52,6 +55,7 @@ export function meshDeps(options: MeshDepsOptions) {
     mesh,
     slots,
     sessions,
+    policy: options.policy,
     hc,
     relay,
     sync: (s) => sync.adopt(s),

@@ -11,6 +11,7 @@ import {
   secureLink,
   SessionKind,
 } from "@doriface/crypto";
+import { OPEN_POLICY, type PlanPolicy, requireFeature, requireWithin } from "@doriface/policy";
 import type { AuthorizeIndex } from "../mesh/authorize-index.ts";
 import type { DeviceStore } from "../state/devices.ts";
 import type { MeshStore } from "../state/mesh.ts";
@@ -33,9 +34,19 @@ export interface E2eeDeps {
   readonly lanUrls: readonly string[];
   /** For tests: messages per direction between rekeys. */
   readonly rekeyInterval?: number | undefined;
+  /** The plan this host runs under: it narrows pairing, paired devices and open sessions. */
+  readonly policy: PlanPolicy;
+  /** How many sessions this host serves now, for a plan's concurrent-session limit. */
+  readonly live: { readonly count: () => number };
 }
 
 const refuse = (closeCode: number, reason: string): Authorization => ({ accept: false, closeCode, reason });
+
+/** A withdrawal the plan caused: the person reads the plan's own words, and the host's log records them. */
+const planRefusal = (deps: E2eeDeps, code: number, what: string, message: string): Authorization => {
+  deps.log(`plan: refused ${what}: ${message}`);
+  return refuse(code, message);
+};
 
 /**
  * Runs the responder handshake on a fresh session (contract v1.3 "Session kinds"). A session (0x01) admits only a
@@ -64,11 +75,31 @@ export async function acceptE2ee(
     if (result.retiredCode) logRetired(deps);
     return { accept: true, secret: result.secret };
   };
+  /** The plan's gate on adding a device: the plan carries pairing, and the host has room for one more. */
+  const pairingRoom = (remoteStatic: Uint8Array): Authorization | undefined => {
+    const feature = requireFeature(deps.policy, "pairing");
+    if (!feature.allowed) return planRefusal(deps, CloseCode.UnknownDevice, "a pairing", feature.message);
+    let paired: number;
+    try {
+      const key = base64urlEncode(remoteStatic);
+      const devices = deps.devices.list();
+      if (devices.some((device) => device.clientStaticPub === key)) return undefined;
+      paired = devices.length;
+    } catch (error) {
+      return refuse(1011, `cannot read the paired devices: ${String(error)}`);
+    }
+    const room = requireWithin(deps.policy, "devices", paired);
+    return room.allowed ? undefined : planRefusal(deps, CloseCode.UnknownDevice, "a pairing", room.message);
+  };
   const authorize = (hello: ClientHello): Authorization => {
     deviceName = hello.name ?? "";
     const mesh = hello.stream === "mesh";
     if (hello.kind === SessionKind.Session) {
       if (pairSession) return refuse(CloseCode.UnknownDevice, "a ?pair session carries only pairing");
+      if (hello.stream !== "mesh" && hello.stream !== "push") {
+        const room = requireWithin(deps.policy, "sessions", deps.live.count());
+        if (!room.allowed) return planRefusal(deps, CloseCode.RateLimited, "a session", room.message);
+      }
       const index = meshIndex(deps);
       if ("refused" in index) return refuse(1011, index.refused);
       const peer = sessionPeer(hello.stream, hello.remoteStatic, index.index, deps.devices);
@@ -76,10 +107,15 @@ export async function acceptE2ee(
         deps.log(`mesh: refused a session: ${peer.reason}`);
       return authorizationOf(peer);
     }
-    if (hello.kind === SessionKind.PairLink) return claimWith(() => deps.pairing.claimLink(Date.now(), mesh));
+    if (hello.kind === SessionKind.PairLink) {
+      const room = pairingRoom(hello.remoteStatic);
+      return room ?? claimWith(() => deps.pairing.claimLink(Date.now(), mesh));
+    }
     if (transport.kind !== "relay" || transport.openSlot === undefined) {
       return refuse(CloseCode.UnknownDevice, "typed-code pairing runs over the relay with ?pair");
     }
+    const open = pairingRoom(hello.remoteStatic);
+    if (open !== undefined) return open;
     const openSlot = transport.openSlot;
     return claimWith(() => deps.pairing.claimCode(openSlot, Date.now(), mesh));
   };
@@ -109,7 +145,7 @@ export async function acceptE2ee(
     const admitted =
       claim === undefined || "refused" in index
         ? REFUSED_CLAIM
-        : admitPairing(claim, deps.devices, secure.remoteStatic, deviceName, index.index);
+        : admitPairing(claim, deps.devices, secure.remoteStatic, deviceName, index.index, deps.policy);
     if (!admitted.ok) {
       deps.log(`pairing refused: ${admitted.reason}`);
       secure.close(admitted.code, admitted.reason);
@@ -152,6 +188,7 @@ export function admitPairing(
   clientStatic: Uint8Array,
   name: string,
   mesh?: AuthorizeIndex | undefined,
+  policy: PlanPolicy = OPEN_POLICY,
 ): Admission {
   if (!claim.complete())
     return { ok: false, code: CloseCode.UnknownDevice, reason: "the pairing offer was already used" };
@@ -159,6 +196,11 @@ export function admitPairing(
     return { ok: false, code: CloseCode.UnknownDevice, reason: "this key belongs to a mesh member" };
   }
   try {
+    const paired = devices.list();
+    if (!paired.some((device) => device.clientStaticPub === base64urlEncode(clientStatic))) {
+      const room = requireWithin(policy, "devices", paired.length);
+      if (!room.allowed) return { ok: false, code: CloseCode.UnknownDevice, reason: room.message };
+    }
     devices.add(clientStatic, name);
   } catch (error) {
     return { ok: false, code: 1011, reason: `cannot store the paired device: ${String(error)}` };

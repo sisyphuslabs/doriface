@@ -1,5 +1,6 @@
 import { CloseCode, PAIRING_TTL_MS, type SecureLink, SessionKind } from "@doriface/crypto";
 import { memoryLinkPair, type MemoryEnd } from "@doriface/crypto/testing";
+import { OPEN_POLICY } from "@doriface/policy";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,6 +42,7 @@ function hostMesh(sync?: (session: SecureLink) => void, Sessions = LiveSessions)
       mesh,
       slots,
       sessions,
+      policy: OPEN_POLICY,
       hc: { hc: "hc" },
       relay: { url: undefined },
       log,
@@ -197,6 +199,7 @@ describe("the running host's pending joins in mesh status (section 4.3)", () => 
       mesh,
       slots,
       sessions,
+      policy: OPEN_POLICY,
       hc: { hc: "hc" },
       relay: { url: undefined },
       program: "/opt/doriface-host",

@@ -1,5 +1,6 @@
 import packageJson from "../package.json" with { type: "json" };
 import type { MeshStatus } from "@doriface/protocol";
+import type { PlanPolicy } from "@doriface/policy";
 import type { CreateSocket } from "@doriface/relay-client";
 import type { ListenAddress } from "./listen.ts";
 import type { MeshHooks } from "./mesh/host-hooks.ts";
@@ -36,6 +37,8 @@ export interface HostOptions {
   readonly meshHooks?: MeshHooks | undefined;
   /** For tests: origins of a private push service the host may post web push notices to, besides the browsers' own. */
   readonly pushTestOrigins?: readonly string[] | undefined;
+  /** The plan this host runs under; unset reads `DORIFACE_POLICY` (open when it is unset too). */
+  readonly policy?: PlanPolicy | undefined;
   readonly log: (line: string) => void;
   /** The OS this host reports on its core (`process.platform` unless a test names another). */
   readonly platform?: string;

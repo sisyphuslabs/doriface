@@ -22,6 +22,13 @@ export class LiveSessions {
     return this.#byKey.has(key);
   }
 
+  /** How many sessions this host serves now, for a plan's concurrent-session limit. */
+  count(): number {
+    let total = 0;
+    for (const sessions of this.#byKey.values()) total += sessions.size;
+    return total;
+  }
+
   /**
    * Registers a session, then re-checks the stores: a revoke that ran during its handshake still closes it. False when
    * that re-check closed it.

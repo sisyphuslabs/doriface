@@ -1,5 +1,6 @@
 import { base64urlDecode, base64urlEncode, CloseCode, fingerprintOf, type HostIdentity } from "@doriface/crypto";
 import { type CardBody, checkName, MAX_MESH_MEMBERS, type Signed, verifyCard } from "@doriface/mesh";
+import { type PlanPolicy, requireWithin } from "@doriface/policy";
 import type { MeshStore, OwnCard } from "../state/mesh.ts";
 import type { AuthorizeIndex } from "./authorize-index.ts";
 import { type MeshLines, recordLines } from "./lines.ts";
@@ -16,6 +17,8 @@ export interface InviteDeps {
   readonly expiresAt: number;
   /** The highest claim a peer's `hello` holds on this host's counter: the admit is not signed below it (10.1). */
   readonly floor: () => CounterFloor | undefined;
+  /** The plan this host runs under: its `machines` limit narrows what the protocol admits, and never widens it. */
+  readonly policy: PlanPolicy;
   readonly log: (line: string) => void;
 }
 
@@ -79,7 +82,10 @@ function admit(deps: InviteDeps, meshId: string, inviter: string, card: CardBody
   return deps.mesh.transact((tx) => {
     const index = deps.mesh.authorizeIndex();
     if (isRejoin(index, card)) return tx.records;
-    if ((index?.memberCount ?? 0) >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
+    const joining = index?.memberCount ?? 0;
+    const room = requireWithin(deps.policy, "machines", joining);
+    if (!room.allowed) throw new JoinRefused(room.message);
+    if (joining >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
     checkFloor(tx.records, inviter, deps.floor());
     tx.sign(deps.identity, (n, prev) => ({
       v: 2,
@@ -161,6 +167,8 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
       return card;
     }
     if ((index?.memberCount ?? 0) >= MAX_MESH_MEMBERS) throw new JoinRefused("the mesh is full");
+    const room = requireWithin(deps.policy, "machines", index?.memberCount ?? 0);
+    if (!room.allowed) throw new JoinRefused(room.message);
     const fingerprint = fingerprintOf(base64urlDecode(card.noisePub));
     const join = {
       nonce: offer.nonce,

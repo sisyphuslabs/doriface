@@ -47,6 +47,20 @@ describe("registering a live session", () => {
     expect(sessions.add(session(end, key))).toBe(true);
     expect(end.closeCode).toBeUndefined();
   });
+
+  test("count is every session it serves now", () => {
+    const { devices, sessions } = stores();
+    const phone = generateX25519();
+    const laptop = generateX25519();
+    devices.add(phone.publicKey, "phone");
+    devices.add(laptop.publicKey, "laptop");
+    const [first] = memoryLinkPair();
+    const [second] = memoryLinkPair();
+    expect(sessions.count()).toBe(0);
+    expect(sessions.add(session(first, phone.publicKey))).toBe(true);
+    expect(sessions.add(session(second, laptop.publicKey))).toBe(true);
+    expect(sessions.count()).toBe(2);
+  });
 });
 
 describe("whether a session from a key is open (presence, design section 8.2)", () => {

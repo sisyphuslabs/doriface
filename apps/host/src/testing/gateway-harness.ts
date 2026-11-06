@@ -1,5 +1,6 @@
 import { rawStaticKey, type SecureLink, secureLink } from "@doriface/crypto";
 import { memoryLinkPair } from "@doriface/crypto/testing";
+import { OPEN_POLICY } from "@doriface/policy";
 import { type ChildLink, createGateway } from "../gateway.ts";
 import type { E2eeWire } from "../e2ee/links.ts";
 import { LiveSessions } from "../e2ee/sessions.ts";
@@ -56,6 +57,7 @@ export function gatewayOn(founder: Machine, member: Machine, setup: GatewaySetup
   let opened = 0;
   const logs: string[] = [];
   const log = (line: string): void => void logs.push(line);
+  const sessions = new LiveSessions(devices, log, mesh);
   const deps = { identity: founder.identity, devices, pairing: new PairingStore(setup.dir), mesh, log };
   const gateway = createGateway({
     token: "t".repeat(32),
@@ -66,7 +68,13 @@ export function gatewayOn(founder: Machine, member: Machine, setup: GatewaySetup
       return setup.openPipe?.() ?? pipe.child;
     },
     log,
-    e2ee: { ...deps, lanUrls: [], sessions: new LiveSessions(devices, log, mesh) },
+    e2ee: {
+      ...deps,
+      lanUrls: [],
+      sessions,
+      policy: OPEN_POLICY,
+      live: { count: () => sessions.count() },
+    },
   });
   return { gateway, devices, logs, pipe, opened: () => opened };
 }

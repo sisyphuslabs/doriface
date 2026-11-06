@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memoryLinkPair } from "@doriface/crypto/testing";
 import { hashOf, parseRecord, type Signed } from "@doriface/mesh";
+import { OPEN_POLICY } from "@doriface/policy";
 import { CounterBehindError } from "../state/mesh.ts";
 import { failure, joinerContext, removeSides, runJoin, side } from "../testing/join-harness.ts";
 import { MeshCommands } from "./commands.ts";
@@ -77,7 +78,7 @@ function restoredB(seed: number) {
     const deps = { identity: b.machine.identity, mesh: store, pending, own: card, expiresAt: Date.now() + 60_000 };
     const joining = side(joiner);
     const inviter = { m: b.machine, dir: stateDir, mesh: store, logs: [] };
-    const invite = { ...deps, floor: () => gossip.floor(), log: () => undefined };
+    const invite = { ...deps, policy: OPEN_POLICY, floor: () => gossip.floor(), log: () => undefined };
     return runJoin(invite, joinerContext(joining, inviter), joining.m.identity.noise.publicKey);
   };
   return { commands, claim, deliver, ownNs, at, approveJoin, records: () => store.read()?.records ?? [] };

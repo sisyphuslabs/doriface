@@ -1,4 +1,5 @@
 import { DEFAULT_RELAY_URL, type HostIdentity, PAIRING_TTL_MS, type SecureLink, SessionKind } from "@doriface/crypto";
+import type { PlanPolicy } from "@doriface/policy";
 import { PairingStore } from "../state/pairing.ts";
 import type { CreateSocket, RelayProofs } from "@doriface/relay-client";
 import { parseTarget } from "../connect/target.ts";
@@ -19,6 +20,8 @@ export interface HostMeshOptions {
   readonly mesh: MeshStore;
   readonly slots: PairingSlots;
   readonly sessions: LiveSessions;
+  /** The plan this host runs under: a join is refused while the mesh already fills the plan's `machines` limit. */
+  readonly policy: PlanPolicy;
   readonly hc: HcCoreOptions;
   readonly relay: {
     readonly url: string | undefined;
@@ -82,9 +85,18 @@ export class HostMesh {
   /** Serves a session on the mesh stream: a join on a mesh offer, or a member's sync session for the sync hook. */
   serve(secure: SecureLink): void {
     if (secure.kind === SessionKind.Session) return this.#options.sync?.(secure);
-    const { identity, mesh, floor, log } = this.#options;
+    const { identity, mesh, floor, log, policy } = this.#options;
     const expiresAt = this.#offerExpiresAt > 0 ? this.#offerExpiresAt : Date.now() + PAIRING_TTL_MS;
-    const deps = { identity, mesh, pending: this.pending, own: () => this.#own(undefined), expiresAt, floor, log };
+    const deps = {
+      identity,
+      mesh,
+      pending: this.pending,
+      own: () => this.#own(undefined),
+      expiresAt,
+      floor,
+      policy,
+      log,
+    };
     serveJoin(new MeshLines(secure, INVITER_EXPECTS), secure.remoteStatic, deps).then(
       () => this.#keep(secure),
       () => undefined,
