@@ -15,7 +15,7 @@ export const AGENTS_DONE: readonly Agent[] = [
   { id: "a2", name: "Codex", detail: "sync tests", status: "done", age: "6m" },
 ];
 export const AGENTS_WORKING: readonly Agent[] = [
-  { id: "a3", name: "Claude Code", detail: "web-client", status: "working", age: "<1m" },
+  { id: "a3", name: "OmO", detail: "web-client", status: "working", age: "<1m" },
   { id: "a4", name: "Codex", detail: "terraform plan", status: "working", machine: "build-box", age: "12m" },
 ];
 export const AGENTS_IDLE: readonly Agent[] = [
@@ -25,7 +25,7 @@ export const AGENTS_IDLE: readonly Agent[] = [
 export const TABS: readonly WorkspaceTab[] = [
   { id: "t1", title: "Claude Code", status: "blocked" },
   { id: "t2", title: "Codex", status: "done" },
-  { id: "t3", title: "shell", status: "idle" },
+  { id: "t3", title: "OmO", status: "working" },
 ];
 
 export const CLAUDE_LINES: readonly TerminalLine[] = [

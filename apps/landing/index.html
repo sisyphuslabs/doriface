@@ -6,15 +6,12 @@
     <title>doriterm: Your devices. One terminal.</title>
     <meta
       name="description"
-      content="doriterm puts the shells and coding agents on your machines in a browser tab, a phone and a desktop app. Every session is end-to-end encrypted with Noise; the relay in the middle only sees ciphertext."
+      content="Your devices. One terminal. Every machine you own, linked through an end-to-end encrypted mesh."
     />
     <meta name="theme-color" content="#0f0e0d" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)" />
     <meta property="og:title" content="doriterm: Your devices. One terminal." />
-    <meta
-      property="og:description"
-      content="Your terminals on every device. End-to-end encrypted with Noise; the relay only sees ciphertext."
-    />
+    <meta property="og:description" content="Every machine you own, linked through an end-to-end encrypted mesh." />
     <meta property="og:url" content="https://doriterm.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://doriterm.com/og.png" />
@@ -24,7 +21,8 @@
     <link rel="canonical" href="https://doriterm.com/" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="./fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./fonts/TimelessSansVF.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./fonts/TimelessSerifVF.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./fonts/jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
     <script src="/theme-init.js"></script>
@@ -106,386 +104,139 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="wrap">
-          <p class="eyebrow"><span class="num">Noise IK</span><span class="rule"></span>end-to-end encrypted</p>
-          <h1 class="display">Your devices. One terminal.</h1>
-          <p class="hero__sub">
-            Every machine you own, linked through an <span class="nowrap">end-to-end</span> encrypted mesh.
-          </p>
-          <div class="hero__row">
-            <p class="hero__lede">
-              doriterm puts the shells and coding agents on your machines in a browser tab, a phone and a desktop app.
-              <strong>Each session is encrypted end to end with Noise.</strong> The relay in the middle forwards
-              ciphertext and holds no key that opens it.
+          <div class="hero__copy">
+            <p class="eyebrow">
+              <span class="num">doriterm</span><span class="rule"></span>end-to-end encrypted terminal
             </p>
-            <div class="hero__side">
-              <div class="hero__cta">
-                <a class="btn btn--primary" href="https://app.doriterm.com">Open the app</a>
-                <a class="btn btn--ghost" href="https://github.com/sisyphuslabs/doriterm/releases"
-                  >Download for desktop <span class="arrow" aria-hidden="true">&rarr;</span></a
-                >
-              </div>
-              <dl class="stats">
-                <div>
-                  <dt>0</dt>
-                  <dd>keys at the relay that open your sessions</dd>
-                </div>
-                <div>
-                  <dt>8</dt>
-                  <dd>characters to pair, behind CPace</dd>
-                </div>
-                <div>
-                  <dt>1</dt>
-                  <dd>sidebar for every machine</dd>
-                </div>
-              </dl>
+            <h1 class="display">Your devices.<br />One terminal.</h1>
+            <p class="hero__sub">
+              Every machine you own, linked through an <span class="nowrap">end-to-end</span> encrypted mesh.
+            </p>
+            <div class="hero__cta">
+              <a class="btn btn--primary" href="https://app.doriterm.com">Open the app</a>
+              <a class="btn btn--ghost" href="https://github.com/sisyphuslabs/doriterm/releases"
+                >Download for desktop <span class="arrow" aria-hidden="true">&rarr;</span></a
+              >
             </div>
+            <p class="hero__proof">
+              <span>Noise IK sessions</span> &middot; <span>ChaCha20-Poly1305</span> &middot;
+              <span>the relay holds no key</span>
+            </p>
           </div>
 
-          <figure class="frame hero__frame reveal" style="--delay: 220ms">
+          <figure class="frame meshwin" data-meshwin aria-labelledby="meshwin-caption">
             <div class="frame__bar">
               <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="frame__title">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="5" y="11" width="14" height="10" rx="2" />
-                  <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-                </svg>
-                relay, ciphertext only
-              </span>
-              <span class="frame__meta">Noise_IK_25519_ChaChaPoly</span>
+              <span class="frame__title">one terminal &middot; 4 machines</span>
+              <span class="frame__meta">e2ee mesh</span>
             </div>
-            <div class="scene">
-              <svg class="scene__wide" viewBox="0 0 1000 400" role="img" aria-labelledby="scene-caption">
-                <defs>
-                  <path id="w-f0" d="M208 76 C 298 76, 310 200, 400 200 L 600 200 C 690 200, 702 136, 792 136" />
-                  <path id="w-b0" d="M792 136 C 702 136, 690 200, 600 200 L 400 200 C 310 200, 298 76, 208 76" />
-                  <path id="w-f1" d="M208 200 C 298 200, 310 200, 400 200 L 600 200 C 690 200, 702 264, 792 264" />
-                  <path id="w-b1" d="M792 264 C 702 264, 690 200, 600 200 L 400 200 C 310 200, 298 200, 208 200" />
-                  <path id="w-f2" d="M208 324 C 298 324, 310 200, 400 200 L 600 200 C 690 200, 702 136, 792 136" />
-                  <path id="w-b2" d="M792 136 C 702 136, 690 200, 600 200 L 400 200 C 310 200, 298 324, 208 324" />
-                </defs>
-                <text class="col" x="40" y="22">your devices</text>
-                <text class="col" x="500" y="22" text-anchor="middle">relay</text>
-                <text class="col" x="960" y="22" text-anchor="end">your machines</text>
-                <path class="link" d="M208 76 C 298 76, 310 200, 400 200" />
-                <path class="link" d="M208 200 C 298 200, 310 200, 400 200" />
-                <path class="link" d="M208 324 C 298 324, 310 200, 400 200" />
-                <path class="link" d="M600 200 C 690 200, 702 136, 792 136" />
-                <path class="link" d="M600 200 C 690 200, 702 264, 792 264" />
-                <g aria-hidden="true">
-                  <rect class="packet" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.4s"
-                      begin="0s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#w-f0" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet packet--back" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.6s"
-                      begin="-1.7s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#w-b0" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.6999999999999997s"
-                      begin="-1.1s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#w-f1" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet packet--back" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.8000000000000003s"
-                      begin="-2.6s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#w-b1" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="4s"
-                      begin="-2.2s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#w-f2" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet packet--back" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="4s"
-                      begin="-3.5s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#w-b2" />
-                    </animateMotion>
-                  </rect>
-                </g>
-                <g class="relay">
-                  <rect class="pulse" x="400" y="148" width="200" height="104" rx="14" />
-                  <rect x="400" y="148" width="200" height="104" rx="14" />
-                  <text class="title" x="416" y="172">relay</text>
-                  <text class="note" x="584" y="172" text-anchor="end">sees only</text>
-                  <text class="hex" x="416" y="196" data-hex>9f 3a c1 e0 7b 22 d4 08</text>
-                  <text class="hex" x="416" y="212" data-hex>5e 61 0c ff 93 a8 17 4b</text>
-                  <text class="hex" x="416" y="228" data-hex>c2 7d 39 e6 01 bd 58 aa</text>
-                </g>
-                <g class="node" transform="translate(40 40)">
-                  <rect width="168" height="72" rx="12" />
-                  <path
-                    class="glyph"
-                    transform="translate(24 28)"
-                    d="M-6 -13h12a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-12a3 3 0 0 1-3-3v-20a3 3 0 0 1 3-3zM-2 9h4"
-                  />
-                  <path class="key" d="M150 12a4 4 0 1 0 0 .01M150 16v9M150 22h3" />
-                  <text x="14" y="60">phone</text>
-                  <text class="sub" x="44" y="32">PWA</text>
-                </g>
-                <g class="node" transform="translate(40 164)">
-                  <rect width="168" height="72" rx="12" />
-                  <path class="glyph" transform="translate(24 28)" d="M-12 -9h24v14h-24zM-16 9h32" />
-                  <path class="key" d="M150 12a4 4 0 1 0 0 .01M150 16v9M150 22h3" />
-                  <text x="14" y="60">laptop</text>
-                  <text class="sub" x="44" y="32">browser</text>
-                </g>
-                <g class="node" transform="translate(40 288)">
-                  <rect width="168" height="72" rx="12" />
-                  <path class="glyph" transform="translate(24 28)" d="M-14 -11h28v17h-28zM-5 12h10M0 6v6" />
-                  <path class="key" d="M150 12a4 4 0 1 0 0 .01M150 16v9M150 22h3" />
-                  <text x="14" y="60">desktop</text>
-                  <text class="sub" x="44" y="32">app</text>
-                </g>
-                <g class="node" transform="translate(792 100)">
-                  <rect width="168" height="72" rx="12" />
-                  <path
-                    class="glyph"
-                    transform="translate(24 28)"
-                    d="M-12 -11h24v9h-24zM-12 2h24v9h-24zM-7 -6.5h.01M-7 6.5h.01"
-                  />
-                  <path class="key" d="M150 12a4 4 0 1 0 0 .01M150 16v9M150 22h3" />
-                  <text x="14" y="60">studio</text>
-                  <text class="sub" x="44" y="32">host + hc</text>
-                </g>
-                <g class="node" transform="translate(792 228)">
-                  <rect width="168" height="72" rx="12" />
-                  <path
-                    class="glyph"
-                    transform="translate(24 28)"
-                    d="M-12 -11h24v9h-24zM-12 2h24v9h-24zM-7 -6.5h.01M-7 6.5h.01"
-                  />
-                  <path class="key" d="M150 12a4 4 0 1 0 0 .01M150 16v9M150 22h3" />
-                  <text x="14" y="60">build-box</text>
-                  <text class="sub" x="44" y="32">host + hc</text>
-                </g>
-              </svg>
-              <svg class="scene__tall" viewBox="0 0 360 660" role="img" aria-labelledby="scene-caption">
-                <defs>
-                  <path id="t-f0" d="M60 116 C 60 176, 180 200, 180 260 L 180 364 C 180 424, 102 488, 102 548" />
-                  <path id="t-b0" d="M102 548 C 102 488, 180 424, 180 364 L 180 260 C 180 200, 60 176, 60 116" />
-                  <path id="t-f1" d="M180 116 C 180 176, 180 200, 180 260 L 180 364 C 180 424, 258 488, 258 548" />
-                  <path id="t-b1" d="M258 548 C 258 488, 180 424, 180 364 L 180 260 C 180 200, 180 176, 180 116" />
-                  <path id="t-f2" d="M300 116 C 300 176, 180 200, 180 260 L 180 364 C 180 424, 102 488, 102 548" />
-                  <path id="t-b2" d="M102 548 C 102 488, 180 424, 180 364 L 180 260 C 180 200, 300 176, 300 116" />
-                </defs>
-                <text class="col" x="180" y="24" text-anchor="middle">your devices</text>
-                <text class="col" x="180" y="648" text-anchor="middle">your machines</text>
-                <path class="link" d="M60 116 C 60 176, 180 200, 180 260" />
-                <path class="link" d="M180 116 C 180 176, 180 200, 180 260" />
-                <path class="link" d="M300 116 C 300 176, 180 200, 180 260" />
-                <path class="link" d="M180 364 C 180 424, 102 488, 102 548" />
-                <path class="link" d="M180 364 C 180 424, 258 488, 258 548" />
-                <g aria-hidden="true">
-                  <rect class="packet" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.4s"
-                      begin="0s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#t-f0" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet packet--back" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.6s"
-                      begin="-1.7s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#t-b0" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.6999999999999997s"
-                      begin="-1.1s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#t-f1" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet packet--back" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="3.8000000000000003s"
-                      begin="-2.6s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#t-b1" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="4s"
-                      begin="-2.2s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#t-f2" />
-                    </animateMotion>
-                  </rect>
-                  <rect class="packet packet--back" width="14" height="6" rx="3" x="-7" y="-3">
-                    <animateMotion
-                      dur="4s"
-                      begin="-3.5s"
-                      repeatCount="indefinite"
-                      rotate="auto"
-                      calcMode="spline"
-                      keyPoints="0;1"
-                      keyTimes="0;1"
-                      keySplines="0.45 0 0.55 1"
-                    >
-                      <mpath href="#t-b2" />
-                    </animateMotion>
-                  </rect>
-                </g>
-                <g class="relay">
-                  <rect class="pulse" x="80" y="260" width="200" height="104" rx="14" />
-                  <rect x="80" y="260" width="200" height="104" rx="14" />
-                  <text class="title" x="96" y="284">relay</text>
-                  <text class="note" x="264" y="284" text-anchor="end">sees only</text>
-                  <text class="hex" x="96" y="308" data-hex>9f 3a c1 e0 7b 22 d4 08</text>
-                  <text class="hex" x="96" y="324" data-hex>5e 61 0c ff 93 a8 17 4b</text>
-                  <text class="hex" x="96" y="340" data-hex>c2 7d 39 e6 01 bd 58 aa</text>
-                </g>
-                <g class="node" transform="translate(8 44)">
-                  <rect width="104" height="72" rx="12" />
-                  <path
-                    class="glyph"
-                    transform="translate(24 28)"
-                    d="M-6 -13h12a3 3 0 0 1 3 3v20a3 3 0 0 1-3 3h-12a3 3 0 0 1-3-3v-20a3 3 0 0 1 3-3zM-2 9h4"
-                  />
-                  <path class="key" d="M86 12a4 4 0 1 0 0 .01M86 16v9M86 22h3" />
-                  <text x="14" y="60">phone</text>
-                  <text class="sub" x="44" y="32">PWA</text>
-                </g>
-                <g class="node" transform="translate(128 44)">
-                  <rect width="104" height="72" rx="12" />
-                  <path class="glyph" transform="translate(24 28)" d="M-12 -9h24v14h-24zM-16 9h32" />
-                  <path class="key" d="M86 12a4 4 0 1 0 0 .01M86 16v9M86 22h3" />
-                  <text x="14" y="60">laptop</text>
-                  <text class="sub" x="44" y="32">tab</text>
-                </g>
-                <g class="node" transform="translate(248 44)">
-                  <rect width="104" height="72" rx="12" />
-                  <path class="glyph" transform="translate(24 28)" d="M-14 -11h28v17h-28zM-5 12h10M0 6v6" />
-                  <path class="key" d="M86 12a4 4 0 1 0 0 .01M86 16v9M86 22h3" />
-                  <text x="14" y="60">desktop</text>
-                  <text class="sub" x="44" y="32">app</text>
-                </g>
-                <g class="node" transform="translate(40 548)">
-                  <rect width="124" height="72" rx="12" />
-                  <path
-                    class="glyph"
-                    transform="translate(24 28)"
-                    d="M-12 -11h24v9h-24zM-12 2h24v9h-24zM-7 -6.5h.01M-7 6.5h.01"
-                  />
-                  <path class="key" d="M106 12a4 4 0 1 0 0 .01M106 16v9M106 22h3" />
-                  <text x="14" y="60">studio</text>
-                  <text class="sub" x="44" y="32">host</text>
-                </g>
-                <g class="node" transform="translate(196 548)">
-                  <rect width="124" height="72" rx="12" />
-                  <path
-                    class="glyph"
-                    transform="translate(24 28)"
-                    d="M-12 -11h24v9h-24zM-12 2h24v9h-24zM-7 -6.5h.01M-7 6.5h.01"
-                  />
-                  <path class="key" d="M106 12a4 4 0 1 0 0 .01M106 16v9M106 22h3" />
-                  <text x="14" y="60">build-box</text>
-                  <text class="sub" x="44" y="32">host</text>
-                </g>
-              </svg>
+            <div class="meshwin__body">
+              <div class="meshwin__links" aria-hidden="true" data-links></div>
+              <section class="mpane" data-pane="laptop" aria-label="laptop terminal">
+                <header class="mpane__bar">
+                  <span class="mpane__icon"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <rect x="2.5" y="3.5" width="11" height="7.5" rx="1" />
+                      <path d="M1 13h14" /></svg
+                  ></span>
+                  <span class="mpane__name">laptop</span>
+                  <span class="mpane__os">macOS</span>
+                  <span class="mpane__key" title="Noise key on this machine"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="5" cy="8" r="2.6" />
+                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
+                  ></span>
+                </header>
+                <div class="mpane__body">
+                  <p class="mline"><span class="p">~/api main $</span> bun test</p>
+                  <p class="mline ok">✓ 412 pass &nbsp;0 fail &nbsp;<span class="d">3.1s</span></p>
+                  <p class="mline"><span class="p">~/api main $</span> <span class="cur"></span></p>
+                  <p class="mline ok" data-step="l-healthy">● cloud-box: api@4f2c healthy</p>
+                </div>
+              </section>
+              <section class="mpane" data-pane="mini" aria-label="mac mini terminal">
+                <header class="mpane__bar">
+                  <span class="mpane__icon"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <rect x="2" y="5" width="12" height="6" rx="2" />
+                      <path d="M5 9.5h1.5" /></svg
+                  ></span>
+                  <span class="mpane__name">mac mini</span>
+                  <span class="mpane__os">agent</span>
+                  <span class="mpane__key" title="Noise key on this machine"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="5" cy="8" r="2.6" />
+                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
+                  ></span>
+                </header>
+                <div class="mpane__body">
+                  <p class="mline"><span class="p">mini:~/api $</span> claude</p>
+                  <p class="mline d">● Reading migrations/0042_keys.sql</p>
+                  <p class="mline warn">! Needs you: apply to staging?</p>
+                  <p class="mline ok" data-step="m-applied">✓ Applied. 41 tests pass</p>
+                </div>
+              </section>
+              <div class="relay-node" data-relay>
+                <span class="relay-node__ring" aria-hidden="true"></span>
+                <span class="relay-node__lock"
+                  ><svg viewBox="0 0 16 16" aria-hidden="true">
+                    <rect x="3" y="7" width="10" height="7" rx="1.5" />
+                    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg
+                ></span>
+                <span class="relay-node__name">relay</span>
+                <span class="relay-node__note">ciphertext only</span>
+              </div>
+              <section class="mpane" data-pane="cloud" aria-label="cloud-box terminal">
+                <header class="mpane__bar">
+                  <span class="mpane__icon"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <rect x="2" y="2.5" width="12" height="4.5" rx="1" />
+                      <rect x="2" y="9" width="12" height="4.5" rx="1" />
+                      <path d="M4.5 4.75h.01M4.5 11.25h.01" /></svg
+                  ></span>
+                  <span class="mpane__name">cloud-box</span>
+                  <span class="mpane__os">ubuntu</span>
+                  <span class="mpane__key" title="Noise key on this machine"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="5" cy="8" r="2.6" />
+                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
+                  ></span>
+                </header>
+                <div class="mpane__body">
+                  <p class="mline"><span class="p">ubuntu@cloud-box:~ $</span> tail -f deploy.log</p>
+                  <p class="mline d">pull api@4f2c &nbsp;migrate &nbsp;restart</p>
+                  <p class="mline ok" data-step="c-healthy">api@4f2c healthy in 41s</p>
+                </div>
+              </section>
+              <section class="mpane" data-pane="phone" aria-label="phone terminal">
+                <header class="mpane__bar">
+                  <span class="mpane__icon"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <rect x="4.5" y="1.5" width="7" height="13" rx="1.6" />
+                      <path d="M7 12.5h2" /></svg
+                  ></span>
+                  <span class="mpane__name">phone</span>
+                  <span class="mpane__os">iOS</span>
+                  <span class="mpane__key" title="Noise key on this machine"
+                    ><svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="5" cy="8" r="2.6" />
+                      <path d="M7.6 8H14M11.5 8v2.4M13.5 8v1.6" /></svg
+                  ></span>
+                </header>
+                <div class="mpane__body">
+                  <p class="mline d">attached to mac mini</p>
+                  <p class="mline warn">! apply to staging?</p>
+                  <p class="mline" data-step="p-answer">
+                    <span class="p">›</span> 1 &nbsp;<span class="d">yes, apply it</span>
+                  </p>
+                </div>
+              </section>
+              <div class="meshwin__packets" aria-hidden="true" data-packets></div>
             </div>
-            <figcaption class="scene-legend" id="scene-caption">
-              <span><i></i>keystrokes, encrypted</span>
-              <span><i class="back"></i>terminal output, encrypted</span>
-              <span><i class="key"></i>keys stay on your devices and machines</span>
+            <figcaption class="scene-legend" id="meshwin-caption">
+              <span><i class="plain"></i>plaintext, only on your machines</span>
+              <span><i></i>sealed with Noise in transit</span>
+              <span><i class="key"></i>each machine keeps its own key</span>
             </figcaption>
           </figure>
         </div>

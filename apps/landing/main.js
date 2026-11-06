@@ -128,26 +128,234 @@ function setupReveal() {
   for (const item of items) observer.observe(item);
 }
 
-function setupHeroScene() {
-  const scene = document.querySelector(".scene");
-  const svgs = [...scene.querySelectorAll("svg")];
-  const lines = [...scene.querySelectorAll("[data-hex]")];
-  let timer;
-  whileVisible(
-    scene,
-    () => {
-      for (const svg of svgs) svg.unpauseAnimations();
-      timer = setInterval(() => {
-        const line = lines[Math.floor(Math.random() * lines.length)];
-        line.textContent = randomHex(8);
-      }, 140);
+const LOCK_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>';
+const narrowMesh = matchMedia("(max-width: 860px)");
+const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
+
+/** A polyline's points with the fraction of its length at each point, for WAAPI keyframe offsets. */
+function along(points) {
+  const lengths = points.slice(1).map((point, i) => Math.hypot(point[0] - points[i][0], point[1] - points[i][1]));
+  const total = lengths.reduce((sum, length) => sum + length, 0) || 1;
+  let run = 0;
+  return points.map((point, i) => {
+    if (i > 0) run += lengths[i - 1];
+    return { point, offset: run / total };
+  });
+}
+
+/**
+ * The hero: one terminal window tiled from four machines around the relay. Links form, each machine's key lights, and
+ * packets leave a pane as plaintext, travel sealed, and open only in the pane they reach. Transform and opacity only.
+ */
+function setupMeshWindow() {
+  const root = document.querySelector("[data-meshwin]");
+  const body = root.querySelector(".meshwin__body");
+  const linksLayer = root.querySelector("[data-links]");
+  const packetLayer = root.querySelector("[data-packets]");
+  const relay = root.querySelector("[data-relay]");
+  const panes = new Map([...root.querySelectorAll("[data-pane]")].map((pane) => [pane.dataset.pane, pane]));
+  const steps = new Map([...root.querySelectorAll("[data-step]")].map((line) => [line.dataset.step, line]));
+  const routes = new Map();
+  let formed = false;
+  let introduced = false;
+
+  const measure = () => {
+    const box = body.getBoundingClientRect();
+    const hub = relay.getBoundingClientRect();
+    const center = [hub.left + hub.width / 2 - box.left, hub.top + hub.height / 2 - box.top];
+    routes.clear();
+    for (const [id, pane] of panes) {
+      const rect = pane.getBoundingClientRect();
+      const left = rect.left - box.left;
+      const top = rect.top - box.top;
+      if (narrowMesh.matches) {
+        // A rail down the left edge: out of the pane's middle, along the rail to the relay.
+        const middle = top + rect.height / 2;
+        routes.set(id, [[left, middle], [center[0], middle], center]);
+      } else {
+        // Straight from the pane corner nearest the relay.
+        const corner = [clamp(center[0], left, left + rect.width), clamp(center[1], top, top + rect.height)];
+        routes.set(id, [corner, center]);
+      }
+    }
+    linksLayer.replaceChildren(
+      ...[...routes].flatMap(([id, points]) =>
+        points.slice(1).map((end, i) => {
+          const start = points[i];
+          const link = document.createElement("i");
+          link.className = "mlink";
+          link.dataset.for = id;
+          link.style.width = `${Math.hypot(end[0] - start[0], end[1] - start[1])}px`;
+          link.dataset.base = `translate(${start[0]}px, ${start[1]}px) rotate(${Math.atan2(end[1] - start[1], end[0] - start[0])}rad)`;
+          link.style.transform = `${link.dataset.base} scaleX(${formed ? 1 : 0})`;
+          return link;
+        }),
+      ),
+    );
+  };
+
+  const formLinks = async (signal) => {
+    await sequence(
+      [...panes.keys()].map((id, index) => async () => {
+        for (const link of linksLayer.querySelectorAll(`[data-for="${id}"]`)) {
+          link.animate(
+            [{ transform: `${link.dataset.base} scaleX(0)` }, { transform: `${link.dataset.base} scaleX(1)` }],
+            { duration: 700, easing: "cubic-bezier(0.1, 1, 0.1, 1)", fill: "forwards", delay: index * 40 },
+          );
+        }
+        await sleep(260, signal);
+        panes.get(id).classList.add("keyed");
+      }),
+    );
+    formed = true;
+    for (const link of linksLayer.children) link.style.transform = `${link.dataset.base} scaleX(1)`;
+  };
+
+  const packet = (plain, sealed) => {
+    const element = document.createElement("span");
+    element.className = "mpacket";
+    element.innerHTML = `<span class="plain"></span><span class="sealed">${LOCK_ICON}<b></b></span>`;
+    element.querySelector(".plain").textContent = plain;
+    element.querySelector(".sealed b").textContent = sealed;
+    packetLayer.append(element);
+    return element;
+  };
+
+  const send = async (from, to, plain, signal) => {
+    const path = along(packetRoute(from, to));
+    const element = packet(plain, randomHex(4).replaceAll(" ", ""));
+    const duration = 2000;
+    const moves = [
+      element.animate(
+        path.map(({ point, offset }) => ({ offset, transform: `translate(${point[0]}px, ${point[1]}px)` })),
+        { duration, easing: "cubic-bezier(0.45, 0, 0.55, 1)" },
+      ),
+      element.animate([{ opacity: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1, offset: 0.94 }, { opacity: 0 }], {
+        duration,
+      }),
+      element
+        .querySelector(".plain")
+        .animate(
+          [
+            { opacity: 1 },
+            { opacity: 1, offset: 0.14 },
+            { opacity: 0, offset: 0.2 },
+            { opacity: 0, offset: 0.8 },
+            { opacity: 1, offset: 0.86 },
+            { opacity: 1 },
+          ],
+          { duration },
+        ),
+      element
+        .querySelector(".sealed")
+        .animate(
+          [
+            { opacity: 0 },
+            { opacity: 0, offset: 0.14 },
+            { opacity: 1, offset: 0.2 },
+            { opacity: 1, offset: 0.8 },
+            { opacity: 0, offset: 0.86 },
+            { opacity: 0 },
+          ],
+          { duration },
+        ),
+    ];
+    // The relay pulses as the sealed record passes through it, and the receiving machine's key lights as it opens it.
+    moves.push(
+      relay.querySelector(".relay-node__ring").animate(
+        [
+          { opacity: 0.7, transform: "scale(1)" },
+          { opacity: 0, transform: "scale(1.35, 1.6)" },
+        ],
+        { duration: 700, delay: duration * 0.45, easing: "cubic-bezier(0.1, 1, 0.1, 1)" },
+      ),
+      panes
+        .get(to)
+        .querySelector(".mpane__key")
+        .animate([{ transform: "scale(1)" }, { transform: "scale(1.45)" }, { transform: "scale(1)" }], {
+          duration: 500,
+          delay: duration * 0.84,
+          easing: "cubic-bezier(0.2, 0, 0, 1)",
+        }),
+    );
+    const stop = () => {
+      for (const move of moves) move.cancel();
+      element.remove();
+    };
+    signal.addEventListener("abort", stop, { once: true });
+    await moves[0].finished;
+    signal.removeEventListener("abort", stop);
+    element.remove();
+  };
+
+  /** One leg of a packet's route: off the pane (a little past its corner, or from the rail), to the relay. */
+  const leg = (id) => {
+    const points = routes.get(id);
+    if (narrowMesh.matches) return points.slice(1);
+    const [[x, y], [cx, cy]] = points;
+    const length = Math.hypot(cx - x, cy - y) || 1;
+    return [
+      [x + ((cx - x) / length) * 14, y + ((cy - y) / length) * 14],
+      [cx, cy],
+    ];
+  };
+
+  /** A packet's route: off the sending pane, through the relay, to just outside the receiving pane. */
+  const packetRoute = (from, to) => [...leg(from), ...leg(to).toReversed().slice(1)];
+
+  const show = (step, on = true) => steps.get(step)?.classList.toggle("shown", on);
+
+  const still = () => {
+    for (const element of packetLayer.querySelectorAll(".mpacket")) element.remove();
+    formed = true;
+    measure();
+    for (const pane of panes.values()) pane.classList.add("keyed");
+    for (const step of steps.keys()) show(step);
+    // The still frame (reduced motion, or off screen) shows two records sealed halfway along their routes.
+    for (const [from, to, plain] of [
+      ["phone", "mini", "1"],
+      ["cloud", "laptop", "healthy"],
+    ]) {
+      const points = along(packetRoute(from, to));
+      const middle = points.find(({ offset }) => offset >= 0.3) ?? points[0];
+      const element = packet(plain, randomHex(4).replaceAll(" ", ""));
+      element.style.transform = `translate(${middle.point[0]}px, ${middle.point[1]}px)`;
+      element.querySelector(".plain").style.opacity = "0";
+    }
+  };
+
+  new ResizeObserver(() => measure()).observe(body);
+  narrowMesh.addEventListener("change", measure);
+
+  loopWhileVisible(
+    root,
+    async (signal) => {
+      for (const element of packetLayer.querySelectorAll(".mpacket")) element.remove();
+      for (const step of steps.keys()) show(step, false);
+      if (!introduced) {
+        // The first time the window is seen, the links form and each machine's key lights in turn.
+        introduced = true;
+        formed = false;
+        for (const pane of panes.values()) pane.classList.remove("keyed");
+        measure();
+        await formLinks(signal);
+      }
+      await sleep(500, signal);
+      show("p-answer");
+      await Promise.all([
+        send("phone", "mini", "1", signal),
+        sleep(300, signal).then(() => send("laptop", "cloud", "tail -f", signal)),
+      ]);
+      show("m-applied");
+      await sleep(600, signal);
+      show("c-healthy");
+      await Promise.all([send("cloud", "laptop", "healthy", signal), send("mini", "phone", "applied", signal)]);
+      show("l-healthy");
+      await sleep(2600, signal);
     },
-    () => {
-      for (const svg of svgs) svg.pauseAnimations();
-      clearInterval(timer);
-    },
+    still,
   );
-  for (const svg of svgs) svg.pauseAnimations();
 }
 
 function setupWire() {
@@ -420,7 +628,7 @@ function setupCopy() {
 setupReveal();
 setupTheme();
 setupLive();
-setupHeroScene();
+setupMeshWindow();
 setupWire();
 setupPipe();
 setupPairing();
