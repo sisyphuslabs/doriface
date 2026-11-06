@@ -3,6 +3,7 @@ export {
   docSpaces,
   editTab,
   LAYOUT_DOC,
+  moveSpace,
   moveTab,
   readDocument,
   removeTab,

@@ -1,28 +1,13 @@
 import type { Terminal } from "@doriface/protocol";
-import { docSpaces, renameSpace as renamedIn } from "@doriface/protocol/layout";
-import { spaceKey } from "../layout/view.ts";
+import { renameSpace as renamedIn } from "@doriface/protocol/layout";
 import { type ListedSpace, SPACE_LABEL } from "./model.ts";
 import { isGone, type SessionCalls } from "./session-actions.ts";
+import { spacePlace } from "./space-place.ts";
 import type { MachineLayout } from "./use-layout-docs.ts";
-
-/** The layout holding listed space `id` (a `spaceKey`), and that space's id in its document. */
-function placeOf(
-  layouts: readonly MachineLayout[],
-  id: string,
-): { readonly layout: MachineLayout; readonly space: string } | undefined {
-  for (const layout of layouts) {
-    const space =
-      layout.doc === null
-        ? undefined
-        : docSpaces(layout.doc).find((each) => spaceKey(layout.machineId, each.id) === id);
-    if (space !== undefined) return { layout, space: space.id };
-  }
-  return undefined;
-}
 
 /** Why space `id` cannot be renamed now: its layout takes no edits (or it is gone); null when it can. */
 export function renameRefusal(layouts: readonly MachineLayout[], id: string): string | null {
-  const place = placeOf(layouts, id);
+  const place = spacePlace(layouts, id);
   if (place === undefined) return "This space is no longer in the layout.";
   const { readOnly } = place.layout;
   return readOnly === null ? null : `The layout cannot take changes now: ${readOnly}`;
@@ -56,7 +41,7 @@ export async function renameSpace(
 ): Promise<void> {
   const wanted = name.trim();
   const refusal = renameRefusal(layouts, id);
-  const place = placeOf(layouts, id);
+  const place = spacePlace(layouts, id);
   if (refusal !== null || place === undefined) throw new Error(refusal ?? "This space is no longer in the layout.");
   await place.layout.edit((doc) => (doc === null ? null : renamedIn(doc, place.space, wanted)));
   const addresses = new Set(spaces.find((space) => space.id === id)?.addresses ?? []);

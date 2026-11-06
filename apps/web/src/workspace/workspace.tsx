@@ -32,6 +32,7 @@ import { useLayoutDocs } from "./use-layout-docs.ts";
 import { GitFactsContext, useGitFacts } from "./git-facts.ts";
 import { layoutSpaces, tabTitle } from "./model.ts";
 import { SpaceSelectionContext } from "./space-selection.ts";
+import { useSpaceMove } from "./space-order.ts";
 import { useAdoptLoose } from "./use-adopt-loose.ts";
 import { orderNotSaved } from "./machine-order.ts";
 import { useMachineOrder } from "./use-machine-order.ts";
@@ -292,9 +293,10 @@ export function Workspace({ connection }: WorkspaceProps) {
   );
   const { selectSpace } = layout;
   const selectedSpace = layout.active?.spaceKey ?? null;
+  const moveSpace = useSpaceMove(layouts, failed);
   const spaceSelection = useMemo(
-    () => ({ spaces, selected: selectedSpace, select: selectSpace }),
-    [spaces, selectedSpace, selectSpace],
+    () => ({ spaces, selected: selectedSpace, select: selectSpace, move: moveSpace }),
+    [spaces, selectedSpace, selectSpace, moveSpace],
   );
   return (
     <MachinesContext value={machines}>

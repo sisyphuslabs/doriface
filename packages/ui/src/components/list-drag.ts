@@ -56,6 +56,11 @@ export interface ListDragOptions {
   readonly onStart?: () => void;
   /** A held touch let go without moving: where the finger was, for the row's menu. */
   readonly onHoldRelease?: (id: string, x: number, y: number) => void;
+  /**
+   * Whether a release at this point may move the row. False drops it back where it came from, as a release the row's own
+   * list did not take does: a row never lands in another list's rows.
+   */
+  readonly canDrop?: (point: { readonly clientX: number; readonly clientY: number }) => boolean;
 }
 
 /**
@@ -66,7 +71,7 @@ export interface ListDragOptions {
 export function useListDrag(
   list: RefObject<HTMLElement | null>,
   ids: readonly string[],
-  { onMove, onStart, onHoldRelease }: ListDragOptions,
+  { onMove, onStart, onHoldRelease, canDrop }: ListDragOptions,
 ): ListDrag {
   const [drag, setDrag] = useState<ListDragState | null>(null);
   const [settle, setSettle] = useState<ListSettle | null>(null);
@@ -74,8 +79,8 @@ export function useListDrag(
   const press = useRef<Press | null>(null);
   const swallowClick = useRef(false);
   const stop = useRef<() => void>(() => undefined);
-  const latest = useRef({ onMove, onStart, onHoldRelease });
-  latest.current = { onMove, onStart, onHoldRelease };
+  const latest = useRef({ onMove, onStart, onHoldRelease, canDrop });
+  latest.current = { onMove, onStart, onHoldRelease, canDrop };
 
   const end = useCallback(() => stop.current(), []);
 
@@ -103,9 +108,11 @@ export function useListDrag(
       const last = current === null || current.dragging === null ? null : update();
       end();
       if (last === null) return;
+      const point = current === null ? null : { clientX: current.clientX, clientY: current.clientY };
+      const taken = commit && (point === null || latest.current.canDrop?.(point) !== false);
       swallowClick.current = true;
-      const to = commit ? last.to : last.from;
-      const landed = commit ? rowLandingTop(last) : (last.slots[last.from]?.top ?? 0);
+      const to = taken ? last.to : last.from;
+      const landed = taken ? rowLandingTop(last) : (last.slots[last.from]?.top ?? 0);
       const offset = (last.slots[last.from]?.top ?? 0) + last.offset - landed;
       setSettle({ id: last.id, offset, running: false });
       if (to !== last.from) latest.current.onMove?.(last.id, to);

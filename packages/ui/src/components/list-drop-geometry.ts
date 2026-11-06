@@ -53,9 +53,11 @@ export function rowCaretTop(drag: ListDragState): number {
   return drag.to > drag.from ? to.top + to.height + drag.gap / 2 : to.top - drag.gap / 2;
 }
 
-/** The rows' slots, from every `[data-drag-id]` element of the list (positioned against the list itself). */
+/** The rows' slots, from the list's own `[data-drag-id]` children (positioned against the list itself). */
 export function measureRows(list: HTMLElement): { readonly slots: readonly RowSlot[]; readonly gap: number } {
-  const slots = [...list.querySelectorAll<HTMLElement>("[data-drag-id]")].map((el) => ({
+  // Direct children only: a list may hold another draggable list (a machine's spaces inside the machines list), whose
+  // rows are measured by their own drag, against their own box.
+  const slots = [...list.querySelectorAll<HTMLElement>(":scope > [data-drag-id]")].map((el) => ({
     top: el.offsetTop,
     height: el.offsetHeight,
   }));

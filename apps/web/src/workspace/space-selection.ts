@@ -6,8 +6,15 @@ export interface SpaceSelection {
   readonly spaces: readonly ListedSpace[];
   readonly selected: string | null;
   readonly select: (key: string) => void;
+  /** Moves space `key` to index `to` among its machine's spaces; a refused write is a notice, never a rejection. */
+  readonly move: (key: string, to: number) => void;
 }
 
-export const SpaceSelectionContext = createContext<SpaceSelection>({ spaces: [], selected: null, select: () => {} });
+export const SpaceSelectionContext = createContext<SpaceSelection>({
+  spaces: [],
+  selected: null,
+  select: () => {},
+  move: () => {},
+});
 
 export const useSpaceSelection = (): SpaceSelection => use(SpaceSelectionContext);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isJsonObject, parseJson, type JsonObject, type JsonValue } from "../json.ts";
-import { addTab, docSpaces, editTab, moveTab, readDocument, renameSpace, renameTab, tabsOf } from "./document.ts";
+import { addTab, docSpaces, editTab, moveSpace, moveTab, readDocument, renameSpace, renameTab, tabsOf } from "./document.ts";
 import { panesOf, splitPane, terminalBlock, removePane } from "./tree.ts";
 
 // Written by herdr-app 0.1.12 against hc 0.1.17: ⌘D ⌘⇧D ⌘D ⌘⇧D in one tab, a second tab split down then beside a
@@ -236,5 +236,47 @@ describe("spaces and their tabs' order (#404)", () => {
     const spaces = renamed?.["spaces"];
     expect(Array.isArray(spaces) ? spaces[1] : null).toBe(Array.isArray(two["spaces"]) ? two["spaces"][1] : null);
     expect([renameTab(two, "a1", ""), renameTab(two, "gone", "x")]).toEqual([null, null]);
+  });
+});
+
+describe("a space's place among its machine's spaces (#610)", () => {
+  const three: JsonObject = {
+    other: { kept: true },
+    spaces: [
+      { folder: "/a", id: "spc-a", name: "alpha", tabs: [tab("a1")] },
+      { extra: 1, folder: "/b", id: "spc-b", name: "beta", tabs: [tab("b1")] },
+      { folder: "/c", id: "spc-c", name: "gamma", tabs: [tab("c1")] },
+    ],
+  };
+  const ids = (doc: JsonObject | null) => docSpaces(doc ?? {}).map((space) => space.id);
+  const spacesOf = (doc: JsonObject | null) => {
+    const spaces = doc?.["spaces"];
+    return Array.isArray(spaces) ? spaces : [];
+  };
+
+  test("a space takes the place it moved to, the others keeping their order, as herdr-app's space.move", () => {
+    expect(ids(moveSpace(three, "spc-c", 0))).toEqual(["spc-c", "spc-a", "spc-b"]);
+    expect(ids(moveSpace(three, "spc-a", 2))).toEqual(["spc-b", "spc-c", "spc-a"]);
+    expect(ids(moveSpace(three, "spc-b", 0))).toEqual(["spc-b", "spc-a", "spc-c"]);
+  });
+
+  test("an index past either end clamps, and a move that changes nothing or a space that is gone writes nothing", () => {
+    expect(ids(moveSpace(three, "spc-b", 9))).toEqual(["spc-a", "spc-c", "spc-b"]);
+    expect(ids(moveSpace(three, "spc-b", -3))).toEqual(["spc-b", "spc-a", "spc-c"]);
+    expect([moveSpace(three, "spc-b", 1), moveSpace(three, "gone", 0)]).toEqual([null, null]);
+  });
+
+  test("the moved space keeps its own fields and tabs, and the spaces it passed are the objects that were read", () => {
+    const moved = moveSpace(three, "spc-b", 2);
+    expect(spacesOf(moved)[2]).toEqual({
+      extra: 1,
+      folder: "/b",
+      id: "spc-b",
+      name: "beta",
+      tabs: [tab("b1")],
+    });
+    expect(spacesOf(moved)[0]).toBe(spacesOf(three)[0]);
+    expect(spacesOf(moved)[1]).toBe(spacesOf(three)[2]);
+    expect(moved?.["other"]).toEqual({ kept: true });
   });
 });

@@ -156,6 +156,21 @@ export function renameTab(doc: JsonObject, tabId: string, name: string): JsonObj
 }
 
 /**
+ * The document with space `spaceId` moved to index `to` among the document's spaces (clamped), the others keeping their
+ * order, as herdr-app's `space.move` moves a space inside its machine; null when the space is gone or already there, so
+ * nothing is written. Every other field of the document and of the spaces stays as read.
+ */
+export function moveSpace(doc: JsonObject, spaceId: string, to: number): JsonObject | null {
+  const spaces = spacesOf(doc);
+  const from = spaces.findIndex((space) => text(space["id"]) === spaceId);
+  const target = Math.max(0, Math.min(spaces.length - 1, to));
+  const moving = spaces[from];
+  if (moving === undefined || target === from) return null;
+  const placed = spaces.toSpliced(from, 1).toSpliced(target, 0, moving);
+  return { ...doc, spaces: placed };
+}
+
+/**
  * The document with a tab moved to index `to` among its own space's tabs (clamped), the others keeping their order; null
  * when the tab is gone or already there, so nothing is written.
  */

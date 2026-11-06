@@ -10,7 +10,7 @@ import {
   cn,
   type Space,
 } from "@doriface/ui";
-import { Ellipsis, Pencil, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Ellipsis, Pencil, Plus } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { machineCause } from "./machine-cause.ts";
 import { type HeaderButton, MachineGroup } from "./machine-group.tsx";
@@ -18,6 +18,7 @@ import { stateLabel, type MachineEntry } from "./machines.ts";
 import { MachinesListError } from "./machines-list-error.tsx";
 import { useConnectionNotice } from "./reconnect-status.tsx";
 import { RetryButton } from "./retry-button.tsx";
+import { SpaceList, type SpaceReorder } from "./space-list.tsx";
 import { SpaceNameInput } from "./space-name-input.tsx";
 import { useSpaceRenaming } from "./space-rename-context.ts";
 import { machineGroups } from "./sidebar-model.ts";
@@ -48,14 +49,37 @@ function MachineNotice({ name }: { readonly name: string }) {
   );
 }
 
-/** A space row's "..." menu: Rename space asks for the new name; a double-click on the row edits it in place. */
-function SpaceActions({ space }: { readonly space: Space }) {
+/**
+ * A space row's "..." menu: Rename space asks for the new name; a double-click on the row edits it in place. Move up and
+ * Move down are the list's single-pointer path (WCAG 2.5.7), with the move keys the rows themselves take.
+ */
+function SpaceActions({ space, reorder }: { readonly space: Space; readonly reorder: SpaceReorder | undefined }) {
   const renaming = useSpaceRenaming();
   return (
     <Menu align="end" trigger={<IconButton label={`More for ${space.name}`} icon={<Ellipsis />} className="size-6" />}>
       <MenuItem icon={<Pencil />} onClick={() => renaming.ask(space.id)}>
         Rename space…
       </MenuItem>
+      {reorder === undefined ? null : (
+        <>
+          <MenuItem
+            icon={<ArrowUp />}
+            disabled={reorder.index === 0}
+            {...(reorder.keys.up === undefined ? {} : { keys: reorder.keys.up })}
+            onClick={() => reorder.move(reorder.index - 1)}
+          >
+            Move up
+          </MenuItem>
+          <MenuItem
+            icon={<ArrowDown />}
+            disabled={reorder.index === reorder.count - 1}
+            {...(reorder.keys.down === undefined ? {} : { keys: reorder.keys.down })}
+            onClick={() => reorder.move(reorder.index + 1)}
+          >
+            Move down
+          </MenuItem>
+        </>
+      )}
     </Menu>
   );
 }
@@ -109,34 +133,56 @@ function SpacesLists({
   machines,
 }: SpacesGroupProps & { readonly rail: boolean; readonly machines: ReturnType<typeof useMachinesContext> }) {
   // The layout documents' spaces (#404): picking one shows it on the tab it showed last.
-  const { spaces, selected, select } = useSpaceSelection();
+  const { spaces, selected, select, move } = useSpaceSelection();
   const colors = useSpaceColors(useMemo(() => spaces.map((space) => space.id), [spaces]));
   const colored = spaces.map((space): Space => {
     const color = colors[space.id];
     return color === undefined ? space : { ...space, color };
   });
   const [editing, setEditing] = useState<string | null>(null);
-  const rows = (list: readonly Space[], grouped: boolean) =>
-    list.map((space) => {
-      if (!rail && space.id === editing)
-        return <SpaceNameInput key={space.id} space={space} onClose={() => setEditing(null)} />;
-      const row = (
+  // A space row: the list owns its wrapper (drag id, offset), so this is what a person acts on inside it.
+  const spaceRow = (space: Space, grouped: boolean, reorder: SpaceReorder | undefined) => {
+    if (!rail && space.id === editing)
+      return (
+        <div data-drag-ignore>
+          <SpaceNameInput space={space} onClose={() => setEditing(null)} />
+        </div>
+      );
+    const button = (
+      <div
+        className="contents"
+        {...(reorder === undefined ? {} : { "data-reorder-keys": "", onKeyDown: reorder.onKeyDown })}
+      >
         <SpaceRow
-          key={space.id}
           space={space}
           selected={space.id === selected}
           onSelect={select}
           rail={rail}
           hideMachine={grouped}
         />
-      );
-      if (rail) return row;
-      return (
-        <div key={space.id} onDoubleClick={() => setEditing(space.id)}>
-          <RowWithActions row={row} actions={<SpaceActions space={space} />} />
-        </div>
-      );
-    });
+      </div>
+    );
+    if (rail) return button;
+    return (
+      <RowWithActions
+        row={button}
+        actions={
+          <span data-drag-ignore className="flex items-center">
+            <SpaceActions space={space} reorder={reorder} />
+          </span>
+        }
+      />
+    );
+  };
+  const editName = rail ? undefined : (space: Space): void => setEditing(space.id);
+  const listOf = (own: readonly Space[], grouped: boolean) => (
+    <SpaceList
+      spaces={own}
+      move={rail ? undefined : move}
+      onDoubleClick={editName}
+      row={(space, reorder) => spaceRow(space, grouped, reorder)}
+    />
+  );
   const grouped = machineGroups(machines.entries, colored);
   // The icon rail has no room for a drag handle or a menu; the full sidebar reorders.
   const list = useRef<HTMLDivElement>(null);
@@ -180,9 +226,7 @@ function SpacesLists({
         <MachinesListError cause={machines.listError} className="mx-1 mt-1" />
       )}
       {grouped === undefined ? (
-        <section aria-label="Spaces on this machine" className="flex flex-col gap-px">
-          {rows(colored, false)}
-        </section>
+        <section aria-label="Spaces on this machine">{listOf(colored, false)}</section>
       ) : (
         <div ref={list} className="relative flex flex-col gap-2">
           {overlay}
@@ -196,7 +240,7 @@ function SpacesLists({
             >
               {collapsed.includes(machine.id) ? null : (
                 <>
-                  {rows(own, true)}
+                  {listOf(own, true)}
                   {own.length > 0 || rail ? null : (
                     <NewSpaceThere
                       disabled={linkDown !== null || machine.state !== "connected"}
