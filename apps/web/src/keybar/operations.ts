@@ -1,7 +1,7 @@
 import { DEFAULT_KEY_IDS, SPECIAL_KEYS, specialKey } from "./catalog.ts";
 import { parseKeyInput } from "./custom.ts";
-import { type CustomKey, FAVORITES_PACK_ID, type KeyBarSettings, KEYBAR_VERSION } from "./settings.ts";
-import { isPackId } from "./packs.ts";
+import { type CustomKey, type KeyBarSettings, KEYBAR_VERSION } from "./settings.ts";
+import { FAVORITES_PACK_ID, isPackId } from "./packs.ts";
 
 /** Every change here is a pure function of the previous document, so a stored value is never mutated in place. */
 
