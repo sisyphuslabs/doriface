@@ -53,6 +53,10 @@
 
 - An image pasted into a terminal, or a file dropped on one, goes to that terminal's machine, this one or an added one, and its path is pasted there, as in herdr-app, so an agent there can read it. Text pastes as before, Ctrl+V works as before, and **Paste image** can be bound to a key in Settings > Keybindings. (#701)
 
+### Settings
+
+- Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
+
 ## v0.1.2 - 2026-11-06
 
 ### Tabs and spaces
