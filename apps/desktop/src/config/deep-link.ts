@@ -3,7 +3,7 @@ import { buildPairingUrl, parsePairingUrl } from "@doriface/crypto";
 export const DEEP_LINK_SCHEME = "doriface";
 
 /** The web app whose pairing links (`<origin>/pair#…`, docs/transport.md "Pairing") the desktop app opens itself. */
-export const PAIRING_WEB_ORIGIN = "https://doriface.omo.dev";
+export const PAIRING_WEB_ORIGIN = "https://app.doriterm.com";
 
 export type DeepLink = { readonly kind: "open" } | { readonly kind: "pair"; readonly fragment: string };
 
