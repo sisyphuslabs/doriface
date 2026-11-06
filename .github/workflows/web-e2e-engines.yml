@@ -53,8 +53,11 @@ jobs:
       - name: Which engines this run actually got
         working-directory: apps/web
         run: bunx playwright --version && ls "$HOME/.cache/ms-playwright"
+      # One worker on purpose: each test starts its own fake relay host, host core and added machine, and the harness
+      # gives a startup stage 10 s. Three engines running in parallel on a two-core runner blow that budget, which
+      # fails as "the fake relay host did not finish ... within 10000 ms" - a startup timeout, not a broken join.
       - name: Join in all three engines
-        run: E2E_BROWSERS=all bunx playwright test e2e/join-desktop.e2e.ts --reporter=list
+        run: E2E_BROWSERS=all bunx playwright test e2e/join-desktop.e2e.ts --workers=1 --reporter=list
         working-directory: apps/web
         env:
           CI: "1"
