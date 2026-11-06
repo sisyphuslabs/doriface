@@ -43,6 +43,14 @@ const TIMEOUT_MS = 10_000;
 export type PushFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 /**
+ * `now` is the clock the VAPID header is signed with. A test injects the same clock its bridge checks the header
+ * against, so the header's lifetime is never measured against the wall clock (#750).
+ */
+export interface DeliverOptions {
+  readonly now?: () => number;
+}
+
+/**
  * The push service closed the connection before any answer: a pooled keep-alive connection it had dropped as idle while
  * the host reused it. The request never reached it, so it is sent again once, on a new connection.
  */
@@ -57,15 +65,18 @@ export async function deliverPush(
   notice: PushNotice,
   vapid: VapidKey,
   post: PushFetch = fetch,
+  options: DeliverOptions = {},
 ): Promise<Delivery> {
   const plaintext = new TextEncoder().encode(JSON.stringify(notice));
   if (plaintext.byteLength >= NOTICE_RECORD_BYTES) throw new Error("a notice longer than its padded record");
   const body = await encryptPushPayload(plaintext, subscription, { padTo: NOTICE_RECORD_BYTES });
+  // One clock for the whole delivery, so the header's lifetime is measured from the same instant every attempt.
+  const signedAt = options.now?.() ?? Date.now();
   const send = async (fresh: boolean): Promise<Response> =>
     post(subscription.endpoint, {
       method: "POST",
       headers: {
-        authorization: await vapidAuthorization(subscription.endpoint, vapid),
+        authorization: await vapidAuthorization(subscription.endpoint, vapid, signedAt),
         "content-encoding": "aes128gcm",
         "content-type": "application/octet-stream",
         ttl: String(TTL_SECONDS),

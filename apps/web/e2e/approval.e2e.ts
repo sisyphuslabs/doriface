@@ -25,41 +25,50 @@ test.afterEach(() => {
 
 const banner = (page: Page) => page.locator(`[data-approval="${agent.address}"]`);
 
-/** Opens the asking agent's pane and waits for its banner to offer Allow and Deny. */
+/** The card's row for the agent's own "Yes" (`1`), and its cancel (Esc). */
+const yes = (page: Page) => banner(page).locator('[data-option="1"]');
+const cancel = (page: Page) => banner(page).locator("[data-cancel]");
+
+/** Opens the asking agent's pane and waits for its card to offer the dialog's rows. */
 async function openAsking(page: Page): Promise<void> {
   await expect(agentRow(page, name, false)).toBeVisible({ timeout: 20_000 });
   await agentRow(page, name, false).click();
   await expect(banner(page)).toContainText("Claude Code", { timeout: 15_000 });
   await expect(banner(page)).toContainText("touch probe-a.txt");
-  await expect(banner(page).getByRole("button", { name: /^Allow/ })).toBeEnabled();
+  await expect(yes(page)).toBeEnabled();
+  await expect(yes(page)).toHaveText(/Yes$/);
 }
 
-test("Allow presses the agent's own key once, and the banner says it was answered from here", async ({ page }) => {
+test("Yes presses the agent's own key once, and the card says it was answered from here", async ({ page }) => {
   ask();
   await page.goto("/");
   await openAsking(page);
-  await banner(page)
-    .getByRole("button", { name: /^Allow/ })
-    .click();
-  await expect(banner(page)).toContainText("Allowed", { timeout: 10_000 });
-  await expect(banner(page)).toContainText("from this device");
+  await yes(page).click();
+  await expect(banner(page)).toContainText("from this device", { timeout: 10_000 });
+  await expect(banner(page)).toContainText("Yes");
   await expect.poll(agent.keys, { timeout: 10_000 }).toEqual(["1"]);
   await expect(page.locator(`[data-terminal="${agent.address}"]`)).toContainText("Allowed", { timeout: 10_000 });
   const [record] = agent.records();
-  expect(record).toMatchObject({ answer: "allow", outcome: "sent", by: expect.stringContaining("Chrome") });
+  expect(record).toMatchObject({
+    answer: "allow",
+    choice: "Yes",
+    outcome: "sent",
+    by: expect.stringContaining("Chrome"),
+  });
   await expect(banner(page)).toHaveCount(0, { timeout: 10_000 });
 });
 
-test("Deny presses Esc, for an agent that starts asking while the page is open", async ({ page }) => {
+test("Cancel presses Esc, for an agent that starts asking while the page is open", async ({ page }) => {
   // Known only from events, this terminal has no status_ms on the page (hc's status event carries none).
   await page.goto("/");
   await expect(page.getByRole("contentinfo")).toContainText(/\d+ terminals?/, { timeout: 20_000 });
   ask();
   await openAsking(page);
-  await banner(page).getByRole("button", { name: /^Deny/ }).click();
-  await expect(banner(page)).toContainText("Denied", { timeout: 10_000 });
+  await cancel(page).click();
+  await expect(banner(page)).toContainText("Cancel", { timeout: 10_000 });
+  await expect(banner(page)).toContainText("from this device");
   await expect.poll(agent.keys, { timeout: 10_000 }).toEqual(["\u001B"]);
-  expect(agent.records()).toMatchObject([{ answer: "deny", outcome: "sent" }]);
+  expect(agent.records()).toMatchObject([{ answer: "deny", choice: "Cancel", outcome: "sent" }]);
 });
 
 test("stale: answered in the terminal before the status caught up, so the banner sends nothing", async ({ page }) => {
@@ -71,10 +80,8 @@ test("stale: answered in the terminal before the status caught up, so the banner
   await expect(page.locator(`[data-terminal="${agent.address}"]`)).toContainText("Answered in the terminal", {
     timeout: 10_000,
   });
-  // The status still says blocked, so the banner still offers Allow; the re-read before the key press finds no prompt.
-  await banner(page)
-    .getByRole("button", { name: /^Allow/ })
-    .click();
+  // The status still says blocked, so the card still offers Yes; the re-read before the key press finds no prompt.
+  await yes(page).click();
   await expect(banner(page)).toContainText("The prompt went away.", { timeout: 10_000 });
   expect(agent.keys()).toEqual(["x"]);
   expect(agent.records()).toMatchObject([{ answer: "allow", outcome: "stale" }]);
@@ -94,16 +101,12 @@ test("two clients racing on one prompt: exactly one answer reaches the agent, th
   await fast.goto("/");
   await openAsking(fast);
 
-  // Both press Allow while the prompt is up; the slow client's claim is held on its way to the core, so the fast one
+  // Both press Yes while the prompt is up; the slow client's claim is held on its way to the core, so the fast one
   // claims first, re-reads the screen and presses the key. Then the slow claim reaches the core and finds it taken.
   const release = slowLink.hold("doc.set");
-  await banner(slow)
-    .getByRole("button", { name: /^Allow/ })
-    .click();
+  await yes(slow).click();
   await expect(banner(slow)).toContainText("Checking the prompt is still on screen");
-  await banner(fast)
-    .getByRole("button", { name: /^Allow/ })
-    .click();
+  await yes(fast).click();
   await expect(banner(fast)).toContainText("from this device", { timeout: 10_000 });
   release();
   await expect(banner(slow)).toContainText("Answered on another device (", { timeout: 10_000 });
@@ -125,16 +128,14 @@ test("a link that drops between the claim and the key press shows the failure, p
   const reads = () => link.sent().filter((frame) => frame.includes('"method":"terminal.read"')).length;
   const readsBefore = reads();
   link.hold("terminal.read");
-  await banner(page)
-    .getByRole("button", { name: /^Allow/ })
-    .click();
+  await yes(page).click();
   await expect.poll(reads, { timeout: 10_000 }).toBeGreaterThan(readsBefore);
   expect(agent.records()).toMatchObject([{ answer: "allow", outcome: "claimed" }]);
   const sockets = link.opened();
   await link.drop(true);
   link.hold();
   await expect(banner(page)).toContainText("The answer did not go through.", { timeout: 15_000 });
-  await expect(banner(page)).not.toContainText("Allowed");
+  await expect(banner(page)).not.toContainText("from this device");
   expect(agent.keys()).toEqual([]);
 
   link.restore();
