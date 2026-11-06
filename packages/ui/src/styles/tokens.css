@@ -41,8 +41,6 @@
   --color-brand-foreground: var(--brand-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-affirmative: var(--avatar-green);
-  --color-affirmative-foreground: var(--avatar-ink);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
