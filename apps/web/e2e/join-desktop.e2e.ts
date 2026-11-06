@@ -27,6 +27,11 @@ async function confirmAndPair(page: Awaited<ReturnType<typeof desktopPage>>): Pr
   await expect(page.getByRole("figure").filter(FINGERPRINT)).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: "They match" }).click();
   await expect(page.getByText(PAIRED)).toBeVisible({ timeout: 90_000 });
+  // A join is not finished at the paired notice: the person opens the terminals, and the first-run guide is what a newly
+  // joined device sees there (#723). Each path in - link, paste, code - has to arrive at it, not only the QR link
+  // first-run-guide.e2e.ts drives from a phone.
+  await page.getByRole("link", { name: "Open terminals" }).click();
+  await expect(page.getByRole("region", { name: "Getting started" })).toBeVisible({ timeout: 60_000 });
 }
 
 test("a desktop browser joins by clicking the invite link", async ({ browser }) => {
