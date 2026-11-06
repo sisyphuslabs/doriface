@@ -7,6 +7,10 @@
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
 - Settings > Connections has **Pair a device**: it asks this computer's host for a fresh offer and shows its QR code, link, 8-character code, fingerprint and expiry, then the device that used it — no terminal and no CLI. (#614)
 
+### Machine mesh
+
+- A machine you had already added over ssh or with a via is replaced by its mesh line under the same name, and mesh status and the Mesh panel say what kind of entry it replaced. Its open tabs and layout carry over. (#710)
+
 ## v0.1.2
 
 ### Tabs and spaces

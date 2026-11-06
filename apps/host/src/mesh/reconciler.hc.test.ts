@@ -3,7 +3,18 @@ import { DialPolicy } from "./dial-policy.ts";
 import { LineGrants } from "./line-grants.ts";
 import { Reconciler, STUCK_RETRY_MS } from "./reconciler.ts";
 import { FakeClock, seededRandom } from "./testing/fake-clock.ts";
-import { type Core, dialCore, directVia, hostIdFor, localHost, recorded, startCore } from "./testing/hc-mesh.ts";
+import {
+  addOverSsh,
+  type Core,
+  dialCore,
+  directVia,
+  hostIdFor,
+  localHost,
+  recorded,
+  sshTo,
+  startCore,
+  startCoreWith,
+} from "./testing/hc-mesh.ts";
 import { fallbacks } from "@doriface/mesh";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshView } from "./mesh-view.ts";
@@ -13,7 +24,7 @@ const LONG = 60_000;
 const started: Core[] = [];
 /** Each mesh's own core, whose machines dial the other cores. */
 const dialers = new Set<Core>();
-const locals: ReturnType<typeof localHost>[] = [];
+const locals: { dispose(): void }[] = [];
 afterAll(async () => {
   for (const local of locals) local.dispose();
   // A dialer reconnects a machine whose core stopped, and its `hc connect` starts that core again: dialers stop first.
@@ -37,9 +48,14 @@ async function cores(...names: readonly string[]): Promise<readonly Core[]> {
   return made;
 }
 
-async function mesh(names: readonly string[]) {
-  const [self, ...members] = await cores("self", ...names);
-  if (self === undefined) throw new Error("no core");
+/** `sshTarget` names the member `self`'s `ssh` reaches, so a test can add that member over ssh. */
+async function mesh(names: readonly string[], sshTarget?: string) {
+  const members = await cores(...names);
+  const reach = members.find((core) => core.member.name === sshTarget);
+  const shim = reach === undefined ? undefined : sshTo(reach);
+  if (shim !== undefined) locals.push(shim);
+  const self = await startCoreWith("self", shim?.env ?? {});
+  started.push(self);
   dialers.add(self);
   const local = localHost();
   locals.push(local);
@@ -143,6 +159,42 @@ describe("the reconciler against real hc (R-1, R-2, R-9, R-10, R-11)", () => {
   );
 
   test(
+    "a member's core already added over ssh is migrated to the mesh line, and the note says it was ssh",
+    async () => {
+      const { self, members, local, reconciler, run, list } = await mesh(["b"], "b");
+      const [b] = members;
+      if (b === undefined) throw new Error("core");
+      await addOverSsh(self, "old", "build-box");
+      expect((await list()).map((m) => [m.name, m.via ?? false, m.id])).toEqual([["old", false, b.control.coreId]]);
+      await run(viewOf(self.member, b.member));
+      const listed = await list();
+      expect(listed.map((m) => m.name)).toEqual(["b"]);
+      expect(meshHostOf(listed[0]?.target ?? "", local.program, local.stateDir)).toBe(b.member.hostId);
+      expect(reconciler.status.get(b.member.hostId)).toEqual({ state: "ok", replaced: { name: "old", kind: "ssh" } });
+    },
+    LONG,
+  );
+
+  test(
+    "an earlier entry that holds the member's name hands it to the mesh line instead of a fallback",
+    async () => {
+      const { self, members, local, machines, reconciler, run, list } = await mesh(["b"], "b");
+      const [b] = members;
+      if (b === undefined) throw new Error("core");
+      await addOverSsh(self, "b", "build-box");
+      machines.calls.length = 0;
+      await run(viewOf(self.member, b.member));
+      const fallback = fallbacks("b", b.member.hostId)[0] ?? "";
+      expect(machines.calls).toEqual(["add b", `add ${fallback}`, "rm b", "add b"]);
+      const listed = await list();
+      expect(listed.map((m) => [m.name, m.id])).toEqual([["b", b.control.coreId]]);
+      expect(meshHostOf(listed[0]?.target ?? "", local.program, local.stateDir)).toBe(b.member.hostId);
+      expect(reconciler.status.get(b.member.hostId)).toEqual({ state: "ok", replaced: { name: "b", kind: "ssh" } });
+    },
+    LONG,
+  );
+
+  test(
     "a member's core already added with plain doriface-host connect is migrated to the mesh line",
     async () => {
       const { self, members, local, reconciler, run, list } = await mesh(["b"]);
@@ -153,10 +205,10 @@ describe("the reconciler against real hc (R-1, R-2, R-9, R-10, R-11)", () => {
       const listed = await list();
       expect(listed.map((m) => m.name)).toEqual(["b"]);
       expect(meshHostOf(listed[0]?.target ?? "", local.program, local.stateDir)).toBe(b.member.hostId);
-      const status = reconciler.status.get(b.member.hostId);
-      expect(status?.state === "ok" && status.note).toBe(
-        'replaced machine "old" (doriface-host connect) with the mesh line',
-      );
+      expect(reconciler.status.get(b.member.hostId)).toEqual({
+        state: "ok",
+        replaced: { name: "old", kind: "command" },
+      });
     },
     LONG,
   );

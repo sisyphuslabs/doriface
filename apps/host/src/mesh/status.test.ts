@@ -67,7 +67,7 @@ describe("mesh status", () => {
     expect(memberNamed("build-box")).toMatchObject({
       lineReason: null,
       helloCoreId: "core-build-box",
-      replacedMachine: "build-box-old",
+      replacedMachine: { name: "build-box-old", kind: "ssh" },
     });
     expect(memberNamed("tablet")).toMatchObject({ lineReason: null, replacedMachine: null });
   });

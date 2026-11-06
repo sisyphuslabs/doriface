@@ -1,5 +1,5 @@
 import type { View } from "@doriface/mesh";
-import type { MeshLineState, MeshLineStuck } from "@doriface/protocol";
+import type { MeshLineState, MeshLineStuck, MeshReplacedMachine } from "@doriface/protocol";
 
 // What `mesh status` reads, one snapshot per call. Every key is a signing public key (base64url).
 // Each part is owned by another module of the mesh (design section 11): the view by `packages/mesh`, the stored state
@@ -60,8 +60,8 @@ export interface LineFacts {
   readonly stuck: MeshLineStuck | null;
   /** The core id of the latest line hello from the member, logged for the card's hcId check (design section 7.6). */
   readonly helloCoreId: string | null;
-  /** The non-mesh machine (from `doriface-host connect`) this line replaced for the same core (design section 8.1). */
-  readonly replaced: string | null;
+  /** The non-mesh machine (ssh or a via) this line replaced for the same core (design section 8.1). */
+  readonly replaced: MeshReplacedMachine | null;
 }
 
 export interface PendingJoinFact {
