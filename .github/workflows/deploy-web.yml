@@ -29,8 +29,13 @@ on:
 permissions:
   contents: read
 
-# Concurrency is per job, not per run: every pull request push starts this workflow, and a run-level group let each of
-# those runs (whose jobs are skipped) replace a labelled deploy still waiting for its slot (#857).
+# A group keeps one pending run and a newer one cancels it, so pull requests must never share dev's group: every PR
+# push starts a run (its jobs skip without the label), and in one shared group those runs cancelled the dev deploys of
+# merged commits (#868). dev deploys queue in their own group and are never cancelled in progress; each pull request has
+# its own group, where a newer push replaces its older run.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('deploy-web-pr-{0}', github.event.pull_request.number) || 'deploy-web-dev' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   BUN_VERSION: 1.4.4
@@ -44,9 +49,6 @@ jobs:
       github.event_name != 'pull_request' ||
       (contains(github.event.pull_request.labels.*.name, 'deploy-staging') &&
       github.event.pull_request.head.repo.full_name == github.repository)
-    concurrency:
-      group: deploy-web-staging
-      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -72,18 +74,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx "$WRANGLER" deploy --env staging
-      - name: Probe staging
-        run: |
-          bun .github/scripts/probe-web.ts https://staging.app.doriterm.com
-          bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev
+      # One step per host, so a host that fails is named and the other is still probed.
+      - name: Probe staging (staging.app.doriterm.com)
+        run: bun .github/scripts/probe-web.ts https://staging.app.doriterm.com
+      - name: Probe staging (doriface-staging.omo.dev)
+        if: ${{ !cancelled() }}
+        run: bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev
 
   production:
     name: Production
     needs: staging
     if: github.ref == 'refs/heads/dev' && (github.event_name == 'push' || inputs.production)
-    concurrency:
-      group: deploy-web-production
-      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -105,7 +106,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx "$WRANGLER" deploy --env ""
-      - name: Probe production
-        run: |
-          bun .github/scripts/probe-web.ts https://app.doriterm.com
-          bun .github/scripts/probe-web.ts https://doriface.omo.dev
+      - name: Probe production (app.doriterm.com)
+        run: bun .github/scripts/probe-web.ts https://app.doriterm.com
+      - name: Probe production (doriface.omo.dev)
+        if: ${{ !cancelled() }}
+        run: bun .github/scripts/probe-web.ts https://doriface.omo.dev
