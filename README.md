@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="https://doriterm.com">doriterm.com</a> ·
   <a href="#install">install</a> ·
   <a href="#pairing-and-how-the-relay-fits">how the relay fits</a> ·
   <a href="#security">security</a> ·
@@ -27,19 +28,21 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/sisyphuslabs/doriterm?labelColor=333333&color=666666" alt="license" /></a>
 </p>
 
-![The workspace at 1440 wide in the night theme: spaces and a list of agents on the left, one of them waiting for an answer, and two terminals side by side.](docs/design/app/workspace-1440-night.png)
+![The workspace in the night theme: spaces and a list of agents on the left, one of them waiting for an answer, and two terminals side by side.](docs/design/app/workspace-1440-4k-night.png)
 
 ---
 
-**Doriterm is a browser, PWA and desktop client for the terminals and coding agents running on your own machines.** It runs
-`doriface-host` beside [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) and passes herdr-core's own JSON-RPC and
-framed terminal protocol through byte for byte, so every `hc` method works without Doriterm re-implementing it — and what
-crosses the network is a Noise session, not a remote-desktop stream.
+**Doriterm puts the terminals and coding agents on your machines on every screen you have.** A host runs beside
+[herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) where the work actually happens; a browser tab, an installed PWA
+on your phone and the desktop app all open the same workspace, through a relay that only ever carries ciphertext.
+
+Because that host pipes `hc`'s own JSON-RPC and framed terminal protocol through byte for byte, every `hc` feature works
+without Doriterm re-implementing it — and what crosses the network is a Noise session, not a remote-desktop stream.
 
 ## What you get
 
-- **Your terminals, on every screen.** One workspace in a browser tab, on a phone as an installed PWA, and in the desktop app:
-  the same tabs, panes and layout.
+- **Your terminals, on every screen.** The browser tab, the phone's home screen and the desktop app open the same workspace: the
+  same tabs, panes and layout.
 - **Agents that say when they need you.** The sidebar groups every session as _needs you_, _working_, _idle_, _done_ or
   _offline_, so you read the list instead of cycling through panes looking for the one that stopped.
 - **One window, many machines.** A host added over ssh, or through the relay with `hc machine add --via`, appears next to your
@@ -53,9 +56,9 @@ crosses the network is a Noise session, not a remote-desktop stream.
 - **Installs and stays installed.** The desktop app starts the host and `hc` on the computer it runs on, starts the host again
   if it stops, and installs herdr-core for this user when it is missing or too old.
 
-| Needs you, day theme                                                                                                                          | A terminal on a phone                                                                                                                                           |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <img src="docs/design/app/agents-attention-1440-day.png" width="620" alt="The agent list in the day theme, one agent waiting for approval" /> | <img src="docs/design/app/mobile-keys-bar-390-night.png" width="210" alt="A terminal on a phone, with a key bar for ctrl, shift, tab, esc, arrows and paste" /> |
+| Needs you, day theme                                                                                                                             | A terminal on a phone                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <img src="docs/design/app/agents-attention-1440-4k-day.png" width="620" alt="The agent list in the day theme, one agent waiting for approval" /> | <img src="docs/design/app/mobile-keys-bar-390-night.png" width="210" alt="A terminal on a phone, with a key bar for ctrl, shift, tab, esc, arrows and paste" /> |
 
 ## Install
 
@@ -64,7 +67,8 @@ app; and the **relay** between them, which is already deployed. The shortest pat
 
 1. **Start a host** on the machine whose terminals you want. The desktop app does it for you when it opens, or run
    [`doriface-host`](#a-host-on-the-machine-with-the-terminals) from this repository.
-2. **Open a client**: the desktop app, or the web app at [doriface.omo.dev](https://doriface.omo.dev).
+2. **Open a client**: the desktop app, or the web app — [app.doriterm.com](https://app.doriterm.com) once the domain lands,
+   [doriface.omo.dev](https://doriface.omo.dev) until then.
 3. **Pair it** with the host — scan the QR code the host prints, or open the link it prints, and confirm the fingerprint it
    shows. [Pairing, and how the relay fits](#pairing-and-how-the-relay-fits) is the whole of it.
 
@@ -90,11 +94,12 @@ The desktop app starts a host on the computer it runs on, so that computer's ter
 
 ### In a browser
 
-The web client is the same app and needs no install: it is live at [doriface.omo.dev](https://doriface.omo.dev), and moves to
-doriterm.com when that domain lands. Use your browser's "install" or "add to home screen" if you want it in a window of its
-own; an installed PWA opens full screen and precaches its shell, so a dropped network does not empty the window. A release
-build reaches your machines through the relay only — a development build (`bun run --cwd apps/web dev`) also offers "Loopback
-dev" in Settings > Connections, with the token from `doriface-host --print-token`.
+The web client is the same app and needs no install. It moves to [app.doriterm.com](https://app.doriterm.com) when that domain
+lands; until then it is live at [doriface.omo.dev](https://doriface.omo.dev). Use your browser's "install" or "add to home
+screen" if you want it in a window of its own; an installed PWA opens full screen and precaches its shell, so a dropped
+network does not empty the window. A release build reaches your machines through the relay only — a development build
+(`bun run --cwd apps/web dev`) also offers "Loopback dev" in Settings > Connections, with the token from
+`doriface-host --print-token`.
 
 Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older browser gets an "Update your browser" screen
 naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
@@ -142,12 +147,12 @@ Other machines join the same way, through the same relay:
 hc machine add --via 'doriface-host connect <B hostId>' --name b   # B's terminals appear as b/t1, b/t2, …
 ```
 
-A client reaches another machine's host through the relay, and the host also serves the contract's direct path — `/v1/e2ee`
-is mounted on the main listener and on `--lan-listen` when that is given — though no shipped client dials it. On the same
-machine the host serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`, which is how the desktop app talks to its own
-local host. The host never parses what `hc` says — it pipes the stream — so the client SDK speaks herdr-core's protocol itself
-and a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire contract
-every package is built against is [docs/transport.md](docs/transport.md).
+Every one of those paths goes through the relay, and the host also serves the contract's direct path — `/v1/e2ee` is mounted on
+the main listener and on `--lan-listen` when that is given — though no shipped client dials it. On the same machine the host
+serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`, which is how the desktop app talks to its own local host. The
+host never parses what `hc` says — it pipes the stream — so the client SDK speaks herdr-core's protocol itself and a future
+native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire contract every package
+is built against is [docs/transport.md](docs/transport.md).
 
 ## Security
 
@@ -200,7 +205,7 @@ bun run --cwd apps/host start --print-token   # the host gateway on 127.0.0.1:77
 bun run --cwd apps/web dev                    # the web client
 bun run --cwd apps/desktop start              # the desktop app
 bun run --cwd packages/ui showcase            # every component and screen mockup
-bun run capture:readme                        # recapture the workspace screenshots in this file, from the real build
+bun run capture:readme                        # the README's app screenshots, 1280x720 CSS at 3x (3840x2160)
 ```
 
 `bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`.
