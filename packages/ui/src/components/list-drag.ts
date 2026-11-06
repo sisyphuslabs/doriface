@@ -35,6 +35,7 @@ interface Press {
   readonly startX: number;
   armed: boolean;
   clientY: number;
+  clientX: number;
   dragging: { readonly slots: readonly RowSlot[]; readonly gap: number; readonly listTop: number } | null;
 }
 
@@ -135,6 +136,7 @@ export function useListDrag(
         startX: event.clientX,
         armed: !touch,
         clientY: event.clientY,
+        clientX: event.clientX,
         dragging: null,
       };
       press.current = current;
@@ -147,6 +149,7 @@ export function useListDrag(
       const onMoveEvent = (move: PointerEvent): void => {
         if (move.pointerId !== current.pointerId) return;
         current.clientY = move.clientY;
+        current.clientX = move.clientX;
         const travel = Math.hypot(move.clientX - current.startX, move.clientY - current.startY);
         if (!current.armed) {
           if (travel > TOUCH_SLOP_PX) end();
