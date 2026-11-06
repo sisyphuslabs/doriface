@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createServer } from "node:net";
-import { listPortHolders } from "./port-holders.ts";
+import { describePortFailure, listPortHolders } from "./port-holders.ts";
 
 test("a port holder is named by its pid and its command", async () => {
   const server = createServer();
@@ -20,4 +20,19 @@ test("a port holder is named by its pid and its command", async () => {
 
 test("a port nobody holds has no holder", () => {
   expect(listPortHolders([1])).toEqual([]);
+});
+
+test("the failure names the bases it tried and who holds them", () => {
+  const described = describePortFailure([51_234, 51_290], [{ port: 51_234, pid: 4_412, command: "bun" }]);
+  expect(described).toContain("51234");
+  expect(described).toContain("pid 4412");
+  expect(described).toContain("bun");
+});
+
+test("the failure says so when no listener could be named", () => {
+  expect(describePortFailure([], [])).toContain("no listener could be named");
+});
+
+test("a listener that could not be named still reports the bases tried", () => {
+  expect(describePortFailure([40_001], [])).toContain("40001");
 });
