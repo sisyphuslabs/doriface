@@ -4,8 +4,8 @@
 {
   "name": "doriterm-landing",
   "compatibility_date": "2026-11-06",
-  // auto-trailing-slash serves a folder index (mockup/index.html) at /mockup/ with no redirect, and 307s a request for
-  // /mockup.html to /mockup; the page and the probe therefore use /mockup/.
+  // auto-trailing-slash serves the mockup's folder index (mockup/index.html) at /mockup/ with no redirect (/mockup
+  // without the slash redirects to it); the page and the probe therefore use /mockup/.
   "assets": { "directory": "./dist", "html_handling": "auto-trailing-slash" },
   "workers_dev": false,
   "preview_urls": false,
