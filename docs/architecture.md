@@ -2,7 +2,7 @@
 
 Decision-complete big picture for the plan and the implementation. Written 2026-11-03 from the research wave and the repository. Every claim is tagged **SOURCE** (the cited bytes or page were read in this session) or **INFERRED** (a design conclusion). Where the verification pass found a handoff's citations unopenable, the claim is carried as **UNPROVEN** and is never used as a load-bearing fact.
 
-Citation bases. `BASE:path:line` names a file in that tree. `REPO` is this repository. `CRYPTO`, `RELAY` and `GHOSTTY` are feature branches that were still in review when this was written, so those paths exist on their branches and land in `dev` when the branches merge. `CORE`, `APP` and `T3` are public upstream repositories pinned by commit. `apps/relay` has since moved, with its history, to the relay server's own private repository (the relay server is deployed separately), where its files sit at the root; `RELAY:apps/relay/...` citations name those files. The relay's public contract is `docs/transport.md`, and `tests/relay` runs this repository's host and client against the private relay at the commit `relay-pin.json` pins.
+Citation bases. `BASE:path:line` names a file in that tree. `REPO` is this repository. `CRYPTO`, `RELAY` and `GHOSTTY` were feature branches that were still in review when this was written, so those paths existed on their branches; `CRYPTO` and `GHOSTTY` landed in `dev` when their branches merged, and `RELAY` is the exception below. `CORE`, `APP` and `T3` are public upstream repositories pinned by commit. `RELAY` is the relay server's own private repository: `apps/relay` moved there with its history, its files sit at that repository's root, and `RELAY:apps/relay/...` citations name those files. The relay server is deployed separately from this repository; its public contract is `docs/transport.md`, and `tests/relay` runs this repository's host and client against the private relay at the commit `relay-pin.json` pins.
 
 **What SOURCE means here.** A SOURCE tag says the cited bytes were read while writing this document. Citations into `REPO` can be checked in this repository. Citations into `CORE`, `APP` and `T3` can be checked at the pinned public commit. Citations of the form research note `<name>` point at working notes that are not published, so those claims are external references a reader cannot check independently; nothing load-bearing rests on them alone.
 
@@ -10,7 +10,7 @@ Citation bases. `BASE:path:line` names a file in that tree. `REPO` is this repos
 | ---------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
 | `REPO`     | this repository            | doriface `dev` (public repo, AGPL-3.0)                                                         |
 | `CRYPTO`   | branch `feat/crypto-e2ee`  | `packages/crypto` and the host's `/v1/e2ee`, in review                                         |
-| `RELAY`    | branch `feat/relay`        | `apps/relay` and `packages/relay-client`, in review                                            |
+| `RELAY`    | private repository         | `apps/relay` at its root, deployed separately                                                  |
 | `GHOSTTY`  | branch `feat/ghostty-wasm` | `packages/ghostty-wasm`, in review                                                             |
 | `DESKTOP`  | this repository            | `apps/desktop` (merged)                                                                        |
 | `CONTRACT` | `docs/transport.md`        | transport contract v1.6 (binding); bare line numbers in older section 6 rows were read at v1.2 |
@@ -82,7 +82,7 @@ Outermost first (`CONTRACT:3-8`, SOURCE):
 | Layer | Carrier                                                                                              | Unit            | Who parses                                          |
 | ----- | ---------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------- |
 | 1     | WebSocket, binary only, permessage-deflate off                                                       | one message     | browser / Bun / workerd                             |
-| 2     | Relay routing header `[type u8][sessionId u32 LE]` — relay ↔ host only                               | one mux frame   | `packages/relay-client`, `apps/relay`               |
+| 2     | Relay routing header `[type u8][sessionId u32 LE]` — relay ↔ host only                               | one mux frame   | `packages/relay-client`, `apps/relay` (private)     |
 | 3     | Noise record (`@doriface/crypto`): one WebSocket message = one Noise message, ≤ 65,519 B plaintext   | one record      | `packages/crypto` at both ends                      |
 | 4     | Plaintext = a chunk of `hc connect`'s raw byte stream: one JSON-RPC `hello` line, then 9-byte frames | arbitrary chunk | `packages/client` (device side) and herdr-core only |
 
