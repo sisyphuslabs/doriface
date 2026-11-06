@@ -2,21 +2,32 @@
 
 ## Unreleased
 
+### Phone
+
+- On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
+- On a phone, an agent row shows its "..." alone, with Pin to top as its first item, so the summary, machine and age have room. (#950)
+
 ### Web app
 
 - A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
+- A machine's terminal count and a space's tab count stay on one line however many digits they have: on a phone, "19" no longer breaks into "1" above "9" in the Spaces list. (#899)
 
 ### Settings
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
+- On a phone, the Settings tab strip's arrows that page to more sections are a full 44 pt tap each. (#900)
 
 ### Pairing from a phone
 
 - The pairing link a phone opens points at **https://app.doriterm.com**, the app's own host, instead of the old `doriface.omo.dev` address; a link from either host still opens the pair page while the move completes. The desktop app accepts a pair link on both hosts for the same reason. (#759)
 
+### Choosing the phone's keys
+
+- Settings > Keyboard puts the keys bar in your own hands: the bar itself at the top, the keys it carries with the order you set by dragging or by keyboard, and Add keys for the ones you took out. Packs (Navigation, Ctrl chords, Tmux, Coding agents) are rows you switch on, and Your keys carries your own entries — a label plus the exact bytes or chord it sends, checked against the chord grammar so a bare modifier is refused rather than sent as text. The bar belongs to the host the phone talks to, so an iPhone on a Linux machine is offered no Command key. (#770)
+
 ### Machine mesh
 
-- A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 45 s without it, as a laptop that went to sleep still does. (#909)
+- A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 75 s without it, as a laptop that went to sleep still does. (#909)
 
 ### Settings
 
@@ -25,6 +36,15 @@
 ### Notifications
 
 - Notifications say why they are not arriving: the app reports when the OS refuses a notification, with the remedy, retries a subscription that failed, and says how many agents are already waiting. (#783)
+
+### The phone
+
+- Korean typed straight into the terminal on an iPhone, an iPad or Safari on a Mac reaches the program as the syllables you see, instead of separate letters (`한글` used to arrive as `ㅎㅏㄴㄱㅡㄹ`); the syllable you are still typing shows at the cursor until it is finished. (#960)
+- The key bar's Type field shows the whole line you are writing: it takes a row of its own above the keys, wraps and grows, and every key stays in reach under it. A line you have not sent yet is still there when the keyboard closes and opens again. (#960)
+
+### Fonts, Korean text and the terminal
+
+- Nerd Font icons, powerline separators, box drawing, braille spinners and agent marks such as `⏺ ⎿` are drawn from fonts the app ships, so they show on an iPhone instead of empty boxes. The icon font is only downloaded the first time a terminal shows an icon. (#960)
 
 ## v0.1.4 - 2026-11-06
 
