@@ -33,3 +33,15 @@ export function hostFailure(error: Error): string {
   const code = "code" in error && typeof error.code === "number" ? error.code : undefined;
   return (code === undefined ? undefined : BY_CODE[code]) ?? FALLBACK;
 }
+
+/**
+ * A failure a retry cannot fix: the host does not know this device, the address is not on this computer, or its core has
+ * to be updated on one side or the other (#462, #515, #651). None of them is helped by dialing again.
+ */
+export function isFinal(error: Error): boolean {
+  return (
+    error instanceof DeviceNotPairedError ||
+    error instanceof LoopbackAddressError ||
+    error instanceof HcCoreMismatchError
+  );
+}

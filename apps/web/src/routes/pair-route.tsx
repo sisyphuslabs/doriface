@@ -3,6 +3,7 @@ import { Link2Off } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 import { parsePairingFragment, type PairingOffer } from "../pair/fragment.ts";
 import { pairingLink } from "../pair/link-capture.ts";
+import { MeshInvite } from "../pair/mesh-invite.tsx";
 import { PairStep } from "../pair/pair-step.tsx";
 import { VerifyStep } from "../pair/verify-step.tsx";
 import { useOnline } from "../pwa/use-online.ts";
@@ -15,6 +16,7 @@ export function PairRoute() {
   if (typed !== null) return <VerifyStep offer={typed} />;
   if (link === null) return <PairStep onOffer={setTyped} offline={!online} />;
   const parsed = parsePairingFragment(link);
+  if (parsed.ok && parsed.offer.target === "mesh") return <MeshInvite />;
   if (parsed.ok) return <VerifyStep key={link} offer={parsed.offer} />;
   return (
     <main className="grid min-h-dvh place-items-center p-6">

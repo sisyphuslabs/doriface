@@ -1,4 +1,10 @@
-import { type MeshMemberStatus, type MeshStatus, type MeshStuckReason, meshRevokeCommand } from "@doriface/protocol";
+import {
+  type MeshMemberStatus,
+  type MeshStatus,
+  type MeshStuckReason,
+  meshRevokeCommand,
+  replacedMachineText,
+} from "@doriface/protocol";
 
 function stuckLine(reason: MeshStuckReason, nameOf: (hostId: string) => string): string {
   switch (reason.kind) {
@@ -43,7 +49,7 @@ function memberLine(member: MeshMemberStatus, nameOf: (hostId: string) => string
   const title = [member.name, member.hostId, member.fingerprint].filter((part) => part !== null).join(" ");
   const lines = [`  ${title}`, `    ${parts.join(", ")}`];
   if (member.replacedMachine !== null) {
-    lines.push(`    replaced machine "${member.replacedMachine}" (doriface-host connect) with the mesh line`);
+    lines.push(`    ${replacedMachineText(member.replacedMachine)}`);
   }
   if (member.witnessPool.length === 0 && member.line !== "self") {
     const ask = member.witnessAsk === null ? "re-found if its key is compromised" : `ask ${nameOf(member.witnessAsk)}`;
