@@ -1,7 +1,7 @@
 # @doriface/ghostty-wasm
 
-`ghostty-vt.wasm` for `@wterm/ghostty` 0.5.8, rebuilt from Ghostty v1.4.0 instead of the v1.3.1 source that
-`@wterm/ghostty` 0.5.8 ships.
+`ghostty-vt.wasm` for `@wterm/ghostty` 0.5.9, rebuilt from Ghostty v1.4.0 instead of the v1.3.1 source that
+`@wterm/ghostty` 0.5.9 ships.
 
 ```ts
 import { loadGhosttyCore } from "@doriface/ghostty-wasm";
@@ -40,13 +40,14 @@ CI does not rebuild Zig. `scripts/verify.ts` checks that the committed wasm, its
 ## Kitty metadata cap
 
 At 4096 resident images (or placements), a command that would add a new one is refused with `ENOMEM` instead of
-evicting the oldest. This is the behavior of the stock 0.5.8 binary, whose wterm build patches its Ghostty the same
+evicting the oldest. This is the behavior of the stock 0.5.9 binary, whose wterm build patches its Ghostty the same
 way: it keeps a full byte-eviction scan off the path of every metadata-only overflow, so the resident set stays
 bounded until a program deletes images or byte-budget eviction frees room.
 
-## Differences from the stock 0.5.8 binary
+## Differences from the stock 0.5.9 binary
 
-wterm's own `@wterm/ghostty` suite (187 tests) passes on this binary except two cases that pin v1.3.1 behavior:
+wterm's own `@wterm/ghostty` suite (187 tests at 0.5.8) passed on the 0.5.8 build of this binary except two cases
+that pin v1.3.1 behavior:
 
 - An ANSI-mode DECRQM (`CSI 4 $ p`) now gets a DECRPM reply; Ghostty v1.3.1 never dispatched it.
 - 4096 repeated Kitty placements settle at about 2.4 MiB of WebAssembly memory instead of about 1.3 MiB; the

@@ -1,5 +1,5 @@
 diff --git a/dist/input.d.ts b/dist/input.d.ts
-index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02f1804d30 100644
+index 3bc52a7..8b31842 100644
 --- a/dist/input.d.ts
 +++ b/dist/input.d.ts
 @@ -20,6 +20,7 @@ export declare class InputHandler {
@@ -23,7 +23,7 @@ index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02
      private handleCompositionEnd;
      private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..e13afdf5746a190a47fcb35356ab7cb8a262c679 100644
+index 78a86ff..3740d5a 100644
 --- a/dist/input.js
 +++ b/dist/input.js
 @@ -86,6 +86,8 @@ export class InputHandler {
@@ -92,16 +92,16 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..e13afdf5746a190a47fcb35356ab7cb8
      hideComposition() {
          this.compositionWidth = 0;
          const s = this.textarea.style;
-@@ -816,7 +846,7 @@ export class InputHandler {
-     }
-     keyToSequence(e) {
+@@ -821,7 +851,7 @@ export class InputHandler {
+                 return other;
+         }
          if (e.ctrlKey && !e.altKey && !e.metaKey) {
 -            const control = legacyControlByte(e.key);
 +            const control = legacyControlByte(e.key) ?? physicalControlByte(e);
              if (control !== null)
                  return control;
              if (e.key === "Backspace")
-@@ -850,4 +880,15 @@ export class InputHandler {
+@@ -855,6 +885,17 @@ export class InputHandler {
          return null;
      }
  }
@@ -116,13 +116,14 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..e13afdf5746a190a47fcb35356ab7cb8
 +    const letter = /^Key([A-Z])$/.exec(e.code ?? "");
 +    return letter ? String.fromCharCode(letter[1].charCodeAt(0) - 64) : null;
 +}
- //# sourceMappingURL=input.js.map
-\ No newline at end of file
+ /**
+  * xterm modifyOtherKeys level 2: keys whose legacy encoding loses their
+  * modifiers become `CSI 27 ; modifier ; code ~`. Like xterm, and unlike
 diff --git a/dist/renderer.d.ts b/dist/renderer.d.ts
-index 208021ab4fefce3dda7da7f337850a59113cc514..b6c3f70309d5e78e15d656d09f406f268b869f8b 100644
+index dbff026..b9be38a 100644
 --- a/dist/renderer.d.ts
 +++ b/dist/renderer.d.ts
-@@ -95,6 +95,8 @@ export declare class Renderer {
+@@ -114,6 +114,8 @@ export declare class Renderer {
      /** Turns the color canvas off so block cells keep their own colored spans. */
      setCanvasSuspended(suspended: boolean): void;
      requestSetup(): void;
@@ -132,10 +133,10 @@ index 208021ab4fefce3dda7da7f337850a59113cc514..b6c3f70309d5e78e15d656d09f406f26
      invalidateColors(): void;
      /** Replaces decorations only, preserving native text selection. */
 diff --git a/dist/renderer.js b/dist/renderer.js
-index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c14988a6410fc 100644
+index 077910e..7b0dbf3 100644
 --- a/dist/renderer.js
 +++ b/dist/renderer.js
-@@ -157,8 +157,42 @@ function cellSpanPart(className, style, text) {
+@@ -158,8 +158,42 @@ function cellSpanPart(className, style, text) {
          html: `${opening}${content}</span>`,
          opening: flat ? opening : undefined,
          text: flat ? text : undefined,
@@ -178,7 +179,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
  function safeLinkHref(uri) {
      if (!uri)
          return undefined;
-@@ -549,6 +583,8 @@ export class Renderer {
+@@ -571,6 +605,8 @@ export class Renderer {
          // Keeping their boundaries lets a redraw preserve unchanged Unicode cells.
          const parts = [];
          let linkHtml = "";
@@ -187,7 +188,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
          const content = {
              text: "",
              specialCells: [],
-@@ -590,14 +626,18 @@ export class Renderer {
+@@ -612,14 +648,18 @@ export class Renderer {
              const nextLinkKey = href ? linkKey : "";
              if (nextLinkKey !== outputLinkKey) {
                  if (outputLinkKey)
@@ -208,7 +209,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
              else
                  parts.push(content);
          };
-@@ -746,7 +786,10 @@ export class Renderer {
+@@ -768,7 +808,10 @@ export class Renderer {
                  }
                  const ch = cell.chars ?? (cp >= 32 ? String.fromCodePoint(cp) : " ");
                  recordText(ch, col, 2);
@@ -220,7 +221,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
                  const cursor = cursorCol >= col && cursorCol < col + 2;
                  const cls = cursor ? "term-wide term-cursor" : "term-wide";
                  appendStyledSpan(cls, cursor ? cursorCellStyle(style) : style, ch, cellLinkKey, cellLinkUri);
-@@ -818,7 +861,7 @@ export class Renderer {
+@@ -840,7 +883,7 @@ export class Renderer {
          flushRun(this.cols);
          flushCanvasRun();
          if (outputLinkKey)
@@ -229,7 +230,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
          this.updateRowParts(rowEl, parts);
          this.rowText.set(rowEl, content);
          if (canvasTop)
-@@ -871,9 +914,9 @@ export class Renderer {
+@@ -893,9 +936,9 @@ export class Renderer {
          }
          const retained = start + parts.length - newEnd;
          const replaced = Math.max(oldEnd - start, newEnd - start);
@@ -241,7 +242,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
          }
          else {
              // Replace only the changed middle, retaining the native text nodes and
-@@ -882,12 +925,12 @@ export class Renderer {
+@@ -904,12 +947,12 @@ export class Renderer {
              range.setStart(row, start);
              range.setEnd(row, oldEnd);
              range.deleteContents();
@@ -260,7 +261,7 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
          }
          this.rowParts.set(row, parts);
      }
-@@ -1286,6 +1329,11 @@ export class Renderer {
+@@ -1330,6 +1373,11 @@ export class Renderer {
      requestSetup() {
          this.needsSetup = true;
      }
@@ -273,10 +274,10 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
      invalidateColors() {
          this.colorsChanged = true;
 diff --git a/dist/wterm.d.ts b/dist/wterm.d.ts
-index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..04cbfc73f380b80233da981248ce19056a1dc3fa 100644
+index a6746f4..7ef2bfc 100644
 --- a/dist/wterm.d.ts
 +++ b/dist/wterm.d.ts
-@@ -115,6 +115,17 @@ export declare class WTerm {
+@@ -131,6 +131,17 @@ export declare class WTerm {
       * Pass `null` to drop them and answer color queries from the page's CSS again.
       */
      setThemeColors(colors: TerminalThemeColors | null): void;
@@ -295,18 +296,18 @@ index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..04cbfc73f380b80233da981248ce1905
      /**
       * Hands the core the theme colors the page's CSS resolves to, unless the
 diff --git a/dist/wterm.js b/dist/wterm.js
-index 848e1c3f7880842c4439541fc4565ff4a42c0201..3a69b5ccab58680500721e787d159dfaea8804a1 100644
+index 6f31f07..7c5a441 100644
 --- a/dist/wterm.js
 +++ b/dist/wterm.js
-@@ -372,6 +372,7 @@ export class WTerm {
-                 maxImageWidth: this.maxImageWidth,
+@@ -418,6 +418,7 @@ export class WTerm {
                  maxImageHeight: this.maxImageHeight,
+                 renderer: this._rendererOption,
              });
 +            this.renderer.setWideGlyphScale(this._wideGlyphScale ?? null);
              this.renderer.setup(this.cols, this.rows);
              this.input = new InputHandler(this.element, (data, preserveScroll = false) => this._deliverInput(data, preserveScroll), () => this.bridge, () => this._charWidth > 0 && this._rowHeight > 0
                  ? { charWidth: this._charWidth, rowHeight: this._rowHeight }
-@@ -407,7 +408,6 @@ export class WTerm {
+@@ -453,7 +454,6 @@ export class WTerm {
              if (!this.autoResize) {
                  this._lockHeight();
              }
@@ -314,9 +315,9 @@ index 848e1c3f7880842c4439541fc4565ff4a42c0201..3a69b5ccab58680500721e787d159dfa
              this._initialRender();
              this._registerWebMCP();
              if (this.cols !== initialCols || this.rows !== initialRows)
-@@ -445,6 +445,29 @@ export class WTerm {
-         }
-         this.element.scrollTop = target;
+@@ -508,6 +508,29 @@ export class WTerm {
+             throw new Error("This terminal core cannot change its scrollback");
+         this.bridge.setScrollbackLines(this._scrollbackLines);
      }
 +    /**
 +     * Ends an input-method composition still in progress in the terminal's field and returns its preedit, which the
