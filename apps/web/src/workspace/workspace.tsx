@@ -96,9 +96,18 @@ export function Workspace({ connection }: WorkspaceProps) {
     },
     [saveMove, toasts],
   );
+  // A write the link dropped under is lost with the link, which the connection notice already names: the toast says what
+  // to do, as a failed New terminal does, never the closed link's raw cause (#698).
   const failed = useCallback(
-    (message: string) => toasts.add({ type: "error", title: "The layout was not saved", description: message }),
-    [toasts],
+    (message: string) =>
+      toasts.add({
+        type: "error",
+        title: "The layout was not saved",
+        description: connection.closed
+          ? `Reconnecting to ${connection.hello.core.name}; make the change again once it is back.`
+          : message,
+      }),
+    [connection, toasts],
   );
   const told = useCallback((message: string) => toasts.add({ type: "info", title: message }), [toasts]);
   const unsaved = useCallback(

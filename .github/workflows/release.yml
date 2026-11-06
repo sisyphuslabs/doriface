@@ -311,8 +311,9 @@ jobs:
         with:
           path: assets
           merge-multiple: true
+      # Stamped with this tag, so the installer from a release installs that release rather than whatever is latest.
       - name: The host installer
-        run: cp apps/host/install/install.sh assets/install.sh
+        run: sed "s/__DORIFACE_RELEASE__/$TAG/" apps/host/install/install.sh > assets/install.sh
       - name: SHA256SUMS.txt
         working-directory: assets
         run: |

@@ -1,5 +1,5 @@
 import { DEFAULT_RELAY_URL, fingerprintOf, type HostIdentity } from "@doriface/crypto";
-import { pairingArtifact } from "./pair-link.ts";
+import { pairingArtifact, phonePairingLink } from "./pair-link.ts";
 import { codeRetired, type PendingPairing } from "./state/pairing.ts";
 
 /**
@@ -13,6 +13,8 @@ export interface PairingOfferView {
   readonly link: string;
   /** What opens `link`: a web page, or the doriface desktop app. */
   readonly opens: "web" | "desktop";
+  /** What the QR code encodes for a phone: `<web origin>/pair#…` with `link`'s fragment, the hosted app by default. */
+  readonly phoneLink: string;
   readonly hostId: string;
   /** This host's Noise key, grouped for reading aloud, as `doriface-host fingerprint` prints it. */
   readonly fingerprint: string;
@@ -39,20 +41,19 @@ export function pairingOfferView({
   relayUrl = DEFAULT_RELAY_URL,
   webOrigin,
 }: PairingOfferParts): PairingOfferView {
-  const artifact = pairingArtifact(
-    {
-      hostId: identity.hostId,
-      noiseStaticPub: identity.noise.publicKey,
-      signPub: identity.sign.publicKey,
-      linkSecret: offer.linkSecret,
-      relayUrl,
-    },
-    webOrigin,
-  );
+  const target = {
+    hostId: identity.hostId,
+    noiseStaticPub: identity.noise.publicKey,
+    signPub: identity.sign.publicKey,
+    linkSecret: offer.linkSecret,
+    relayUrl,
+  };
+  const artifact = pairingArtifact(target, webOrigin);
   return {
     code: offer.code,
     link: artifact.url,
     opens: artifact.opens,
+    phoneLink: phonePairingLink(target, webOrigin),
     hostId: identity.hostId,
     fingerprint: fingerprintOf(identity.noise.publicKey),
     expiresAt: offer.expiresAt,

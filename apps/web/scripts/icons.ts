@@ -88,11 +88,12 @@ await mkdir(DESKTOP, { recursive: true });
 await copyFile(join(BRAND, "doriface-icon.svg"), join(PUBLIC, "icon.svg"));
 await copyFile(join(BRAND, "doriface-icon-small.svg"), join(PUBLIC, "favicon.svg"));
 
-const [f16, f32, i192, i512, mask512, touch180, linux512] = await Promise.all([
+const [f16, f32, i192, i512, mask192, mask512, touch180, linux512] = await Promise.all([
   png(small, 16),
   png(small, 32),
   png(icon, 192),
   png(icon, 512),
+  png(maskable, 192),
   png(maskable, 512),
   png(touch, 180),
   png(icon, 512),
@@ -121,6 +122,7 @@ await Promise.all([
   Bun.write(join(PUBLIC, "favicon-32.png"), f32),
   Bun.write(join(PUBLIC, "icon-192.png"), i192),
   Bun.write(join(PUBLIC, "icon-512.png"), i512),
+  Bun.write(join(PUBLIC, "icon-maskable-192.png"), mask192),
   Bun.write(join(PUBLIC, "icon-maskable-512.png"), mask512),
   Bun.write(join(PUBLIC, "apple-touch-icon.png"), touch180),
   Bun.write(join(DESKTOP, "icon.png"), linux512),

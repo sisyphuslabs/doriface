@@ -11,13 +11,15 @@
 set -eu
 
 REPO_RELEASES="https://github.com/sisyphuslabs/doriface/releases"
+# The release workflow stamps its tag here, so a published install.sh installs the release it came with.
+release="__DORIFACE_RELEASE__"
 SERVICE_LABEL="dev.omo.doriface-host"
 
 usage() {
   cat <<'EOF'
 usage: install.sh [options]
 
-  --version <vX.Y.Z>    the release to install (default: the latest)
+  --version <vX.Y.Z>    the release to install (default: the one this script came with, else the latest)
   --web-origin <url>    the web app the pairing QR code and link open (default: the doriface desktop app's link)
   --join <link>         join the mesh of the host that made this link (the app's Add a machine command), instead
                         of printing a pairing
@@ -74,6 +76,8 @@ asset="doriface-host-${os}-${arch}"
 host_bin="${bin_dir}/doriface-host"
 unit_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 unit="${unit_dir}/doriface-host.service"
+# Named once and passed to the service and to every command below, so they all use the same keys and devices.
+state_dir="${DORIFACE_HOST_STATE_DIR:-${XDG_STATE_HOME:-${HOME}/.local/state}/doriface-host}"
 plist="${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -110,6 +114,7 @@ if [ "$service" -eq 1 ]; then
 fi
 
 have curl || fail "curl is needed to download doriface-host"
+if [ -z "$version" ] && [ "$release" != "__DORIFACE_RELEASE__" ]; then version="$release"; fi
 if [ -z "$from" ]; then
   if [ -z "$version" ]; then from="${REPO_RELEASES}/latest/download"; else from="${REPO_RELEASES}/download/${version}"; fi
 fi
@@ -159,13 +164,13 @@ else
 fi
 
 if [ "$service" -eq 0 ] && [ -n "$join" ]; then
-  "$host_bin" mesh join --yes --hc "$hc_path" "$join"
+  "$host_bin" mesh join --yes --hc "$hc_path" --state-dir "$state_dir" "$join"
   say "joined; start the host with: ${host_bin} --hc ${hc_path}"
   exit 0
 fi
 if [ "$service" -eq 0 ]; then
-  say "start the host with: ${host_bin} --hc ${hc_path}"
-  say "then pair a device with: ${host_bin} pair"
+  say "start the host with: ${host_bin} --hc ${hc_path} --state-dir ${state_dir}"
+  say "then pair a device with: ${host_bin} pair --state-dir ${state_dir}"
   exit 0
 fi
 
@@ -181,7 +186,7 @@ Description=doriface host gateway beside herdr-core
 After=network-online.target
 
 [Service]
-ExecStart="${host_bin}" --hc "${hc_path}"
+ExecStart="${host_bin}" --hc "${hc_path}" --state-dir "${state_dir}"
 Environment="PATH=${service_path}" "SHELL=${service_shell}"
 Restart=always
 RestartSec=2
@@ -213,6 +218,8 @@ else
     <string>$(xml "$host_bin")</string>
     <string>--hc</string>
     <string>$(xml "$hc_path")</string>
+    <string>--state-dir</string>
+    <string>$(xml "$state_dir")</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -233,15 +240,15 @@ EOF
 fi
 
 if [ -n "$join" ]; then
-  "$host_bin" mesh join --wait-host 60 --yes "$join"
+  "$host_bin" mesh join --wait-host 60 --yes --state-dir "$state_dir" "$join"
   say "this machine joined the mesh; its terminals show in the app under its name"
 elif [ "$pair" -eq 1 ]; then
   echo
   if [ -n "$web_origin" ]; then
-    "$host_bin" pair --wait-host 60 --web-origin "$web_origin"
+    "$host_bin" pair --wait-host 60 --state-dir "$state_dir" --web-origin "$web_origin"
   else
-    "$host_bin" pair --wait-host 60
+    "$host_bin" pair --wait-host 60 --state-dir "$state_dir"
   fi
   echo
-  say "pair another device later with: ${host_bin} pair"
+  say "pair another device later with: ${host_bin} pair --state-dir ${state_dir}"
 fi

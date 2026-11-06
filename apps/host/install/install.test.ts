@@ -95,10 +95,12 @@ describe("install.sh on Linux", () => {
       "systemctl --user daemon-reload",
       "systemctl --user enable doriface-host.service",
       "systemctl --user restart doriface-host.service",
-      "doriface-host pair --wait-host 60 --web-origin https://app.example",
+      `doriface-host pair --wait-host 60 --state-dir ${join(r.home, ".local", "state", "doriface-host")} --web-origin https://app.example`,
     ]);
     const unit = readFileSync(join(r.home, ".config", "systemd", "user", "doriface-host.service"), "utf8");
-    expect(unit).toContain(`ExecStart="${join(bin, "doriface-host")}" --hc "${hc}"`);
+    expect(unit).toContain(
+      `ExecStart="${join(bin, "doriface-host")}" --hc "${hc}" --state-dir "${join(r.home, ".local", "state", "doriface-host")}"`,
+    );
     expect(unit).toContain(`Environment="PATH=${bin}:${bin}:${r.stubs}:/usr/bin:/bin" "SHELL=/bin/zsh"`);
     expect(unit).toContain("Restart=always");
     expect(unit).toContain("CPUWeight=10000");
@@ -113,8 +115,35 @@ describe("install.sh on Linux", () => {
     const run = install(r, ["--join", "doriface://pair#h=a&m=1"]);
     expect(run.err).toBe("");
     expect(run.code).toBe(0);
-    expect(run.calls.at(-1)).toBe("doriface-host mesh join --wait-host 60 --yes doriface://pair#h=a&m=1");
+    expect(run.calls.at(-1)).toBe(
+      `doriface-host mesh join --wait-host 60 --yes --state-dir ${join(r.home, ".local", "state", "doriface-host")} doriface://pair#h=a&m=1`,
+    );
     expect(run.calls.some((call) => call.startsWith("doriface-host pair"))).toBe(false);
+  });
+
+  test("the service and the pairing use one state dir, the one this shell names, even with XDG_STATE_HOME set", () => {
+    const r = rig("Linux");
+    const state = join(r.root, "xdg-state");
+    const run = install(r, [], [], { XDG_STATE_HOME: state });
+    expect(run.code).toBe(0);
+    const dir = join(state, "doriface-host");
+    const unit = readFileSync(join(r.home, ".config", "systemd", "user", "doriface-host.service"), "utf8");
+    expect(unit).toContain(`--state-dir "${dir}"`);
+    expect(run.calls.at(-1)).toBe(`doriface-host pair --wait-host 60 --state-dir ${dir}`);
+  });
+
+  test("a published install.sh installs its own release by default, and the repository copy the latest", () => {
+    const script = readFileSync(SCRIPT, "utf8");
+    expect(script).toContain('release="__DORIFACE_RELEASE__"');
+    const r = rig("Linux");
+    const stamped = join(r.root, "install-v9.9.9.sh");
+    writeFileSync(stamped, script.replace('release="__DORIFACE_RELEASE__"', 'release="v9.9.9"'));
+    const proc = Bun.spawnSync(["/bin/sh", stamped, "--no-service", "--no-pair"], {
+      env: { HOME: r.home, PATH: [r.stubs, "/usr/bin", "/bin"].join(":"), TMPDIR: r.root },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(proc.stdout.toString() + proc.stderr.toString()).toContain("/releases/download/v9.9.9");
   });
 
   test("keeps an hc already on PATH and runs the service with it", () => {
@@ -189,7 +218,7 @@ describe("install.sh on macOS", () => {
       "doriface-host --install-hc",
       `launchctl bootout gui/${uid}/dev.omo.doriface-host`,
       `launchctl bootstrap gui/${uid} ${join(r.home, "Library", "LaunchAgents", "dev.omo.doriface-host.plist")}`,
-      "doriface-host pair --wait-host 60",
+      `doriface-host pair --wait-host 60 --state-dir ${join(r.home, ".local", "state", "doriface-host")}`,
     ]);
     const plist = readFileSync(join(r.home, "Library", "LaunchAgents", "dev.omo.doriface-host.plist"), "utf8");
     expect(plist).toContain(`<string>${join(r.home, ".local", "bin", "doriface-host")}</string>`);

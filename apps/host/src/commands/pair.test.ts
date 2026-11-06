@@ -1,9 +1,11 @@
-import { base64urlEncode, formatPairingCode } from "@doriface/crypto";
+import { base64urlEncode, buildPairingUrl, DEFAULT_RELAY_URL, formatPairingCode } from "@doriface/crypto";
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { renderUnicodeCompact } from "uqr";
 import { listenControl } from "../control.ts";
+import { loadHostIdentity } from "../state/host-keys.ts";
 import { PairingStore, pendingToWire } from "../state/pairing.ts";
 import { meshJoinCommand } from "./mesh-join.ts";
 import { pairCommand } from "./pair.ts";
@@ -39,6 +41,26 @@ describe("doriface-host pair", () => {
       if (offer === undefined) throw new Error("pair printed a link but stored no offer");
       expect(fragmentOf(link).get("p")).toBe(base64urlEncode(offer.linkSecret));
       expect(text).toContain(formatPairingCode(offer.code));
+    });
+  });
+
+  test("the QR code is the hosted web app's /pair page for a phone, while the printed link stays the deep link", async () => {
+    await withStateDir("dh-pair-qr-", async (dir) => {
+      let text = "";
+      await pairCommand(["--state-dir", dir], (chunk) => void (text += chunk));
+      const identity = loadHostIdentity(dir);
+      const offer = new PairingStore(dir).read();
+      if (offer === undefined) throw new Error("pair printed a QR code but stored no offer");
+      const phone = buildPairingUrl({
+        webOrigin: "https://doriface.omo.dev",
+        hostId: identity.hostId,
+        noiseStaticPub: identity.noise.publicKey,
+        signPub: identity.sign.publicKey,
+        linkSecret: offer.linkSecret,
+        relayUrl: DEFAULT_RELAY_URL,
+      });
+      expect(text).toContain(renderUnicodeCompact(phone, { ecc: "L", border: 2 }));
+      expect(new URL(linkOf(text, "doriface://pair#")).hash).toBe(new URL(phone).hash);
     });
   });
 

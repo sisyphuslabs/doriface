@@ -1,0 +1,10 @@
+name = "doriface-push-bridge"
+main = "src/worker.ts"
+compatibility_date = "2026-11-01"
+routes = [{ pattern = "push-doriface.omo.dev", custom_domain = true }]
+
+# Secrets (wrangler secret put): APNS_PRIVATE_KEY, FCM_SERVICE_ACCOUNT.
+[vars]
+APNS_TEAM_ID = ""
+APNS_KEY_ID = ""
+APNS_TOPIC = "dev.omo.doriface"
