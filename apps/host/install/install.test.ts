@@ -110,6 +110,17 @@ describe("install.sh on Linux", () => {
     expect(run.out).toContain("doriface://pair#h=fake");
   });
 
+  test("--join joins the mesh of the host that made the link once the service answers, instead of printing a pairing", () => {
+    const r = rig("Linux");
+    const run = install(r, ["--join", "doriface://pair#h=a&m=1"]);
+    expect(run.err).toBe("");
+    expect(run.code).toBe(0);
+    expect(run.calls.at(-1)).toBe(
+      `doriface-host mesh join --wait-host 60 --yes --state-dir ${join(r.home, ".local", "state", "doriface-host")} doriface://pair#h=a&m=1`,
+    );
+    expect(run.calls.some((call) => call.startsWith("doriface-host pair"))).toBe(false);
+  });
+
   test("the service and the pairing use one state dir, the one this shell names, even with XDG_STATE_HOME set", () => {
     const r = rig("Linux");
     const state = join(r.root, "xdg-state");
