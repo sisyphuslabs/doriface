@@ -1,5 +1,18 @@
-/** Why a dictation ended without a transcript. */
-export type VoiceError = "permission" | "no-speech" | "microphone" | "network" | "language" | "service" | "device";
+/**
+ * Why a dictation ended without a transcript. `mic-system`, `speech-system` and `device-mac` come only from the macOS
+ * desktop app, whose recognizer is the system's own (#726).
+ */
+export type VoiceError =
+  | "permission"
+  | "no-speech"
+  | "microphone"
+  | "network"
+  | "language"
+  | "service"
+  | "device"
+  | "mic-system"
+  | "speech-system"
+  | "device-mac";
 
 interface ErrorCopy {
   readonly tone: "warning" | "error";
@@ -52,6 +65,27 @@ export const VOICE_ERROR_COPY: Readonly<Record<VoiceError, ErrorCopy>> = {
     title: () => "Not available on this device",
     body: (language) =>
       `This browser can't recognize ${language} on the device itself. Allow its speech service in Settings > Voice input, or type instead.`,
+    retry: false,
+  },
+  "mic-system": {
+    tone: "error",
+    title: () => "Microphone access is off",
+    body: () =>
+      "Turn on doriface in System Settings > Privacy & Security > Microphone, then try again. Nothing was typed.",
+    retry: true,
+  },
+  "speech-system": {
+    tone: "error",
+    title: () => "Speech recognition is off",
+    body: () =>
+      "Turn on doriface in System Settings > Privacy & Security > Speech Recognition, then try again. Nothing was typed.",
+    retry: true,
+  },
+  "device-mac": {
+    tone: "warning",
+    title: () => "Not available on this Mac",
+    body: (language) =>
+      `This Mac can't recognize ${language} on the device. Pick another language in Settings > Voice input, or type instead.`,
     retry: false,
   },
 };
