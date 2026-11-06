@@ -52,6 +52,17 @@ export class FakeMachines implements HcMachines {
     return Promise.resolve();
   }
 
+  /** Each restore fails with the next queued error, then succeeds. */
+  readonly failRestores: HcRpcError[] = [];
+
+  restore(machine: MachineView): Promise<void> {
+    this.#log(`restore ${machine.name}`);
+    const failure = this.failRestores.shift();
+    if (failure !== undefined) return Promise.reject(failure);
+    this.#machines.push({ ...machine });
+    return Promise.resolve();
+  }
+
   connect(name: string): Promise<MachineView> {
     this.#log(`connect ${name}`);
     const machine = this.#machines.find((entry) => entry.name === name);

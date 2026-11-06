@@ -20,6 +20,7 @@ import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
 import { noticesSupported, showNotice } from "./notice.ts";
 import { requestPairOffer } from "./pair-offer.ts";
+import { requestPairedDevices, revokePairedDevice } from "./devices.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
@@ -178,6 +179,20 @@ function ready(): void {
     pairOffer: async (request) => {
       try {
         return await requestPairOffer(await localHost.start(), request);
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    pairedDevices: async () => {
+      try {
+        return await requestPairedDevices(await localHost.start());
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    revokeDevice: async (id) => {
+      try {
+        return await revokePairedDevice(await localHost.start(), id);
       } catch (error) {
         return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
       }
