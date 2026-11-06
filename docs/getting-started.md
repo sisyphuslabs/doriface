@@ -50,7 +50,8 @@ the way you would at the computer, for example `claude` or `codex`. Agents runni
 ## When something does not work
 
 - **Pair a device** says the host did not answer: choose **Try again**. The app restarts its host when it stops.
-- The phone says the offer expired: choose **New code** in the app and scan again; an offer lasts a few minutes.
+- The phone says the offer expired: an offer lasts 10 minutes. Choose **Try again** in the app's dialog (or **New code**
+  while the old one is still showing) and scan the new QR code.
 - Another computer, rather than a phone: open the `doriface://pair#…` link from **Pairing link** on that computer, where
   the desktop app takes it.
 

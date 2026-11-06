@@ -23,12 +23,14 @@ let hc: ReturnType<typeof scratchHcSession> | undefined;
 let profile: string | undefined;
 let app: ElectronApplication | undefined;
 let phone: ElectronApplication | undefined;
+let phoneProfile: string | undefined;
 
 test.afterAll(async () => {
   await phone?.close().catch(() => undefined);
   await app?.close().catch(() => undefined);
   await hc?.dispose().catch(() => undefined);
   if (profile !== undefined) rmSync(profile, { recursive: true, force: true });
+  if (phoneProfile !== undefined) rmSync(phoneProfile, { recursive: true, force: true });
 });
 
 const originOf = (page: Page): string => {
@@ -67,11 +69,18 @@ test("a fresh browser pairs with the desktop app through the hosted relay and ty
   });
   const link = await dialog.getByRole("textbox", { name: "Pairing link" }).inputValue();
   expect(link).toMatch(/&r=wss%3A%2F%2Frelay-doriface\.omo\.dev/);
-  // The QR code encodes the hosted pair page with the same fragment as this link (apps/host/src/pair-link.ts).
-  const scanned = `${PAIRING_WEB_ORIGIN}/pair${link.slice(link.indexOf("#"))}`;
+  // What the QR code encodes is the offer's phoneLink (apps/web/src/settings/pair-device.ts, qrLink); ask the shell for
+  // the same live offer the dialog shows, so the browser opens exactly what a phone's camera would.
+  const answer = await page.evaluate(() =>
+    (window as unknown as { doriface: { pairOffer(request: "state"): Promise<unknown> } }).doriface.pairOffer("state"),
+  );
+  const scanned = (answer as { offer?: { phoneLink?: string } }).offer?.phoneLink ?? "";
+  expect(scanned.startsWith(`${PAIRING_WEB_ORIGIN}/pair#`)).toBe(true);
+  expect(scanned.slice(scanned.indexOf("#"))).toBe(link.slice(link.indexOf("#")));
   const fingerprint = (await dialog.locator("figure p").innerText()).replace(/\s/g, "");
 
-  phone = await electron.launch({ args: [BROWSER_APP, scanned], env });
+  phoneProfile = mkdtempSync(join(tmpdir(), "dd-hosted-phone-"));
+  phone = await electron.launch({ args: [BROWSER_APP, scanned, `--user-data-dir=${phoneProfile}`], env });
   const browser = await phone.firstWindow();
   await expect(browser.getByRole("heading", { name: "Check the host's key" })).toBeVisible({ timeout: 120_000 });
   await expect(browser.locator("body")).toContainText(fingerprint.slice(0, 4));

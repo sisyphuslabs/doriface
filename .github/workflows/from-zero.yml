@@ -9,7 +9,8 @@ name: From zero
 # and on a pull request that changes the guide, its runner or what the guide installs from.
 #
 # user-guide checks docs/getting-started.md the same way: a packed desktop app pairs a fresh browser through the
-# production relay and the hosted web app, as the release smoke does with the AppImage it publishes.
+# production relay and the hosted web app, as the release smoke does with the AppImage it publishes. It tests dev's app
+# against the deployed web app, so a protocol change merged to dev before the web deploy shows here first.
 on:
   push:
     branches: [dev]
