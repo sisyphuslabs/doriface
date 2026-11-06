@@ -84,6 +84,20 @@ describe("publishing the status document", () => {
     expect(isJsonObject(docs.value) ? docs.value["generation"] : undefined).toBe(42);
   });
 
+  test("a host that left its mesh writes the document empty, so no client reads the mesh it left", async () => {
+    const docs = new Docs();
+    docs.value = status;
+    docs.version = 3;
+    expect(await publishMeshStatus(docs, () => undefined)).toBe("cleared");
+    expect(docs.value).toBeNull();
+  });
+
+  test("an empty document stays empty on a host that is in no mesh", async () => {
+    const docs = new Docs();
+    expect(await publishMeshStatus(docs, () => undefined)).toBe("unchanged");
+    expect(docs.sets).toBe(0);
+  });
+
   test("gives up with the conflict after three racing writers in a row", async () => {
     const docs = new Docs();
     docs.racing = [1, 2, 3];

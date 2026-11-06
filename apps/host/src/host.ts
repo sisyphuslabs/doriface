@@ -11,6 +11,7 @@ import { PairOffers } from "./pair-surface.ts";
 import { type GitFactsPublisher, publishGitFacts } from "./git-facts.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { retireLock } from "./host-lock.ts";
+import { publishMeshStatusOnCore, type MeshStatusPublisher } from "./mesh/status-publisher.ts";
 import { type Host, HOST_VERSION, type HostOptions } from "./host-types.ts";
 import { listenError, StartupError } from "./startup-error.ts";
 import { type StartedPart, stopStarted } from "./stop-started.ts";
@@ -107,6 +108,7 @@ async function serve(
   const core = { hc: options.hc, session: options.session, env: options.env };
   let info: HostInfoPublisher | undefined;
   let git: GitFactsPublisher | undefined;
+  let meshDoc: MeshStatusPublisher | undefined;
   started(
     "host info",
     () => info?.stop(),
@@ -134,6 +136,8 @@ async function serve(
       void ends.ensure();
       info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
       git ??= publishGitFacts(core, options.log);
+      meshDoc ??=
+        e2ee?.meshStatus === undefined ? undefined : publishMeshStatusOnCore(core, e2ee.meshStatus, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
@@ -142,6 +146,12 @@ async function serve(
     "git facts",
     () => git?.stop(),
     () => (git?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
+  );
+  // A host in no mesh writes the document empty (a mesh it left), so this starts with the first pipe, as the others do.
+  started(
+    "mesh status",
+    () => meshDoc?.stop(),
+    () => (meshDoc?.kill() ?? []).map((pid) => `hc connect pid ${pid}`),
   );
   if (uplink !== undefined) started("relay uplink", () => uplink.stop());
   await uplink?.start({
@@ -215,6 +225,7 @@ async function serve(
     relayUrl: uplink === undefined ? undefined : options.relay?.url,
     hostInfoSettled: () => info?.settled ?? Promise.resolve(),
     gitFactsSettled: () => git?.settled() ?? Promise.resolve(),
+    meshStatusSettled: () => meshDoc?.settled() ?? Promise.resolve(),
     stop() {
       const pushStopped = push?.stop();
       e2ee?.slots.stop();
