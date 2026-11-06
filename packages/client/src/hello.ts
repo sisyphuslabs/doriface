@@ -16,6 +16,24 @@ import { GENERATION } from "./generation.ts";
 
 export { GENERATION };
 
+/**
+ * The methods the workspace cannot run without, as herdr-app gates its own (`USES`): a core build without one of them
+ * is named as a mismatch at the handshake, instead of failing later on the first call that needs it (#651).
+ */
+export const USES: readonly string[] = [
+  "terminal.run",
+  "terminal.list",
+  "terminal.get",
+  "terminal.kill",
+  "terminal.label",
+  "terminal.attach",
+  "terminal.read",
+  "terminal.keys",
+  "doc.get",
+  "doc.set",
+  "events.subscribe",
+];
+
 const HELLO_ID = 0;
 
 /** The exact first bytes `hc attach` sends: a plain-mode JSON line asking for the framed upgrade. */
@@ -72,6 +90,9 @@ function helloFromLine(line: string): HelloResult | undefined {
   if (!meetsHcFloor(result.version)) {
     throw new HcCoreMismatchError({ kind: "core-too-old", version: result.version, need: HC_VERSION_FLOOR });
   }
+  const missing = USES.filter((method) => !result.methods.includes(method));
+  if (missing.length > 0)
+    throw new HcCoreMismatchError({ kind: "core-missing", methods: missing, need: HC_VERSION_FLOOR });
   if (!result.framed) throw new HcHandshakeError("core did not switch to framed mode");
   return result;
 }

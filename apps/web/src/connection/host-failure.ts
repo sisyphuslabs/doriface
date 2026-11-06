@@ -19,6 +19,8 @@ function coreMismatch(mismatch: HcCoreMismatch): string {
       return `Your host's herdr-core is ${mismatch.version}, and doriface needs ${mismatch.need} or newer. Run hc update on that computer.`;
     case "core-older":
       return `Your host's herdr-core is too old for doriface, which needs ${mismatch.need} or newer. Run hc update on that computer.`;
+    case "core-missing":
+      return `Your host's herdr-core is missing ${mismatch.methods.join(", ")}, which doriface needs. Run hc update on that computer.`;
     case "core-newer":
       return "Your host's herdr-core is newer than this doriface understands. Update doriface.";
   }
