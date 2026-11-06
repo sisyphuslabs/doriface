@@ -327,6 +327,10 @@ export function TerminalView(props: TerminalViewProps) {
   const attach = (ready: WTerm): void => {
     setWt(ready);
     attachedTo.current = connection;
+    // A test hook, as crash-probe is: a spec sets window.__dorifaceAttachLog and reads which terminal re-attached when
+    // a link came back (#639). Inert in the product, where nothing sets it.
+    const attachLog: unknown = Reflect.get(globalThis, "__dorifaceAttachLog");
+    if (Array.isArray(attachLog)) attachLog.push(address);
     // wterm pins the row height it measured at mount inline, over the stylesheet's font-size-derived one; without this
     // a font-size change (zoom, Settings) keeps the old row height, so the grid gains columns but never rows.
     ready.element.style.removeProperty("--term-row-height");
