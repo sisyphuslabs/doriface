@@ -7,16 +7,17 @@
 
 <h1 align="center">Doriterm</h1>
 
+<h3 align="center">Your devices. One terminal.</h3>
+
 <p align="center">
-  Your terminals and coding agents, <strong>on every screen</strong>.
-  <br />
-  End-to-end encrypted, through a relay that never sees them.
+  Every machine you own, linked through an end-to-end encrypted mesh.
 </p>
 
 <p align="center">
   <a href="https://doriterm.com">doriterm.com</a> ·
   <a href="#install">install</a> ·
   <a href="#pairing-and-how-the-relay-fits">how the relay fits</a> ·
+  <a href="#a-mesh-of-your-machines">mesh</a> ·
   <a href="#security">security</a> ·
   <a href="CONTRIBUTING.md">contributing</a> ·
   <a href="docs/architecture.md">architecture</a>
@@ -28,13 +29,22 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/sisyphuslabs/doriterm?labelColor=333333&color=666666" alt="license" /></a>
 </p>
 
-![The workspace in the night theme: spaces and a list of agents on the left, one of them waiting for an answer, and two terminals side by side.](docs/design/app/workspace-1440-4k-night.png)
+<p align="center">
+  <b>0</b> keys at the relay that open your sessions &nbsp;·&nbsp; <b>8</b> characters to pair, behind CPace &nbsp;·&nbsp;
+  <b>1</b> sidebar for every machine
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/design/app/workspace-1440-4k-night.png" />
+  <img src="docs/design/app/workspace-1440-4k-day.png" alt="The workspace: spaces and a list of agents on the left, one of them waiting for an answer, and two terminals side by side." />
+</picture>
 
 ---
 
-**Doriterm puts the terminals and coding agents on your machines on every screen you have.** A host runs beside
-[herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) where the work actually happens; a browser tab, an installed PWA
-on your phone and the desktop app all open the same workspace, through a relay that only ever carries ciphertext.
+**Doriterm puts the shells and coding agents on your machines in a browser tab, a phone and a desktop app.** A host runs
+beside [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) where the work actually happens, your machines link into
+one mesh, and every session is encrypted end to end with Noise: the relay in the middle forwards ciphertext and holds no key
+that opens it.
 
 Because that host pipes `hc`'s own JSON-RPC and framed terminal protocol through byte for byte, every `hc` feature works
 without Doriterm re-implementing it — and what crosses the network is a Noise session, not a remote-desktop stream.
@@ -45,8 +55,11 @@ without Doriterm re-implementing it — and what crosses the network is a Noise 
   same tabs, panes and layout.
 - **Agents that say when they need you.** The sidebar groups every session as _needs you_, _working_, _idle_, _done_ or
   _offline_, so you read the list instead of cycling through panes looking for the one that stopped.
-- **One window, many machines.** A host added over ssh, or through the relay with `hc machine add --via`, appears next to your
-  local ones as `b/t1`, `b/t2`, … with its own reconnect.
+- **One window, many machines.** Machines in your [mesh](#a-mesh-of-your-machines) show up in each other's sidebar, and a host
+  added over ssh or through the relay with `hc machine add --via` appears next to your local ones as `b/t1`, `b/t2`, … with its
+  own reconnect.
+- **Machines that vouch for each other.** Membership is a set of records every member signs with its Ed25519 key and syncs
+  over the same encrypted relay — no ssh, no open port, and one record revokes a machine everywhere.
 - **An encrypted pipe, not a proxy.** Each client holds its own Noise session with the host: IKpsk2 with the pairing code's
   preshared key for the first one, IK from then on. The relay forwards records it cannot read.
 - **A real terminal.** libghostty-vt compiled to WebAssembly from Ghostty v1.4.0, with the wasm build's provenance checked in
@@ -153,6 +166,25 @@ serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`, which is how th
 host never parses what `hc` says — it pipes the stream — so the client SDK speaks herdr-core's protocol itself and a future
 native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire contract every package
 is built against is [docs/transport.md](docs/transport.md).
+
+## A mesh of your machines
+
+Put a laptop, a build box and a VPS in one mesh and each one lists the others as machines in its sidebar, with their spaces and
+agents under their names. Joining needs no ssh and no open port: it runs the same pairing handshake through the same relay.
+
+```sh
+doriface-host mesh pair                       # on a member: invite a machine (a link and a code)
+doriface-host mesh join '<link or code>'      # on the new machine: ask to join
+doriface-host mesh status                     # who is in the mesh (--json for scripts)
+doriface-host mesh revoke <member>            # remove a member on every machine
+doriface-host mesh revoke --compromised <member>   # …and everyone it admitted
+```
+
+A machine joins only after you approve it on the member it dialed — in that member's terminal, or on a device paired to it —
+unless the invite was opened with `--auto`. Membership is a grow-only set of signed, hash-linked records; every member keeps
+the whole set and syncs it over Noise sessions through the relay, which stores none of it and can forge none of it. A revoke
+closes the revoked keys' sessions on every member and refuses those keys on every path; `mesh rename` and `mesh leave` cover
+the rest. The record format and its conflict rules are in [docs/transport.md](docs/transport.md).
 
 ## Security
 

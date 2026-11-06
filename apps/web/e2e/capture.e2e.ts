@@ -26,9 +26,9 @@ const STORED: Readonly<Record<Start, string | null>> = {
 test.skip(process.env["CAPTURE"] !== "1", "captures run only with CAPTURE=1");
 test.use({ page: async ({ page }, use) => use(page), serviceWorkers: "block" });
 
-/** The README's images: a 1280x720 layout at 3x (3840x2160) with the terminal font a step up. */
+/** The README's images: a 1280x900 layout at 3x (3840x2700) with the terminal font a step up. */
 const FOUR_K = process.env["CAPTURE_PRESET"] === "4k";
-/** 21 px is 15.75 pt, and the old appearance record's px is what the config migrates from. */
+/** The old appearance record's px, which the config migrates to half-points: 21 px is stored as 16 pt. */
 const FOUR_K_FONT_PX = 21;
 const SUFFIX = FOUR_K ? "-4k" : "";
 
