@@ -32,6 +32,7 @@ test("a relay that cannot be reached fails pairing with person-facing copy, not 
     secret: { mode: "link", linkSecret: new Uint8Array(32) },
     relayUrl: `http://127.0.0.1:${port}`,
     fingerprint: "",
+    target: "device",
   } as const;
   const failure = await pairWithHost(offer, "phone").then(
     () => undefined,
