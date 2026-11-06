@@ -416,6 +416,43 @@ test("8 (E): a tab renamed by a double-click, F2 or its menu shows the name on e
   await other.context().close();
 });
 
+test("8 (E): a rename chosen from a tab's menu keeps the keyboard, so the name typed at once is its own", async ({
+  page,
+}) => {
+  twoSpaces();
+  await page.goto("/");
+  await spaceRow(page, "alpha").click();
+  await expect(tabBar(page)).toHaveText([/a-one/, /a-two/], { timeout: 20_000 });
+
+  await tabBar(page).filter({ hasText: "a-one" }).click({ button: "right" });
+  // Subscribed before the menu closes, which happens a moment after its item opened the dialog: focus must stay in the
+  // dialog. Resolves on the first focus taken outside it, else empty once the close can no longer move focus.
+  const taken = page.evaluate(
+    () =>
+      new Promise<string>((resolve) => {
+        document.addEventListener(
+          "focusin",
+          (event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest('[role="dialog"]') === null && target.closest('[role="menu"]') === null)
+              resolve(`${target.tagName} ${target.textContent ?? ""}`.trim());
+          },
+          true,
+        );
+        setTimeout(() => resolve(""), 2_000);
+      }),
+  );
+  await page.getByRole("menuitem", { name: "Rename tab…" }).click();
+  const field = page.getByRole("dialog", { name: "Rename a-one" }).getByRole("textbox", { name: "Name" });
+  await expect(field).toBeFocused();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  expect(await taken).toBe("");
+
+  await page.keyboard.press("End");
+  await page.keyboard.type("!");
+  await expect(field).toHaveValue("a-one!");
+});
+
 test("E: the ninth number chord selects the ninth tab, not the last", async ({ page }) => {
   const folder = mkdtempSync(join(tmpdir(), "tabs-parity-nine-"));
   const shells = Array.from({ length: 11 }, () => shellIn(folder));
