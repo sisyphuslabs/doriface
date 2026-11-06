@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 type Step = { name?: string; run?: string; uses?: string };
 type Job = { needs?: string; if?: string; steps: Step[] };
-type Workflow = { jobs: Record<string, Job> };
+type Workflow = { concurrency: { group: string; "cancel-in-progress": string | boolean }; jobs: Record<string, Job> };
 type Route = { pattern: string; custom_domain?: boolean };
 type Assets = { directory: string; not_found_handling?: string };
 type Wrangler = { assets: Assets; routes: Route[]; env: { staging: { assets: Assets; routes: Route[] } } };
@@ -14,6 +14,13 @@ const workflow = Bun.YAML.parse(readFileSync(join(ROOT, ".github", "workflows", 
 const wrangler = Bun.JSONC.parse(readFileSync(join(ROOT, "apps", "web", "wrangler.jsonc"), "utf8")) as Wrangler;
 
 const runs = (job: Job): string[] => job.steps.flatMap((step) => (step.run === undefined ? [] : [step.run]));
+
+test("a pull request's run never shares dev's concurrency group, and dev deploys are never cancelled in progress", () => {
+  expect(workflow.concurrency.group).toBe(
+    "${{ github.event_name == 'pull_request' && format('deploy-web-pr-{0}', github.event.pull_request.number) || 'deploy-web-dev' }}",
+  );
+  expect(workflow.concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
+});
 
 test("production deploys only from dev, after staging was deployed and probed, from staging's own build", () => {
   const { staging, production } = workflow.jobs;
