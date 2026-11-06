@@ -70,6 +70,13 @@ interface Sample {
   readonly away: number;
   /** The newest transcript line the screen shows (the rest of a reflowed line shows none); 0 for none. */
   readonly newest: number;
+  /**
+   * The oldest transcript line inside the scroll element's visible box, scrollback rows included; 0 for none. A view
+   * that jumps into the history shows old lines here, while the screen's rows (`newest`) stay mounted wherever it is.
+   */
+  readonly top: number;
+  /** Rows on the screen, the view's height in lines. */
+  readonly screen: number;
 }
 
 /**
@@ -87,10 +94,20 @@ async function sampleWhile(page: Page, address: string, change: () => Promise<vo
           const element = document.querySelector(selector);
           if (element !== null) {
             const rows = [...element.querySelectorAll(".term-row:not(.term-scrollback-row)")];
-            const numbers = rows.map((row) => Number(/row (\d{5})/.exec(row.textContent ?? "")?.[1] ?? 0));
+            const box = element.getBoundingClientRect();
+            const bottom = box.top + element.clientTop + element.clientHeight;
+            const visible = [...element.querySelectorAll(".term-row")]
+              .filter((row) => {
+                const rect = row.getBoundingClientRect();
+                return rect.bottom > box.top + 1 && rect.top < bottom - 1;
+              })
+              .map((row) => Number(/row (\d{5})/.exec(row.textContent ?? "")?.[1] ?? 0))
+              .filter((number) => number > 0);
             seen.push({
               away: element.scrollHeight - element.clientHeight - element.scrollTop,
-              newest: Math.max(0, ...numbers),
+              newest: Math.max(0, ...rows.map((row) => Number(/row (\d{5})/.exec(row.textContent ?? "")?.[1] ?? 0))),
+              top: visible.length === 0 ? 0 : Math.min(...visible),
+              screen: rows.length,
             });
           }
           if (document.documentElement.hasAttribute("data-e2e-stop-sampling")) {
@@ -117,13 +134,15 @@ async function sampleWhile(page: Page, address: string, change: () => Promise<vo
 }
 
 /**
- * Every sampled frame showed the transcript's end: none scrolled back through it. `atBottom` also requires each frame at
- * the scroll element's very bottom; a layout change that React commits in its own task can be read after it lands and
- * before the frame's ResizeObserver fits the grid to it, a state the browser never paints, so it is checked only where
- * no such change happens.
+ * Every sampled frame showed the transcript's end, and none scrolled back through it: the lines in view are all within
+ * two screens of the end. `atBottom` also requires each frame at the scroll element's very bottom; a layout change that
+ * React commits in its own task can be read after it lands and before the frame's ResizeObserver fits the grid to it, a
+ * state the browser never paints, so that is checked only where no such change happens.
  */
 function expectFollowed(samples: readonly Sample[], { atBottom = true } = {}): void {
-  const off = samples.filter((sample) => sample.newest !== LINES || (atBottom && sample.away >= 5));
+  const off = samples.filter(
+    (sample) => sample.newest !== LINES || sample.top <= LINES - 2 * sample.screen || (atBottom && sample.away >= 5),
+  );
   expect(samples.length).toBeGreaterThan(0);
   expect(off.slice(0, 5), `${off.length} of ${samples.length} frames left the transcript's end`).toEqual([]);
 }
