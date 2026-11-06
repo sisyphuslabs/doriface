@@ -2,17 +2,24 @@
 
 ## Unreleased
 
-### Website
+### Paired devices
 
-- A landing page for doriterm.com in `apps/landing` (a static Vite build) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the hero line "Your devices. One terminal.", the app shown live from its own components, the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
+- Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
+
+### Joining a mesh from a browser
+
+- A browser with no account and no pairing opens the web app, follows an invite link a member sent, checks the host's fingerprint and lands on the mesh's terminals; a revisit needs no new invite. (#709)
+- A mesh invite (`&m=1`) is no longer read as a device invite: the web app says it adds a machine, with the command that does, instead of reporting a link that was already used. (#709)
 
 ### Answering agents from the card
 
 - The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
+- A notification for a waiting agent offers its prompt's own rows, a question's included, fetched over the encrypted push stream: the agent's No row answers from the notification, any other row opens the app and is sent once it is on screen, and a prompt with several steps, boxes or a typed answer opens the card. (#669)
 
 ### Web app and PWA
 
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
+- A resize no longer moves a terminal's view: a terminal following its output stays on its last line when the window is resized, a split divider is dragged or the phone keyboard opens, even while an agent redraws its whole transcript for the new width, and a terminal scrolled into its history keeps its line at the top. (#811)
 
 ### Native apps
 
@@ -23,6 +30,19 @@
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
 - Settings > Connections has **Pair a device**: it asks this computer's host for a fresh offer and shows its QR code, link, 8-character code, fingerprint and expiry, then the device that used it — no terminal and no CLI. (#614)
 - The web app is hosted at https://doriface.omo.dev, and the pairing QR code (in **Pair a device** and from `doriface-host pair`) opens its pair page on a phone, with the host's key ready to check. The link for another computer stays `doriface://pair#…`. (#700)
+- The hosted web app sends a Content Security Policy: a page there runs only the app's own scripts and the terminal's wasm, connects only to the relay, and cannot be framed. Every deploy's probe checks the live origin sends it. (#703)
+
+### Machine mesh
+
+- A machine you had already added over ssh or with a via is replaced by its mesh line under the same name, and mesh status and the Mesh panel say what kind of entry it replaced. Its open tabs and layout carry over. (#710)
+
+### Workspace (#673)
+
+- The sidebar has a filter: the funnel button, Cmd+Alt+F on macOS or Ctrl+Alt+F elsewhere opens a field that narrows machines, spaces and agents to the rows whose shown labels match what is typed (letters in order, any case). The selected space and agent stay as context, a folded machine opens to show its matches, and Escape clears the query, then closes the field and returns to the terminal. (#673)
+
+### Website
+
+- A landing page for doriterm.com in `apps/landing` (a static Vite build) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the hero line "Your devices. One terminal.", the app shown live from its own components, the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
 
 ## v0.1.2
 
