@@ -128,8 +128,11 @@ function KeyButton({ entry, latched, onKey, onHold }: KeyButtonProps) {
 }
 
 export interface ExtraKeysBarProps {
-  /** The person's keys, in their order. */
-  readonly keys: readonly ExtraKey[];
+  /**
+   * The person's keys, in their order. Unset where a caller draws only a pack's keys or none — a design mock, or the
+   * desktop's keys — so adding the person's own row never breaks a caller that had nothing to put there.
+   */
+  readonly keys?: readonly ExtraKey[];
   /** The active pack's keys, drawn before the person's own so picking a pack shows its keys at once. */
   readonly packKeys?: readonly ExtraKey[];
   /** Ids of modifiers currently latched. */
@@ -165,7 +168,7 @@ export interface ExtraKeysBarProps {
  * to solid ink with a bar under its label, so it reads as on in both themes.
  */
 export function ExtraKeysBar(props: ExtraKeysBarProps) {
-  const { keys, packKeys = [], latched = [], onKey, onKeyHold, padOpen = false, inputBox = false } = props;
+  const { keys = [], packKeys = [], latched = [], onKey, onKeyHold, padOpen = false, inputBox = false } = props;
   const [fade, scroller] = useEdgeFade();
   const textKey = (entry: ExtraKey) => (
     <KeyButton
