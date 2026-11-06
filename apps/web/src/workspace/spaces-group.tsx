@@ -229,7 +229,7 @@ function SpacesLists({
       live={machine.live}
       connected={linkDown === null && machine.state === "connected"}
       rail={rail}
-      collapsed={collapsed.includes(machine.id)}
+      collapsed={collapsed.includes(machine.id) && !filtering}
       onToggle={() => toggle(machine.id)}
       onNewSpace={() => newSpaceOn(machine)}
       {...(machine.first === undefined ? {} : { onOpen: () => onOpen(machine.first ?? "") })}

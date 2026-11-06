@@ -26,9 +26,12 @@ export function matchesQuery(query: string, labels: readonly string[]): boolean 
 /** What an agent row shows: its name, its detail and, for an agent on another machine, that machine. */
 const agentLabels = (agent: Agent): string[] => [agent.name, agent.detail ?? "", agent.machine ?? ""];
 
-/** What a space row shows: its name and, unless its machine's header already says it, its machine. */
-const spaceLabels = (space: Space, hideMachine: boolean): string[] =>
-  hideMachine ? [space.name] : [space.name, space.machine ?? ""];
+/** What a space row shows: its name, its git branch when it shows one and, unless its header says it, its machine. */
+const spaceLabels = (space: Space, hideMachine: boolean): string[] => [
+  space.name,
+  space.git?.branch ?? "",
+  ...(hideMachine ? [] : [space.machine ?? ""]),
+];
 
 /**
  * The agent groups narrowed to the rows matching the query: membership only (the rows are the same objects in the same

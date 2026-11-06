@@ -32,7 +32,7 @@ import { sidebarFilter } from "./sidebar-filter-field.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
 import { useArrivalReady, workspaceSettled } from "./use-arrival-ready.ts";
-import { useFocusSidebar } from "./use-focus-sidebar.ts";
+import { behindModal, useFocusSidebar } from "./use-focus-sidebar.ts";
 import { useSidebarShown, useSidebarSize } from "./layout-store.ts";
 import type { LayoutTab } from "./layout-model.ts";
 import type { Axis } from "@doriface/protocol/layout";
@@ -127,9 +127,11 @@ export function DesktopShell(props: DesktopShellProps) {
   const moveLeftKeys = useActionKeys("tab.move:left");
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
-  // The filter key shows the whole sidebar (out of hiding, off the rail) with its field focused.
+  // The filter key shows the whole sidebar (out of hiding, off the rail) with its field focused. Behind a modal dialog
+  // (the palette, a rename) it does nothing, as the focus key does, so focus stays in the dialog.
   useActionHandler("app", (action) => {
     if (action !== "layout.filter:sidebar") return false;
+    if (behindModal()) return true;
     setSidebar(true);
     if (rail) setSidebarSize({ rail: false });
     sidebarFilter.ask();

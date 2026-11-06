@@ -55,7 +55,10 @@ test("typing in the sidebar filter narrows spaces and agents by their labels, ke
   await Promise.all(NAMES.map((name) => expect(agentRow(name)).toHaveCount(1, { timeout: 20_000 })));
   await spaceRow("alpha673").click();
   await expect(spaceRow("alpha673")).toHaveAttribute("aria-current", /.+/);
-  const before = await sidebar.innerText();
+  // The rows' names, not the sidebar's whole text: an agent's age ticks over each minute.
+  const rowNames = () =>
+    rows(sidebar).evaluateAll((buttons) => buttons.map((row) => row.textContent?.replace(/\d+m|<1m/gu, "") ?? ""));
+  const before = await rowNames();
 
   // The filter key opens the field with focus in it, from wherever focus was.
   await page.keyboard.press("Control+Alt+F");
@@ -84,7 +87,7 @@ test("typing in the sidebar filter narrows spaces and agents by their labels, ke
   await page.keyboard.press("Escape");
   await expect(field).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => document.activeElement?.closest("[data-terminal]") !== null)).toBe(true);
-  await expect.poll(() => sidebar.innerText()).toBe(before);
+  await expect.poll(rowNames).toEqual(before);
 });
 
 test("the filter button opens and closes the field (#673)", async ({ page }) => {
@@ -95,4 +98,20 @@ test("the filter button opens and closes the field (#673)", async ({ page }) => 
   await expect(sidebar.getByRole("searchbox", { name: "Filter sidebar" })).toBeFocused();
   await button.click();
   await expect(sidebar.getByRole("searchbox", { name: "Filter sidebar" })).toHaveCount(0);
+});
+
+test("behind the command palette the filter key does nothing: the palette keeps focus and the sidebar is left alone (#673)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const sidebar = page.getByRole("complementary", { name: "Workspace" });
+  await expect(sidebar.getByRole("button", { name: "Filter sidebar" })).toBeVisible({ timeout: 15_000 });
+  await sidebar.getByRole("button", { name: "Command palette" }).click();
+  const palette = page.getByRole("dialog");
+  await expect(palette).toBeVisible();
+  const focused = await page.evaluate(() => document.activeElement?.outerHTML ?? "");
+  await page.keyboard.press("Control+Alt+F");
+  await expect(palette).toBeVisible();
+  await expect(sidebar.getByRole("searchbox", { name: "Filter sidebar" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.activeElement?.outerHTML ?? "")).toBe(focused);
 });

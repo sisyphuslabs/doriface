@@ -97,6 +97,13 @@ describe("filterSpaces", () => {
     expect(filterSpaces(spaces, "web", "s3").map((one) => one.id)).toEqual(["s2", "s3"]);
   });
 
+  test("the git branch a row shows is a label too", () => {
+    const branched = [
+      { ...space("s4", "api"), git: { branch: "fix/parser", detached: false, ahead: 1, behind: 0, dirty: false } },
+    ];
+    expect(filterSpaces(branched, "parser", null).map((one) => one.id)).toEqual(["s4"]);
+  });
+
   test("the machine is not searched where the row hides it", () => {
     expect(filterSpaces(spaces, "lap", null, { hideMachine: true })).toEqual([]);
   });
