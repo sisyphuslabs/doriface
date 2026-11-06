@@ -31,6 +31,15 @@ async function write(connection: HcConnection, value: JsonValue, version: number
   }
 }
 
+// An answered link whose offer has expired becomes `expired`; read on every connect and doc event too, so a timer
+// lost with its connection or its host still ends with the link gone.
+async function dropIfExpired(connection: HcConnection): Promise<void> {
+  const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
+  const current = parseMeshOfferDoc(doc.value);
+  if (current === undefined || !("link" in current) || current.expiresAt > Date.now()) return;
+  await write(connection, { request: current.request, expired: true }, doc.version);
+}
+
 /**
  * Answers a client's one-line Add a machine (#668): a `{request}` in the `doriface-mesh-offer` document opens one
  * single-use mesh offer that admits without asking, written back beside the request; the link is dropped from the
@@ -41,7 +50,9 @@ async function write(connection: HcConnection, value: JsonValue, version: number
 export function serveMeshOffers(
   target: HcTarget,
   log: (line: string) => void,
-  onAdmitted: (listener: (join: { readonly name: string; readonly hostId: string }) => void) => () => void,
+  onAdmitted: (
+    listener: (join: { readonly name: string; readonly hostId: string; readonly expiresAt: number }) => void,
+  ) => () => void,
   open: () => Promise<MeshOffer>,
   openLink: (core: HcTarget) => OfferLink = spawnHcLink,
 ): MeshOfferService {
@@ -54,17 +65,18 @@ export function serveMeshOffers(
   const expiries = new Set<ReturnType<typeof setTimeout>>();
   const follows = new Set<() => void>();
   let answering: string | undefined;
+  // The line timers and joins write through: the one up now, so a reconnect does not strand them on a closed one.
+  let live: HcConnection | undefined;
 
-  const expire = (connection: HcConnection, request: string, expiresAt: number): void => {
+  const expire = (expiresAt: number, unfollow: () => void): void => {
     const timer = setTimeout(
       () => {
         expiries.delete(timer);
-        void (async () => {
-          const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
-          const current = parseMeshOfferDoc(doc.value);
-          if (current?.request !== request || !("link" in current)) return;
-          await write(connection, { request, expired: true }, doc.version);
-        })().catch((error: unknown) => log(`mesh offer: cannot drop the expired link: ${String(error)}`));
+        unfollow();
+        if (live !== undefined)
+          void dropIfExpired(live).catch((error: unknown) =>
+            log(`mesh offer: cannot drop the expired link: ${String(error)}`),
+          );
       },
       Math.max(0, expiresAt - Date.now()),
     );
@@ -72,10 +84,14 @@ export function serveMeshOffers(
   };
 
   // The offer admits once: the first join on it replaces the link with who joined, so the asking client can say so.
-  const follow = (connection: HcConnection, request: string): (() => void) => {
+  // A join belongs to this offer when it shares the offer's expiry, which a pending join takes from the offer it came on.
+  const follow = (request: string, expiresAt: number): (() => void) => {
     const stop = onAdmitted((join) => {
+      if (join.expiresAt !== expiresAt) return;
       stop();
       follows.delete(stop);
+      const connection = live;
+      if (connection === undefined) return;
       void (async () => {
         const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
         if (parseMeshOfferDoc(doc.value)?.request !== request) return;
@@ -90,6 +106,7 @@ export function serveMeshOffers(
   };
 
   const answer = async (connection: HcConnection): Promise<void> => {
+    await dropIfExpired(connection);
     const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
     const current = parseMeshOfferDoc(doc.value);
     if (current === undefined || Object.keys(current).length > 1 || answering === current.request) return;
@@ -98,10 +115,10 @@ export function serveMeshOffers(
     try {
       const offer = await open();
       // Followed before the link is out: a machine can join the moment a client reads it.
-      const unfollow = follow(connection, request);
+      const unfollow = follow(request, offer.expiresAt);
       if (await write(connection, { request, link: offer.link, expiresAt: offer.expiresAt }, doc.version)) {
         log(`mesh offer: opened a single-use join for request ${request}`);
-        expire(connection, request, offer.expiresAt);
+        expire(offer.expiresAt, unfollow);
       } else {
         unfollow();
       }
@@ -130,12 +147,14 @@ export function serveMeshOffers(
       const connection = await HcConnection.open(child);
       if (stopped) return connection.close();
       const feed = await connection.subscribe();
+      live = connection;
       const handle = (): void =>
         void answer(connection).catch((error: unknown) => log(`mesh offer: cannot answer a request: ${String(error)}`));
       feed.onEvent((event) => {
         if (event.type === "doc" && event.machine === undefined && event.data.name === MESH_OFFER_DOC) handle();
       });
       feed.onClose(() => {
+        if (live === connection) live = undefined;
         connection.close();
         retry();
       });

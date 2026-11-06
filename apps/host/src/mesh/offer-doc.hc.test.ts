@@ -24,8 +24,6 @@ async function client(session: Session) {
     },
     /** Resolves with the document once `done` holds for it, checked now and on each doc event. */
     async until(done: (value: JsonValue) => boolean): Promise<JsonValue> {
-      const now = await read();
-      if (done(now)) return now;
       const { promise, resolve } = Promise.withResolvers<JsonValue>();
       const check = async (): Promise<void> => {
         const value = await read();
@@ -33,7 +31,9 @@ async function client(session: Session) {
         waiters.delete(check);
         resolve(value);
       };
+      // Listening before the first read, so a write between the two is not missed.
       waiters.add(check);
+      await check();
       return promise;
     },
     close(): void {
@@ -50,8 +50,9 @@ const noJoins = (): (() => void) => () => {};
 test("a join on the offer is written back in place of the link, with the machine's name", async () => {
   const session = createHcSession("dh-offer-joined");
   const target = { hc: session.hc, session: session.name, env: session.env };
-  const listeners = new Set<(join: { name: string; hostId: string }) => void>();
-  const onAdmitted = (listener: (join: { name: string; hostId: string }) => void) => {
+  const expiresAt = Date.now() + 60_000;
+  const listeners = new Set<(join: { name: string; hostId: string; expiresAt: number }) => void>();
+  const onAdmitted = (listener: (join: { name: string; hostId: string; expiresAt: number }) => void) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
   };
@@ -59,14 +60,16 @@ test("a join on the offer is written back in place of the link, with the machine
     target,
     () => {},
     onAdmitted,
-    () => Promise.resolve({ link: "doriface://pair#h=x&m=1", expiresAt: Date.now() + 60_000 }),
+    () => Promise.resolve({ link: "doriface://pair#h=x&m=1", expiresAt }),
   );
   const app = await client(session);
   try {
     await service.ready;
     await app.request("r1");
     await app.until((value) => field(value, "link") !== undefined);
-    for (const listener of listeners) listener({ name: "laptop", hostId: "h2" });
+    // A join on some other offer (another expiry) is not this request's.
+    for (const listener of listeners) listener({ name: "elsewhere", hostId: "h9", expiresAt: 1 });
+    for (const listener of listeners) listener({ name: "laptop", hostId: "h2", expiresAt });
     expect(await app.until((value) => field(value, "joined") !== undefined)).toEqual({
       request: "r1",
       joined: { name: "laptop", hostId: "h2" },
@@ -131,6 +134,45 @@ test("an offer the host cannot open is answered with why", async () => {
       request: "n1",
       error: "the mesh is full",
     });
+  } finally {
+    app.close();
+    await service.stop();
+    await session.dispose();
+  }
+}, 30_000);
+
+test("a link that expired while no service ran is dropped when the service starts", async () => {
+  const session = createHcSession("dh-offer-stale");
+  const target = { hc: session.hc, session: session.name, env: session.env };
+  const app = await client(session);
+  const { version } = await (async () => {
+    const link = spawnHcLink(target);
+    const core = await HcConnection.open(link);
+    try {
+      return await core.call("doc.get", { name: MESH_OFFER_DOC });
+    } finally {
+      core.close();
+      link.close();
+    }
+  })();
+  const seed = spawnHcLink(target);
+  const seedCore = await HcConnection.open(seed);
+  await seedCore.call("doc.set", {
+    name: MESH_OFFER_DOC,
+    value: { request: "old", link: "doriface://pair#h=x&m=1", expiresAt: Date.now() - 1_000 },
+    version,
+  });
+  seedCore.close();
+  seed.close();
+  const service = serveMeshOffers(
+    target,
+    () => {},
+    noJoins,
+    () => Promise.reject(new Error("no offer here")),
+  );
+  try {
+    await service.ready;
+    expect(await app.until((value) => field(value, "expired") === true)).toEqual({ request: "old", expired: true });
   } finally {
     app.close();
     await service.stop();
