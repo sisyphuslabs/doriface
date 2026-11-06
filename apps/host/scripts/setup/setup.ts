@@ -25,6 +25,7 @@ import {
   bunMeetsFloor,
   desktopStateDir,
   hcVersionOf,
+  failureOf,
   hostFailure,
   installedHcPath,
   lastRelayState,
@@ -99,7 +100,7 @@ function cliOf(src: string): string {
 async function must(context: SetupContext, step: string, command: readonly string[], cwd?: string): Promise<Ran> {
   const ran = await context.run(command, { cwd });
   if (ran.code !== 0) {
-    const why = hostFailure(`${ran.stderr}\n${ran.stdout}`);
+    const why = failureOf(ran.stderr, ran.stdout);
     throw new SetupError(step, `${command.slice(0, 3).join(" ")} exited ${ran.code}: ${why}`);
   }
   return ran;

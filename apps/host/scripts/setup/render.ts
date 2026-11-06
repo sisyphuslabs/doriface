@@ -309,6 +309,16 @@ export function hostFailure(output: string): string {
   return lines.find((line) => line.startsWith("doriface-host")) ?? lines.at(-1) ?? "(no output)";
 }
 
+/**
+ * Why a failed command failed: the host's own cause line wherever it is, else the last line of stderr, where git and
+ * bun put their errors (stdout carries only their banner), and stdout only when stderr is empty.
+ */
+export function failureOf(stderr: string, stdout: string): string {
+  const cause = hostFailure(`${stderr}\n${stdout}`);
+  if (cause.startsWith("doriface-host")) return cause;
+  return hostFailure(stderr.trim() !== "" ? stderr : stdout);
+}
+
 export function bunMeetsFloor(version: string, floor = "1.4.4"): boolean {
   const [a, b] = [versionParts(version), versionParts(floor)];
   for (let i = 0; i < 3; i += 1) {

@@ -3,6 +3,7 @@ import {
   DEFAULT_LABEL,
   bunMeetsFloor,
   desktopStateDir,
+  failureOf,
   hcVersionOf,
   hostFailure,
   installedHcPath,
@@ -253,6 +254,16 @@ describe("the host's own output", () => {
     expect(hostFailure(stderr)).toBe("doriface-host: mesh join needs a mesh pairing link or code");
     expect(hostFailure("error: Module not found\n")).toBe("error: Module not found");
     expect(hostFailure("")).toBe("(no output)");
+  });
+
+  test("a failed git or bun step reports stderr's cause, not stdout's banner", () => {
+    expect(failureOf("error: lockfile had changes, but lockfile is frozen\n", "bun install v1.4.4 (38afee6c8)\n")).toBe(
+      "error: lockfile had changes, but lockfile is frozen",
+    );
+    expect(failureOf("doriface-host: no running host\n\nusage: doriface-host mesh\n", "")).toBe(
+      "doriface-host: no running host",
+    );
+    expect(failureOf("", "only stdout\n")).toBe("only stdout");
   });
 
   test("versions", () => {
