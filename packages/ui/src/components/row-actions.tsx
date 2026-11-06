@@ -15,10 +15,11 @@ export interface RowWithActionsProps {
   readonly className?: string;
 }
 
+/** Hover, keyboard focus or an open menu shows them, and so does a coarse pointer, which has no hover to give them (#798). */
 const SHOWN =
-  "group-hover/row:visible group-focus-within/row:visible group-has-[[data-popup-open]]/row:visible group-data-popup-open/row:visible";
+  "group-hover/row:visible group-focus-within/row:visible group-has-[[data-popup-open]]/row:visible group-data-popup-open/row:visible coarse:visible";
 const MASKED =
-  "[&:is(:hover,:focus-within,:has([data-popup-open]),[data-popup-open])_[data-row-meta]]:invisible data-popup-open:outline-2 data-popup-open:outline-solid data-popup-open:-outline-offset-2 data-popup-open:outline-ring";
+  "[&:is(:hover,:focus-within,:has([data-popup-open]),[data-popup-open])_[data-row-meta]]:invisible coarse:[&_[data-row-meta]]:invisible data-popup-open:outline-2 data-popup-open:outline-solid data-popup-open:-outline-offset-2 data-popup-open:outline-ring";
 
 /** A touch keeps the row's own press (a held space row lifts for a drag): only a mouse, a pen or a key opens the menu. */
 function skipTouchMenu(event: MouseEvent<HTMLDivElement>): void {
@@ -51,7 +52,9 @@ export function RowWithActions({ row, actions, menu, className }: RowWithActions
         : { onTouchStart: skipMenuHandler, onContextMenu: skipTouchMenu, onKeyDown: openFromKeys })}
     >
       {row}
-      <span className={cn("invisible absolute inset-y-0 right-1 flex items-center gap-0.5", SHOWN)}>{actions}</span>
+      <span className={cn("invisible absolute inset-y-0 right-1 flex items-center gap-0.5 coarse:gap-6", SHOWN)}>
+        {actions}
+      </span>
     </div>
   );
   if (menu === undefined) return element;
