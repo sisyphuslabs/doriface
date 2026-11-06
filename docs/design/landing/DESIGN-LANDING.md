@@ -95,11 +95,10 @@ Motion on this page explains a mechanism; nothing moves for decoration alone.
 
 Scenes:
 
-- Hero: a doriterm window on the mac mini tab running OmO. OmO boots, takes the prompt `mass ulw 12k sources → ranking model → deck` and runs the demo workflow from omo.dev wave by wave: each node goes pending, running (pulsing), completed with its result, and `model-train` stays blocked on its GPU quota. State changes are opacity cross-fades on Material standard easing; nodes in a wave start 140 ms apart and finish in reverse order. Reduced motion shows the finished run.
-- Fleet: one canvas draws the relay as a 5x5 amber block and five machine boxes as dot matrices. Arrivals use the reverb curve `cubic-bezier(0.1, 1, 0.1, 1)` over 900 ms with a 50 ms stagger, load changes Material standard over 700 ms, and sealed records travel the links on `cubic-bezier(0.4, 0, 0, 1)` (move within the frame), turning blue only for the last stretch into the machine they are for. Scenes advance every 5.6 s and on click; drawing runs only while the figure is on screen, and reduced motion draws each scene settled with two sealed records parked on their links.
+- Hero: no animation of its own. Under the headline sits the app itself (the window and phone described under Live mockups), so the first thing a visitor sees is the product: OmO first in the tabs, Claude Code and Codex after it.
+- Mesh (section 01, right under the hero): one canvas draws the relay as a 5x5 amber block and five machine boxes as dot matrices. Arrivals use the reverb curve `cubic-bezier(0.1, 1, 0.1, 1)` over 900 ms with a 50 ms stagger, load changes Material standard over 700 ms, and sealed records travel the links on `cubic-bezier(0.4, 0, 0, 1)` (move within the frame), turning blue only for the last stretch into the machine they are for. Scenes advance every 5.6 s and on click; drawing runs only while the figure is on screen, and reduced motion draws each scene settled with two sealed records parked on their links. In the join and revoke scenes a signed record (green for admit, red for revoke) leaves the laptop, crosses the relay and reaches every member before the machine joins or is cut off; the revoked machine keeps working until its record lands.
 - Relay pipe: the phone types a command, the wire carries ciphertext chips both ways, the server prints the result.
 - Pairing: the QR is scanned, the fingerprint groups are compared one by one, then turn green.
-- Mesh: four members, a fifth asks to join (dashed amber ring), is admitted (edges draw in, record sparks travel), then one member is revoked (red, its edges retract). The step list beside the stage highlights the current step and reads as a static caption.
 
 Every loop runs only while its scene is on screen and the tab is visible (IntersectionObserver plus `visibilitychange`); SMIL scenes are paused with `pauseAnimations()`. With `prefers-reduced-motion: reduce`, no loop starts, packets and scan lines are hidden, reveals show at once, and each scene shows a complete still frame: the pipe with its command and result, the fingerprint matched, the mesh with five members.
 
@@ -124,7 +123,7 @@ Every loop runs only while its scene is on screen and the tab is visible (Inters
 
 ### Live mockups
 
-The window and phone in section 01 are `<iframe>`s of `/mockup/?view=desktop` (1280 x 780) and `?view=phone` (390 x 844). That page imports `@doriface/ui`, the component set `apps/web` is built from (SidebarSection, SpaceRow, AgentRow, TabBar, TerminalPreview, StatusBar, StatusChip, ExtraKeysBar), with Tailwind and the app's tokens, and renders them with the fixtures in `apps/landing/src/mockup/fixtures.ts`. The landing never loads React or the app's stylesheet itself:
+The window and phone in the hero are `<iframe>`s of `/mockup/?view=desktop` (1280 x 780) and `?view=phone` (390 x 844). That page imports `@doriface/ui`, the component set `apps/web` is built from (SidebarSection, SpaceRow, AgentRow, TabBar, TerminalPreview, StatusBar, StatusChip, ExtraKeysBar), with Tailwind and the app's tokens, and renders them with the fixtures in `apps/landing/src/mockup/fixtures.ts`. The landing never loads React or the app's stylesheet itself:
 
 - Isolation: the iframe keeps Tailwind's preflight and the app's tokens off the landing, and the landing's styles off the app.
 - Size: `main.js` scales each frame to its box with a ResizeObserver (`--scale`), so the app keeps its own pixel layout at every width. Below 640 px only the phone is shown.

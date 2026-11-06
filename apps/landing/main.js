@@ -560,7 +560,7 @@ function setupFleet() {
     // packets: sealed (cipher) on the way, opened (accent) for the last stretch into the machine they are for
     for (const p of packets) {
       const k = Math.min(Math.max((now - p.start) / p.dur, 0), 1);
-      const f = EASE_MOVE(k);
+      const f = p.parked ?? EASE_MOVE(k);
       const up = paths.get(p.from);
       const down = paths.get(p.to);
       const [x, y] = f < 0.5 ? pointOn(up.toReversed(), f * 2) : pointOn(down, (f - 0.5) * 2);
@@ -610,8 +610,11 @@ function setupFleet() {
       state.status = status;
       if (animate) {
         state.shown.set(shown, now + i * 50, 900, EASE_ENTER);
-        state.load.set(load, now + 200 + i * 40, 700, EASE_STATE);
-        state.cut.set(targets.revoke === m.id ? 1 : 0, now + 150, 500, EASE_STATE);
+        // The machine being revoked keeps working until its revoke record lands (scheduled below).
+        if (targets.revoke !== m.id) {
+          state.load.set(load, now + 200 + i * 40, 700, EASE_STATE);
+          state.cut.set(0, now + 150, 500, EASE_STATE);
+        }
       } else {
         state.shown.jump(shown);
         state.load.jump(load);
@@ -653,14 +656,14 @@ function setupFleet() {
       packets = [
         { from: "phone", to: "mini", start: -1, dur: 1 },
         { from: "laptop", to: "cloud", start: -1, dur: 1 },
-      ].map((p, i) => Object.assign(p, { start: now - (i ? 0.3 : 0.7) * 1400, dur: 1400 * 1e9 }));
+      ].map((p, i) => Object.assign(p, { parked: i ? 0.3 : 0.7, start: now, dur: Infinity }));
     }
   };
 
   const routesFor = () => {
     const targets = FLEET_SCENES[scene];
     return FLEET_ROUTES.filter(
-      ([a, b]) => targets[a][0] && targets[b][0] && targets.revoke !== a && targets.revoke !== b,
+      ([a, b]) => targets[a][0] && targets[b][0] && machines.get(a).cut.to < 0.5 && machines.get(b).cut.to < 0.5,
     );
   };
 
@@ -686,6 +689,7 @@ function setupFleet() {
     cancelAnimationFrame(raf);
     clearTimeout(timer);
     if (running()) {
+      packets = packets.filter((p) => p.parked === undefined);
       raf = requestAnimationFrame(frame);
       timer = setTimeout(advance, 5600);
     } else {
@@ -706,6 +710,18 @@ function setupFleet() {
   layout();
   apply(0, performance.now(), false);
   draw(performance.now());
+  // Moving the window to a screen with another pixel density re-sizes the canvas backing store.
+  const watchDensity = () =>
+    matchMedia(`(resolution: ${devicePixelRatio}dppx)`).addEventListener(
+      "change",
+      () => {
+        layout();
+        if (!running()) draw(performance.now());
+        watchDensity();
+      },
+      { once: true },
+    );
+  watchDensity();
   new ResizeObserver(() => {
     layout();
     if (!running()) draw(performance.now());
