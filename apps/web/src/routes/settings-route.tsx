@@ -11,6 +11,8 @@ import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { KeyboardSection } from "../settings/keyboard-section.tsx";
 import { MeshSection } from "../settings/mesh-section.tsx";
 import { MachinesSection } from "../settings/machines-section.tsx";
+import { MembersSection } from "../settings/members-section.tsx";
+import { useMeshMembers } from "../connection/store.ts";
 import { NotificationsSection } from "../settings/notifications-section.tsx";
 import { PairSection } from "../settings/pair-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
@@ -58,6 +60,7 @@ function Lead({ children }: { readonly children: ReactNode }) {
 /** Section navigation beside the form; changes apply as they are made. */
 export function SettingsRoute() {
   const [section, setSection] = useState<SectionId>(firstSection);
+  const members = useMeshMembers();
   const close = useCloseSettings();
   const update = usePendingUpdate();
   // In the dialog its header is not the window's titlebar: it neither moves the window nor makes room for its controls.
@@ -169,6 +172,7 @@ export function SettingsRoute() {
                   machine is offline the row says when it was last seen and, where the host knows a cause, what it is.
                 </Lead>
                 <Group title="Machines">
+                  {members.length > 1 ? <MembersSection /> : null}
                   <MachinesSection />
                 </Group>
                 <Group title="In your mesh">
