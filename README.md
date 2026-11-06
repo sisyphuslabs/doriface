@@ -85,6 +85,8 @@ app; and the **relay** between them, which is already deployed. The shortest pat
 3. **Pair it** with the host — scan the QR code the host prints, or open the link it prints, and confirm the fingerprint it
    shows. [Pairing, and how the relay fits](#pairing-and-how-the-relay-fits) is the whole of it.
 
+[Getting started](docs/getting-started.md) walks these steps with the desktop app and a phone, button by button.
+
 ### The desktop app
 
 [Releases](https://github.com/sisyphuslabs/doriterm/releases/latest) carries the app for every supported platform:
@@ -250,7 +252,9 @@ This table describes `dev`. The latest release is [v0.1.2](https://github.com/si
 ## Development
 
 Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on
-`PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests.
+`PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests. Starting on a machine with neither,
+follow [CONTRIBUTING.md, "From zero"](CONTRIBUTING.md#from-zero): every step is public, and the `From zero` workflow
+runs it as written on a clean runner with no secrets.
 
 ```sh
 bun install
