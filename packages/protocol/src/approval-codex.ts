@@ -17,7 +17,25 @@ const AGENT = "Codex";
 /** The person's own message in the transcript: where the agent's lines above a dialog start. */
 const ASKED = /^› /;
 
-const PERMISSION_QUESTION = /^\s*Would you like to (.+)\?\s*$/;
+/**
+ * Every title Codex's approval overlay draws (codex-rs tui `bottom_pane/approval_overlay.rs` `build_options`, upstream
+ * c3d3b142d1), the group being what it asks: a command (:265), input to a terminal (:258, :260), network access (:268),
+ * permissions (:286), edits (:290), an MCP server's request (:294). The last entry is any other "Would you like to …?"
+ * title, which the card read before these were listed, so no approval read then goes unread now.
+ */
+const TITLES: readonly RegExp[] = [
+  /^Would you like to (run the following command)\?$/,
+  /^Would you like to (send input to the existing terminal)\?$/,
+  /^Would you like to (send input to terminal \S+)\?$/,
+  /^Do you want to (approve network access to ".+")\?$/,
+  /^Would you like to (grant these permissions)\?$/,
+  /^Would you like to (make the following edits)\?$/,
+  /^(\S.* needs your approval)\.$/,
+  /^Would you like to (.+)\?$/,
+];
+/** What a title line asks, or undefined for a line that is not one of Codex's approval titles. */
+const askedBy = (line: string) =>
+  TITLES.map((title) => title.exec(line.trim())?.[1]).find((asked) => asked !== undefined);
 const PERMISSION_FOOTER = /\besc to cancel\b/;
 const KEYED = /^(.*\S)\s+\((\S+)\)$/;
 const DESTINATION = /^Destination:\s+(.+)$/;
@@ -78,9 +96,10 @@ const edgeAbove = (lines: readonly string[], at: number, column: number) =>
  * It is read from the bottom up: the footer, the option rows right above it, then the header above them. The header
  * is drawn two columns in, and so is every line of a command inside it, while the transcript above starts each cell
  * at the left edge. The dialog's title is the highest title line at the footer's column below that edge: a
- * title-shaped line in the command is below the real one (#776). Under any other cell (a permissions request draws
- * none), the agent's own text could sit right above the dialog at its column and pass for its header, so there the
- * block must hold exactly one title, or nothing is read.
+ * title-shaped line in the command is below the real one (#776). Every title shape Codex draws counts: a card is read
+ * only when exactly one title heads the dialog, i.e. one title in the header above the command under Codex's own
+ * cell, and one title in the whole block under any other cell (a permissions request draws none), where the agent's
+ * own text could sit right above the dialog at its column and pass for its header.
  */
 function readPermission(lines: readonly string[]): Found | undefined {
   const footer = lastIndex(lines, (line) => PERMISSION_FOOTER.test(line));
@@ -95,19 +114,23 @@ function readPermission(lines: readonly string[]): Found | undefined {
   const column = indent(lines[footer] ?? "");
   const edge = edgeAbove(lines, first, column);
   const titles = lines.flatMap((line, index) =>
-    index > edge && index < first && indent(line) === column && PERMISSION_QUESTION.test(line) ? [index] : [],
+    index > edge && index < first && indent(line) === column && askedBy(line) !== undefined ? [index] : [],
   );
   const question = titles[0] ?? -1;
-  if (question === -1 || (titles.length > 1 && !ASKED_CELL.test(lines[edge] ?? ""))) return undefined;
+  const commandAt = lines.findIndex((line, index) => index > question && index < first && /^\s*\$ /.test(line));
+  const heading = titles.filter((index) => index < (commandAt === -1 ? first : commandAt)).length;
+  const ownCell = ASKED_CELL.test(lines[edge] ?? "");
+  if (question === -1 || heading > 1 || (titles.length > 1 && !ownCell)) return undefined;
   const details = lines
     .slice(question + 1, first)
     .map((line) => line.trim())
     .filter((line) => line !== "");
-  const commandAt = details.findIndex((line) => line.startsWith("$ "));
-  const asked = PERMISSION_QUESTION.exec(lines[question] ?? "")?.[1] ?? "";
-  const header = commandAt === -1 ? details : details.slice(0, commandAt);
+  const commandLine = details.findIndex((line) => line.startsWith("$ "));
+  const asked = askedBy(lines[question] ?? "") ?? "";
+  const header = commandLine === -1 ? details : details.slice(0, commandLine);
   const destination = header.map((line) => DESTINATION.exec(line)?.[1]).find((path) => path !== undefined);
-  const command = commandAt !== -1 ? details.slice(commandAt).join("\n").replace(/^\$ /, "") : (destination ?? asked);
+  const command =
+    commandLine !== -1 ? details.slice(commandLine).join("\n").replace(/^\$ /, "") : (destination ?? asked);
   const block = [
     lines[question]?.trim() ?? "",
     ...details,
