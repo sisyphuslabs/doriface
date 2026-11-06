@@ -1,8 +1,15 @@
-import { BAD_LINK, PAIR_LINK } from "./capture-relay.ts";
+import { BAD_LINK, MESH_LINK, PAIR_LINK } from "./capture-relay.ts";
 import { expect, test } from "./fixtures.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
+
+test("a mesh invite says it adds a machine and never offers to pair this browser", async ({ page }) => {
+  await page.goto(MESH_LINK);
+  await expect(page.getByRole("heading", { name: "This link adds a machine to a mesh" })).toBeVisible();
+  await expect(page.locator("code").filter({ hasText: "doriface-host mesh join <link>" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "They match" })).toHaveCount(0);
+});
 
 test("an unusable pairing link leads on to typing the code", async ({ page }) => {
   await page.goto(BAD_LINK);
