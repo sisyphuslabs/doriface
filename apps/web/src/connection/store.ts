@@ -47,6 +47,18 @@ const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
  */
 const STABLE_CONNECTION_MS = 10_000;
 
+/** How long one attempt may take before the store abandons it, and the ceiling that deadline grows to (#635). */
+const ATTEMPT_DEADLINE_MS = 10_000;
+const ATTEMPT_DEADLINE_MAX_MS = 30_000;
+
+/** An attempt the store gave up waiting for; the link it opened belongs to nobody once this is thrown (#635). */
+export class AttemptTimeoutError extends Error {
+  override readonly name = "AttemptTimeoutError";
+  constructor(deadlineMs: number) {
+    super(`The connection attempt did not finish within ${deadlineMs} ms.`);
+  }
+}
+
 /** This computer's host, as the desktop app runs it: where it listens now, and why it did not start. */
 export interface LocalHostStarter {
   start(): Promise<{ readonly url: string; readonly token: string }>;
@@ -74,6 +86,8 @@ export class ConnectionStore {
   #current = 0;
   /** A wake already asked for this tick: several page events must cost one attempt, not three. */
   #wakeQueued = false;
+  /** The deadline for the next attempt: it doubles after each attempt that timed out, so a slow path can still land. */
+  #deadlineMs = ATTEMPT_DEADLINE_MS;
   readonly #connect: typeof connect;
 
   constructor(settings: ConnectionSettings, open: typeof connect = connect) {
@@ -152,13 +166,13 @@ export class ConnectionStore {
     this.#abort = abort;
     const relayFirst = this.#relayFirst;
     this.#relayFirst = false;
+    const deadlineMs = this.#deadlineMs;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const opened: OpenConnection = await this.#connect(
-        this.#settings,
-        abort.signal,
-        undefined,
-        relayFirst ? { skipDirect: true } : {},
+      const opened: OpenConnection = await this.#within(
+        this.#connect(this.#settings, abort.signal, undefined, relayFirst ? { skipDirect: true } : {}),
+        abort,
+        deadlineMs,
       );
       const { connection } = opened;
       if (abort.signal.aborted) return connection.close();
@@ -170,6 +184,7 @@ export class ConnectionStore {
         this.#retry(error ?? new Error("the host closed the connection"), this.#stable ? 0 : attempt + 1);
       });
       this.#stale = null;
+      this.#deadlineMs = ATTEMPT_DEADLINE_MS;
       this.#armStable();
       this.#set({
         phase: "open",
@@ -178,9 +193,30 @@ export class ConnectionStore {
         ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
       });
     } catch (error) {
+      if (this.#abort !== abort) return;
+      if (error instanceof AttemptTimeoutError) {
+        this.#deadlineMs = Math.min(ATTEMPT_DEADLINE_MAX_MS, this.#deadlineMs * 2);
+        this.#retry(error, attempt + 1);
+        return;
+      }
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * Races one attempt against its deadline. A connector that never settles used to leave the page on "Connecting" with no
+   * timer and no way out (#635); the deadline abandons it and the link it may still open is closed by its abort (#630).
+   */
+  #within(work: Promise<OpenConnection>, abort: AbortController, deadlineMs: number): Promise<OpenConnection> {
+    const deadline = new Promise<never>((_resolve, reject) => {
+      const timer = setTimeout(() => {
+        abort.abort();
+        reject(new AttemptTimeoutError(deadlineMs));
+      }, deadlineMs);
+      void work.finally(() => clearTimeout(timer)).catch(() => undefined);
+    });
+    return Promise.race([work, deadline]);
   }
 
   /**
@@ -299,6 +335,7 @@ export class ConnectionStore {
     queueMicrotask(() => {
       this.#wakeQueued = false;
       if (this.#state.phase !== "connecting") return;
+      this.#deadlineMs = ATTEMPT_DEADLINE_MS;
       this.#abort?.abort();
       void this.#again(this.#current);
     });
