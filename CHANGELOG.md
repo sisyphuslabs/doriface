@@ -37,6 +37,7 @@
 - Your machines lists every machine this app holds its own connection to, each with that machine's own state, so a machine that is away is one row saying so. Each machine has its own connection, which means the others stay usable while one is gone. (#942)
 - A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
 - A machine's terminal count and a space's tab count stay on one line however many digits they have: on a phone, "19" no longer breaks into "1" above "9" in the Spaces list. (#899)
+- A disabled button reads as a labelled control instead of an empty grey pill, such as Pair before a code is typed. It is dimmed with its own quiet fill and a grey label of at least 4.5:1 in both themes, where it used to fade the whole button, label included. (#1031)
 
 ### Korean input after selecting text
 
