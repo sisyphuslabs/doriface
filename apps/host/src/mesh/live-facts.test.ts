@@ -9,12 +9,13 @@ import { type LiveParts, liveFactsOf } from "./live-facts.ts";
 import { MemberDialer } from "./member-dialer.ts";
 import { Reconciler } from "./reconciler.ts";
 import { FakeClock, seededRandom, settle } from "./testing/fake-clock.ts";
-import { FakeMachines } from "./testing/fake-machines.ts";
+import { FakeMachines, hcError } from "./testing/fake-machines.ts";
+import { fallbacks } from "@doriface/mesh";
 import { hostIdFor } from "./testing/hc-mesh.ts";
 import { meshOf, peer } from "./testing/mesh-peers.ts";
 import { MeshNet, type NetHost } from "./testing/mesh-net.ts";
 
-const noLines = { lines: () => [] };
+const noLines = { lines: () => [], status: new Map() };
 const coreMember = (name: string): MemberEntry => ({
   signPub: `sign-${name}`,
   hostId: hostIdFor(name),
@@ -162,6 +163,32 @@ describe("a member's line in status (section 8.1)", () => {
     };
     const facts = liveFactsOf({ policy, gossip, reconciler, openFrom: () => false }, clock);
     expect(facts.lines.get(b.signPub)?.state).toBe("connected");
+  });
+
+  test("a line that replaced an earlier entry for the member's core says which, and how it had been added", async () => {
+    const clock = new FakeClock();
+    const [self, b] = [coreMember("self"), coreMember("b")];
+    const machines = new FakeMachines(clock);
+    machines.seed({ name: "b", target: "box", via: false });
+    machines.failAdds.set("b", [hcError("name_taken")]);
+    machines.failAdds.set(fallbacks("b", b.hostId)[0] ?? "", [hcError("already_added")]);
+    const options = { program: "/opt/doriface-host", stateDir: "/state", selfHostId: self.hostId };
+    const reconciler = new Reconciler({ machines, ...options, clock, log: () => undefined });
+    const view = { members: [self, b], overCap: [], revoked: [] };
+    await reconciler.reconcile(view);
+    const policy = new DialPolicy({ clock, random: seededRandom(4), onDue: () => undefined });
+    const gossip = {
+      view,
+      self: self.signPub,
+      lastSync: () => undefined,
+      owedCount: () => 0,
+      session: () => undefined,
+      peerCounter: 0,
+      possiblyRevoked: false,
+    };
+    const facts = liveFactsOf({ policy, gossip, reconciler, openFrom: () => false }, clock);
+    expect(facts.lines.get(b.signPub)?.replaced).toEqual({ name: "b", kind: "ssh" });
+    expect((await machines.list()).map((machine) => machine.name)).toEqual(["b"]);
   });
 });
 
