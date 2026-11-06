@@ -70,6 +70,13 @@ describe("parseInAppLink", () => {
     expect(parseInAppLink(LINK)).toEqual({ kind: "pair", fragment: FRAGMENT });
   });
 
+  test("keeps a link printed on the previous host, while that host is still live", () => {
+    expect(parseInAppLink(LINK.replace("app.doriterm.com", "doriface.omo.dev"))).toEqual({
+      kind: "pair",
+      fragment: FRAGMENT,
+    });
+  });
+
   test.each([
     ["another origin", LINK.replace("app.doriterm.com", "evil.omo.dev")],
     ["a host ending in the web app's host", LINK.replace("app.doriterm.com", "evil-app.doriterm.com")],
