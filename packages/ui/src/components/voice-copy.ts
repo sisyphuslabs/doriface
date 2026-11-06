@@ -27,7 +27,7 @@ export const VOICE_ERROR_COPY: Readonly<Record<VoiceError, ErrorCopy>> = {
   permission: {
     tone: "error",
     title: () => "Microphone access is off",
-    body: () => "Allow the microphone for doriface in the browser's site settings, then try again.",
+    body: () => "Allow the microphone for Doriterm in the browser's site settings, then try again.",
     retry: true,
   },
   "no-speech": {
@@ -71,14 +71,14 @@ export const VOICE_ERROR_COPY: Readonly<Record<VoiceError, ErrorCopy>> = {
     tone: "error",
     title: () => "Microphone access is off",
     body: () =>
-      "Turn on doriface in System Settings > Privacy & Security > Microphone, then try again. Nothing was typed.",
+      "Turn on Doriterm in System Settings > Privacy & Security > Microphone, then try again. Nothing was typed.",
     retry: true,
   },
   "speech-system": {
     tone: "error",
     title: () => "Speech recognition is off",
     body: () =>
-      "Turn on doriface in System Settings > Privacy & Security > Speech Recognition, then try again. Nothing was typed.",
+      "Turn on Doriterm in System Settings > Privacy & Security > Speech Recognition, then try again. Nothing was typed.",
     retry: true,
   },
   "device-mac": {
