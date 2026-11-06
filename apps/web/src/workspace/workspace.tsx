@@ -204,14 +204,20 @@ export function Workspace({ connection }: WorkspaceProps) {
   const inView = narrow ? phoneOpen : (layout.focused?.address ?? null);
   // A new tab goes to the selected space (openTerminal), so it starts where that space is when no terminal is in focus.
   const newTerminal = (template?: string): void => {
-    guideStore.opened();
-    runs.start({
-      ...runParamsFor(
-        terminals.find((terminal) => terminal.address === inView),
-        spaces.find((space) => space.id === layout.active?.spaceKey),
-      ),
-      ...(template === undefined ? {} : { argv: [template], name: template }),
-    });
+    runs.start(
+      {
+        ...runParamsFor(
+          terminals.find((terminal) => terminal.address === inView),
+          spaces.find((space) => space.id === layout.active?.spaceKey),
+        ),
+        ...(template === undefined ? {} : { argv: [template], name: template }),
+      },
+      // The first run's agent step completes once the terminal really started, not when it was asked for (#668).
+      (address) => {
+        guideStore.opened();
+        opened(address);
+      },
+    );
   };
   const split = (axis: Axis, target?: PaneTarget): void => {
     const from =

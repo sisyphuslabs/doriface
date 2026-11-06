@@ -8,7 +8,7 @@ export interface FirstRunGuideCardProps extends GuideFacts {
 }
 
 /**
- * The first-run steps on a newly paired device (#668), while the guide runs: each step's state, a New terminal button
+ * The first-run steps on a newly paired device (#668), while the guide runs: each step's state, a Start a terminal button
  * for the current agent step, Skip, and Done once every step is done. Renders nothing otherwise.
  */
 export function FirstRunGuideCard({ onNew, className, ...facts }: FirstRunGuideCardProps) {
@@ -55,7 +55,7 @@ export function FirstRunGuideCard({ onNew, className, ...facts }: FirstRunGuideC
           <>
             {agentCurrent ? (
               <Button variant="primary" onClick={onNew}>
-                New terminal
+                Start a terminal
               </Button>
             ) : null}
             <Button variant="ghost" onClick={() => guideStore.skip()}>

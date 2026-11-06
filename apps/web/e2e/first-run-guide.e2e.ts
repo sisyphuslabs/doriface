@@ -45,7 +45,7 @@ test("from the QR code's link, the first-run steps complete in order on their re
     await expect(guide(page)).toBeVisible();
     await expect.poll(() => stepStates(page)).toEqual(["pair:done", "agent:current", "list:todo"]);
 
-    await guide(page).getByRole("button", { name: "New terminal" }).click();
+    await guide(page).getByRole("button", { name: "Start a terminal" }).click();
     await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "Back to agents" }).click();
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
@@ -88,7 +88,8 @@ test.describe("on a desktop, with a terminal the host already had", () => {
       await pairFromQrLink(page, host);
       const existing = page.getByRole("complementary", { name: "Workspace" }).getByText("existing").first();
       await expect(existing).toBeVisible({ timeout: 30_000 });
-      // The host's own shell is listed and may be in focus, and still completes nothing.
+      // The restored layout puts the host's own shell in focus, and that completes nothing.
+      await expect(page.locator('[data-focused="true"] [data-terminal]')).toBeVisible({ timeout: 30_000 });
       await expect.poll(() => stepStates(page)).toEqual(["pair:done", "agent:current", "list:todo"]);
       await existing.click();
       await expect.poll(() => stepStates(page), { timeout: 30_000 }).toEqual(["pair:done", "agent:done", "list:done"]);

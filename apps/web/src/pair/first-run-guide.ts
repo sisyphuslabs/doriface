@@ -3,14 +3,14 @@ import { guardedLocalStorage, type StorageLike } from "../storage/guarded.ts";
 
 /**
  * The first run on a newly paired device (#668): pair, then start or pick an agent, then see it in the agents list.
- * Each step is done by the event itself (the pairing, a terminal shown on this device, the list showing a live
- * terminal after that), never by a click on the guide. The guide can be skipped, and reopened from Settings.
+ * Each step is done by the event itself (the pairing, this device starting a terminal or opening one from the list, the
+ * list showing a live terminal after that), never by a restored focus or a click on the guide. The guide can be skipped, and reopened from Settings.
  */
 export type GuideStatus = "off" | "active" | "skipped" | "done";
 
 export interface GuideState {
   readonly status: GuideStatus;
-  /** A terminal was shown on this device since the guide started. */
+  /** This device started a terminal, or opened one from the agents list, since the guide started. */
   readonly opened: boolean;
 }
 
@@ -58,7 +58,7 @@ export class GuideStore {
     this.#set({ status: "active", opened: false });
   }
 
-  /** A terminal is shown on this device; counts only while the guide runs. */
+  /** This device started or opened a terminal; counts only while the guide runs. */
   opened(): void {
     if (this.#value.status === "active" && !this.#value.opened) this.#set({ ...this.#value, opened: true });
   }
