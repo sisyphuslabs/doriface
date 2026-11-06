@@ -13,10 +13,24 @@ const SETTINGS: ConnectionSettings = { ...DEFAULT_SETTINGS, mode: "loopback", to
 
 afterEach(() => jest.useRealTimers());
 
+/**
+ * A stand-in for the one live connection the store holds. A real `HcConnection` always carries the hello the host
+ * answered with — the store reads the host's name out of every connection it opens (#496) — so its stand-in does too;
+ * `closes` collects the drop listeners the store installs.
+ */
+function standIn(name = ""): { readonly connection: HcConnection; readonly closes: ((error?: Error) => void)[] } {
+  const closes: ((error?: Error) => void)[] = [];
+  const connection = {
+    hello: { core: { id: "c0re", name } },
+    onClose: (listener: (error?: Error) => void) => (closes.push(listener), () => undefined),
+    close: () => undefined,
+  } as unknown as HcConnection;
+  return { connection, closes };
+}
+
 test("retryNow makes the waiting attempt at once, and its back-off timer makes no second one", async () => {
   jest.useFakeTimers();
-  const live = { hello: { core: { id: "c0re", name: "" } }, onClose: () => () => undefined, close: () => undefined };
-  const connection = live as unknown as HcConnection;
+  const { connection } = standIn();
   let attempts = 0;
   const store = new ConnectionStore(SETTINGS, () => {
     attempts += 1;
@@ -119,13 +133,7 @@ test("a loopback link that fails asks this computer's host first, and the retry 
   Object.assign(globalThis, {
     localStorage: { getItem: () => null, setItem: (_key: string, value: string) => saved.push(value) },
   });
-  const closes: ((error?: Error) => void)[] = [];
-  const live = {
-    hello: { core: { id: "c0re", name: "" } },
-    onClose: (fn: (error?: Error) => void) => (closes.push(fn), () => undefined),
-    close: () => undefined,
-  };
-  const connection = live as unknown as HcConnection;
+  const { connection, closes } = standIn();
   const dialled: string[] = [];
   const store = new ConnectionStore({ ...SETTINGS, loopbackUrl: "ws://127.0.0.1:1111/v1/hc" }, (settings) => {
     dialled.push(`${settings.loopbackUrl} ${settings.token}`);
@@ -181,13 +189,10 @@ function recordingStorage(): { readonly written: string[]; readonly restore: () 
 
 test("the host's name is saved beside the paired host, so a load without it still knows what to call it (#496)", async () => {
   const storage = recordingStorage();
-  const announcing = {
-    onClose: () => () => undefined,
-    close: () => undefined,
-    hello: { core: { id: "c0re", name: "studio" } },
-  };
-  const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" }, () =>
-    Promise.resolve(announcing as unknown as HcConnection),
+  const { connection } = standIn("studio");
+  const store = new ConnectionStore(
+    { ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" },
+    (): Promise<OpenConnection> => Promise.resolve({ connection, path: "relay" }),
   );
   const open = new Promise<void>((resolve) => {
     const off = store.subscribe(() => {
@@ -252,8 +257,7 @@ test("a host that does not start again shows its cause, and no link is tried", a
 
 test("the open state carries the path its session opened on (#446 §5)", async () => {
   jest.useFakeTimers();
-  const live: Pick<HcConnection, "onClose" | "close"> = { onClose: () => () => undefined, close: () => undefined };
-  const connection = live as HcConnection;
+  const { connection } = standIn();
   const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" }, (): Promise<OpenConnection> =>
     Promise.resolve({ connection, path: "direct" }),
   );
@@ -272,12 +276,7 @@ test("the open state carries the path its session opened on (#446 §5)", async (
 
 test("a direct link that drops sends the next attempt to the relay at once, once (#446 §4)", async () => {
   jest.useFakeTimers();
-  const closes: ((error?: Error) => void)[] = [];
-  const live: Pick<HcConnection, "onClose" | "close"> = {
-    onClose: (fn) => (closes.push(fn), () => undefined),
-    close: () => undefined,
-  };
-  const connection = live as HcConnection;
+  const { connection, closes } = standIn();
   const skip: (boolean | undefined)[] = [];
   const store = new ConnectionStore(
     { ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" },
