@@ -4,6 +4,7 @@ import { connectionStore } from "../connection/store.ts";
 import { formatCode, normalizeCode } from "./code.ts";
 import type { PairingOffer } from "./fragment.ts";
 import { parsePairingFragment } from "./fragment.ts";
+import { PAIR_STEP_DESCRIPTION } from "./pair-help.ts";
 import { lookupCode } from "./lookup.ts";
 import { Steps } from "./steps.tsx";
 
@@ -41,9 +42,7 @@ export function PairStep({
       <Steps current={1} />
       <div className="text-center">
         <h1 className="text-2xl font-semibold text-balance text-foreground">Pair this device</h1>
-        <p className="mt-1.5 text-base text-muted-foreground">
-          Scan the code shown by the host with this device's camera, or type its pairing code.
-        </p>
+        <p className="mt-1.5 text-base text-muted-foreground">{PAIR_STEP_DESCRIPTION}</p>
       </div>
       <form
         className="flex flex-col gap-5"
