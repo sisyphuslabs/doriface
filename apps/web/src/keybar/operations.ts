@@ -1,7 +1,7 @@
 import { DEFAULT_KEY_IDS, SPECIAL_KEYS, specialKey } from "./catalog.ts";
 import { parseKeyInput } from "./custom.ts";
-import { type CustomKey, FAVORITES_PACK_ID, type KeyBarSettings, KEYBAR_VERSION } from "./settings.ts";
-import { isPackId } from "./packs.ts";
+import { type CustomKey, type KeyBarSettings, KEYBAR_VERSION } from "./settings.ts";
+import { FAVORITES_PACK_ID, isPackId } from "./packs.ts";
 
 /** Every change here is a pure function of the previous document, so a stored value is never mutated in place. */
 
@@ -89,6 +89,7 @@ export function addFavorite(
   }
   const key: CustomKey = { id: entry.id, label, input: entry.input.trim(), bytes: parsed.key.bytes };
   const packs = settings.packs.includes(FAVORITES_PACK_ID) ? settings.packs : [...settings.packs, FAVORITES_PACK_ID];
+  // The bar shows Favorites after the add, so the new key is where the person can see it.
   return {
     kind: "added",
     key,
@@ -96,7 +97,7 @@ export function addFavorite(
       ...settings,
       favorites: [...settings.favorites, key],
       packs,
-      activePack: settings.activePack ?? FAVORITES_PACK_ID,
+      activePack: FAVORITES_PACK_ID,
     },
   };
 }

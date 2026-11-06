@@ -1,15 +1,4 @@
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  ClipboardPaste,
-  GamepadDirectional,
-  Keyboard,
-  KeyboardOff,
-  List,
-  TextCursorInput,
-} from "lucide-react";
+import { ClipboardPaste, GamepadDirectional, Keyboard, KeyboardOff, List, TextCursorInput } from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -31,41 +20,6 @@ export interface ExtraKey {
   readonly modifier?: boolean;
 }
 
-const CTRL: ExtraKey = { id: "ctrl", label: "ctrl", name: "Control", modifier: true };
-const CMD: ExtraKey = { id: "cmd", label: "cmd", name: "Command", modifier: true };
-const REST: readonly ExtraKey[] = [
-  { id: "shift", label: "shift", name: "Shift", modifier: true },
-  { id: "tab", label: "tab", name: "Tab" },
-  { id: "esc", label: "esc", name: "Escape" },
-  { id: "interrupt", label: "^C", name: "Control C" },
-];
-
-export function extraKeys(command: boolean): readonly ExtraKey[] {
-  return command ? [CTRL, CMD, ...REST] : [CTRL, ...REST];
-}
-
-export const DEFAULT_EXTRA_KEYS: readonly ExtraKey[] = extraKeys(false);
-
-/**
- * The arrow keys, one key each, in the bar's own row (the owner's phone keys bar, #195): up, down, left and right are
- * the keys people reach for while the soft keyboard covers the terminal. They read "Arrow left" and so on because the
- * arrow pad over the terminal names the same keys "Left arrow" (#238); one of the two would otherwise answer twice.
- */
-export const ARROW_KEYS: readonly ExtraKey[] = [
-  { id: "left", label: <ArrowLeft aria-hidden />, name: "Arrow left" },
-  { id: "up", label: <ArrowUp aria-hidden />, name: "Arrow up" },
-  { id: "down", label: <ArrowDown aria-hidden />, name: "Arrow down" },
-  { id: "right", label: <ArrowRight aria-hidden />, name: "Arrow right" },
-];
-
-export const SWIPE_KEYS: readonly ExtraKey[] = [
-  { id: "alt", label: "alt", name: "Option", modifier: true },
-  { id: "tilde", label: "~", name: "Tilde" },
-  { id: "pipe", label: "|", name: "Vertical bar" },
-  { id: "slash", label: "/", name: "Slash" },
-  { id: "dash", label: "-", name: "Hyphen" },
-];
-
 /** A mousedown that would move focus off the terminal would also drop the soft keyboard. */
 export function keepFocus(event: MouseEvent): void {
   event.preventDefault();
@@ -76,6 +30,9 @@ const key =
 const latchedKey =
   "bg-primary font-semibold text-primary-foreground after:absolute after:bottom-1.5 after:h-0.5 after:w-3 after:rounded-full after:bg-current active:opacity-80";
 const idleKey = "text-foreground active:bg-selected";
+
+/** How long a key is held before the hold counts; a shorter press is the tap it always was. */
+const HOLD_MS = 400;
 
 const symbol = (entry: ExtraKey): boolean => typeof entry.label === "string" && entry.label.length === 1;
 
@@ -113,12 +70,73 @@ function useEdgeFade(): [Fade, (el: HTMLDivElement | null) => void] {
   return [fade, ref];
 }
 
+interface KeyButtonProps {
+  readonly entry: ExtraKey;
+  readonly latched: boolean;
+  readonly onKey: ((id: string) => void) | undefined;
+  readonly onHold: ((id: string) => void) | undefined;
+}
+
+/**
+ * One bar key. A held press is its own gesture where the caller names one (Ctrl opens the packs panel); the tap that
+ * follows a hold sends nothing, so opening a panel never latches a modifier by accident.
+ */
+function KeyButton({ entry, latched, onKey, onHold }: KeyButtonProps) {
+  const timer = useRef<number | null>(null);
+  const held = useRef(false);
+  const stop = useCallback((): void => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  useEffect(() => stop, [stop]);
+  const start = (): void => {
+    held.current = false;
+    if (onHold === undefined) return;
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      held.current = true;
+      onHold(entry.id);
+    }, HOLD_MS);
+  };
+  return (
+    <button
+      type="button"
+      aria-label={entry.name}
+      aria-pressed={entry.modifier === true ? latched : undefined}
+      onMouseDown={keepFocus}
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={onHold === undefined ? undefined : (event) => event.preventDefault()}
+      onClick={() => {
+        if (held.current) {
+          held.current = false;
+          return;
+        }
+        onKey?.(entry.id);
+      }}
+      className={cn(
+        key,
+        symbol(entry) ? "font-mono text-base" : "text-[0.8125rem] font-medium",
+        latched ? latchedKey : idleKey,
+      )}
+    >
+      {entry.label}
+    </button>
+  );
+}
+
 export interface ExtraKeysBarProps {
-  readonly keys?: readonly ExtraKey[];
-  readonly swipeKeys?: readonly ExtraKey[];
+  /** The person's keys, in their order. */
+  readonly keys: readonly ExtraKey[];
+  /** The active pack's keys, drawn before the person's own so picking a pack shows its keys at once. */
+  readonly packKeys?: readonly ExtraKey[];
   /** Ids of modifiers currently latched. */
   readonly latched?: readonly string[];
   readonly onKey?: (id: string) => void;
+  /** A key held down, by id. Ctrl's hold opens the packs panel. */
+  readonly onKeyHold?: (id: string) => void;
   readonly padOpen?: boolean;
   readonly onPad?: () => void;
   readonly onPaste?: () => void;
@@ -141,42 +159,23 @@ export interface ExtraKeysBarProps {
 
 /**
  * The phone's terminal keys, one rounded pill riding on the soft keyboard. Everything that scrolls sits in the row on
- * the left: the modifiers and Tab/Esc, the arrow keys, the arrow-pad toggle, Switch session and Paste, then the
- * characters behind a swipe (an edge fade says which way more keys hide). The two slots on the right never scroll:
- * the input field's toggle and the keyboard's. Every key is a 44 pt target, and pressing one leaves the text focus
- * (and so the keyboard) where it was. A latched modifier inverts to solid ink with a bar under its label, so it reads
- * as on in both themes.
+ * the left: the active pack's keys, the person's own keys behind a divider, the arrow-pad toggle, Switch session and
+ * Paste. The two slots on the right never scroll: the input field and the keyboard's toggle. Every key is
+ * a 44 pt target, and pressing one leaves the text focus (and so the keyboard) where it was. A latched modifier inverts
+ * to solid ink with a bar under its label, so it reads as on in both themes.
  */
 export function ExtraKeysBar(props: ExtraKeysBarProps) {
-  const {
-    keys = DEFAULT_EXTRA_KEYS,
-    swipeKeys = SWIPE_KEYS,
-    latched = [],
-    onKey,
-    padOpen = false,
-    inputBox = false,
-  } = props;
+  const { keys, packKeys = [], latched = [], onKey, onKeyHold, padOpen = false, inputBox = false } = props;
   const [fade, scroller] = useEdgeFade();
-  const textKey = (entry: ExtraKey) => {
-    const on = latched.includes(entry.id);
-    return (
-      <button
-        key={entry.id}
-        type="button"
-        aria-label={entry.name}
-        aria-pressed={entry.modifier === true ? on : undefined}
-        onMouseDown={keepFocus}
-        onClick={() => onKey?.(entry.id)}
-        className={cn(
-          key,
-          symbol(entry) ? "font-mono text-base" : "text-[0.8125rem] font-medium",
-          on ? latchedKey : idleKey,
-        )}
-      >
-        {entry.label}
-      </button>
-    );
-  };
+  const textKey = (entry: ExtraKey) => (
+    <KeyButton
+      key={entry.id}
+      entry={entry}
+      latched={latched.includes(entry.id)}
+      onKey={onKey}
+      onHold={entry.id === "ctrl" ? onKeyHold : undefined}
+    />
+  );
   const sessions = (
     <button type="button" aria-label="Switch session" onMouseDown={keepFocus} className={cn(key, idleKey)}>
       <List />
@@ -204,9 +203,10 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
             "data-[fade=both]:[mask-image:linear-gradient(to_right,transparent,black_0.75rem,black_calc(100%-0.75rem),transparent)]",
           )}
         >
+          {packKeys.map(textKey)}
+          {packKeys.length > 0 ? divider("h-5") : null}
           {keys.map(textKey)}
           {divider("h-5")}
-          {ARROW_KEYS.map(textKey)}
           <button
             type="button"
             aria-label="Arrow keys"
@@ -227,8 +227,6 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
           >
             <ClipboardPaste />
           </button>
-          {divider("h-5")}
-          {swipeKeys.map(textKey)}
         </div>
         {divider("h-6")}
         <div className="flex shrink-0 items-center">

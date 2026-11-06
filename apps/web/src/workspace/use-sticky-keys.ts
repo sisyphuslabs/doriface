@@ -8,6 +8,8 @@ export interface StickyKeys {
   /** Applies the latched modifiers to typed input and lets them go; the paste chord pastes and sends nothing. */
   readonly transform: (data: string) => string;
   readonly press: (id: string) => void;
+  /** Sends the bytes a key carries (a pack's key, or one of the person's own), through the latched modifiers. */
+  readonly send: (bytes: string) => void;
   readonly paste: () => void;
 }
 
@@ -32,6 +34,10 @@ export function useStickyKeys(port: RefObject<TerminalPort | null>, host: HostPl
     pasteClipboard();
     return "";
   };
+  const send = (bytes: string): void => {
+    const input = transform(bytes);
+    if (input !== "") port.current?.send(input);
+  };
   const press = (id: string): void => {
     if (MODIFIERS.has(id)) {
       // A syllable still composing was typed before the modifier: it goes now, without it (#652).
@@ -44,13 +50,11 @@ export function useStickyKeys(port: RefObject<TerminalPort | null>, host: HostPl
       return;
     }
     const sequence = keySequence(id);
-    if (sequence === undefined) return;
-    const input = transform(sequence);
-    if (input !== "") port.current?.send(input);
+    if (sequence !== undefined) send(sequence);
   };
   const paste = (): void => {
     setLatched(new Set());
     pasteClipboard();
   };
-  return { latched, transform, press, paste };
+  return { latched, transform, press, send, paste };
 }
