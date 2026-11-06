@@ -133,6 +133,12 @@ bun run --cwd apps/host start --print-token   # the gateway on 127.0.0.1:7766, a
 keeps its keys and the devices it paired in `$XDG_STATE_HOME/doriface-host` (or `--state-dir`), and `doriface-host devices
 list` and `doriface-host devices revoke <id>` manage what is paired.
 
+To keep a host running on every machine you own, as a systemd user unit on Linux or a LaunchAgent on macOS that survives
+logouts and reboots, follow [docs/install.md](docs/install.md), or hand the
+[doriterm-setup skill](skills/doriterm-setup/SKILL.md) to a coding agent. Its `bun apps/host/scripts/setup/cli.ts install`
+writes the service, installs herdr-core if needed, waits for the relay and is safe to re-run. The service keeps its own state
+dir (`~/.local/state/doriface-host-mesh`), so it never shares keys or devices with the desktop app's own host.
+
 ## Pairing, and how the relay fits
 
 A client reaches another machine's host through the relay, in a Noise session the relay cannot read:
@@ -181,6 +187,9 @@ doriface-host mesh status                     # who is in the mesh (--json for s
 doriface-host mesh revoke <member>            # remove a member on every machine
 doriface-host mesh revoke --compromised <member>   # …and everyone it admitted
 ```
+
+The setup skill's `invite --out <file>` and `join --from <file>` wrap `mesh pair --auto` and `mesh join` and keep the
+single-use link in a 0600 file instead of on screen ([docs/install.md](docs/install.md)).
 
 A machine joins only after you approve it on the member it dialed — in that member's terminal, or on a device paired to it —
 unless the invite was opened with `--auto`. Membership is a grow-only set of signed, hash-linked records; every member keeps
@@ -272,7 +281,8 @@ The [release workflow](.github/workflows/release.yml) builds every file on GitHu
 
 1. Set `version` there and merge it.
 2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the
-   uploaded Linux AppImage and macOS app, installs the Windows installer, then publishes the release.
+   uploaded Linux AppImage and macOS app, installs the Windows installer, then publishes the release. Notes come from the
+   `## vX.Y.Z` section of `CHANGELOG.md`, and a tag whose section is missing or empty fails before any build.
 
 A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is
 accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with
