@@ -284,6 +284,30 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
 
+  ios:
+    # After the merge, like the other platform jobs: the iOS app (#704) and its Notification Service Extension build for
+    # the simulator, unsigned.
+    name: iOS
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - name: Build the web app and copy it into the iOS project
+        run: bun run --cwd apps/mobile sync:ios
+      - name: Simulator build of the app and its extension
+        working-directory: apps/mobile/ios/App
+        run: >-
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+
   desktop:
     # After the merge, not on the pull request: nothing here can hold a pull request before it lands.
     name: Desktop
