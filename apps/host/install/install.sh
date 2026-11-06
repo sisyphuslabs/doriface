@@ -110,7 +110,10 @@ if [ "$service" -eq 1 ]; then
 fi
 
 have curl || fail "curl is needed to download doriface-host"
-if [ -z "$version" ] && [ "$release" != "__DORIFACE_RELEASE__" ]; then version="$release"; fi
+# Matched by its shape, never by the placeholder's text, which the stamp replaces on every line it appears.
+case "$release" in
+  v[0-9]*) [ -n "$version" ] || version="$release" ;;
+esac
 if [ -z "$from" ]; then
   if [ -z "$version" ]; then from="${REPO_RELEASES}/latest/download"; else from="${REPO_RELEASES}/download/${version}"; fi
 fi
@@ -169,6 +172,9 @@ fi
 service_path="${bin_dir}:$(dirname "$hc_path"):${PATH}"
 service_shell="${SHELL:-/bin/sh}"
 
+# systemd reads % as a specifier in unit values; a literal one is written %%.
+sd() { printf '%s' "$1" | sed 's/%/%%/g'; }
+
 if [ "$os" = linux ]; then
   mkdir -p "$unit_dir"
   cat >"$unit" <<EOF
@@ -177,8 +183,8 @@ Description=doriface host gateway beside herdr-core
 After=network-online.target
 
 [Service]
-ExecStart="${host_bin}" --hc "${hc_path}" --state-dir "${state_dir}"
-Environment="PATH=${service_path}" "SHELL=${service_shell}"
+ExecStart="$(sd "$host_bin")" --hc "$(sd "$hc_path")" --state-dir "$(sd "$state_dir")"
+Environment="PATH=$(sd "$service_path")" "SHELL=$(sd "$service_shell")"
 Restart=always
 RestartSec=2
 # The highest share a user unit can ask for; a negative Nice needs privilege, so none is set.
