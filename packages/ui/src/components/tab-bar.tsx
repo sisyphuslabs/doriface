@@ -209,10 +209,12 @@ export function TabBar({
             <ContextMenu
               key={tab.id}
               trigger={item}
-              finalFocus={{
-                get current() {
-                  return buttons.current.get(tab.id) ?? null;
-                },
+              // An item that opened a dialog (Rename tab…) has already given it the keyboard, and the menu closes a
+              // moment later: taking focus back to the tab would lose the name typed meanwhile.
+              finalFocus={() => {
+                const holder = document.activeElement;
+                if (holder instanceof HTMLElement && holder.closest('[role="dialog"]') !== null) return false;
+                return buttons.current.get(tab.id) ?? true;
               }}
               open={menuFor === tab.id}
               onOpenChange={(open) => setMenuFor(open ? tab.id : null)}
