@@ -13,9 +13,9 @@ export interface RowWithActionsProps {
    */
   readonly menu?: ReactNode;
   /**
-   * Keeps the actions drawn on a coarse pointer, where there is no hover to reveal them, in place of the row's meta:
-   * only for a row whose trailing meta can give way (the agents list, #798). A row whose meta is its own signal, like a
-   * space's status dot and tab count, leaves this off and keeps its meta.
+   * Keeps the actions drawn on a coarse pointer, where there is no hover to reveal them: only for a row that can give
+   * them room, which this asks the row's own button for with a trailing pad (#798). A row that cannot, like a space
+   * whose status dot and tab count are its own signal, leaves this off and keeps its actions on hover.
    */
   readonly coarseActions?: boolean;
   readonly className?: string;
@@ -25,9 +25,13 @@ const SHOWN =
   "group-hover/row:visible group-focus-within/row:visible group-has-[[data-popup-open]]/row:visible group-data-popup-open/row:visible";
 const MASKED =
   "[&:is(:hover,:focus-within,:has([data-popup-open]),[data-popup-open])_[data-row-meta]]:invisible data-popup-open:outline-2 data-popup-open:outline-solid data-popup-open:-outline-offset-2 data-popup-open:outline-ring";
-/** The same two, held on a coarse pointer: the actions are drawn, and the meta they cover is not. */
-const COARSE_SHOWN = `${SHOWN} coarse:visible`;
-const COARSE_MASKED = `${MASKED} coarse:[&_[data-row-meta]]:invisible`;
+/**
+ * Held on a coarse pointer: the actions are drawn, 24 px apart so their centred 44 px hit areas do not meet, and the
+ * row's own button gives them the width they take (two 24 px buttons, the 24 px gap and the 4 px inset), so nothing the
+ * row draws runs under them. The pad goes on the button, not the wrapper, so its hover wash still spans the row.
+ */
+const COARSE_SHOWN = `${SHOWN} coarse:visible coarse:gap-6`;
+const COARSE_ROOM = "coarse:[&>button]:pr-20";
 
 /** A touch keeps the row's own press (a held space row lifts for a drag): only a mouse, a pen or a key opens the menu. */
 function skipTouchMenu(event: MouseEvent<HTMLDivElement>): void {
@@ -54,7 +58,7 @@ export function RowWithActions({ row, actions, menu, coarseActions = false, clas
   const element = (
     <div
       ref={box}
-      className={cn("group/row relative min-w-0 rounded-md", coarseActions ? COARSE_MASKED : MASKED, className)}
+      className={cn("group/row relative min-w-0 rounded-md", MASKED, coarseActions && COARSE_ROOM, className)}
       {...(menu === undefined
         ? {}
         : { onTouchStart: skipMenuHandler, onContextMenu: skipTouchMenu, onKeyDown: openFromKeys })}
@@ -62,7 +66,7 @@ export function RowWithActions({ row, actions, menu, coarseActions = false, clas
       {row}
       <span
         className={cn(
-          "invisible absolute inset-y-0 right-1 flex items-center gap-0.5 coarse:gap-6",
+          "invisible absolute inset-y-0 right-1 flex items-center gap-0.5",
           coarseActions ? COARSE_SHOWN : SHOWN,
         )}
       >

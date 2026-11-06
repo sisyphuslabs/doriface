@@ -16,13 +16,15 @@ test("an agent row's Pin and More are on the phone, and each takes a tap just in
   page,
 }) => {
   const address = startAgent("host", "tapme", "idle");
+  // A detail far longer than the row: the text that used to run under the actions.
+  const long = startAgent("host", "longrow", "idle", "a-long-space-name-for-the-detail");
   try {
     await page.goto("/");
     const row = page.getByRole("button", { name: /tapme/ }).first();
     const pin = page.getByRole("button", { name: "Pin tapme" });
     const more = page.getByRole("button", { name: "More for tapme" });
-    await expect(pin).toBeVisible({ timeout: 20_000 });
-    await expect(more).toBeVisible();
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    await expect(pin).toBeVisible();
 
     const boxes = await Promise.all([pin.boundingBox(), more.boundingBox()]);
     const [left, right] = boxes;
@@ -56,8 +58,16 @@ test("an agent row's Pin and More are on the phone, and each takes a tap just in
       expect.soft(hits[index], `a tap 10 px ${side} of "${label}" reaches it`).toBe(label),
     );
 
-    // The meta gives way to the actions, as it does on hover on a fine pointer, so nothing is drawn under them.
-    await expect(row.locator("[data-row-meta]").first()).toHaveCSS("visibility", "hidden");
+    // The row made room for the actions instead of covering what it draws: a long detail stops before them, and the
+    // row's meta stays, because nothing had to give way.
+    const longRow = page.getByRole("button", { name: /longrow/ }).first();
+    const longPin = page.getByRole("button", { name: "Pin longrow" });
+    await expect(longPin).toBeVisible();
+    const detail = await longRow.locator('[data-floor="detail"]').boundingBox();
+    const longPinBox = await longPin.boundingBox();
+    if (detail === null || longPinBox === null) throw new Error("no box");
+    expect(detail.x + detail.width, "the row's text stops before its actions").toBeLessThanOrEqual(longPinBox.x);
+    await expect(longRow.locator("[data-row-meta]").first()).toHaveCSS("visibility", "visible");
 
     // A space row's meta is its own signal: its status dot and tab count stay in its name, and its "..." waits for a hover.
     await expect(page.getByRole("button", { name: /\d+ tabs/ }).first()).toBeVisible();
@@ -67,5 +77,6 @@ test("an agent row's Pin and More are on the phone, and each takes a tap just in
     await expect(page.getByRole("button", { name: "Unpin tapme" })).toBeVisible();
   } finally {
     endAgent("host", address);
+    endAgent("host", long);
   }
 });
