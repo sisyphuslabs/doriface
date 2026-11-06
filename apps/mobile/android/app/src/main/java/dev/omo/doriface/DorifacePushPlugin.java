@@ -111,6 +111,8 @@ public class DorifacePushPlugin extends Plugin {
                     return;
                 }
                 try {
+                    // Keys first: a recovery inside load() clears the store, and must not erase the token saved here.
+                    NoticeKeys.load(getContext());
                     saveToken(getContext(), task.getResult());
                     call.resolve(registration(task.getResult()));
                 } catch (Exception error) {
@@ -121,9 +123,12 @@ public class DorifacePushPlugin extends Plugin {
 
     @PluginMethod
     public void current(PluginCall call) {
-        String token = NoticeKeys.prefs(getContext()).getString("token", null);
         JSObject out = new JSObject();
         try {
+            // Keys first: keys that had to be made again come with no token, so the page subscribes afresh instead of
+            // keeping a host subscription that still holds the old keys.
+            NoticeKeys.load(getContext());
+            String token = NoticeKeys.prefs(getContext()).getString("token", null);
             out.put("registration", token == null ? null : registration(token));
             call.resolve(out);
         } catch (Exception error) {
