@@ -281,7 +281,12 @@ describe("what the bridge refuses before anything reaches APNs or FCM", () => {
       status: 401,
       forwarded: 0,
     });
-    const lapsed = createBridge(await config(), { fetch: upstream().fetch, now: () => NOW + 13 * 60 * 60 * 1000 });
+    // The token under test is signed from the real clock with a 12 h life, so its lapse is measured from now too: a
+    // fixed anchor here reads as expired only for the hour after that anchor (#750).
+    const lapsed = createBridge(await config(), {
+      fetch: upstream().fetch,
+      now: () => Date.now() + 13 * 60 * 60 * 1000,
+    });
     const late = await lapsed(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
     expect(late.status).toBe(401);
     const elsewhere = createBridge(await config(), { fetch: upstream().fetch, now: () => NOW });
