@@ -77,7 +77,8 @@ async function main(argv: readonly string[]): Promise<number> {
           env: { ...process.env, DORITERM_SETUP_REEXEC: checkout.sha },
           stdio: ["inherit", "inherit", "inherit"],
         });
-        return child.exited;
+        // The child reports its own result line.
+        process.exit(await child.exited);
       }
       const paths = resolvePaths(context, await ensureHc(context));
       const service = await ensureService(context, paths, process.env["DORITERM_SETUP_REEXEC"] !== undefined);
