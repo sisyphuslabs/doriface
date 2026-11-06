@@ -79,7 +79,7 @@ async function referenceSizes(page: Page): Promise<readonly string[]> {
   return sizes;
 }
 
-test("a web font that loads while no terminal is mounted re-sizes wide glyphs measured before it loaded", async ({
+test("a web font that loads while the terminal is under Settings re-sizes wide glyphs measured before it loaded", async ({
   page,
   context,
 }) => {
@@ -90,9 +90,9 @@ test("a web font that loads while no terminal is mounted re-sizes wide glyphs me
   await print(page, terminal, HANGUL);
   await expect.poll(async () => (await wideSizes(terminal)).length).toBe(2);
   const before = await wideSizes(terminal);
-  // Settings replaces the terminal view, so no view is mounted when the font arrives.
+  // Settings keeps the workspace mounted and hidden, so the font arrives under a terminal that is not on screen.
   await page.getByRole("link", { name: "Settings" }).first().click();
-  await expect(page.locator("[data-terminal]")).toHaveCount(0);
+  await expect(page.locator("[data-terminal]")).toBeHidden();
   release();
   await expect.poll(() => webFontLoaded(page), { timeout: 15_000 }).toBe(true);
   await page.getByRole("button", { name: "Close settings" }).first().click();

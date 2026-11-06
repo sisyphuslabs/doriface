@@ -155,12 +155,15 @@ async function leaveWhileStarting(page: Page, link: HcSocket): Promise<(fail?: b
   await askNewTab(page, previous, "keys");
   await page.keyboard.type(LINE, { delay: 40 });
   await page.getByRole("link", { name: "Settings" }).first().click();
-  await expect(page.locator("[data-terminal]")).toHaveCount(0);
+  // Settings keeps the workspace mounted and hides it, so the panes that asked are there but not shown when the run lands.
+  await expect(page.locator("[data-terminal]")).toBeHidden();
   await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
   return release;
 }
 
-test("a run that answers after the workspace closed arms no observer or timer and shows no toast", async ({ page }) => {
+test("a run that answers while Settings hides the workspace arms no observer or timer and shows no toast", async ({
+  page,
+}) => {
   await page.addInitScript({ content: COUNT_LATE_WORK });
   const link = await routeHcSocket(page);
   await page.clock.install();

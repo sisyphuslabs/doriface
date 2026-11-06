@@ -36,10 +36,11 @@ for (const colorScheme of ["light", "dark"] as const) {
       await page.keyboard.press("Enter");
       await page.getByRole("button", { name: "Close settings" }).first().click();
       await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-      // The phone lists the agents, and the terminal opened above is this test's only one (the terminal guard ends every
-      // test's own). Its row is found by being the one, not by its title: a shell retitles its tab (/bin/sh, then sh)
-      // after it starts, so a title read early names a row that never shows (#527).
+      // The workspace is kept, so the tab opened above is still the one in view at 390: the phone opens straight onto it. Its
+      // agent list is a tap away, and that list is what a phone uses to reach any other terminal — this test's one.
       if (width === 390) {
+        const back = page.getByRole("button", { name: "Back to agents" });
+        if (await back.isVisible()) await back.click();
         const agents = page.locator("button:has([data-floor='name']):has(time)");
         await expect(agents, "the phone lists the one terminal this test opened").toHaveCount(1, { timeout: 30_000 });
         await agents.click();

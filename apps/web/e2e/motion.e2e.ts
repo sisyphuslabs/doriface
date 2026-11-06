@@ -141,7 +141,9 @@ test("a kept tab on an added machine does not arrive late on the way back from S
   await page.goBack();
   await expect(page.getByRole("contentinfo").getByText(/^\d+ terminals?\b/)).toBeVisible({ timeout: 20_000 });
   await twoFrames(page);
-  await expect(remoteTab).toHaveCount(0);
+  // Settings keeps the workspace, so the strip never lost the tab: coming back shows it as it was, with nothing left to
+  // arrive from a list that had to be asked for again while machine.list was held.
+  await expect(remoteTab).toBeVisible();
   release();
   await expect(remoteTab).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => page.locator(":root").getAttribute("data-ready")).toBe("");
