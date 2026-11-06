@@ -13,6 +13,7 @@ import {
   PING,
 } from "@doriface/relay-client";
 import type { Server, ServerWebSocket } from "bun";
+import type { PairSlotSignature } from "@doriface/relay-client/wire";
 
 export class RelaySessionClosed extends Error {
   readonly code: number;
@@ -71,6 +72,11 @@ export class FakeRelay {
   readonly #sessions = new Map<number, Session>();
   #host: ServerWebSocket<Uplink> | undefined;
   #lastSlot = "000";
+  #hostId = "";
+  #signPub: Uint8Array | undefined;
+  #registered:
+    | { readonly slot: string; readonly noiseStaticPub: Uint8Array; readonly signed?: PairSlotSignature }
+    | undefined;
 
   constructor() {
     this.#server = Bun.serve<Uplink>({
@@ -170,6 +176,11 @@ export class FakeRelay {
     if (!ws.data.answered) {
       ws.data.answered = true;
       const { origin, hostId, challenge } = ws.data;
+      // The relay knows the host's signing key from this answer; so does this one, for the code lookup it answers.
+      if (message.byteLength === 96) {
+        this.#hostId = hostId;
+        this.#signPub = message.slice(0, 32);
+      }
       return this.answers.push({ hostId, verified: verifyRelayAnswer(origin, hostId, challenge, message) });
     }
     const frame = decodeMux(message);
@@ -182,8 +193,40 @@ export class FakeRelay {
   #pairSlot(payload: Uint8Array): void {
     const request = payload.byteLength === 0 ? "clear" : decodePairSlotRequest(payload);
     if (request === undefined) throw new Error("malformed PAIR_SLOT");
-    if (request !== "clear") this.#lastSlot = request.slot;
+    if (request === "clear") this.#registered = undefined;
+    else {
+      this.#lastSlot = request.slot;
+      this.#registered = request;
+    }
     this.pairSlots.push(request);
     this.#sendOrThrow(encodePairSlotAck(this.#lastSlot, PairSlotAckStatus.Registered));
   }
+
+  /**
+   * What the relay answers at `GET /v1/pair/<slot>`: the signed record the host registered for it (#22), with the
+   * signing key it presented on its uplink. Undefined when no host holds that slot or its record is unsigned.
+   */
+  pairLookup(slot: string):
+    | {
+        readonly hostId: string;
+        readonly noiseStaticPub: string;
+        readonly signPub: string;
+        readonly expiresAt: number;
+        readonly slotSig: string;
+      }
+    | undefined {
+    const registered = this.#registered;
+    const signPub = this.#signPub;
+    if (registered === undefined || signPub === undefined) return undefined;
+    if (registered.slot !== slot || registered.signed === undefined) return undefined;
+    return {
+      hostId: this.#hostId,
+      noiseStaticPub: base64urlFor(registered.noiseStaticPub),
+      signPub: base64urlFor(signPub),
+      expiresAt: registered.signed.expiresAt,
+      slotSig: base64urlFor(registered.signed.signature),
+    };
+  }
 }
+
+const base64urlFor = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64url");

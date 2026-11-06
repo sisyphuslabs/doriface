@@ -36,6 +36,16 @@ export function checkHandshake(header: string | undefined, token: string): Hands
   return { ok: true };
 }
 
+/**
+ * The loopback gateway's plain-HTTP routes (the pairing offer) present the same per-launch token as `/v1/hc`, as
+ * `Authorization: Bearer <token>`.
+ */
+export function checkBearer(header: string | undefined, token: string): boolean {
+  const [scheme, presented] = (header ?? "").split(" ");
+  if (scheme !== "Bearer" || presented === undefined || presented === "") return false;
+  return sameSecret(presented, token);
+}
+
 const digest = (value: string): Buffer => createHash("sha256").update(value).digest();
 
 function sameSecret(presented: string, expected: string): boolean {

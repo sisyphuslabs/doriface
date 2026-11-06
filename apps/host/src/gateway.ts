@@ -3,7 +3,7 @@ import type { WebSocketHandler } from "bun";
 import { type Context, Hono, type Next } from "hono";
 import { type BunWebSocketData, upgradeWebSocket } from "hono/bun";
 import type { WSEvents } from "hono/ws";
-import { checkHandshake } from "./auth.ts";
+import { checkBearer, checkHandshake } from "./auth.ts";
 import { bridge } from "./bridge.ts";
 import { acceptE2ee, type E2eeDeps, type E2eeTransport } from "./e2ee/accept.ts";
 import { meshPeer } from "./e2ee/authorize.ts";
@@ -12,6 +12,7 @@ import { type E2eeWire, plaintextLink, WsByteLink } from "./e2ee/links.ts";
 import type { LiveSessions } from "./e2ee/sessions.ts";
 import type { Link } from "./link.ts";
 import type { AuthorizeIndex } from "./mesh/authorize-index.ts";
+import type { PairingOfferView } from "./pair-offer.ts";
 import type { PushLink } from "./push/push-stream.ts";
 import { LOOPBACK_OWNER } from "./push/subscriptions.ts";
 import { DIRECT_IDLE_MS, WsLink } from "./ws-link.ts";
@@ -38,7 +39,27 @@ export interface GatewayOptions {
   readonly directIdleMs?: number | undefined;
   /** Serves a device's push stream (`stream:"push"`, and `/v1/push` on loopback); without it both are refused. */
   readonly push?: ((link: PushLink, owner: string) => void) | undefined;
+  /**
+   * This computer's own pairing offer, for the app that runs the host: `POST /v1/pair` opens one and `GET /v1/pair`
+   * reports it, behind the same token as `/v1/hc` and never on the LAN listener. Without it both routes are absent.
+   */
+  readonly pair?: PairRoute | undefined;
 }
+
+/** The loopback pairing routes' answers; the app renders these, so they stay JSON-serialisable. */
+export interface PairRoute {
+  open(): Promise<PairAnswer>;
+  state(): PairAnswer;
+}
+
+export type PairAnswer =
+  | { readonly state: "pending"; readonly offer: PairingOfferView }
+  | {
+      readonly state: "paired";
+      readonly device: { readonly name: string; readonly id: string; readonly pairedAt: string } | null;
+    }
+  | { readonly state: "expired" }
+  | { readonly state: "none" };
 
 /** Serves a session whose plaintext is the mesh stream (a member's sync session, or a machine join). */
 export type MeshStreamHandler = (secure: SecureLink) => void;
@@ -108,6 +129,17 @@ export function createGateway(options: GatewayOptions): Gateway {
       return events;
     }),
   );
+  const pair = options.pair;
+  if (pair !== undefined) {
+    const pairGate = async (c: Context, next: Next) => {
+      if (!checkBearer(c.req.header("authorization"), options.token))
+        return c.text("missing or wrong doriface token", 401);
+      await next();
+      return undefined;
+    };
+    app.get("/v1/pair", pairGate, (c) => c.json(pair.state()));
+    app.post("/v1/pair", pairGate, async (c) => c.json(await pair.open()));
+  }
 
   const pipeTo = (link: Link, closeClient: (code: number, reason: string) => void): void => {
     let pipe: ChildLink;

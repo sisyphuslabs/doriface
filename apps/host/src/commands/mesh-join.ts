@@ -15,7 +15,7 @@ import { openReadOnlyRelayPasses } from "../relay/relay-passes.ts";
 import { defaultStateDir, isRecord } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { pendingFromWire } from "../state/pairing.ts";
-import { pairingArtifact } from "./pair-link.ts";
+import { pairingArtifact } from "../pair-link.ts";
 
 export const MESH_JOIN_USAGE = `usage: doriface-host mesh pair [--auto] [--no-qr] [--web-origin <url>] [--relay <url>]
        doriface-host mesh join <mesh link | code> [--fingerprint <fp>] [--name <mesh name>] [--yes]

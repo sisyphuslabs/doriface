@@ -1,4 +1,4 @@
-import { fingerprintOf } from "@doriface/crypto";
+import { DEFAULT_RELAY_URL, fingerprintOf } from "@doriface/crypto";
 import { controlIsLive } from "./control.ts";
 import { lanUrlsFor } from "./lan-urls.ts";
 import { endSweeper } from "./end-sweeper.ts";
@@ -7,6 +7,7 @@ import { HC_VERSION_FLOOR, meetsHcFloor } from "./hc-install.ts";
 import { HcPipe, readHcVersion } from "./hc-pipe.ts";
 import { openControl } from "./host-control.ts";
 import { e2eeDeps } from "./host-e2ee.ts";
+import { PairOffers } from "./pair-surface.ts";
 import { type GitFactsPublisher, publishGitFacts } from "./git-facts.ts";
 import { type HostInfoPublisher, publishHostInfo } from "./host-info.ts";
 import { retireLock } from "./host-lock.ts";
@@ -114,6 +115,16 @@ async function serve(
   const gateway = createGateway({
     e2ee,
     push: push?.serve,
+    pair:
+      e2ee === undefined
+        ? undefined
+        : new PairOffers({
+            identity: e2ee.identity,
+            pairing: e2ee.pairing,
+            devices: e2ee.devices,
+            open: () => e2ee.hostMesh.pairDevice(),
+            relayUrl: options.relay?.url ?? DEFAULT_RELAY_URL,
+          }),
     token: options.token,
     hostVersion: HOST_VERSION,
     hcVersion,

@@ -12,7 +12,7 @@ import { requestControl } from "../control.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { type PendingPairing, PairingStore, pendingFromWire } from "../state/pairing.ts";
-import { pairingArtifact, type PairingArtifact } from "./pair-link.ts";
+import { pairingArtifact, type PairingArtifact } from "../pair-link.ts";
 
 export const PAIR_USAGE = `usage: doriface-host pair [options]
 
