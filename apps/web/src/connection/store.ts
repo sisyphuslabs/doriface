@@ -1,9 +1,10 @@
-import { HcCoreMismatchError, type HcConnection } from "@doriface/client";
+import type { HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
-import { connect, type ConnectionPath, DeviceNotPairedError, type OpenConnection } from "./connect.ts";
+import { AttemptBudget, AttemptTimeoutError } from "./attempt-budget.ts";
+import { connect, type ConnectionPath, type OpenConnection } from "./connect.ts";
 import type { DirectReason } from "./direct-attempt.ts";
-import { LoopbackAddressError } from "./loopback-address.ts";
+import { isFinal } from "./host-failure.ts";
 import {
   type ConnectionSettings,
   isConfigured,
@@ -41,18 +42,6 @@ export type ConnectionState =
 const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
 
 /**
- * A failure a retry cannot fix: the host does not know this device, the address is not on this computer, or its core has to
- * be updated on one side or the other (#462, #515, #651). None of them is helped by dialing again.
- */
-function isFinal(error: Error): boolean {
-  return (
-    error instanceof DeviceNotPairedError ||
-    error instanceof LoopbackAddressError ||
-    error instanceof HcCoreMismatchError
-  );
-}
-
-/**
  * How long a live connection has to stay up before its next drop starts the ladder over. A link that opens and drops must
  * keep backing off, or a flapping host reconnects on the shortest delay forever (#634); the comparable clients reset at a
  * floor of this order — 10 s in one, 60 s in herdr (`#653`).
@@ -85,6 +74,7 @@ export class ConnectionStore {
   #current = 0;
   /** A wake already asked for this tick: several page events must cost one attempt, not three. */
   #wakeQueued = false;
+  readonly #budget = new AttemptBudget();
   readonly #connect: typeof connect;
 
   constructor(settings: ConnectionSettings, open: typeof connect = connect) {
@@ -165,11 +155,9 @@ export class ConnectionStore {
     this.#relayFirst = false;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const opened: OpenConnection = await this.#connect(
-        this.#settings,
-        abort.signal,
-        undefined,
-        relayFirst ? { skipDirect: true } : {},
+      const opened: OpenConnection = await this.#budget.bounded(
+        this.#connect(this.#settings, abort.signal, undefined, relayFirst ? { skipDirect: true } : {}),
+        abort,
       );
       const { connection } = opened;
       if (abort.signal.aborted) return connection.close();
@@ -181,6 +169,7 @@ export class ConnectionStore {
         this.#retry(error ?? new Error("the host closed the connection"), this.#stable ? 0 : attempt + 1);
       });
       this.#stale = null;
+      this.#budget.reset();
       this.#armStable();
       this.#set({
         phase: "open",
@@ -189,6 +178,12 @@ export class ConnectionStore {
         ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
       });
     } catch (error) {
+      if (this.#abort !== abort) return;
+      if (error instanceof AttemptTimeoutError) {
+        this.#budget.timedOut();
+        this.#retry(error, attempt + 1);
+        return;
+      }
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
@@ -312,6 +307,7 @@ export class ConnectionStore {
     queueMicrotask(() => {
       this.#wakeQueued = false;
       if (this.#state.phase !== "connecting") return;
+      this.#budget.reset();
       this.#abort?.abort();
       void this.#again(this.#current);
     });
