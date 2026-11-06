@@ -229,15 +229,35 @@ jobs:
           fi
       # mesh-attach.e2e.ts is a browser spec that needs this job's relay checkout: the web app paired with one mesh
       # member attaches to a terminal on another, through the mesh (G009 C004). Web e2e has no relay, so it skips it.
+      - name: Playwright version
+        if: env.RELAY_TOKEN_SET == 'true'
+        id: playwright
+        working-directory: apps/web
+        run: echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         if: env.RELAY_TOKEN_SET == 'true'
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('bun.lock') }}
       - name: Install Chromium
         if: env.RELAY_TOKEN_SET == 'true'
-        run: bunx playwright install --with-deps chromium
         working-directory: apps/web
+        timeout-minutes: 12
+        run: |
+          # Two separate things arrive here, and only one of them is cacheable. The browser binary is cached, so a
+          # warm cache can skip its download; the system packages are not, and skipping them once cost two required
+          # tests their CJK fonts (doriterm#915: the Korean width assertions failed on a warm cache and passed cold).
+          # So the packages are ensured on every run. The pre-update carries the Acquire timeouts, the two installs are
+          # bounded by timeout, and the step by timeout-minutes - on doriterm#914 an unreachable mirror spent a whole
+          # 30-minute job inside this step, which is why nothing here waits indefinitely.
+          sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
+          timeout 300 bunx playwright install-deps chromium
+          if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
+            echo "browser cache hit: installing the engine without downloading it again"
+            timeout 300 bunx playwright install chromium
+          else
+            timeout 600 bunx playwright install chromium
+          fi
       - name: Browser spec through the mesh
         if: env.RELAY_TOKEN_SET == 'true'
         run: bun run test:e2e e2e/mesh-attach.e2e.ts
@@ -283,9 +303,32 @@ jobs:
           echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/hc/hc" --version
       - run: bun install --frozen-lockfile
-      - name: Install Chromium
-        run: bunx playwright install --with-deps chromium
+      - name: Playwright version
+        id: playwright
         working-directory: apps/web
+        run: echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('bun.lock') }}
+      - name: Install Chromium
+        working-directory: apps/web
+        timeout-minutes: 12
+        run: |
+          # Two separate things arrive here, and only one of them is cacheable. The browser binary is cached, so a
+          # warm cache can skip its download; the system packages are not, and skipping them once cost two required
+          # tests their CJK fonts (doriterm#915: the Korean width assertions failed on a warm cache and passed cold).
+          # So the packages are ensured on every run. The pre-update carries the Acquire timeouts, the two installs are
+          # bounded by timeout, and the step by timeout-minutes - on doriterm#914 an unreachable mirror spent a whole
+          # 30-minute job inside this step, which is why nothing here waits indefinitely.
+          sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
+          timeout 300 bunx playwright install-deps chromium
+          if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
+            echo "browser cache hit: installing the engine without downloading it again"
+            timeout 300 bunx playwright install chromium
+          else
+            timeout 600 bunx playwright install chromium
+          fi
       # The e2e workers follow the runner's cores (playwright.config.ts, #342): record what this runner has.
       - name: Runner resources
         run: |

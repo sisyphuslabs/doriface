@@ -38,10 +38,10 @@
         </a>
         <nav aria-label="Sections">
           <ul class="nav__links">
+            <li><a href="#mesh">Mesh</a></li>
             <li><a href="#app">App</a></li>
             <li><a href="#relay">Relay</a></li>
             <li><a href="#pairing">Pairing</a></li>
-            <li><a href="#mesh">Mesh</a></li>
             <li><a href="#everywhere">Platforms</a></li>
             <li><a href="https://github.com/sisyphuslabs/doriterm">GitHub</a></li>
           </ul>
@@ -120,241 +120,88 @@
             <a href="https://omo.dev">OmO</a>.
           </p>
 
-          <figure class="frame omowin" data-omowin aria-labelledby="omowin-caption">
-            <div class="omowin__bar">
-              <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-              <ul class="omowin__tabs" aria-label="Machines in this window">
-                <li>
-                  <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <rect x="3" y="4" width="10" height="7" rx="1" />
-                    <path d="M1.5 13h13" /></svg
-                  >laptop
-                </li>
-                <li aria-current="true">
-                  <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <rect x="2" y="5" width="12" height="6" rx="2" />
-                    <path d="M5 9.5h1.5" /></svg
-                  >mac mini
-                </li>
-                <li>
-                  <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <rect x="2.5" y="3" width="11" height="4.5" rx="1" />
-                    <rect x="2.5" y="8.5" width="11" height="4.5" rx="1" /></svg
-                  >cloud-box
-                </li>
-                <li>
-                  <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="2" width="6" height="12" rx="1.5" /></svg
-                  >phone
-                </li>
-              </ul>
-              <span class="omowin__lock"
-                ><svg viewBox="0 0 16 16" aria-hidden="true">
-                  <rect x="3" y="7" width="10" height="7" rx="1.5" />
-                  <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg
-                >e2ee</span
-              >
-            </div>
-            <div class="omowin__body">
-              <p class="oline"><span class="p">mini:~/research $</span> omo</p>
-              <p class="oline o-dim" data-o="boot">OmO &middot; Claude Fable 5.1 &middot; mac mini</p>
-              <p class="oline o-prompt" data-o="prompt">
-                <span class="caret-mark">&rsaquo;</span> mass ulw 12k sources &rarr; ranking model &rarr; deck
-              </p>
-              <div class="oflow" data-o="flow">
-                <p class="oflow__head">
-                  <span>Workflow &middot; market research, 12,000 sources</span>
-                  <span class="oflow__progress"><span data-progress>0</span>/10 done &middot; 7 models</span>
-                </p>
-                <ol class="oflow__waves">
-                  <li class="owave" data-wave="1">
-                    <p class="owave__head">
-                      Wave 1 <span class="owave__count"><span data-done>0</span>/1</span>
-                    </p>
-                    <ul>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">plan-interview</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">planning &middot; Claude Fable 5.1</span>
-                        <span class="onode__result">plan: 10 nodes / 5 waves</span>
-                      </li>
-                    </ul>
-                  </li>
-                  <li class="owave" data-wave="2">
-                    <p class="owave__head">
-                      Wave 2 <span class="owave__count"><span data-done>0</span>/2</span>
-                    </p>
-                    <ul>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">scope-check</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">verification &middot; Claude Opus 5</span>
-                        <span class="onode__result">APPROVE</span>
-                      </li>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">source-sweep</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">deep &middot; GPT 6 Astra</span>
-                        <span class="onode__result">11,388 sources kept</span>
-                      </li>
-                    </ul>
-                  </li>
-                  <li class="owave" data-wave="3">
-                    <p class="owave__head">
-                      Wave 3 <span class="owave__count"><span data-done>0</span>/3</span>
-                    </p>
-                    <ul>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">chart-system</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">visual-engineering &middot; Claude Fable 5.1</span>
-                        <span class="onode__result">12 charts, one palette</span>
-                      </li>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">claim-graph</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">analysis &middot; Claude Opus 5</span>
-                        <span class="onode__result">3,100 claims, 41 refuted</span>
-                      </li>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">dataset-build</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">deep &middot; GPT 5.6 Sol</span>
-                        <span class="onode__result">40k rows, 0 leaks</span>
-                      </li>
-                    </ul>
-                  </li>
-                  <li class="owave" data-wave="4">
-                    <p class="owave__head">
-                      Wave 4 <span class="owave__count"><span data-done>0</span>/3</span>
-                    </p>
-                    <ul>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">deck</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">visual-engineering &middot; GPT 6 Astra</span>
-                        <span class="onode__result">screenshots 375 / 1280</span>
-                      </li>
-                      <li class="onode" data-node data-kind="blocked">
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">model-train</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">deep &middot; Kimi K3</span>
-                        <span class="onode__result">waiting: GPU quota</span>
-                      </li>
-                      <li class="onode" data-node>
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">report-draft</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">writing &middot; Grok 4.6</span>
-                        <span class="onode__result">every claim cited</span>
-                      </li>
-                    </ul>
-                  </li>
-                  <li class="owave" data-wave="5">
-                    <p class="owave__head">
-                      Wave 5 <span class="owave__count"><span data-done>0</span>/1</span>
-                    </p>
-                    <ul>
-                      <li class="onode" data-node data-kind="last">
-                        <span class="onode__dot" aria-hidden="true"
-                          ><i class="s-pending"></i><i class="s-running"></i><i class="s-done"></i
-                          ><i class="s-blocked"></i
-                        ></span>
-                        <span class="onode__name">gate-review</span>
-                        <span class="onode__state"
-                          ><i class="s-pending">pending</i><i class="s-running">running</i
-                          ><i class="s-done">completed</i><i class="s-blocked">blocked</i></span
-                        >
-                        <span class="onode__meta">unspecified-low &middot; GLM 5.2</span>
-                      </li>
-                    </ul>
-                  </li>
-                </ol>
+          <div class="app-stage hero__stage">
+            <figure class="frame app-desktop">
+              <div class="frame__bar">
+                <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="frame__title">doriterm, studio</span>
+                <span class="frame__meta">app.doriterm.com</span>
               </div>
-            </div>
-            <figcaption class="omowin__foot" id="omowin-caption">
-              <span><i class="dot-ok"></i>attached from phone</span>
-              <span><i class="dot-cipher"></i>through the relay, ciphertext only</span>
-              <span class="omowin__src">OmO's own demo workflow, from omo.dev</span>
-            </figcaption>
-          </figure>
+              <div class="live" style="--w: 1280; --h: 780">
+                <iframe
+                  data-src="/mockup/?view=desktop"
+                  title="The doriterm desktop workspace, drawn by the app's components with sample data"
+                  tabindex="-1"
+                  width="1280"
+                  height="780"
+                ></iframe>
+              </div>
+            </figure>
+            <figure class="app-phone">
+              <div class="live" style="--w: 390; --h: 844">
+                <iframe
+                  data-src="/mockup/?view=phone"
+                  title="The doriterm phone terminal with its key bar, drawn by the app's components with sample data"
+                  tabindex="-1"
+                  width="390"
+                  height="844"
+                ></iframe>
+              </div>
+            </figure>
+          </div>
         </div>
+
+        <nav class="wrap index" aria-label="On this page">
+          <ol>
+            <li>
+              <a href="#mesh"
+                ><span class="n">01</span><span class="t">Every machine you own, one mesh</span
+                ><span class="d">signed records, no open ports</span></a
+              >
+            </li>
+            <li>
+              <a href="#app"
+                ><span class="n">02</span><span class="t">The app, live</span
+                ><span class="d">desktop and phone</span></a
+              >
+            </li>
+            <li>
+              <a href="#relay"
+                ><span class="n">03</span><span class="t">The relay is a pipe</span
+                ><span class="d">ciphertext in, ciphertext out</span></a
+              >
+            </li>
+            <li>
+              <a href="#pairing"
+                ><span class="n">04</span><span class="t">Pair a phone in one scan</span
+                ><span class="d">QR, link or an 8-character code</span></a
+              >
+            </li>
+            <li>
+              <a href="#everywhere"
+                ><span class="n">05</span><span class="t">Desktop, browser and phone</span
+                ><span class="d">rendered by libghostty</span></a
+              >
+            </li>
+          </ol>
+        </nav>
       </section>
 
-      <section class="section machines" id="machines" aria-labelledby="machines-title">
+      <section class="section" id="mesh" aria-labelledby="mesh-title">
         <div class="wrap">
-          <h2 class="h2 reveal" id="machines-title">
-            Your fleet, in one window.<br /><span class="soft">Linked by a relay that cannot read it.</span>
+          <p class="eyebrow reveal"><span class="num">01</span><span class="rule"></span>Mesh</p>
+          <h2 class="h2 reveal" id="mesh-title">
+            Every machine you own, one mesh.<br /><span class="soft">No ssh, no open port.</span>
           </h2>
           <p class="section__lede reveal">
-            Each machine keeps its own key. Records leave a machine in the clear, are sealed before they reach the
-            relay, and open only on the machine they are for.
+            Each machine keeps its own key and signs the membership records it writes with Ed25519. The records sync
+            over the same encrypted relay as your terminals.
+            <strong>The relay stores none of it and can forge none of it.</strong>
           </p>
           <figure class="fleet reveal" data-fleet aria-labelledby="fleet-title">
             <div class="fleet__steps" role="group" aria-label="Fleet scenes">
               <button type="button" data-fleet-step="0" aria-pressed="true">
-                <span class="fleet__n">01</span>One window
+                <span class="fleet__n">01</span>One mesh
               </button>
               <button type="button" data-fleet-step="1" aria-pressed="false">
                 <span class="fleet__n">02</span>Work
@@ -369,104 +216,102 @@
             <canvas class="fleet__canvas" aria-hidden="true"></canvas>
             <figcaption class="fleet__caption">
               <p data-fleet-text="0">
-                <strong id="fleet-title">Every machine in one window.</strong> Your laptop, the mac mini at home and a
-                cloud box each run a host. They link through one relay and show up in the same sidebar, next to the
-                phone you hold.
+                <strong id="fleet-title">Three machines, one mesh.</strong> Your laptop, the mac mini at home and a
+                cloud box share one mesh, and each one lists the others in its sidebar. The phone you paired sees all
+                three.
               </p>
               <p data-fleet-text="1" hidden>
                 <strong>Work runs where you start it.</strong> Start OmO on the mac mini and answer it from your phone.
-                Every record crosses the relay sealed with Noise, and the relay forwards bytes it cannot read.
+                Each record is sealed with Noise on the machine that sends it and opens only on the machine it is for.
               </p>
               <p data-fleet-text="2" hidden>
-                <strong>A new machine joins.</strong> Invite one with mesh pair and approve it on a machine you trust. A
-                signed admit record syncs and every member dials the new one. No ssh, no open port.
+                <strong>A new machine asks to join.</strong> <code>mesh pair</code> on the laptop invites pi. You
+                approve it on the laptop, the signed admit record syncs, and every member dials pi.
               </p>
               <p data-fleet-text="3" hidden>
-                <strong>One record removes one.</strong> Revoke a machine once and the record reaches every member. From
-                then on its key is refused everywhere.
+                <strong>One record removes one.</strong> <code>mesh revoke cloud-box --compromised</code> reaches every
+                member as one signed record. Each closes its sessions with cloud-box and refuses its keys.
               </p>
             </figcaption>
           </figure>
+          <div class="mesh-facts">
+            <div class="card reveal">
+              <div class="card__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              </div>
+              <h3>Approved, then admitted</h3>
+              <p>
+                A machine joins after you approve it on a member, unless you opened the invite with <code>--auto</code>.
+                For seven days every member shows who joined, who invited it and its fingerprint.
+              </p>
+            </div>
+            <div class="card reveal" style="--delay: 60ms">
+              <div class="card__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="6" cy="6" r="2.5" />
+                  <circle cx="18" cy="6" r="2.5" />
+                  <circle cx="12" cy="18" r="2.5" />
+                  <path d="M8.5 6h7M7.2 8.2l3.6 7.6M16.8 8.2l-3.6 7.6" />
+                </svg>
+              </div>
+              <h3>One sidebar, every machine</h3>
+              <p>
+                Each member adds every other member as a herdr machine on its own, so their spaces and agents appear
+                under their names.
+              </p>
+            </div>
+            <div class="card reveal" style="--delay: 120ms">
+              <div class="card__icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M5.6 5.6l12.8 12.8" />
+                </svg>
+              </div>
+              <h3>Revoke in one record</h3>
+              <p>
+                With <code>--compromised</code>, one record removes a member and every machine it admitted. Its sessions
+                close and its keys are refused on every path.
+              </p>
+            </div>
+          </div>
         </div>
-
-        <nav class="wrap index" aria-label="On this page">
-          <ol>
-            <li>
-              <a href="#app"
-                ><span class="n">01</span><span class="t">The app, live</span
-                ><span class="d">desktop and phone</span></a
-              >
-            </li>
-            <li>
-              <a href="#relay"
-                ><span class="n">02</span><span class="t">The relay is a pipe</span
-                ><span class="d">ciphertext in, ciphertext out</span></a
-              >
-            </li>
-            <li>
-              <a href="#pairing"
-                ><span class="n">03</span><span class="t">Pair a phone in one scan</span
-                ><span class="d">QR, link or an 8-character code</span></a
-              >
-            </li>
-            <li>
-              <a href="#mesh"
-                ><span class="n">04</span><span class="t">Machines that vouch for each other</span
-                ><span class="d">signed records, no open ports</span></a
-              >
-            </li>
-            <li>
-              <a href="#everywhere"
-                ><span class="n">05</span><span class="t">Desktop, browser and phone</span
-                ><span class="d">rendered by libghostty</span></a
-              >
-            </li>
-          </ol>
-        </nav>
       </section>
 
       <section class="section" id="app" aria-labelledby="app-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">01</span><span class="rule"></span>App</p>
+          <p class="eyebrow reveal"><span class="num">02</span><span class="rule"></span>App</p>
           <h2 class="h2 reveal" id="app-title">
             Every terminal on every machine.<br /><span class="soft">One sidebar for all of them.</span>
           </h2>
           <p class="section__lede reveal">
             Spaces on the left, agents grouped by whether they need you, are working or are done, and split terminals on
             the right. On a phone the same terminal gets a key bar with ctrl, esc and the arrows.
-            <strong>What you see here is the app's own components, live, with sample data.</strong>
+            <strong>The window at the top of the page is the app's own components, live, with sample data.</strong>
           </p>
-          <div class="app-stage reveal">
-            <figure class="frame app-desktop">
-              <div class="frame__bar">
-                <span class="frame__dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="frame__title">doriterm, studio</span>
-                <span class="frame__meta">app.doriterm.com</span>
-              </div>
-              <div class="live" style="--w: 1280; --h: 780">
-                <iframe
-                  data-src="/mockup/?view=desktop"
-                  title="The doriterm desktop workspace, drawn by the app's components with sample data"
-                  loading="lazy"
-                  tabindex="-1"
-                  width="1280"
-                  height="780"
-                ></iframe>
-              </div>
-            </figure>
-            <figure class="app-phone">
-              <div class="live" style="--w: 390; --h: 844">
-                <iframe
-                  data-src="/mockup/?view=phone"
-                  title="The doriterm phone terminal with its key bar, drawn by the app's components with sample data"
-                  loading="lazy"
-                  tabindex="-1"
-                  width="390"
-                  height="844"
-                ></iframe>
-              </div>
-            </figure>
-          </div>
           <ul class="facts reveal">
             <li>
               <strong>Close the tab. The work keeps going.</strong> Agents run in herdr-core on their own machine, and
@@ -483,7 +328,7 @@
 
       <section class="section" id="relay" aria-labelledby="relay-title">
         <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">02</span><span class="rule"></span>Relay</p>
+          <p class="eyebrow reveal"><span class="num">03</span><span class="rule"></span>Relay</p>
           <h2 class="h2 reveal" id="relay-title">
             The relay is a pipe.<br /><span class="soft">It cannot read what it carries.</span>
           </h2>
@@ -564,7 +409,7 @@
       <section class="section" id="pairing" aria-labelledby="pairing-title">
         <div class="wrap split">
           <div>
-            <p class="eyebrow reveal"><span class="num">03</span><span class="rule"></span>Pairing</p>
+            <p class="eyebrow reveal"><span class="num">04</span><span class="rule"></span>Pairing</p>
             <h2 class="h2 reveal" id="pairing-title">
               Pair a phone in one scan.<br /><span class="soft">The secret never leaves the link.</span>
             </h2>
@@ -954,7 +799,7 @@
               <div class="pair-lines">
                 <div>
                   <span class="k">link</span
-                  ><span class="v">https://doriface.omo.dev/pair<span class="frag">#h=…&amp;k=…&amp;p=…</span></span>
+                  ><span class="v">https://app.doriterm.com/pair<span class="frag">#h=…&amp;k=…&amp;p=…</span></span>
                 </div>
                 <div><span class="k">code</span><span class="v">7KQ4 M2XD</span></div>
                 <div>
@@ -971,121 +816,6 @@
               <span>phone paired with Noise IKpsk2</span>
             </div>
           </figure>
-        </div>
-      </section>
-
-      <section class="section" id="mesh" aria-labelledby="mesh-title">
-        <div class="wrap">
-          <p class="eyebrow reveal"><span class="num">04</span><span class="rule"></span>Mesh</p>
-          <h2 class="h2 reveal" id="mesh-title">
-            Machines that vouch for each other.<br /><span class="soft">No ssh, no open port.</span>
-          </h2>
-          <p class="section__lede reveal">
-            Put your laptop, a build box and a VPS in one mesh and each one shows the others in its sidebar. Membership
-            is a set of records every member signs with its Ed25519 key and syncs over the same encrypted relay.
-            <strong>The relay stores none of it and can forge none of it.</strong>
-          </p>
-
-          <div class="mesh reveal" data-mesh>
-            <div class="mesh__stage">
-              <svg viewBox="0 0 720 420" role="img" aria-labelledby="mesh-caption">
-                <g data-edges></g>
-                <g data-sparks aria-hidden="true"></g>
-                <g data-hosts></g>
-              </svg>
-            </div>
-            <ol class="mesh__log" id="mesh-caption" aria-label="How a mesh grows and how a member is removed">
-              <li data-step="0">
-                <span>01</span
-                ><span
-                  >Four machines share one mesh. Each one's <code>hc</code> lists the other three as machines.</span
-                >
-              </li>
-              <li data-step="1">
-                <span>02</span
-                ><span><code>mesh pair</code> on laptop invites a fifth machine; <code>pi</code> asks to join.</span>
-              </li>
-              <li data-step="2">
-                <span>03</span
-                ><span
-                  >You approve on laptop. The signed <code>admit</code> record syncs, and every member dials
-                  <code>pi</code>.</span
-                >
-              </li>
-              <li data-step="3" class="danger">
-                <span>04</span
-                ><span
-                  ><code>mesh revoke vps --compromised</code>: every member closes its sessions and refuses its
-                  keys.</span
-                >
-              </li>
-            </ol>
-          </div>
-
-          <div class="mesh-facts">
-            <div class="card reveal">
-              <div class="card__icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z" />
-                  <path d="M9 12l2 2 4-4" />
-                </svg>
-              </div>
-              <h3>Approved, then admitted</h3>
-              <p>
-                A machine joins after you approve it on a member, unless you opened the invite with <code>--auto</code>.
-                For seven days every member shows who joined, who invited it and its fingerprint.
-              </p>
-            </div>
-            <div class="card reveal" style="--delay: 60ms">
-              <div class="card__icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="6" cy="6" r="2.5" />
-                  <circle cx="18" cy="6" r="2.5" />
-                  <circle cx="12" cy="18" r="2.5" />
-                  <path d="M8.5 6h7M7.2 8.2l3.6 7.6M16.8 8.2l-3.6 7.6" />
-                </svg>
-              </div>
-              <h3>One sidebar, every machine</h3>
-              <p>
-                Each member adds every other member as a herdr machine on its own, so their spaces and agents appear
-                under their names.
-              </p>
-            </div>
-            <div class="card reveal" style="--delay: 120ms">
-              <div class="card__icon" aria-hidden="true">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M5.6 5.6l12.8 12.8" />
-                </svg>
-              </div>
-              <h3>Revoke in one record</h3>
-              <p>
-                With <code>--compromised</code>, one record removes a member and every machine it admitted. Its sessions
-                close and its keys are refused on every path.
-              </p>
-            </div>
-          </div>
         </div>
       </section>
 
