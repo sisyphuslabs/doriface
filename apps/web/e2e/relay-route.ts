@@ -34,9 +34,14 @@ export async function routeRelaySockets(page: Page, toRelay: string, pairUrl: st
   await page.route(new RegExp(`^${httpRelay}/v1/pair/`), async (route) => {
     const target = new URL(route.request().url());
     const answer = await fetch(`${pairUrl}${target.pathname}`);
+    // The body is decoded here, so the upstream framing headers would describe bytes this is not: keep the type and let
+    // the fulfilled response pay for its own length. A compressed lookup answer would otherwise ship a stale encoding.
     await route.fulfill({
       status: answer.status,
-      headers: { ...Object.fromEntries(answer.headers.entries()), "access-control-allow-origin": "*" },
+      headers: {
+        "content-type": answer.headers.get("content-type") ?? "application/json",
+        "access-control-allow-origin": "*",
+      },
       body: await answer.text(),
     });
   });
