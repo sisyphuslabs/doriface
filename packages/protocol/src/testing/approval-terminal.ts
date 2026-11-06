@@ -1,4 +1,5 @@
 import type { Status, Terminal } from "../__generated__/hc-api.ts";
+import type { PromptReply } from "../approval-reply.ts";
 
 /** A live terminal as `terminal.get` reports it, with the status fields an approval reads. */
 export function terminalAt(
@@ -29,3 +30,8 @@ export const CLAUDE_BLOCKED: Status = {
   state: "blocked",
 };
 export const CODEX_BLOCKED: Status = { app: "codex", kind: "permission", state: "blocked" };
+
+/** The first row, the plain "Yes" on the recorded Claude Code and Codex dialogs (`1`, Codex's `y`). */
+export const ALLOW: PromptReply = { kind: "option", option: "1" };
+/** The dialog's own cancel (Esc). */
+export const DENY: PromptReply = { kind: "cancel" };

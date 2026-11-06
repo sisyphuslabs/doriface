@@ -9,6 +9,8 @@ import { readScreenPrompt, type ScreenPrompt } from "./approval-screen.ts";
 export interface ApprovalMark {
   readonly terminal: string;
   readonly app: string;
+  /** The directory the agent works in, as the core reports it (its foreground program's, else the terminal's). */
+  readonly cwd: string;
   readonly statusMs: number;
   readonly turn: number;
   /** A hash of the prompt's dialog ({@link ScreenPrompt.block}), 16 hex digits. */
@@ -16,12 +18,19 @@ export interface ApprovalMark {
   readonly prompt: ScreenPrompt;
 }
 
-/** `pending`: the marked prompt is up. `gone`: no permission prompt is (answered, cancelled, exited). `changed`: another one is. */
+/** `pending`: the marked prompt is up. `gone`: no prompt is (answered, cancelled, exited). `changed`: another one is. */
 export type ApprovalCheck = "pending" | "gone" | "changed";
 
-/** The agent says it waits on a permission decision (its OSC 7501 root record: `blocked`, `kind: permission`). */
+/** The record kinds of a person's decision an agent waits on: a permission (or a plan to approve), or a question. */
+const ASKING_KINDS: ReadonlySet<unknown> = new Set(["permission", "question"]);
+
+/**
+ * The agent says it waits on a person's decision: its OSC 7501 root record is `blocked` with `kind: permission` (Claude
+ * Code and Codex approvals, Claude Code's plan approval) or `kind: question` (Claude Code's AskUserQuestion, Codex's
+ * request_user_input), as measured on Claude Code 2.1.311 and Codex 0.167.0.
+ */
 export function waitsOnApproval(terminal: Terminal): boolean {
-  return terminal.state === "live" && terminal.status?.state === "blocked" && terminal.status.kind === "permission";
+  return terminal.state === "live" && terminal.status?.state === "blocked" && ASKING_KINDS.has(terminal.status.kind);
 }
 
 const FNV_OFFSET = 0xcbf29ce484222325n;
@@ -47,6 +56,7 @@ export function markApproval(terminal: Terminal, screen: string): ApprovalMark |
   return {
     terminal: terminal.address,
     app: terminal.status?.app ?? "",
+    cwd: terminal.foreground?.cwd ?? terminal.cwd,
     statusMs: terminal.status_ms ?? 0,
     turn: terminal.turn ?? 0,
     screen: screenHash(prompt.block),
