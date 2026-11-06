@@ -1,4 +1,4 @@
-import type { HcConnection } from "@doriface/client";
+import { HcCoreMismatchError, type HcConnection } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
 import { connect, type ConnectionPath, DeviceNotPairedError, type OpenConnection } from "./connect.ts";
@@ -31,6 +31,18 @@ export type ConnectionState =
     };
 
 const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
+
+/**
+ * A failure a retry cannot fix: the host does not know this device, the address is not on this computer, or its core has to
+ * be updated on one side or the other (#462, #515, #651). None of them is helped by dialing again.
+ */
+function isFinal(error: Error): boolean {
+  return (
+    error instanceof DeviceNotPairedError ||
+    error instanceof LoopbackAddressError ||
+    error instanceof HcCoreMismatchError
+  );
+}
 
 /** This computer's host, as the desktop app runs it: where it listens now, and why it did not start. */
 export interface LocalHostStarter {
@@ -170,7 +182,7 @@ export class ConnectionStore {
   }
 
   #retry(error: Error, attempt: number): void {
-    if (error instanceof DeviceNotPairedError || error instanceof LoopbackAddressError) {
+    if (isFinal(error)) {
       this.#stale = null;
       this.#set({ phase: "failed", error, retryInMs: null, retryAt: null, stale: null });
       return;
