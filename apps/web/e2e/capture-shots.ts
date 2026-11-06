@@ -89,7 +89,7 @@ const meshLoaded = async (page: Page) => {
   resetMeshDocs();
   await page.goto("/");
   await expect(machineRow(page)).toContainText("connected", { timeout: STATE_BOUND_MS });
-  await section(page, "Your machines");
+  await section(page, "Machines");
   await expect(page.locator('[data-mesh-group="pending"] [data-mesh-answer]').first()).toBeVisible({ timeout: 20_000 });
 };
 
