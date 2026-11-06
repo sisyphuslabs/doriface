@@ -24,6 +24,7 @@
 ### Native apps
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#705)
+- An Android app: the same web client in a native shell, with notifications that arrive with the app closed and Allow and Deny on a permission prompt, answered once the app is on screen. The status and navigation bars follow the theme. (#704, #705)
 
 ### Desktop local host and pairing by code
 
