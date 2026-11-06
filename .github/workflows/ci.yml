@@ -59,6 +59,8 @@ jobs:
       - run: bun run test
       - name: Build apps/web
         run: bun run --cwd apps/web build
+      - name: Build apps/landing
+        run: bun run --cwd apps/landing build
 
   relay-e2e:
     # This job is the only reporter of the required "Relay e2e" context, so it carries that name only on the paths that
