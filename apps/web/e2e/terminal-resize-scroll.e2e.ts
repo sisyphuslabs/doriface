@@ -1,11 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startShell } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { seedLayout } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
+import { fakeSoftKeyboard, PHONE, showKeyboard } from "./phone-key-bar.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -38,15 +39,15 @@ test.afterEach(() => {
   for (const address of started.splice(0)) hcOn("host", ["kill", address]);
 });
 
-/** Starts the agent on the core; `drawn(n)` tells whether it has written its n-th frame. */
-function startAgent(dir: string): { readonly address: string; readonly drawn: (n: number) => boolean } {
+/** Starts the agent on the core; `frames()` counts the frames it has finished writing. */
+function startAgent(dir: string): { readonly address: string; readonly frames: () => number } {
   const script = join(dir, "agent.sh");
   const marker = join(dir, "drawn");
   writeFileSync(script, AGENT);
   const out = hcOn("host", ["run", "--bg", "--name", "resize-agent", "--", "env", `DRAWN=${marker}`, "bash", script]);
   const address = String((JSON.parse(out) as { address: string }).address);
   started.push(address);
-  return { address, drawn: (n) => existsSync(`${marker}.${n}`) };
+  return { address, frames: () => readdirSync(dir).filter((name) => name.startsWith("drawn.")).length };
 }
 
 const terminalOf = (page: Page, address: string): Locator => page.locator(`[data-terminal="${address}"]`);
@@ -70,38 +71,58 @@ interface Sample {
 }
 
 /**
- * Samples the view on every animation frame until `change` is done: how far it is from the bottom, and the newest line
- * its screen shows. Each frame is what the user saw.
+ * Samples the view after every paint until `change` is done: how far it is from the bottom, and the newest line its
+ * screen shows. Each sample is what the user saw: read after the frame's ResizeObserver callbacks and paint, not in its
+ * animation-frame callback, before a layout change has been fitted. The terminal is found by its address on each frame, as a layout
+ * change can mount it anew; a frame without it records nothing.
  */
-async function sampleWhile(terminal: Locator, change: () => Promise<void>): Promise<Sample[]> {
-  const samples = terminal.evaluate(
-    (element) =>
+async function sampleWhile(page: Page, address: string, change: () => Promise<void>): Promise<Sample[]> {
+  const samples = page.evaluate(
+    (selector) =>
       new Promise<Sample[]>((resolve) => {
         const seen: Sample[] = [];
         const record = (): void => {
-          const rows = [...element.querySelectorAll(".term-row:not(.term-scrollback-row)")];
-          const numbers = rows.map((row) => Number(/row (\d{5})/.exec(row.textContent ?? "")?.[1] ?? 0));
-          seen.push({
-            away: element.scrollHeight - element.clientHeight - element.scrollTop,
-            newest: Math.max(0, ...numbers),
-          });
-          if (element.hasAttribute("data-e2e-stop-sampling")) {
-            element.removeAttribute("data-e2e-stop-sampling");
+          const element = document.querySelector(selector);
+          if (element !== null) {
+            const rows = [...element.querySelectorAll(".term-row:not(.term-scrollback-row)")];
+            const numbers = rows.map((row) => Number(/row (\d{5})/.exec(row.textContent ?? "")?.[1] ?? 0));
+            seen.push({
+              away: element.scrollHeight - element.clientHeight - element.scrollTop,
+              newest: Math.max(0, ...numbers),
+            });
+          }
+          if (document.documentElement.hasAttribute("data-e2e-stop-sampling")) {
+            document.documentElement.removeAttribute("data-e2e-stop-sampling");
             resolve(seen);
-          } else requestAnimationFrame(record);
+          } else afterPaint();
         };
+        // A message posted in a frame's callback is delivered once that frame is painted.
+        const channel = new MessageChannel();
+        channel.port1.addEventListener("message", record);
+        channel.port1.start();
+        const afterPaint = (): void => void requestAnimationFrame(() => channel.port2.postMessage(null));
         record();
       }),
+    `[data-terminal="${address}"]`,
   );
-  await change();
-  await terminal.evaluate((element) => element.setAttribute("data-e2e-stop-sampling", ""));
+  try {
+    await change();
+  } finally {
+    // A change that fails still stops the sampler, so its own error is reported instead of a timeout here.
+    await page.evaluate(() => document.documentElement.setAttribute("data-e2e-stop-sampling", ""));
+  }
   return samples;
 }
 
-/** Every sampled frame stayed at the bottom on the transcript's last line. */
-function expectFollowed(samples: readonly Sample[]): void {
-  const off = samples.filter((sample) => sample.away >= 5 || sample.newest !== LINES);
-  expect(samples.length).toBeGreaterThan(1);
+/**
+ * Every sampled frame showed the transcript's end: none scrolled back through it. `atBottom` also requires each frame at
+ * the scroll element's very bottom; a layout change that React commits in its own task can be read after it lands and
+ * before the frame's ResizeObserver fits the grid to it, a state the browser never paints, so it is checked only where
+ * no such change happens.
+ */
+function expectFollowed(samples: readonly Sample[], { atBottom = true } = {}): void {
+  const off = samples.filter((sample) => sample.newest !== LINES || (atBottom && sample.away >= 5));
+  expect(samples.length).toBeGreaterThan(0);
   expect(off.slice(0, 5), `${off.length} of ${samples.length} frames left the transcript's end`).toEqual([]);
 }
 
@@ -116,16 +137,17 @@ test("a following terminal stays on its last line through window resizes that re
     await page.goto("/");
     const terminal = terminalOf(page, agent.address);
     await atLastLine(terminal);
-    const resize = async (width: number, frame: number): Promise<void> => {
-      const samples = await sampleWhile(terminal, async () => {
+    const resize = async (width: number): Promise<void> => {
+      const drawn = agent.frames();
+      const samples = await sampleWhile(page, agent.address, async () => {
         await page.setViewportSize({ width, height: 800 });
-        await expect.poll(() => agent.drawn(frame), { timeout: 30_000 }).toBe(true);
+        await expect.poll(agent.frames, { timeout: 30_000 }).toBeGreaterThan(drawn);
         await atLastLine(terminal);
       });
       expectFollowed(samples);
     };
-    await resize(960, 2);
-    await resize(1280, 3);
+    await resize(960);
+    await resize(1280);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -151,22 +173,57 @@ test("a following terminal stays on its last line while a split divider is dragg
     await page.goto("/");
     const terminal = terminalOf(page, agent.address);
     await atLastLine(terminal);
-    const divider = page.locator('[role="separator"]').first();
+    const divider = page.locator('[role="separator"][data-container="tb-757"]');
     const line = await divider.boundingBox();
     if (line === null) throw new Error("no divider box");
     const [x, y] = [line.x + line.width / 2, line.y + line.height / 2];
-    const samples = await sampleWhile(terminal, async () => {
+    const drawn = agent.frames();
+    const samples = await sampleWhile(page, agent.address, async () => {
       await page.mouse.move(x, y);
       await page.mouse.down();
       await page.mouse.move(x - 240, y, { steps: 8 });
       await page.mouse.up();
-      await expect.poll(() => agent.drawn(2), { timeout: 30_000 }).toBe(true);
+      await expect.poll(agent.frames, { timeout: 30_000 }).toBeGreaterThan(drawn);
       await atLastLine(terminal);
     });
     expectFollowed(samples);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test.describe("on a phone", () => {
+  test.use({ ...PHONE });
+
+  test("a following terminal stays on its last line as the soft keyboard opens and closes", async ({ page }) => {
+    const dir = mkdtempSync(join(tmpdir(), "doriface-resize-scroll-"));
+    try {
+      const agent = startAgent(dir);
+      seedLayout([{ id: "tb-757", name: "agent", root: [{ pane: "p1", terminal: agent.address }] }]);
+      await fakeSoftKeyboard(page, { raiseOnFocus: false });
+      await page.goto("/");
+      await page
+        .getByRole("button", { name: /resize-agent/ })
+        .first()
+        .click();
+      const terminal = terminalOf(page, agent.address);
+      await atLastLine(terminal);
+      // The keyboard takes rows from the grid, as on a phone: the agent redraws for the new height.
+      const keyboard = async (px: number): Promise<void> => {
+        const drawn = agent.frames();
+        const samples = await sampleWhile(page, agent.address, async () => {
+          await showKeyboard(page, px);
+          await expect.poll(agent.frames, { timeout: 30_000 }).toBeGreaterThan(drawn);
+          await atLastLine(terminal);
+        });
+        expectFollowed(samples, { atBottom: false });
+      };
+      await keyboard(336);
+      await keyboard(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 /** The text of the first row in view (the top one the scroll box shows), trimmed. */
