@@ -66,6 +66,7 @@ export class MeshConnections {
    * The list `entries()` answers with. Rebuilt only when something changes, because it is read through
    * `useSyncExternalStore`, which compares snapshots by identity and would re-render forever on a fresh array per call.
    */
+  // Members a pairing leaves behind are not dialled any more: the settings keep only the machine just paired (see `pair`).
   #snapshot: readonly MemberEntry[] = [];
 
   constructor(settings: ConnectionSettings, make: StoreFactory) {
@@ -102,8 +103,22 @@ export class MeshConnections {
     return this.#snapshot;
   }
 
-  /** Takes new settings, and dials whatever the new roster adds while leaving connections that are still members alone. */
+  /** Takes new settings and keeps the roster: an edit to how this app dials, not a choice of what it dials. */
   update(settings: ConnectionSettings): void {
+    this.#apply(settings);
+  }
+
+  /**
+   * Pairs with one machine, which REPLACES what this app was bound to.
+   *
+   * Pairing is an intent, not something to infer from the host id: the roster exists so a client reaches every member of a
+   * mesh, and a machine the person paired away from must not stay in it and be dialled forever after (review of #994).
+   */
+  pair(settings: ConnectionSettings): void {
+    this.#apply({ ...settings, members: [] });
+  }
+
+  #apply(settings: ConnectionSettings): void {
     this.#settings = normalizeSettings(settings);
     saveSettings(this.#settings);
     this.#sync();

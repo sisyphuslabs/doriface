@@ -158,6 +158,21 @@ describe("one connection per member", () => {
     expect(mesh.entries()).toHaveLength(1);
   });
 
+  it("pairing replaces the roster, so a machine paired away from is not dialled again", () => {
+    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    mesh.pair({ ...settingsWith([member("c")], "c"), members: [member("a"), member("b")] });
+    expect(mesh.entries().map((entry) => entry.target.hostId)).toEqual(["c"]);
+    expect(made.map((connection) => connection.settings.hostId)).toContain("c");
+    expect(made.find((connection) => connection.settings.hostId === "a")?.stopped).toBe(1);
+  });
+
+  it("an ordinary edit keeps the roster rather than replacing it", () => {
+    const initial = settingsWith([member("a"), member("b")]);
+    const { mesh } = harness(initial);
+    mesh.update({ ...initial, relayUrl: "wss://relay.example" });
+    expect(mesh.entries().map((entry) => entry.target.hostId)).toEqual(["a", "b"]);
+  });
+
   it("a new relay reaches the members already dialled, and leaves the untouched ones alone", () => {
     const initial = settingsWith([member("a"), member("b")]);
     const { mesh, made } = harness(initial);
