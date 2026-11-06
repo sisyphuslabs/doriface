@@ -122,14 +122,8 @@ test.describe("the reporter's Android PWA", () => {
     expect(HANGUL_FAMILIES.filter((family) => stack.includes(family))).not.toHaveLength(0);
 
     const terminal = await openNewTerminal(page);
-    await terminal.getByRole("textbox").focus();
-    const octal = [...new TextEncoder().encode("안")].map((byte) => `\\${byte.toString(8)}`).join("");
-    await page.keyboard.type(`printf '${octal}\\n'`);
-    await page.keyboard.press("Enter");
-    const wide = terminal.locator(".term-wide").filter({ hasText: "안" }).first();
-    await expect(wide).toBeVisible({ timeout: 15_000 });
-    const box = await wide.boundingBox();
-    if (box === null) throw new Error("the syllable's cell has no box");
-    expect(box.width).toBeGreaterThan(0);
+    const { glyph, blank } = await syllableInk(page, terminal);
+    expect(glyph.ink).toBeGreaterThan(0);
+    expect(blank.ink).toBe(0);
   });
 });
