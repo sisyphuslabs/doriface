@@ -12,6 +12,41 @@ const HANGUL_FAMILIES = [
   "Apple SD Gothic Neo",
 ];
 
+test.describe("as the reporter's Android PWA", () => {
+  // Samsung Galaxy Tab, Chrome-based, installed to the home screen: the reporter's device renders Hangul in its own
+  // UI, so the stack has a Korean face and the blanks come from what the terminal does with it.
+  test.use({
+    userAgent:
+      "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    viewport: { width: 800, height: 1280 },
+  });
+
+  test("Hangul still draws ink in standalone display mode (#959)", async ({ page }) => {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "display-mode", value: "standalone" }],
+    });
+    await page.goto("/");
+    const terminal = await openNewTerminal(page);
+    await terminal.getByRole("textbox").focus();
+    const octal = [...new TextEncoder().encode("안녕하세요")].map((byte) => `\\${byte.toString(8)}`).join("");
+    await page.keyboard.type(`printf '${octal}\\n'`);
+    await page.keyboard.press("Enter");
+
+    const wide = terminal.locator(".term-row:not(.term-scrollback-row) .term-wide").filter({ hasText: "안" }).first();
+    await expect(wide).toBeVisible({ timeout: 15_000 });
+    const ink = await wide.evaluate((span) => {
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      const box = span.getBoundingClientRect();
+      const glyph = range.getBoundingClientRect();
+      return { glyph: glyph.width, glyphHeight: glyph.height, box: box.width, boxHeight: box.height };
+    });
+    expect(ink.glyph).toBeGreaterThan(0);
+    expect(ink.box).toBeGreaterThan(0);
+  });
+});
+
 test("the terminal font stack names a Hangul face, so a device without the Latin ones still draws Korean (#959)", async ({
   page,
 }) => {
