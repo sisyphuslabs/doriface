@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Phone
+
+- On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
+
 ### Machine mesh
 
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 45 s without it, as a laptop that went to sleep still does. (#909)
