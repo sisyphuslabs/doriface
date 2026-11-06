@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Setting up your machines
+
+- [docs/install.md](docs/install.md) and the README show how to run the host as a user service on every Linux and macOS machine you own, join them into one mesh, and pair phones and browsers. The [doriterm-setup skill](skills/doriterm-setup/SKILL.md) lets a coding agent do it with `apps/host/scripts/setup/cli.ts` (`install`, `verify`, `invite`, `join`, `pair`, `uninstall`), which is safe to re-run and never prints a join link or key. (#778)
+
 ### Paired devices
 
 - Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
@@ -21,6 +25,10 @@
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
 - A resize no longer moves a terminal's view: a terminal following its output stays on its last line when the window is resized, a split divider is dragged or the phone keyboard opens, even while an agent redraws its whole transcript for the new width, and a terminal scrolled into its history keeps its line at the top. (#811)
 
+### Rendering performance
+
+- `bun run bench:render` measures the web client drawing 1, 15 and 50 live panes against a real core: frame times, main-thread load, long tasks, drawing throughput and lag, memory, and the cost of panes in a hidden tab. Every release now benches its web client against the last release's on one runner, stops before the draft when rendering regressed past the recorded limits, and attaches the results to the release. (#670)
+
 ### Native apps
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#705)
@@ -36,6 +44,14 @@
 ### Machine mesh
 
 - A machine you had already added over ssh or with a via is replaced by its mesh line under the same name, and mesh status and the Mesh panel say what kind of entry it replaced. Its open tabs and layout carry over. (#710)
+
+### Website
+
+- A landing page for doriterm.com in `apps/landing` (a static Vite build) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the hero line "Your devices. One terminal.", the app shown live from its own components, the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
+
+### Pasting images
+
+- An image pasted into a terminal, or a file dropped on one, goes to that terminal's machine, this one or an added one, and its path is pasted there, as in herdr-app, so an agent there can read it. Text pastes as before, Ctrl+V works as before, and **Paste image** can be bound to a key in Settings > Keybindings. (#701)
 
 ### First run
 
