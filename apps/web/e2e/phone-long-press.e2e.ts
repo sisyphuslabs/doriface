@@ -60,8 +60,8 @@ test("a tap still types and a swipe still scrolls the scrollback", async ({ page
 
   await page.keyboard.type("seq 1 200\r");
   await expect(terminal).toContainText("200", { timeout: 15_000 });
+  await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   const before = await viewport.evaluate((el) => el.scrollTop);
-  await expect.poll(() => before).toBeGreaterThan(0);
   const at = await pointOnRowStart(terminal, "200");
   await touch.down(at);
   await touch.drag(at, { x: at.x, y: at.y + 260 });
