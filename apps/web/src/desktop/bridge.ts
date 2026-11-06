@@ -66,6 +66,39 @@ export interface DesktopBridge {
   startLocalHost(): Promise<LocalHostEndpoint>;
 }
 
+/** What one forward capability answers: the URL the page dials, or why the shell will not forward (#449). */
+export type ForwardedSocket = { readonly url: string } | { readonly refused: string };
+
+export interface DirectForwardBridge {
+  /** The Direct address the shell may forward to; it checks the value itself and drops every forward when it changes. */
+  setTarget(directUrl: string): Promise<boolean>;
+  /** One capability: one socket to the frozen target, for this window, used once. */
+  forward(): Promise<ForwardedSocket>;
+  /** Gives a capability up, so its late upgrade is refused instead of opening a socket. */
+  cancel(url: string): Promise<boolean>;
+}
+
+/** The shell's byte forwarder, or null outside the desktop app or in a build without it. */
+export function directForwardBridge(scope: object = globalThis): DirectForwardBridge | null {
+  const setTarget = bridgeMethod("setDirectTarget", scope);
+  const forward = bridgeMethod("forwardDirect", scope);
+  const cancel = bridgeMethod("cancelDirectForward", scope);
+  if (setTarget === null || forward === null || cancel === null) return null;
+  return {
+    setTarget: async (directUrl) => (await setTarget(directUrl)) === true,
+    forward: async () => {
+      const answer: unknown = await forward();
+      const field = (key: string): unknown =>
+        typeof answer === "object" && answer !== null ? Reflect.get(answer, key) : undefined;
+      const url = field("url");
+      if (typeof url === "string") return { url };
+      const refused = field("refused");
+      return { refused: typeof refused === "string" ? refused : "the shell returned no forward" };
+    },
+    cancel: async (url) => (await cancel(url)) === true,
+  };
+}
+
 function isEndpoint(value: unknown): value is LocalHostEndpoint {
   return (
     typeof value === "object" &&

@@ -4,6 +4,7 @@ import { base64urlDecode, CloseCode, type SecureLink, secureLink, SecureLinkErro
 import { connectRelayClient } from "@doriface/relay-client";
 import { directDial, type PageAccess, pageAccess, parseDirectAddress } from "./direct-address.ts";
 import { attemptDirect, DirectFailure, type DirectReason } from "./direct-attempt.ts";
+import { canForwardPlainWs, openForwardedLink } from "./direct-forward.ts";
 import { BROWSER_DEPS, deviceKeyFor, type RelayDeps } from "./relay-deps.ts";
 import type { ConnectionSettings } from "./settings.ts";
 import { loopbackOnly } from "./loopback-address.ts";
@@ -43,6 +44,9 @@ export interface OpenOptions {
    */
   readonly deadlineMs?: number | undefined;
 }
+
+/** This page's access: a secure context refuses plain `ws://` to another machine unless the shell forwards it (#449). */
+const thisPage = (): PageAccess => ({ ...pageAccess(), forwardsPlainWs: canForwardPlainWs() });
 
 /**
  * Opens a framed herdr-core connection with the given settings. In relay mode a saved direct address is tried first with
@@ -142,12 +146,14 @@ async function openDirect(
   if (options.skipDirect === true) return { reason: undefined };
   const address = parseDirectAddress(settings.directUrl);
   if (!address.usable) return { reason: address.reason === "no address is set" ? undefined : "unusable-address" };
-  const dial = directDial(address, options.page ?? pageAccess());
+  const dial = directDial(address, options.page ?? thisPage());
   if (dial.kind === "blocked") return { reason: "blocked" };
-  if (dial.kind === "forward") return { reason: "blocked" };
+  const open =
+    dial.kind === "forward" ? (url: string, attempt: AbortSignal) => openForwardedLink(url, attempt) : undefined;
   try {
     const secured = await attemptDirect({
       url: dial.url,
+      ...(open === undefined ? {} : { open }),
       ...(options.budgetMs === undefined ? {} : { budgetMs: options.budgetMs }),
       ...(signal === undefined ? {} : { signal }),
       secure: (link) => openSessionOn(link, settings, deps),

@@ -36,6 +36,12 @@ export const Channel = {
   noticeClicked: "doriface:notice-clicked",
   /** Renderer to main: this computer's pairing offer (`open` for a fresh one, `state` for what stands). */
   pairOffer: "doriface:pair-offer",
+  /** Renderer to main: the Direct address the page saved, checked by the shell before it forwards anything (chosen). */
+  setDirectTarget: "doriface:set-direct-target",
+  /** Renderer to main: one capability to forward bytes to the saved Direct address, or why not (#449). */
+  directForward: "doriface:direct-forward",
+  /** Renderer to main: the page gave up on a capability, so its late upgrade is refused. */
+  cancelDirectForward: "doriface:cancel-direct-forward",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -147,6 +153,27 @@ export interface UpdateReady {
   readonly version: string;
 }
 
+/**
+ * One forward capability: the page dials `ws://127.0.0.1:<port>/<capability>` and the shell copies the bytes to the
+ * configured Direct address. The target is frozen when the capability is issued, and it is used once (#449).
+ */
+export interface DirectForward {
+  readonly url: string;
+}
+
+/** Why the shell will not forward: no usable direct address, or too many forwards already. */
+export interface DirectForwardRefused {
+  readonly refused: string;
+}
+
+export type DirectForwardAnswer = DirectForward | DirectForwardRefused;
+
+export const isDirectForwardRefused = (value: unknown): value is DirectForwardRefused =>
+  typeof value === "object" && value !== null && typeof Reflect.get(value, "refused") === "string";
+
+export const isDirectForward = (value: unknown): value is DirectForward =>
+  typeof value === "object" && value !== null && typeof Reflect.get(value, "url") === "string";
+
 export const isUpdateReady = (value: unknown): value is UpdateReady =>
   typeof value === "object" && value !== null && typeof Reflect.get(value, "version") === "string";
 
@@ -211,6 +238,12 @@ export interface DorifaceBridge {
   showNotice(notice: DesktopNotice): Promise<boolean>;
   /** Calls `listener` with the terminal of each clicked notification (null for a test one). */
   onNoticeClick(listener: (terminal: string | null) => void): void;
+  /** Tells the shell the Direct address the page saved; the shell checks it and forwards nothing else (#449). */
+  setDirectTarget(directUrl: string): Promise<boolean>;
+  /** Asks for one forward capability, or why the shell will not forward. */
+  forwardDirect(): Promise<DirectForwardAnswer>;
+  /** Tells the shell the page gave up on a capability, so no socket is opened for it later. */
+  cancelDirectForward(url: string): Promise<boolean>;
 }
 
 export function parsePlatform(value: string): DesktopPlatform {

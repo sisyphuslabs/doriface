@@ -11,6 +11,7 @@ import { restorePlacement } from "../config/window-state.ts";
 import { launchBackground, secureWebPreferences, windowOptions } from "../config/window.ts";
 import { Channel, parsePlatform } from "../shared/bridge.ts";
 import { openDeepLink, routeDeepLinksTo, takePairingLink } from "./deep-link.ts";
+import { DirectForwarder } from "./direct-forward.ts";
 import { applyDevCsp, hardenContents, lockPermissions } from "./harden.ts";
 import { findHc, hostCommand, type HostContext, saveHc, savedHc, usualHcDirs } from "./host-command.ts";
 import { registerIpc } from "./ipc.ts";
@@ -51,6 +52,8 @@ const openExternal = (url: string): void => {
 };
 
 let mainWindow: BrowserWindow | undefined;
+/** The byte forwarder a plain `ws://` Direct address needs (#449); it lives as long as the app. */
+let forwarder: DirectForwarder | undefined;
 const savedFile = (name: string): string => join(app.getPath("userData"), name);
 
 const liveWindow = (): BrowserWindow | undefined =>
@@ -116,7 +119,13 @@ function createWindow(path: string): BrowserWindow {
     const template = contextMenuTemplate(params);
     if (template.length > 0) Menu.buildFromTemplate(template).popup({ window });
   });
+  // A reload, a navigation or a crash ends every forward the page held: the next page asks for its own (#449).
+  const windowId = window.webContents.id;
+  const dropForwards = (): void => forwarder?.dropWindow(windowId);
+  window.webContents.on("did-start-loading", dropForwards);
+  window.webContents.on("render-process-gone", dropForwards);
   window.on("closed", () => {
+    dropForwards();
     if (mainWindow === window) mainWindow = undefined;
   });
   window.loadURL(new URL(path, devUrl ?? `${APP_ORIGIN}/`).href).catch((error: unknown) => {
@@ -146,6 +155,8 @@ function ready(): void {
     log: (line) => console.log(line),
   });
   app.on("will-quit", () => void localHost.stop());
+  forwarder = new DirectForwarder({ origin });
+  app.on("will-quit", () => void forwarder?.stop());
   // A checkout has no release feed (app-update.yml) to update from; only the packaged app looks for one.
   const updates = app.isPackaged
     ? new UpdateWatch(
@@ -193,6 +204,9 @@ function ready(): void {
     noticesSupported,
     // A click brings the window back (or makes it, on macOS with none left) and opens the pane in it.
     showNotice: (notice) => showNotice(notice, (terminal) => sendToPage(Channel.noticeClicked, terminal)),
+    setDirectTarget: (directUrl) => forwarder?.setTarget(directUrl) ?? false,
+    forwardDirect: async (windowId) => (await forwarder?.issue(windowId)) ?? { refused: "no forwarder" },
+    cancelDirectForward: (url) => forwarder?.cancel(url) ?? false,
   });
   if (updates !== undefined) {
     updates.start();

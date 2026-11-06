@@ -9,6 +9,7 @@ import { connectionStore } from "./connection/store.ts";
 import {
   closeDesktopWindow,
   desktopBridge,
+  directForwardBridge,
   installDesktopUpdate,
   onDesktopNavigate,
   onDesktopUpdateReady,
@@ -84,6 +85,13 @@ if (desktopBridge() !== null) {
   // keys step the terminal text from here; the window itself is never zoomed (#388).
   for (const action of ["app.zoom_in", "app.zoom_out", "app.zoom_reset"]) {
     setActionFallback(action, () => stepTerminalFont(action));
+  }
+  // The shell may forward bytes to this page's saved Direct address and nothing else (#449).
+  const forwarder = directForwardBridge();
+  if (forwarder !== null) {
+    const reportTarget = (): void => void forwarder.setTarget(connectionStore.settings.directUrl);
+    reportTarget();
+    connectionStore.subscribe(reportTarget);
   }
   paintWindow();
   appearanceStore.subscribe(paintWindow);

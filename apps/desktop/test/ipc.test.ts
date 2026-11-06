@@ -8,7 +8,7 @@ import { LocalHostStartError } from "../src/main/local-host.ts";
 import type { DesktopNotice } from "../src/shared/bridge.ts";
 
 const endpoint = { url: "ws://127.0.0.1:1/v1/hc", token: "t".repeat(43) };
-const app: IpcSender = { senderFrame: { url: "app://doriface/hosts" } };
+const app: IpcSender = { senderFrame: { url: "app://doriface/hosts" }, sender: { id: 7 } };
 const foreign: readonly IpcSender[] = [
   { senderFrame: { url: "https://example.com/" } },
   { senderFrame: { url: "app://other/" } },
@@ -33,6 +33,7 @@ const setup = (
   const pairs: ("open" | "state")[] = [];
   const menus: ReadonlyMap<string, string>[] = [];
   const notices: DesktopNotice[] = [];
+  const targets: string[] = [];
   const handlers = ipcHandlers({
     noticesSupported: () => true,
     showNotice: (notice) => {
@@ -73,6 +74,12 @@ const setup = (
       hcInstalls += 1;
       return install(onPhase);
     },
+    setDirectTarget: (directUrl) => {
+      targets.push(directUrl);
+      return directUrl !== "";
+    },
+    forwardDirect: async (windowId) => ({ url: `ws://127.0.0.1:1/${windowId}` }),
+    cancelDirectForward: () => true,
   });
   return {
     handlers,
@@ -81,6 +88,7 @@ const setup = (
     menus,
     notices,
     pairs,
+    targets,
     starts: () => starts,
     closes: () => closes,
     chooses: () => chooses,
@@ -92,7 +100,7 @@ const setup = (
 /** The app frame, with the replies it was sent on its own channels. */
 const replying = (): { event: IpcReplySender; sent: unknown[][] } => {
   const sent: unknown[][] = [];
-  return { event: { ...app, sender: { send: (...args: unknown[]) => void sent.push(args) } }, sent };
+  return { event: { ...app, sender: { id: 7, send: (...args: unknown[]) => void sent.push(args) } }, sent };
 };
 
 afterEach(() => void takePairingLink());
@@ -114,6 +122,9 @@ describe("IPC sender gate", () => {
         expect(handlers.installUpdate(event)).rejects.toThrow("refused IPC"),
         expect(handlers.noticesSupported(event)).rejects.toThrow("refused IPC"),
         expect(handlers.showNotice(event, { kind: "done", terminal: "t1" })).rejects.toThrow("refused IPC"),
+        expect(handlers.setDirectTarget(event, "127.0.0.1:7767")).rejects.toThrow("refused IPC"),
+        expect(handlers.forwardDirect(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.cancelDirectForward(event, "ws://127.0.0.1:1/cap")).rejects.toThrow("refused IPC"),
       ]),
     );
     expect(notices).toEqual([]);

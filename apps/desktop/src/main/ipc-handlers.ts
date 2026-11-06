@@ -6,6 +6,7 @@ import { HcInstallError, type HcInstalled } from "@doriface/host/hc-install";
 import {
   Channel,
   type DesktopNotice,
+  type DirectForwardAnswer,
   type HcInstallAnswer,
   isDesktopNotice,
   type LocalHostEndpoint,
@@ -19,11 +20,13 @@ import { SHELL_MENU_ACTIONS } from "./shell-menu.ts";
 /** The part of an IPC event the gate reads; `senderFrame` is null once the frame is gone. */
 export interface IpcSender {
   readonly senderFrame: { readonly url: string } | null;
+  /** The page that sent it: a forward capability is bound to it, so another window cannot use one (#449). */
+  readonly sender?: { readonly id: number } | undefined;
 }
 
 /** A sender the main process can answer on its own channel as well, as Install herdr-core's progress does. */
 export interface IpcReplySender extends IpcSender {
-  readonly sender: { send(channel: string, ...args: unknown[]): void };
+  readonly sender: { readonly id: number; send(channel: string, ...args: unknown[]): void };
 }
 
 export interface IpcDeps {
@@ -45,6 +48,12 @@ export interface IpcDeps {
   readonly installHc: (onPhase: (phase: string) => void) => Promise<HcInstalled>;
   readonly noticesSupported: () => boolean;
   readonly showNotice: (notice: DesktopNotice) => void;
+  /** Keeps the page's saved Direct address, checked by the shell; a change drops every forward. */
+  readonly setDirectTarget: (directUrl: string) => boolean;
+  /** One capability for `windowId`, or why the shell will not forward. */
+  readonly forwardDirect: (windowId: number) => Promise<DirectForwardAnswer>;
+  /** Forgets a capability the page gave up on. */
+  readonly cancelDirectForward: (url: string) => boolean;
 }
 
 export interface IpcHandlers {
@@ -75,6 +84,12 @@ export interface IpcHandlers {
   noticesSupported(event: IpcSender): Promise<boolean>;
   /** Shows a native notification; only a known kind and a terminal address are taken, never text. */
   showNotice(event: IpcSender, candidate: unknown): Promise<boolean>;
+  /** Keeps the page's saved Direct address as the only forward target, checked by the shell itself (#449). */
+  setDirectTarget(event: IpcSender, candidate: unknown): Promise<boolean>;
+  /** One forward capability for the window that asked, or why the shell will not forward. */
+  forwardDirect(event: IpcSender): Promise<DirectForwardAnswer>;
+  /** Forgets a capability this window gave up on. */
+  cancelDirectForward(event: IpcSender, candidate: unknown): Promise<boolean>;
 }
 
 const TRIGGER = /^[a-z0-9_+=\-[\];',./`\\]{1,40}$/;
@@ -182,6 +197,22 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
       if (!isDesktopNotice(candidate)) return false;
       deps.showNotice({ kind: candidate.kind, terminal: candidate.terminal });
       return true;
+    },
+    async setDirectTarget(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (typeof candidate !== "string") return false;
+      return deps.setDirectTarget(candidate);
+    },
+    async forwardDirect(event) {
+      assertAppFrame(event, deps.origin);
+      const windowId = event.sender?.id;
+      if (windowId === undefined) return { refused: "no window to forward for" };
+      return deps.forwardDirect(windowId);
+    },
+    async cancelDirectForward(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (typeof candidate !== "string") return false;
+      return deps.cancelDirectForward(candidate);
     },
   };
 }

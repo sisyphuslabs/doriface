@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   Channel,
+  isDirectForward,
+  isDirectForwardRefused,
   isHcInstallAnswer,
   isLocalHostEndpoint,
   isLocalHostStartFailed,
@@ -105,6 +107,20 @@ const bridge: DorifaceBridge = {
     ipcRenderer.on(Channel.noticeClicked, (_event, terminal: unknown) => {
       if (terminal === null || typeof terminal === "string") listener(terminal);
     });
+  },
+  async setDirectTarget(directUrl) {
+    const kept: unknown = await ipcRenderer.invoke(Channel.setDirectTarget, directUrl);
+    return kept === true;
+  },
+  async forwardDirect() {
+    const answer: unknown = await ipcRenderer.invoke(Channel.directForward);
+    if (isDirectForward(answer)) return { url: answer.url };
+    if (isDirectForwardRefused(answer)) return { refused: answer.refused };
+    return { refused: "the shell returned no forward" };
+  },
+  async cancelDirectForward(url) {
+    const cancelled: unknown = await ipcRenderer.invoke(Channel.cancelDirectForward, url);
+    return cancelled === true;
   },
 };
 
