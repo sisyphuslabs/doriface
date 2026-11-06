@@ -5,6 +5,7 @@
 ### Contributing from zero
 
 - CONTRIBUTING.md has a from-zero path for a new contributor: install Bun and herdr-core, clone, `bun run check` and the web e2e, with nothing private. The `From zero` workflow runs it exactly as written on a clean runner with no secrets, after every merge to dev and daily, and every suite that needs the private relay says why it skipped in one line. (#672)
+- docs/getting-started.md takes a new user from a release download to an agent reached from the phone: install, **Use this computer**, **Pair a device** with the hosted relay and web app, then a terminal. Every release smoke-tests it with the AppImage it publishes, pairing a fresh browser through relay-doriface.omo.dev, and the `From zero` workflow does the same after every merge to dev and daily. (#672)
 
 ### Answering agents from the card
 

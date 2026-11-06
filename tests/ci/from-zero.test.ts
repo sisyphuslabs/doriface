@@ -123,7 +123,7 @@ test("the From zero workflow runs the guide on a clean runner with no secrets", 
     "actions/checkout",
     "oven-sh/setup-bun",
   ]);
-  expect(text).not.toContain("HC_BIN");
+  expect(JSON.stringify(job)).not.toContain("HC_BIN");
 });
 
 test("bun run test says in one line why the private relay suites did not run", () => {
@@ -153,4 +153,42 @@ test("every e2e spec gated on the private relay skips with the one shared line, 
     "terminal-images-relay.e2e.ts",
     "terminal-links-relay.e2e.ts",
   ]);
+});
+
+type ReleaseStep = { name?: string; run?: string; env?: Record<string, string>; "working-directory"?: string };
+type ReleaseWorkflow = { jobs: Record<string, { needs?: string[]; steps?: ReleaseStep[] }> };
+
+const HOSTED_SPEC = "e2e/hosted-relay-pair.e2e.ts";
+
+test("the release smoke pairs through the hosted relay with the AppImage it is about to publish", () => {
+  const release = Bun.YAML.parse(read(".github/workflows/release.yml")) as ReleaseWorkflow;
+  const step = release.jobs["smoke-linux"]?.steps?.find((candidate) => candidate.run?.includes(HOSTED_SPEC));
+  expect(step?.["working-directory"]).toBe("apps/desktop");
+  expect(step?.env).toEqual({ DORIFACE_E2E_EXECUTABLE: "${{ env.APPIMAGE }}", DORIFACE_HOSTED_RELAY_SMOKE: "1" });
+  expect(release.jobs["publish"]?.needs).toContain("smoke-linux");
+});
+
+test("the From zero workflow checks the user guide through the hosted relay with a packed app", () => {
+  const workflow = Bun.YAML.parse(read(".github/workflows/from-zero.yml")) as Workflow & ReleaseWorkflow;
+  const steps = workflow.jobs["user-guide"]?.steps ?? [];
+  expect(steps.some((step) => step.run?.includes("bun run pack"))).toBe(true);
+  const smoke = steps.find((step) => step.run?.includes(HOSTED_SPEC));
+  expect(smoke?.env?.["DORIFACE_HOSTED_RELAY_SMOKE"]).toBe("1");
+  expect(smoke?.env?.["DORIFACE_E2E_EXECUTABLE"]).toContain("linux-unpacked/doriface");
+  expect(workflow.on.pull_request?.paths).toEqual(
+    expect.arrayContaining(["docs/getting-started.md", "apps/desktop/e2e/hosted-relay-pair.e2e.ts"]),
+  );
+});
+
+test("docs/getting-started.md and the hosted-relay spec walk the same controls", () => {
+  const guide = read("docs/getting-started.md");
+  const spec = read("apps/desktop/e2e/hosted-relay-pair.e2e.ts");
+  expect(guide).toContain("apps/desktop/e2e/hosted-relay-pair.e2e.ts");
+  for (const control of ["Use this computer", "Pair a device", "They match", "Open terminals", "New tab"]) {
+    expect({ control, guide: guide.includes(`**${control}**`), spec: spec.includes(control) }).toEqual({
+      control,
+      guide: true,
+      spec: true,
+    });
+  }
 });

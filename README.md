@@ -11,6 +11,8 @@ An end-to-end encrypted web, PWA and desktop face for [herdr-core](https://githu
 
 doriface runs a small host gateway next to `hc` and passes herdr-core's own JSON-RPC and framed terminal protocol straight through to your browser or desktop app, byte for byte, so every `hc` method works without a translation layer. Traffic between your devices and the host is end-to-end encrypted with Noise and carried through a public Cloudflare relay at `relay-doriface.omo.dev` that only ever sees ciphertext. Terminals render with [libghostty](https://ghostty.org), built from Ghostty's own source.
 
+New here? [Getting started](docs/getting-started.md) goes from a release download to an agent on your computer that you reach from your phone, with nothing to sign up for.
+
 | Workspace (night, 1440)                                             | Workspace (day, 1440)                                           |
 | ------------------------------------------------------------------- | --------------------------------------------------------------- |
 | ![Workspace, night theme](docs/design/app/workspace-1440-night.png) | ![Workspace, day theme](docs/design/app/workspace-1440-day.png) |
