@@ -1,3 +1,4 @@
+import type { Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -28,10 +29,7 @@ test("the terminal font stack names a Hangul face, so a device without the Latin
  * cannot either (a browser paints a tofu box for a missing glyph, which is ink). Only the rendered cell separates a
  * drawn syllable from the blank space in #959.
  */
-async function printsInk(
-  page: import("@playwright/test").Page,
-  terminal: import("@playwright/test").Locator,
-): Promise<boolean> {
+async function printsInk(page: Page, terminal: Locator): Promise<boolean> {
   await terminal.getByRole("textbox").focus();
   const octal = [...new TextEncoder().encode("안")].map((byte) => `\\${byte.toString(8)}`).join("");
   await page.keyboard.type(`printf '${octal}\\n'`);
