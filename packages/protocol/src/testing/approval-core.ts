@@ -10,6 +10,9 @@ import type { JsonValue } from "../json.ts";
  */
 export class MemoryApprovalCore implements ApprovalCore {
   readonly pressed: { readonly address: string; readonly keys: readonly string[] }[] = [];
+  /** Every text pasted and submitted with `send`, in order. */
+  readonly sent: { readonly address: string; readonly text: string }[] = [];
+  #afterKeys: string | undefined;
   /** Every document as it stood at the moment of each key press. */
   readonly docsAtPress: ReadonlyMap<string, JsonValue>[] = [];
   readonly #docs = new Map<string, { value: JsonValue; version: number }>();
@@ -23,7 +26,7 @@ export class MemoryApprovalCore implements ApprovalCore {
   }
 
   /** The calls of `method` after the next `after` ones throw, `times` of them. */
-  failNext(method: "terminal" | "screen" | "keys" | "doc" | "setDoc", times = 1, after = 0): void {
+  failNext(method: "terminal" | "screen" | "keys" | "send" | "doc" | "setDoc", times = 1, after = 0): void {
     this.#failing.set(method, { after, times });
   }
 
@@ -38,6 +41,11 @@ export class MemoryApprovalCore implements ApprovalCore {
   show(terminal: Terminal, screen: string): void {
     this.#terminal = terminal;
     this.#screen = screen;
+  }
+
+  /** The screen the agent draws once the next keys are pressed (a typed row opening), with the same status. */
+  showAfterKeys(screen: string): void {
+    this.#afterKeys = screen;
   }
 
   async terminal(address: string): Promise<Terminal> {
@@ -59,6 +67,13 @@ export class MemoryApprovalCore implements ApprovalCore {
     this.docsAtPress.push(new Map([...this.#docs].map(([key, doc]) => [key, doc.value])));
     this.#fail("keys");
     this.pressed.push({ address, keys });
+    if (this.#afterKeys !== undefined) [this.#screen, this.#afterKeys] = [this.#afterKeys, undefined];
+  }
+
+  async send(address: string, text: string): Promise<void> {
+    await Promise.resolve();
+    this.#fail("send");
+    this.sent.push({ address, text });
   }
 
   async doc(name: string, on: string | undefined): Promise<{ readonly value: JsonValue; readonly version: number }> {
