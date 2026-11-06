@@ -94,8 +94,11 @@ test("9: a tab is 29 px tall with radius 7, 3 px apart, its label capped at 170 
   await openFour(page);
   await tabs(page).nth(0).click();
   const items = strip(page).locator("[data-tab-id]");
-  const measured = await items.evaluateAll((elements) =>
-    elements.map((element) => {
+  const measured = await items.evaluateAll(async (elements) => {
+    // A new tab arrives from scale(0.97) (motion-arrive), and a transform scales its box too: under load the newest tab's
+    // arrival can still be running here, a frame short of 29 px (28.9994, #696). Its resting box is the one measured.
+    await Promise.all(elements.flatMap((element) => element.getAnimations().map((animation) => animation.finished)));
+    return elements.map((element) => {
       const rect = element.getBoundingClientRect();
       const label = element.querySelector('[role="tab"] span.truncate');
       return {
@@ -105,8 +108,8 @@ test("9: a tab is 29 px tall with radius 7, 3 px apart, its label capped at 170 
         radius: getComputedStyle(element).borderTopLeftRadius,
         labelMax: label === null ? null : getComputedStyle(label).maxWidth,
       };
-    }),
-  );
+    });
+  });
   for (const tab of measured) {
     expect.soft(tab.height).toBe(29);
     expect.soft(tab.radius).toBe("7px");
