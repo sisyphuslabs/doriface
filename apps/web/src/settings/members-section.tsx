@@ -68,8 +68,7 @@ export function MembersSection() {
                   <RetryButton
                     size="sm"
                     onRetry={async () => {
-                      connectionStore.select(entry.target.hostId);
-                      connectionStore.retryNow();
+                      connectionStore.retry(entry.target.hostId);
                     }}
                   />
                 ) : null

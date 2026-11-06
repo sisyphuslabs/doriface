@@ -25,6 +25,12 @@ class FakeConnection implements MemberConnection {
   settings: ConnectionSettings;
   started = 0;
   stopped = 0;
+  retries = 0;
+
+  connecting(): void {
+    this.#state = { phase: "connecting", attempt: 1, stale: null };
+    this.#emit();
+  }
 
   constructor(settings: ConnectionSettings, save: (settings: ConnectionSettings) => void) {
     this.settings = settings;
@@ -52,7 +58,9 @@ class FakeConnection implements MemberConnection {
     this.#emit();
   }
 
-  retryNow(): void {}
+  retryNow(): void {
+    this.retries += 1;
+  }
 
   update(settings: ConnectionSettings): void {
     this.settings = settings;
@@ -160,6 +168,27 @@ describe("one connection per member", () => {
     const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "loopback", loopbackUrl: "ws://127.0.0.1:7766/v1/hc" });
     expect(made).toHaveLength(1);
     expect(mesh.entries()).toHaveLength(1);
+  });
+
+  it("moves the shown machine off one that stopped, to a member that is still open", () => {
+    const { mesh, made } = harness(settingsWith([member("a"), member("b")], "a"));
+    expect(mesh.settings.hostId).toBe("a");
+    made[0]?.fail();
+    expect(mesh.settings.hostId).toBe("b");
+    expect(mesh.state.phase).toBe("open");
+  });
+
+  it("does not move off a machine that is only connecting", () => {
+    const { mesh, made } = harness(settingsWith([member("a"), member("b")], "a"));
+    made[0]?.connecting();
+    expect(mesh.settings.hostId).toBe("a");
+  });
+
+  it("retries the machine whose row was clicked, not every member", () => {
+    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    mesh.retry("b");
+    expect(made[1]?.retries).toBe(1);
+    expect(made[0]?.retries).toBe(0);
   });
 
   it("keeps this computer's own-host starter for every connection built later", () => {

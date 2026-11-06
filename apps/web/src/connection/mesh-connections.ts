@@ -172,6 +172,11 @@ export class MeshConnections {
     for (const store of this.#stores.values()) store.stop();
   }
 
+  /** Retries one member: the row a person clicked, not every connection this app holds. */
+  retry(hostId: string): void {
+    this.#stores.get(hostId)?.retryNow();
+  }
+
   retryNow(): void {
     for (const store of this.#stores.values()) store.retryNow();
   }
@@ -235,7 +240,7 @@ export class MeshConnections {
     store.start();
     this.#unsubscribes.set(
       member.hostId,
-      store.subscribe(() => this.#adoptName(member.hostId, store)),
+      store.subscribe(() => this.#onMember(member.hostId, store)),
     );
     return store;
   }
@@ -244,6 +249,38 @@ export class MeshConnections {
    * A member names itself as it answers, and that name is the only way to label it while it is down (#496). The name arrives on
    * the member's own store, so it is folded back into the roster and saved here, the one place the roster is written.
    */
+  /**
+   * A member reported a change. The name it answers with is folded into the roster, and the shown machine moves off a dead one.
+   *
+   * The fallback is the base's failover, kept: a store holds a one-member roster, so the rotation inside `ConnectionStore` cannot
+   * run for it, and without this the workspace would stay on the machine that just stopped while the others were open (review of
+   * #994).
+   */
+  #onMember(hostId: string, store: MemberConnection): void {
+    this.#adoptName(hostId, store);
+    this.#failOver();
+  }
+
+  #failOver(): void {
+    const current = this.selected;
+    if (current === undefined) return;
+    const phase = current.state.phase;
+    if (phase === "open" || phase === "connecting") return;
+    const live = [...this.#stores.entries()].find(([, store]) => store.state.phase === "open");
+    if (live === undefined) return;
+    const [hostId] = live;
+    const target = this.#targets.get(hostId);
+    if (target === undefined || hostId === this.#settings.hostId) return;
+    this.#settings = {
+      ...this.#settings,
+      hostId: target.hostId,
+      hostName: target.hostName,
+      hostKey: target.hostKey,
+      directUrl: target.directUrl,
+    };
+    saveSettings(this.#settings);
+  }
+
   #adoptName(hostId: string, store: MemberConnection): void {
     const name = store.settings.hostName;
     const target = this.#targets.get(hostId);
