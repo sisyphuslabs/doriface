@@ -1,6 +1,8 @@
 /** Bytes for each key the phone's keys bar and arrow pad send. */
 const SEQUENCES: Readonly<Record<string, string>> = {
   esc: "\u001b",
+  // One tap for ^C, the key a phone keyboard has no way to type without latching Ctrl first (#673).
+  interrupt: "\u0003",
   tab: "\t",
   enter: "\r",
   backspace: "\u007f",

@@ -5,6 +5,7 @@ const latched = (...ids: string[]): ReadonlySet<string> => new Set(ids);
 
 test.each([
   ["esc", "\u001b"],
+  ["interrupt", "\u0003"],
   ["tab", "\t"],
   ["enter", "\r"],
   ["backspace", "\u007f"],

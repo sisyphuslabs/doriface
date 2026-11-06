@@ -30,6 +30,19 @@ test("ctrl latches for one key: ctrl then c interrupts a running command", async
   await expect(terminal).not.toContainText("slept-2");
 });
 
+test("one tap on ^C interrupts a running command, with no modifier to latch first (#673)", async ({ page }) => {
+  const terminal = await openPhoneTerminal(page);
+  await page.keyboard.type("sleep 30 && echo slept-$((1+1))\r");
+  await expect(page.getByRole("button", { name: "Session actions for sleep" })).toBeVisible();
+  await key(page, "Control C").click();
+  await expect(key(page, "Control")).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.type("echo after-$((40+3))");
+  await key(page, "Arrow keys").click();
+  await key(page, "Return").click();
+  await expect(terminal).toContainText("after-43", { timeout: 10_000 });
+  await expect(terminal).not.toContainText("slept-2");
+});
+
 test("the pad and the modifiers send the bytes a hardware keyboard would", async ({ page }) => {
   const terminal = await openPhoneTerminal(page);
   // cat -v prints every byte it reads, control bytes as ^X, once a line ends.

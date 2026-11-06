@@ -26,6 +26,7 @@ const REST: readonly ExtraKey[] = [
   { id: "shift", label: "shift", name: "Shift", modifier: true },
   { id: "tab", label: "tab", name: "Tab" },
   { id: "esc", label: "esc", name: "Escape" },
+  { id: "interrupt", label: "^C", name: "Control C" },
 ];
 
 export function extraKeys(command: boolean): readonly ExtraKey[] {
