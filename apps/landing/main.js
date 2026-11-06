@@ -1,5 +1,4 @@
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const SVG_NS = "http://www.w3.org/2000/svg";
 const STORAGE_KEY = "doriterm-theme";
 
 const randomHex = (bytes) =>
@@ -39,8 +38,6 @@ const sleep = (ms, signal) =>
 
 /** Runs each step after the previous one settles; a rejected step (an aborted sleep) stops the rest. */
 const sequence = (steps) => steps.reduce((chain, step) => chain.then(step), Promise.resolve());
-
-const edgeKey = (a, b) => [a, b].toSorted().join("|");
 
 /** Repeats an async scene while it is visible; leaving the screen aborts it mid-step and `reset` restores the still frame. */
 function loopWhileVisible(element, scene, reset) {
@@ -230,152 +227,6 @@ function setupPairing() {
   );
 }
 
-const SERVER_ICON = "M-11 -10h22v8h-22zM-11 2h22v8h-22zM-7 -6h.01M-7 6h.01";
-const MESH_HOSTS = [
-  { id: "laptop", icon: "M-11 -6h22v13h-22zM-15 10h30" },
-  { id: "studio", icon: "M-12 -9h24v15h-24zM-5 11h10M0 6v5" },
-  { id: "build-box", icon: SERVER_ICON },
-  { id: "vps", icon: SERVER_ICON },
-  { id: "pi", icon: "M-9 -9h18v18h-18zM-4 -4h8v8h-8zM-13 -4h4M-13 4h4M9 -4h4M9 4h4" },
-];
-/** Host positions per stage shape: a wide stage beside the step list, a tall one on phones so labels stay legible. */
-const MESH_LAYOUTS = {
-  wide: {
-    viewBox: "0 0 720 420",
-    at: { laptop: [150, 140], studio: [360, 82], "build-box": [575, 150], vps: [530, 330], pi: [220, 332] },
-  },
-  tall: {
-    viewBox: "0 0 360 440",
-    at: { laptop: [80, 90], studio: [270, 70], "build-box": [295, 250], vps: [205, 370], pi: [70, 300] },
-  },
-};
-const narrowStage = matchMedia("(max-width: 640px)");
-const MEMBERS = ["laptop", "studio", "build-box", "vps"];
-
-function setupMesh() {
-  const root = document.querySelector("[data-mesh]");
-  const svg = root.querySelector("svg");
-  const edgeLayer = svg.querySelector("[data-edges]");
-  const sparkLayer = svg.querySelector("[data-sparks]");
-  const hostLayer = svg.querySelector("[data-hosts]");
-  const steps = [...root.querySelectorAll("[data-step]")];
-  const hosts = new Map();
-  const edges = new Map();
-  let at = MESH_LAYOUTS.wide.at;
-  const pos = (id) => at[id];
-
-  for (let i = 0; i < MESH_HOSTS.length; i++) {
-    for (let j = i + 1; j < MESH_HOSTS.length; j++) {
-      const path = document.createElementNS(SVG_NS, "path");
-      path.setAttribute("class", "edge off");
-      edgeLayer.append(path);
-      edges.set(edgeKey(MESH_HOSTS[i].id, MESH_HOSTS[j].id), path);
-    }
-  }
-
-  for (const host of MESH_HOSTS) {
-    const group = document.createElementNS(SVG_NS, "g");
-    group.setAttribute("class", "host");
-    group.innerHTML = `<circle class="ring" r="30"/><path class="icon" d="${host.icon}"/><text y="50">${host.id}</text><text class="tag" y="65"></text>`;
-    hostLayer.append(group);
-    hosts.set(host.id, group);
-  }
-
-  const layout = () => {
-    const shape = MESH_LAYOUTS[narrowStage.matches ? "tall" : "wide"];
-    at = shape.at;
-    svg.setAttribute("viewBox", shape.viewBox);
-    root.style.setProperty("--stage-ratio", shape.viewBox.split(" ").slice(2).join(" / "));
-    for (const [id, group] of hosts) group.setAttribute("transform", `translate(${pos(id)[0]} ${pos(id)[1]})`);
-    for (const [key, path] of edges) {
-      const [a, b] = key.split("|").map(pos);
-      path.setAttribute("d", `M${a[0]} ${a[1]} L${b[0]} ${b[1]}`);
-      path.style.setProperty("--len", String(Math.ceil(path.getTotalLength())));
-    }
-  };
-  layout();
-  narrowStage.addEventListener("change", layout);
-
-  const setTag = (id, text) => {
-    hosts.get(id).querySelector(".tag").textContent = text;
-  };
-
-  const spark = (from, to) => {
-    const [ax, ay] = pos(from);
-    const [bx, by] = pos(to);
-    const dot = document.createElementNS(SVG_NS, "circle");
-    dot.setAttribute("class", "spark");
-    dot.setAttribute("r", "3.5");
-    const motion = document.createElementNS(SVG_NS, "animateMotion");
-    motion.setAttribute("dur", "0.9s");
-    motion.setAttribute("fill", "freeze");
-    motion.setAttribute("begin", "indefinite");
-    motion.setAttribute("calcMode", "spline");
-    motion.setAttribute("keyTimes", "0;1");
-    motion.setAttribute("keyPoints", "0;1");
-    motion.setAttribute("keySplines", "0.2 0 0 1");
-    motion.setAttribute("path", `M${ax} ${ay} L${bx} ${by}`);
-    dot.append(motion);
-    sparkLayer.append(dot);
-    motion.beginElement();
-    setTimeout(() => dot.remove(), 950);
-  };
-
-  const highlight = (index) => {
-    steps.forEach((step, i) => step.classList.toggle("on", i === index));
-  };
-
-  const state = (members, { pending = [], revoked = [] } = {}) => {
-    const present = new Set([...members, ...pending, ...revoked]);
-    for (const [id, group] of hosts) {
-      group.classList.toggle("away", !present.has(id));
-      group.classList.toggle("pending", pending.includes(id));
-      group.classList.toggle("revoked", revoked.includes(id));
-      setTag(id, pending.includes(id) ? "asks to join" : revoked.includes(id) ? "revoked" : "");
-    }
-    for (const [key, path] of edges) {
-      const [a, b] = key.split("|");
-      const linked = members.includes(a) && members.includes(b);
-      const cut = revoked.includes(a) || revoked.includes(b);
-      path.classList.toggle("off", !linked && !cut);
-      path.classList.toggle("cut", cut && (members.includes(a) || members.includes(b)));
-    }
-  };
-
-  const still = () => {
-    highlight(-1);
-    state([...MEMBERS, "pi"]);
-  };
-
-  loopWhileVisible(
-    root,
-    async (signal) => {
-      highlight(0);
-      state(MEMBERS);
-      await sleep(2800, signal);
-
-      highlight(1);
-      state(MEMBERS, { pending: ["pi"] });
-      spark("pi", "laptop");
-      await sleep(2800, signal);
-
-      highlight(2);
-      state([...MEMBERS, "pi"]);
-      for (const member of MEMBERS) spark("laptop", member === "laptop" ? "pi" : member);
-      await sleep(900, signal);
-      for (const member of MEMBERS) spark(member, "pi");
-      await sleep(2600, signal);
-
-      highlight(3);
-      state(["laptop", "studio", "build-box", "pi"], { revoked: ["vps"] });
-      await sleep(3200, signal);
-      state(["laptop", "studio", "build-box", "pi"]);
-      await sleep(900, signal);
-    },
-    still,
-  );
-}
-
 function setupCopy() {
   const button = document.querySelector("[data-copy]");
   const label = button.querySelector("[data-copy-label]");
@@ -393,71 +244,6 @@ function setupCopy() {
     }
     setTimeout(() => (label.textContent = "Copy"), 1600);
   });
-}
-
-/** A workflow node's end state: completed, or blocked for the one node that waits on its GPU quota. */
-const finish = (node) => (node.dataset.state = node.dataset.kind === "blocked" ? "blocked" : "done");
-
-/**
- * The hero's OmO window: OmO boots on the mac mini tab, takes a mass ulw prompt, and runs its demo workflow wave by
- * wave. Each node goes pending, running, completed (model-train stays blocked on its GPU quota). Opacity only.
- */
-function setupOmoWindow() {
-  const root = document.querySelector("[data-omowin]");
-  const waves = [...root.querySelectorAll("[data-wave]")];
-  const nodes = [...root.querySelectorAll("[data-node]")];
-  const progress = root.querySelector("[data-progress]");
-  const setStep = (step) => (root.dataset.step = String(step));
-  const count = () => {
-    let total = 0;
-    for (const wave of waves) {
-      const done = wave.querySelectorAll('[data-state="done"]').length;
-      wave.querySelector("[data-done]").textContent = String(done);
-      total += done;
-    }
-    progress.textContent = String(total);
-  };
-  const reset = () => {
-    setStep(3);
-    for (const node of nodes) {
-      if (node.dataset.kind === "last") node.dataset.state = "running";
-      else finish(node);
-    }
-    count();
-  };
-  loopWhileVisible(
-    root,
-    async (signal) => {
-      setStep(0);
-      for (const node of nodes) node.dataset.state = "pending";
-      count();
-      await sleep(500, signal);
-      setStep(1);
-      await sleep(700, signal);
-      setStep(2);
-      await sleep(900, signal);
-      setStep(3);
-      await sleep(600, signal);
-      // A wave's nodes start a beat apart and finish in a different order, as parallel agents do.
-      const runWave = (wave) => {
-        const members = [...wave.querySelectorAll("[data-node]")];
-        const start = members.map((node, i) => () => {
-          node.dataset.state = "running";
-          return sleep(i < members.length - 1 ? 140 : 0, signal);
-        });
-        if (members.every((node) => node.dataset.kind === "last")) return sequence(start);
-        const end = members.toReversed().map((node) => () => {
-          finish(node);
-          count();
-          return sleep(220, signal);
-        });
-        return sequence([...start, () => sleep(1100, signal), ...end, () => sleep(260, signal)]);
-      };
-      await sequence(waves.map((wave) => () => runWave(wave)));
-      await sleep(3200, signal);
-    },
-    reset,
-  );
 }
 
 /** One coordinate of a cubic bezier at parameter t, and its derivative. */
@@ -557,7 +343,7 @@ const FLEET_SCENES = [
     laptop: [1, 0.1, "idle"],
     mini: [1, 0.15, "idle"],
     cloud: [1, 0.1, "idle"],
-    phone: [1, 0, "client"],
+    phone: [1, 0, "paired"],
     pi: [0, 0, ""],
   },
   {
@@ -613,6 +399,9 @@ function setupFleet() {
   );
   let scene = 0;
   let packets = [];
+  // Signed membership records (admit, revoke) fan out from the laptop through the relay to every member.
+  let records = [];
+  let timeline = [];
   let colors = {};
   let geo;
   let raf = 0;
@@ -741,7 +530,7 @@ function setupFleet() {
         ctx.globalAlpha = (1 - shown) * 0.7;
         ctx.fillStyle = colors.ink3;
         ctx.fillText(m.label, box.x + box.w / 2, box.y + box.h + 16);
-        ctx.fillText("not joined", box.x + box.w / 2, box.y + box.h + 32);
+        ctx.fillText(state.ghost ?? "not joined", box.x + box.w / 2, box.y + box.h + 32);
       }
       for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++) {
@@ -784,11 +573,36 @@ function setupFleet() {
       ])
         square(x + (dx - 0.5) * pitch, y + (dy - 0.5) * pitch, dot + 1, opened ? colors.accent : colors.cipher, 1);
     }
+    // records: a plus-shaped glyph, green for admit and red for revoke, laptop to relay, then relay to every member
+    for (const record of records) {
+      const k = Math.min(Math.max((now - record.start) / record.dur, 0), 1);
+      if (k <= 0 || k >= 1) continue;
+      const color = record.kind === "admit" ? colors.ok : colors.danger;
+      const plus = (x, y) => {
+        for (const [dx, dy] of [
+          [0, -1],
+          [-1, 0],
+          [0, 0],
+          [1, 0],
+          [0, 1],
+        ])
+          square(x + dx * pitch * 0.7, y + dy * pitch * 0.7, dot + 1, color, 1);
+      };
+      if (k < 0.45) plus(...pointOn(paths.get("laptop").toReversed(), EASE_MOVE(k / 0.45)));
+      else
+        for (const m of FLEET_MACHINES) {
+          if (m.id === "laptop" || (machines.get(m.id).shown.value(now) < 0.5 && m.id !== record.to)) continue;
+          plus(...pointOn(paths.get(m.id), EASE_MOVE((k - 0.45) / 0.55)));
+        }
+    }
     ctx.globalAlpha = 1;
   };
 
   const apply = (index, now, animate) => {
     scene = index;
+    for (const id of timeline) clearTimeout(id);
+    timeline = [];
+    records = [];
     const targets = FLEET_SCENES[index];
     for (const [i, m] of FLEET_MACHINES.entries()) {
       const [shown, load, status] = targets[m.id];
@@ -804,6 +618,33 @@ function setupFleet() {
         state.cut.jump(targets.revoke === m.id ? 1 : 0);
       }
     }
+    // Join and revoke happen in order: the signed record crosses the mesh first, then the machine changes.
+    const later = (ms, fn) => timeline.push(setTimeout(fn, ms));
+    if (animate && targets.join) {
+      const pi = machines.get("pi");
+      pi.shown.jump(0);
+      pi.ghost = "asks to join";
+      pi.status = "joined";
+      records.push({ kind: "admit", to: "pi", start: now + 500, dur: 1700 });
+      later(2200, () => {
+        const at = performance.now();
+        pi.shown.set(1, at, 900, EASE_ENTER);
+        pi.load.set(targets.pi[1], at + 200, 700, EASE_STATE);
+      });
+    }
+    if (animate && targets.revoke) {
+      const gone = machines.get(targets.revoke);
+      gone.cut.jump(0);
+      gone.status = "working";
+      records.push({ kind: "revoke", to: targets.revoke, start: now + 500, dur: 1700 });
+      later(2200, () => {
+        const at = performance.now();
+        gone.status = "revoked";
+        gone.cut.set(1, at, 500, EASE_STATE);
+        gone.load.set(0, at, 500, EASE_STATE);
+      });
+    }
+    if (!targets.join) machines.get("pi").ghost = "not joined";
     for (const [i, button] of buttons.entries()) button.setAttribute("aria-pressed", String(i === index));
     for (const [i, text] of texts.entries()) text.hidden = i !== index;
     packets = [];
@@ -898,10 +739,8 @@ function setupFleet() {
 setupReveal();
 setupTheme();
 setupFleet();
-setupOmoWindow();
 setupLive();
 setupWire();
 setupPipe();
 setupPairing();
-setupMesh();
 setupCopy();
