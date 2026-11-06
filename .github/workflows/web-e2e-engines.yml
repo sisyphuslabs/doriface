@@ -57,7 +57,7 @@ jobs:
       # gives a startup stage 10 s. Three engines running in parallel on a two-core runner blow that budget, which
       # fails as "the fake relay host did not finish ... within 10000 ms" - a startup timeout, not a broken join.
       - name: Join in all three engines
-        run: E2E_BROWSERS=all bunx playwright test e2e/join-desktop.e2e.ts --workers=1 --reporter=list
+        run: E2E_BROWSERS=all bunx playwright test e2e/join-desktop.e2e.ts --workers=1
         working-directory: apps/web
         env:
           CI: "1"
