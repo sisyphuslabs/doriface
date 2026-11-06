@@ -25,6 +25,7 @@ import {
   bunMeetsFloor,
   desktopStateDir,
   hcVersionOf,
+  hostFailure,
   installedHcPath,
   lastRelayState,
   readExistingService,
@@ -98,7 +99,7 @@ function cliOf(src: string): string {
 async function must(context: SetupContext, step: string, command: readonly string[], cwd?: string): Promise<Ran> {
   const ran = await context.run(command, { cwd });
   if (ran.code !== 0) {
-    const why = (ran.stderr.trim() || ran.stdout.trim()).split("\n").slice(-3).join(" / ");
+    const why = hostFailure(`${ran.stderr}\n${ran.stdout}`);
     throw new SetupError(step, `${command.slice(0, 3).join(" ")} exited ${ran.code}: ${why}`);
   }
   return ran;
@@ -201,10 +202,15 @@ export function resolvePaths(context: SetupContext, hc: string): SetupPaths {
   if (existing.kind === "other") {
     throw new SetupError(
       "service",
-      `${first.serviceFile} runs another install (${existing.program}); remove it first, or pass --label to install beside it`,
+      `${first.serviceFile} runs another install (${existing.program}); remove it first, or install beside it with its own --label, --state-dir and --listen 127.0.0.1:0`,
     );
   }
-  return setupPaths(context.os, context.home, context.env, tools, {
+  const kept = {
+    ...tools,
+    bun: existing.bun !== undefined && existsSync(existing.bun) ? existing.bun : tools.bun,
+    shell: existing.shell ?? tools.shell,
+  };
+  return setupPaths(context.os, context.home, context.env, kept, {
     ...context.options,
     src: first.src,
     stateDir: context.options.stateDir ?? existing.stateDir,
@@ -420,11 +426,7 @@ export async function verify(context: SetupContext, paths: SetupPaths, minMember
   } else if (/no mesh/.test(status.stdout + status.stderr)) {
     context.report("mesh", minMembers > 0 ? "fail" : "ok", "this host is in no mesh yet");
   } else {
-    context.report(
-      "mesh",
-      "fail",
-      `mesh status exited ${status.code}: ${status.stderr.trim().split("\n").at(-1) ?? ""}`,
-    );
+    context.report("mesh", "fail", `mesh status exited ${status.code}: ${hostFailure(status.stderr)}`);
   }
   const lines = mesh?.members.every((member) => member.line === "self" || member.line === "connected") ?? false;
   if (!running || relay !== "connected" || (minMembers > 0 && ((mesh?.members.length ?? 0) < minMembers || !lines))) {
@@ -471,7 +473,7 @@ export async function joinMesh(context: SetupContext, paths: SetupPaths, from: s
     paths.stateDir,
   ]);
   const said = `${ran.stdout}\n${ran.stderr}`.split(link).join("<link>").trim();
-  if (ran.code !== 0) throw new SetupError("join", `mesh join exited ${ran.code}: ${said.split("\n").at(-1) ?? ""}`);
+  if (ran.code !== 0) throw new SetupError("join", `mesh join exited ${ran.code}: ${hostFailure(said)}`);
   rmSync(from, { force: true });
   context.report("join", "changed", `${said.split("\n").at(-1) ?? "joined"}; removed the spent link ${from}`);
 }

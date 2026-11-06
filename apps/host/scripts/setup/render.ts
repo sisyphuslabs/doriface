@@ -119,7 +119,7 @@ function checkPath(name: string, value: string): void {
   }
 }
 
-/** The service's PATH: fixed from the paths alone, so a re-run from another shell writes the same file. */
+/** The service's PATH, built from the paths alone (bun's and hc's dirs, then fixed ones), never from the caller's PATH. */
 export function servicePath(paths: SetupPaths): string {
   const dirs = [dirOf(paths.bun), dirOf(paths.hc), join(paths.home, ".local", "bin")];
   if (paths.os === "mac") dirs.push("/opt/homebrew/bin");
@@ -211,6 +211,9 @@ export type ExistingService =
       readonly listen: string | undefined;
       readonly session: string | undefined;
       readonly logFile: string | undefined;
+      /** The bun and SHELL it runs with, kept on a re-run so a caller with another bun or shell restarts nothing. */
+      readonly bun: string | undefined;
+      readonly shell: string | undefined;
     }
   | { readonly kind: "other"; readonly program: string };
 
@@ -240,6 +243,10 @@ export function readExistingService(text: string, src: string, home: string): Ex
     listen: flag("--listen"),
     session: flag("--session"),
     logFile: log,
+    bun: args[0],
+    shell: text.includes("<plist")
+      ? /<key>SHELL<\/key>\s*<string>([^<]*)<\/string>/.exec(text)?.[1]
+      : /^Environment=SHELL=(\S+)$/m.exec(text)?.[1],
   };
 }
 
@@ -288,6 +295,18 @@ export function installedHcPath(output: string): string {
   if (path === undefined)
     throw new SetupError("hc", "doriface-host --install-hc did not say where it installed herdr-core");
   return path;
+}
+
+/**
+ * The cause in a failed host command's output: the host prints `doriface-host: <cause>` and then its usage text
+ * (apps/host/src/cli.ts), so the cause is the first such line, not the last line.
+ */
+export function hostFailure(output: string): string {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  return lines.find((line) => line.startsWith("doriface-host")) ?? lines.at(-1) ?? "(no output)";
 }
 
 export function bunMeetsFloor(version: string, floor = "1.4.4"): boolean {

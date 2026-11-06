@@ -4,6 +4,7 @@ import {
   bunMeetsFloor,
   desktopStateDir,
   hcVersionOf,
+  hostFailure,
   installedHcPath,
   lastRelayState,
   readExistingService,
@@ -88,6 +89,8 @@ describe("an existing service", () => {
       listen: undefined,
       session: undefined,
       logFile: linux.logFile,
+      bun: "/home/u/.bun/bin/bun",
+      shell: "/bin/bash",
     });
     expect(readExistingService(renderPlist(mac), "/Users/u/.local/share/doriface-host/src", "/Users/u")).toEqual({
       kind: "checkout",
@@ -95,6 +98,8 @@ describe("an existing service", () => {
       listen: undefined,
       session: undefined,
       logFile: mac.logFile,
+      bun: "/Users/u/.bun/bin/bun",
+      shell: "/bin/bash",
     });
   });
 
@@ -107,6 +112,8 @@ describe("an existing service", () => {
       listen: undefined,
       session: undefined,
       logFile: undefined,
+      bun: "/home/u/.bun/bin/bun",
+      shell: undefined,
     });
   });
 
@@ -118,6 +125,8 @@ describe("an existing service", () => {
       listen: undefined,
       session: undefined,
       logFile: "/Users/u/Library/Logs/doriface-host.log",
+      bun: "/Users/u/.bun/bin/bun",
+      shell: "/bin/bash",
     });
   });
 
@@ -236,6 +245,14 @@ describe("the host's own output", () => {
       "herdr-core 0.1.18 installed at /home/u/.local/bin/herdr-core\nAdd /home/u/.local/bin to your PATH, or pass --hc /home/u/.local/bin/herdr-core.\n";
     expect(installedHcPath(output)).toBe("/home/u/.local/bin/herdr-core");
     expect(() => installedHcPath("doriface-host --install-hc: no network")).toThrow(/did not say/);
+  });
+
+  test("a failed host command reports its cause line, not the usage text after it", () => {
+    const stderr =
+      "doriface-host: mesh join needs a mesh pairing link or code\n\nusage: doriface-host mesh pair [--auto]\n       doriface-host mesh join <link>\n  --state-dir <dir>  the host's state\n";
+    expect(hostFailure(stderr)).toBe("doriface-host: mesh join needs a mesh pairing link or code");
+    expect(hostFailure("error: Module not found\n")).toBe("error: Module not found");
+    expect(hostFailure("")).toBe("(no output)");
   });
 
   test("versions", () => {
