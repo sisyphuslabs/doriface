@@ -103,6 +103,21 @@ test.describe("on a wide screen", () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(settingsDialog(page)).toHaveCount(0);
   });
+
+  test("in a browser, a click on the backdrop's top band, under the titlebar strip, closes Settings too (#673)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await terminalCount(page);
+    await page.getByRole("link", { name: "Settings" }).click();
+    await expect(settingsDialog(page)).toBeVisible();
+    const box = await settingsDialog(page).boundingBox();
+    if (box === null) throw new Error("the Settings dialog has no box");
+    // Left of the panel, 10 px from the top: the band the desktop app moves the window by.
+    await page.mouse.click(Math.max(4, box.x / 2), 10);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(settingsDialog(page)).toHaveCount(0);
+  });
 });
 
 test.describe("on a phone", () => {
