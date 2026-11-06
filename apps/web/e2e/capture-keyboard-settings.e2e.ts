@@ -68,6 +68,8 @@ for (const theme of ["day", "night"] as const) {
         if (width === 390) await page.getByRole("tab", { name: "Keyboard" }).click();
         else await page.getByRole("button", { name: "Keyboard", exact: true }).click();
         await page.getByRole("switch", { name: "Add Tmux pack" }).click();
+        // The document is written before the tab says so: wait for that render, then leave the page.
+        await expect(page.locator('[data-pack-tab="tmux"]')).toHaveAttribute("aria-pressed", "true");
         await page.goto("/");
         await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
         await openPhoneTerminal(page, width);

@@ -38,21 +38,19 @@ test("a pack added in Settings puts its keys in the bar, and the bar keeps that 
 }) => {
   await openSettings(page);
   const preview = page.locator("[data-key-bar-preview]");
-  await expect(preview.locator('[aria-label="Tmux prefix"]')).toHaveCount(0);
+  await expect(preview.locator("[data-pack-tab]")).toHaveCount(0);
 
   const tmux = page.locator('[data-pack-row="tmux"]').getByRole("switch");
   await tmux.click();
   await expect(tmux).toHaveAttribute("aria-checked", "true");
-  // The preview follows the change at once: the pack's keys are in the bar before the terminal is opened.
-  await expect(preview.locator('[aria-label="Tmux prefix"]')).toHaveCount(1);
+  // The preview shows the row the list edits, and the pack it was given as a tab of its own, pressed because the bar leads
+  // with it.
+  await expect(preview.locator("[data-preview-key]")).toHaveCount(await page.locator("[data-key-row]").count());
+  await expect(preview.getByRole("button", { name: "Tmux" })).toHaveAttribute("aria-pressed", "true");
 
-  // The pack's keys lead: picking a pack in the panel must show its keys, not push them past the person's own.
-  const first = preview.locator("button").first();
-  await expect(first).toHaveAttribute("aria-label", "Tmux prefix");
-  const rows = page.locator("[data-key-row]");
-  await expect(rows.first()).toHaveAttribute("data-key-row", "ctrl");
   // The add form scrolled the body: bring the rows back into view before dragging one.
   await page.locator('[data-key-row="ctrl"]').scrollIntoViewIfNeeded();
+  await expect(page.locator("[data-key-row]").first()).toHaveAttribute("data-key-row", "ctrl");
   const moving = await page.locator('[data-key-row="esc"]').boundingBox();
   const landing = await page.locator('[data-key-row="ctrl"]').boundingBox();
   if (moving === null || landing === null) throw new Error("the key rows were not drawn");
@@ -60,7 +58,9 @@ test("a pack added in Settings puts its keys in the bar, and the bar keeps that 
   await page.mouse.down();
   await page.mouse.move(landing.x + 24, landing.y - 6, { steps: 10 });
   await page.mouse.up();
-  await expect(rows.first()).toHaveAttribute("data-key-row", "esc");
+  await expect(page.locator("[data-key-row]").first()).toHaveAttribute("data-key-row", "esc");
+  // The preview follows the drag: its first key is the one the list now puts first.
+  await expect(preview.locator("[data-preview-key]").first()).toHaveAttribute("data-preview-key", "esc");
 
   const terminal = await openTerminal(page);
   const bar = keysBar(page);
@@ -85,7 +85,7 @@ test("a key of the person's own is checked, stored and sent by the bar", async (
   await page.getByLabel("Keys it sends").fill("echo hello-from-a-key");
   await page.getByRole("button", { name: "Add key" }).click();
   await expect(page.locator("[data-favorite-row]")).toHaveCount(1);
-  await expect(page.locator("[data-key-bar-preview]").locator('[aria-label="Shout"]')).toHaveCount(1);
+  await expect(page.locator('[data-pack-tab="favorites"]')).toHaveAttribute("aria-pressed", "true");
 
   const terminal = await openTerminal(page);
   await page.getByRole("button", { name: "Shout", exact: true }).click();
@@ -104,12 +104,49 @@ test("an entry that names no key is refused with a reason and stored nowhere", a
 test("a key removed from the bar is listed as not in it, and one tap puts it back", async ({ page }) => {
   await openSettings(page);
   const preview = page.locator("[data-key-bar-preview]");
-  await expect(preview.locator('[aria-label="Escape"]')).toHaveCount(1);
+  await expect(preview.locator('[data-preview-key="esc"]')).toHaveCount(1);
   await page.getByRole("button", { name: "Remove Escape" }).click();
-  await expect(preview.locator('[aria-label="Escape"]')).toHaveCount(0);
+  await expect(preview.locator('[data-preview-key="esc"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Add Escape" }).click();
-  await expect(preview.locator('[aria-label="Escape"]')).toHaveCount(1);
+  await expect(preview.locator('[data-preview-key="esc"]')).toHaveCount(1);
 });
+
+const channels = (value: string): readonly number[] => value.match(/[\d.]+/g)?.map(Number) ?? [];
+
+const linear = (value: number): number => {
+  const scaled = value / 255;
+  return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4;
+};
+
+const luminance = (value: string): number => {
+  const [r = 0, g = 0, b = 0] = channels(value);
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+};
+
+const contrast = (a: string, b: string): number => {
+  const [light = 0, dark = 0] = [luminance(a), luminance(b)].toSorted((left, right) => right - left);
+  return (light + 0.05) / (dark + 0.05);
+};
+
+for (const theme of ["day", "night"] as const) {
+  test(`the preview draws the bar's keys and they stay readable in the ${theme} theme`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme === "day" ? "light" : "dark" });
+    await page.addInitScript(
+      (chosen: string) => localStorage.setItem("doriface.appearance", JSON.stringify({ theme: chosen, custom: [] })),
+      theme,
+    );
+    await openSettings(page);
+    const pills = page.locator("[data-key-bar-preview] [data-preview-key]");
+    await expect(pills.first()).toBeVisible();
+    expect(await pills.count()).toBeGreaterThan(5);
+    // Every key's ink against the surface it is drawn on: a bar whose text vanished in one theme fails here.
+    const surface = await pills
+      .first()
+      .evaluate((pill) => getComputedStyle(pill.parentElement ?? pill).backgroundColor);
+    const colors = await pills.evaluateAll((all) => all.map((pill) => getComputedStyle(pill).color));
+    expect(Math.min(...colors.map((color) => contrast(color, surface)))).toBeGreaterThanOrEqual(4.5);
+  });
+}
 
 test("holding Ctrl opens the packs panel without latching it, while a tap still latches", async ({ page }) => {
   await openSettings(page);
