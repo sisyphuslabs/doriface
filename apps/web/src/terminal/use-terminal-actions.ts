@@ -4,6 +4,7 @@ import { rendererOptions } from "../ghostty/render-options.ts";
 import { sendBytes } from "../keys/actions.ts";
 import { copiedText } from "./copied-text.ts";
 import { useActionHandler } from "../keys/dispatcher.ts";
+import { heldSelection } from "./held-selection.ts";
 import { scrollTerminal } from "./terminal-scroll.tsx";
 import type { TerminalInput } from "./terminal-view.tsx";
 
@@ -12,7 +13,7 @@ const selectingAll = new WeakMap<WTerm, Promise<unknown>>();
 
 /** Puts the terminal's selection on the clipboard, trimmed as the config says; false when nothing is selected. */
 function copySelection(wt: WTerm): boolean {
-  const text = wt.getSelectionText();
+  const text = wt.getSelectionText() ?? heldSelection(wt.element)?.text ?? null;
   if (text === null || text === "") return false;
   const { trimCopy } = rendererOptions(terminalConfigStore.config);
   void navigator.clipboard?.writeText(copiedText(text, trimCopy)).catch(() => undefined);

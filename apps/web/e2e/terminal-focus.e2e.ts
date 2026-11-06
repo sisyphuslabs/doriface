@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { endOwnTerminals } from "./own-terminals.ts";
 
@@ -15,6 +15,34 @@ const focusedAddress = (page: Page) =>
       ? (active.closest("[data-terminal]")?.getAttribute("data-terminal") ?? null)
       : null;
   });
+
+/**
+ * The selection a press left is painted from whole cells the terminal holds, and is not left as the document's
+ * selection: a non-collapsed document selection over the rows stops IME composition (#592).
+ */
+async function expectHeldSelection(page: Page, terminal: Locator): Promise<void> {
+  await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toBe("");
+  await expect(terminal.locator(".term-selection-cells > div").first()).toBeVisible();
+}
+
+/** Where the first rendered `text` sits in the terminal, the point a drag across it starts from and ends at. */
+async function textBox(terminal: Locator, text: string): Promise<{ left: number; right: number; y: number }> {
+  const box = await terminal.evaluate((root, needle) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const at = node.textContent?.indexOf(needle) ?? -1;
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + needle.length);
+      const rect = range.getBoundingClientRect();
+      return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+    }
+    return null;
+  }, text);
+  if (box === null) throw new Error(`"${text}" is not in the terminal`);
+  return box;
+}
 
 test("clicking New tab puts keyboard focus in the new terminal", async ({ page }) => {
   await page.goto("/");
@@ -118,7 +146,7 @@ test.describe("with clipboard access", () => {
     await page.mouse.down();
     await page.mouse.move(box.right - 1, box.y, { steps: 8 });
     await page.mouse.up();
-    await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toContain("copysrc-42");
+    await expectHeldSelection(page, terminal);
 
     await page.keyboard.press("ControlOrMeta+C");
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("copysrc-42");
@@ -157,7 +185,7 @@ test.describe("with clipboard access", () => {
       });
       if (at === null) throw new Error("the output line is not in the terminal");
       await page.mouse.click(at.x, at.y, { clickCount: clicks });
-      await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toContain("clicksrc");
+      await expectHeldSelection(page, terminal);
 
       await expect.poll(() => focusedAddress(page)).toBe(address);
       await page.keyboard.press("ControlOrMeta+C");
@@ -167,6 +195,29 @@ test.describe("with clipboard access", () => {
       await expect(terminal).toContainText("after-5", { timeout: 15_000 });
     });
   }
+});
+
+test("typing Hangul right after a drag-select composes, rather than each jamo arriving on its own (#592)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const terminal = await openNewTerminal(page);
+  await terminal.getByRole("textbox").focus();
+  await page.keyboard.type("echo imesrc-$((6*7))-end");
+  await page.keyboard.press("Enter");
+  await expect(terminal).toContainText("imesrc-42-end", { timeout: 15_000 });
+  const box = await textBox(terminal, "imesrc-42-end");
+  await page.mouse.move(box.left + 1, box.y);
+  await page.mouse.down();
+  await page.mouse.move(box.right - 1, box.y, { steps: 8 });
+  await page.mouse.up();
+
+  // The browser's own IME path for the first Hangul key: a preedit into the focused input. A non-collapsed document
+  // selection over the rows makes Blink drop it and forward the keystroke as its own jamo instead.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", { text: "\uD55C", selectionStart: 1, selectionEnd: 1 });
+  await expect(terminal.getByRole("textbox")).toHaveValue("\uD55C");
+  await expectHeldSelection(page, terminal);
 });
 
 test("clicking Split right puts keyboard focus in the new pane beside the first, where typing lands", async ({
