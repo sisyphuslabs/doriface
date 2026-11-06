@@ -2,6 +2,7 @@ import type { HcConnection } from "@doriface/client";
 import {
   type AgentStatus,
   Button,
+  cn,
   IconButton,
   Kbd,
   StatusBar,
@@ -219,6 +220,22 @@ export function DesktopShell(props: DesktopShellProps) {
       {sidebar ? (
         <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
       ) : null}
+      {/* The titlebar's leading strip, beside the toggle and, with the sidebar hidden, before it: it keeps the chrome and
+          the window drag where the tab strip's own box used to reach (#643). It comes before the toggle so the toggle's
+          no-drag box is listed after it, and the strip below starts past both of them. Its width is the strip's margin,
+          so the two tile: the strip's own padding-left is what the row's px-2.5 gives it, and its content therefore
+          starts where it did before (--titlebar-leading, or 0.625rem past the rail). */}
+      {sidebar && !rail ? null : (
+        <div
+          data-titlebar
+          className={cn(
+            "absolute top-(--safe-top) h-(--tabbar-height) border-b border-border bg-chrome",
+            rail
+              ? "left-[calc(var(--safe-left)+var(--sidebar-rail-width))] w-[max(0rem,calc(var(--titlebar-leading)-var(--sidebar-rail-width)-0.625rem))] pl-[max(0rem,calc(var(--titlebar-inset-start,0.5rem)-var(--sidebar-rail-width)))]"
+              : "left-(--safe-left) w-[max(0rem,calc(var(--titlebar-leading)-0.625rem))] pl-[var(--titlebar-inset-start,0.5rem)]",
+          )}
+        />
+      )}
       {/* One sidebar toggle in the same place whether the sidebar is open or not, right after the window buttons (#415). It
           comes after the sidebar in the DOM so the skip links stay the first Tab stops and it is the stop just before the tabs. */}
       <div
@@ -260,10 +277,11 @@ export function DesktopShell(props: DesktopShellProps) {
           {...(sidebar && !rail
             ? {}
             : {
-                // The tab strip starts past the sidebar toggle, which sits over it with the sidebar hidden or a rail.
+                // The strip starts past the toggle rather than under it: Electron lists the strip's drag box after the
+                // toggle's no-drag one and the later box wins, so a click on the toggle would drag the window (#643).
                 className: sidebar
-                  ? "pl-[max(0.625rem,calc(var(--titlebar-leading)-var(--sidebar-rail-width)))]"
-                  : "pl-(--titlebar-leading)",
+                  ? "ml-[max(0rem,calc(var(--titlebar-leading)-var(--sidebar-rail-width)-0.625rem))]"
+                  : "ml-[max(0rem,calc(var(--titlebar-leading)-0.625rem))]",
               })}
           trailing={
             <>
