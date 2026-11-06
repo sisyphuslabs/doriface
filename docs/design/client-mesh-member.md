@@ -1,6 +1,6 @@
 # A client joins the mesh as its own member
 
-Status: revision 3, 2026-11-06. Supersedes revision 2 (rejected). Issue #942.
+Status: revision 4, 2026-11-06. Supersedes revision 3, which was approved with one metadata correction. Issue #942.
 
 Revision 2 invented a single pinned "mesh signing key" and a global "roster sequence". Both are withdrawn: one signer is a
 host dependency in new clothes, a shared private key cannot be revoked per signer, and a larger scalar cannot prove that a
