@@ -297,6 +297,8 @@ export function readMeshPair(output: string): MeshInvite {
 
 export interface MeshMemberLine {
   readonly name: string;
+  /** The machine name this host's core gives the member, which differs after a name fallback. */
+  readonly localName: string | undefined;
   readonly line: string;
 }
 
@@ -322,10 +324,37 @@ export function readMeshStatus(json: string): MeshSummary {
       const name = typeof member === "object" && member !== null ? Reflect.get(member, "name") : undefined;
       const hostId = typeof member === "object" && member !== null ? Reflect.get(member, "hostId") : undefined;
       const line = typeof member === "object" && member !== null ? Reflect.get(member, "line") : undefined;
+      const localName = typeof member === "object" && member !== null ? Reflect.get(member, "localName") : undefined;
       return {
         name: typeof name === "string" ? name : typeof hostId === "string" ? hostId : "?",
+        localName: typeof localName === "string" ? localName : undefined,
         line: typeof line === "string" ? line : "?",
       };
+    }),
+  };
+}
+
+/**
+ * Each member's line state as this host's core reports it (`hc machine ls --json`, matched by the member's local
+ * name); a member the core does not list keeps the state `mesh status` gave it.
+ */
+export function withCoreLines(summary: MeshSummary, machinesJson: string | undefined): MeshSummary {
+  const states = new Map<string, string>();
+  if (machinesJson !== undefined) {
+    const value: unknown = JSON.parse(machinesJson);
+    const machines = typeof value === "object" && value !== null ? Reflect.get(value, "machines") : undefined;
+    for (const machine of Array.isArray(machines) ? machines : []) {
+      const name: unknown = typeof machine === "object" && machine !== null ? Reflect.get(machine, "name") : undefined;
+      const state: unknown =
+        typeof machine === "object" && machine !== null ? Reflect.get(machine, "state") : undefined;
+      if (typeof name === "string" && typeof state === "string") states.set(name, state);
+    }
+  }
+  return {
+    ...summary,
+    members: summary.members.map((member) => {
+      const state = member.line === "self" || member.localName === undefined ? undefined : states.get(member.localName);
+      return state === undefined ? member : { ...member, line: state };
     }),
   };
 }

@@ -12,6 +12,7 @@ import {
   renderUnit,
   setupOs,
   setupPaths,
+  withCoreLines,
 } from "./render.ts";
 
 const tools = { bun: "/home/u/.bun/bin/bun", hc: "/home/u/.local/bin/hc", shell: "/bin/bash" };
@@ -156,19 +157,43 @@ describe("the host's own output", () => {
       meshId: "m1",
       sync: "ok",
       members: [
-        { hostId: "a", name: "ny", line: "self" },
-        { hostId: "b", name: null, line: "connected" },
+        { hostId: "a", name: "ny", localName: "ny", line: "self" },
+        { hostId: "b", name: null, localName: null, line: "connected" },
       ],
     });
     expect(readMeshStatus(json)).toEqual({
       meshId: "m1",
       sync: "ok",
       members: [
-        { name: "ny", line: "self" },
-        { name: "b", line: "connected" },
+        { name: "ny", localName: "ny", line: "self" },
+        { name: "b", localName: undefined, line: "connected" },
       ],
     });
     expect(() => readMeshStatus("{}")).toThrow(/lacks/);
+  });
+
+  test("a line's state comes from the core's machine list, which mesh status lags behind", () => {
+    const status = {
+      meshId: "m1",
+      sync: "ok",
+      members: [
+        { name: "a", localName: "a", line: "self" },
+        { name: "b", localName: "b-4dkk", line: "connecting" },
+        { name: "c", localName: "c", line: "unreachable" },
+      ],
+    };
+    const machines = JSON.stringify({
+      machines: [
+        { name: "b-4dkk", state: "connected" },
+        { name: "a", state: "unreachable" },
+      ],
+    });
+    expect(withCoreLines(status, machines).members.map((member) => member.line)).toEqual([
+      "self",
+      "connected",
+      "unreachable",
+    ]);
+    expect(withCoreLines(status, undefined)).toEqual(status);
   });
 
   test("versions", () => {

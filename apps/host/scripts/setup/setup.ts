@@ -29,6 +29,7 @@ import {
   readExistingService,
   readMeshPair,
   readMeshStatus,
+  withCoreLines,
   renderService,
   setupOs,
   setupPaths,
@@ -45,14 +46,21 @@ export interface Ran {
   readonly stderr: string;
 }
 
-export type Runner = (command: readonly string[], cwd?: string) => Promise<Ran>;
+export interface RunOptions {
+  readonly cwd?: string | undefined;
+  /** Added to this process's environment. */
+  readonly env?: Readonly<Record<string, string>> | undefined;
+}
+
+export type Runner = (command: readonly string[], options?: RunOptions) => Promise<Ran>;
 
 export type StepStatus = "ok" | "changed" | "unchanged" | "warn" | "fail";
 export type Report = (step: string, status: StepStatus, detail: string) => void;
 
-export const runCommand: Runner = async (command, cwd) => {
+export const runCommand: Runner = async (command, options = {}) => {
   const child = Bun.spawn([...command], {
-    ...(cwd === undefined ? {} : { cwd }),
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    ...(options.env === undefined ? {} : { env: { ...process.env, ...options.env } }),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -87,7 +95,7 @@ function cliOf(src: string): string {
 }
 
 async function must(context: SetupContext, step: string, command: readonly string[], cwd?: string): Promise<Ran> {
-  const ran = await context.run(command, cwd);
+  const ran = await context.run(command, { cwd });
   if (ran.code !== 0) {
     const why = (ran.stderr.trim() || ran.stdout.trim()).split("\n").slice(-3).join(" / ");
     throw new SetupError(step, `${command.slice(0, 3).join(" ")} exited ${ran.code}: ${why}`);
@@ -381,9 +389,14 @@ export async function verify(context: SetupContext, paths: SetupPaths, minMember
   ]);
   let mesh: MeshSummary | undefined;
   if (status.code === 0) {
-    mesh = readMeshStatus(status.stdout);
+    const machines = await context.run([paths.hc, "machine", "ls", "--json"], {
+      env: paths.session === undefined ? undefined : { HC_SESSION: paths.session },
+    });
+    // mesh status keeps each line's state from its last roster check; the core's own machine list is current.
+    mesh = withCoreLines(readMeshStatus(status.stdout), machines.code === 0 ? machines.stdout : undefined);
     const members = mesh.members.map((member) => `${member.name}=${member.line}`).join(" ");
-    const enough = mesh.members.length >= minMembers;
+    const connected = mesh.members.filter((member) => member.line === "self" || member.line === "connected").length;
+    const enough = mesh.members.length >= minMembers && (minMembers === 0 || connected === mesh.members.length);
     context.report(
       "mesh",
       enough ? "ok" : "fail",
@@ -398,7 +411,8 @@ export async function verify(context: SetupContext, paths: SetupPaths, minMember
       `mesh status exited ${status.code}: ${status.stderr.trim().split("\n").at(-1) ?? ""}`,
     );
   }
-  if (!running || relay !== "connected" || (minMembers > 0 && (mesh?.members.length ?? 0) < minMembers)) {
+  const lines = mesh?.members.every((member) => member.line === "self" || member.line === "connected") ?? false;
+  if (!running || relay !== "connected" || (minMembers > 0 && ((mesh?.members.length ?? 0) < minMembers || !lines))) {
     throw new SetupError("verify", "the host is not set up yet; the lines above say which part");
   }
   return { running, relay, mesh };
