@@ -161,7 +161,7 @@ async function leaveWhileStarting(page: Page, link: HcSocket): Promise<(fail?: b
   return release;
 }
 
-test("a run that answers while Settings hides the workspace arms no observer or timer and shows no toast", async ({
+test("a run that answers while Settings hides the workspace leaves no observer armed and shows no toast", async ({
   page,
 }) => {
   await page.addInitScript({ content: COUNT_LATE_WORK });
