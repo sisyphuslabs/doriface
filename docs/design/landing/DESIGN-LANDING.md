@@ -6,7 +6,7 @@ The marketing page for doriterm.com lives in `apps/landing/`: plain HTML, CSS an
 
 - doriterm is a terminal. The page makes no file-editing or IDE claim, and the sample data shows terminals and coding agents only.
 - The app lives at `https://app.doriterm.com`; doriterm.com is this page. Every primary button says **Open the app** and goes there; the desktop download is the secondary action.
-- Hero copy is the owner's: the headline `your devices, one terminal.` (lowercase, as written) and directly under it `Every machine you own, linked through an end-to-end encrypted mesh.`
+- Hero copy is the owner's: the headline `Your devices. One terminal.` (two beats) and directly under it `Every machine you own, linked through an end-to-end encrypted mesh.`
 - Any view of the app inside a window or phone frame is the app's components rendered live, never a screenshot (section 5, "Live mockups").
 
 ## 0. Research
