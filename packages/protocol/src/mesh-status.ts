@@ -8,6 +8,41 @@ export const MESH_STATUS_DOC = "doriface-mesh";
 /** The document a client device paired to the inviting host writes `{approve}` or `{deny}` to for a pending join. */
 export const MESH_APPROVAL_DOC = "doriface-mesh-approve";
 
+/**
+ * The document a client device writes `{request: <nonce>}` to for a one-line Add a machine (#668): the host answers in
+ * the same document with `{request, link, expiresAt}` (a single-use mesh offer that admits without asking) or
+ * `{request, error}`; once a machine joins on it, `{request, joined: {name, hostId}}` replaces the link, and an offer
+ * that expires unused leaves `{request, expired: true}`.
+ */
+export const MESH_OFFER_DOC = "doriface-mesh-offer";
+
+export type MeshOfferDoc =
+  | { readonly request: string }
+  | { readonly request: string; readonly link: string; readonly expiresAt: number }
+  | { readonly request: string; readonly error: string }
+  | { readonly request: string; readonly expired: true }
+  | { readonly request: string; readonly joined: { readonly name: string; readonly hostId: string } };
+
+/** The offer document as written, or undefined for anything else (a reader treats it as advisory). */
+export function parseMeshOfferDoc(value: unknown): MeshOfferDoc | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const request: unknown = Reflect.get(value, "request");
+  if (typeof request !== "string" || request === "") return undefined;
+  const link: unknown = Reflect.get(value, "link");
+  const expiresAt: unknown = Reflect.get(value, "expiresAt");
+  const error: unknown = Reflect.get(value, "error");
+  if (typeof link === "string" && typeof expiresAt === "number") return { request, link, expiresAt };
+  if (typeof error === "string") return { request, error };
+  if (Reflect.get(value, "expired") === true) return { request, expired: true };
+  const joined: unknown = Reflect.get(value, "joined");
+  if (typeof joined === "object" && joined !== null) {
+    const name: unknown = Reflect.get(joined, "name");
+    const hostId: unknown = Reflect.get(joined, "hostId");
+    if (typeof name === "string" && typeof hostId === "string") return { request, joined: { name, hostId } };
+  }
+  return { request };
+}
+
 /** The `v` of the status document; a reader refuses any other value. */
 export const MESH_STATUS_VERSION = 1;
 
@@ -51,6 +86,22 @@ export type MeshStuckReason =
  */
 export type MeshGate = { readonly kind: "offline"; readonly refusals: number; readonly nextProbeAt: string };
 
+/** How the machine a mesh line replaced had been added: over ssh, with a `doriface-host connect` via, or another via. */
+export type MeshReplacedKind = "ssh" | "connect" | "command";
+
+/** The kind only: an ssh target or via command can carry a user, an address or a key path, so neither is copied. */
+export type MeshReplacedMachine = { readonly name: string; readonly kind: MeshReplacedKind };
+
+const REPLACED_KIND_TEXT: { readonly [K in MeshReplacedKind]: string } = {
+  ssh: "added over ssh",
+  connect: "doriface-host connect",
+  command: "added with a --via command",
+};
+
+/** `replaced machine "old" (added over ssh) with the mesh line`, as status and the reconciler's log say it. */
+export const replacedMachineText = (replaced: MeshReplacedMachine): string =>
+  `replaced machine "${replaced.name}" (${REPLACED_KIND_TEXT[replaced.kind]}) with the mesh line`;
+
 /** Times are ISO 8601 and display only. Every key is a hostId. */
 export type MeshMemberStatus = {
   readonly hostId: string;
@@ -69,10 +120,10 @@ export type MeshMemberStatus = {
   /** The core id of the latest line hello from it; the card's `hcId` check uses it (design section 7.6). */
   readonly helloCoreId: string | null;
   /**
-   * The machine a `doriface-host connect` had added for the same core, which the reconciler replaced with the mesh
+   * The machine added earlier for the same core (over ssh or with a via), which the reconciler replaced with the mesh
    * line (design section 8.1, migration).
    */
-  readonly replacedMachine: string | null;
+  readonly replacedMachine: MeshReplacedMachine | null;
   /** An authenticated session from it is open now. */
   readonly presence: boolean;
   readonly lastSync: string | null;
