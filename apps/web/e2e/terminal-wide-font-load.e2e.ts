@@ -1,6 +1,6 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
-import { FIXTURE_FONT } from "./font-fixture.ts";
+import { fixtureFontWithAdvance } from "./font-fixture.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
@@ -23,12 +23,14 @@ const wideSizes = (terminal: Locator) =>
   );
 
 /**
- * The terminal's configured family: a web font whose W, the cell's advance, is 0.9 em, so its arrival changes the cell
- * (and with it every wide glyph's fit) on every platform, wherever the fallback monospace rounds. The bundled JetBrains
- * Mono no longer can: at 16 points its advance and the fallback's round to the same device pixels.
+ * The terminal's configured family: a web font whose W, the cell's advance, is 0.4 em. A fallback face's wide glyphs
+ * fit Ghostty's ideograph width, min(ASCII ink height, two cells); this font draws no other ASCII, so the ink height
+ * stays the fallback monospace's (0.9 em and up), and its arrival must narrow the two cells below it to change the fit.
+ * A wider cell would not (#691): wherever two cells were already at least the ink height, the fit stays the same.
  */
 const HELD = "Held Terminal Fixture";
 const HELD_URL = "/held-terminal-fixture.ttf";
+const HELD_FONT = fixtureFontWithAdvance(400);
 
 const webFontLoaded = (page: Page) =>
   page.evaluate(
@@ -43,7 +45,7 @@ async function holdWebFont(context: BrowserContext): Promise<() => void> {
   const gate = Promise.withResolvers<void>();
   await context.route(`**${HELD_URL}`, async (route) => {
     await gate.promise;
-    await route.fulfill({ contentType: "font/ttf", body: Buffer.from(FIXTURE_FONT, "base64") });
+    await route.fulfill({ contentType: "font/ttf", body: HELD_FONT });
   });
   await context.addInitScript(({ family, url }) => document.fonts.add(new FontFace(family, `url(${url})`)), {
     family: HELD,

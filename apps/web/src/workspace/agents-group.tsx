@@ -48,34 +48,44 @@ function SortMenu() {
   );
 }
 
-/** Hover or keyboard focus shows only these two; everything else about the agent is in the "..." menu. */
-function AgentActions({ agent }: { readonly agent: Agent }) {
+/** What can be done with an agent: its "..." menu and its right-click menu hold the same items. */
+function AgentMenuItems({ agent }: { readonly agent: Agent }) {
   const pin = usePin();
   const ask = useAskSession();
   const pinned = agent.pinned === true;
-  const toggle = (): void => pin(agent.id, !pinned);
+  return (
+    <>
+      <MenuItem icon={pinned ? <PinOff /> : <Pin />} onClick={() => pin(agent.id, !pinned)}>
+        {pinned ? "Unpin" : "Pin to top"}
+      </MenuItem>
+      <MenuItem icon={<Pencil />} onClick={() => ask({ kind: "rename", address: agent.id })}>
+        Rename…
+      </MenuItem>
+      <MenuSeparator />
+      <MenuItem icon={<Power />} destructive onClick={() => ask({ kind: "end", address: agent.id })}>
+        End session…
+      </MenuItem>
+    </>
+  );
+}
+
+/** Hover or keyboard focus shows only these two; everything else about the agent is in the "..." menu. */
+function AgentActions({ agent }: { readonly agent: Agent }) {
+  const pin = usePin();
+  const pinned = agent.pinned === true;
   return (
     <>
       <IconButton
         label={`${pinned ? "Unpin" : "Pin"} ${agent.name}`}
         icon={pinned ? <PinOff /> : <Pin />}
         className="size-6"
-        onClick={toggle}
+        onClick={() => pin(agent.id, !pinned)}
       />
       <Menu
         align="end"
         trigger={<IconButton label={`More for ${agent.name}`} icon={<Ellipsis />} className="size-6" />}
       >
-        <MenuItem icon={pinned ? <PinOff /> : <Pin />} onClick={toggle}>
-          {pinned ? "Unpin" : "Pin to top"}
-        </MenuItem>
-        <MenuItem icon={<Pencil />} onClick={() => ask({ kind: "rename", address: agent.id })}>
-          Rename…
-        </MenuItem>
-        <MenuSeparator />
-        <MenuItem icon={<Power />} destructive onClick={() => ask({ kind: "end", address: agent.id })}>
-          End session…
-        </MenuItem>
+        <AgentMenuItems agent={agent} />
       </Menu>
     </>
   );
@@ -112,7 +122,12 @@ export function AgentsGroup({ terminals, active, onOpen, rail = false, heading =
             return rail ? (
               <div key={agent.id}>{row}</div>
             ) : (
-              <RowWithActions key={agent.id} row={row} actions={<AgentActions agent={agent} />} />
+              <RowWithActions
+                key={agent.id}
+                row={row}
+                actions={<AgentActions agent={agent} />}
+                menu={<AgentMenuItems agent={agent} />}
+              />
             );
           })}
         </SidebarSection>
