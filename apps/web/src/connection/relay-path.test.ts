@@ -96,8 +96,9 @@ describe("the web relay path against a real doriface-host", () => {
     expect(bridge.dialed.at(-1)?.searchParams.has("pair")).toBe(false);
     const remembered = saved[0];
     if (remembered === undefined) throw new Error("the link pairing saved nothing");
-    const connection = await connect({ ...DEFAULT_SETTINGS, mode: "relay", ...remembered }, undefined, deps);
-    expect(connection.hello.framed).toBe(true);
-    connection.close();
+    const opened = await connect({ ...DEFAULT_SETTINGS, mode: "relay", ...remembered }, undefined, deps);
+    expect(opened.path).toBe("relay");
+    expect(opened.connection.hello.framed).toBe(true);
+    opened.connection.close();
   }, 30_000);
 });

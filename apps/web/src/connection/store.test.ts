@@ -1,5 +1,6 @@
 import { afterEach, expect, jest, test } from "bun:test";
 import type { HcConnection } from "@doriface/client";
+import type { OpenConnection } from "./connect.ts";
 import { LoopbackAddressError } from "./loopback-address.ts";
 import { type ConnectionSettings, DEFAULT_RELAY_URL, DEFAULT_SETTINGS } from "./settings.ts";
 
@@ -19,7 +20,7 @@ test("retryNow makes the waiting attempt at once, and its back-off timer makes n
   let attempts = 0;
   const store = new ConnectionStore(SETTINGS, () => {
     attempts += 1;
-    return attempts === 1 ? Promise.reject(new Error("refused")) : Promise.resolve(connection);
+    return attempts === 1 ? Promise.reject(new Error("refused")) : Promise.resolve({ connection, path: "relay" });
   });
   const reached = (phase: string): Promise<void> =>
     new Promise((resolve) => {
@@ -42,7 +43,7 @@ test("retryNow makes the waiting attempt at once, and its back-off timer makes n
 
   jest.advanceTimersByTime(10_000);
   expect(attempts).toBe(2);
-  expect(store.state).toEqual({ phase: "open", connection });
+  expect(store.state).toEqual({ phase: "open", connection, path: "relay" });
   store.stop();
 });
 
@@ -128,7 +129,7 @@ test("a loopback link that fails asks this computer's host first, and the retry 
   const dialled: string[] = [];
   const store = new ConnectionStore({ ...SETTINGS, loopbackUrl: "ws://127.0.0.1:1111/v1/hc" }, (settings) => {
     dialled.push(`${settings.loopbackUrl} ${settings.token}`);
-    return Promise.resolve(connection);
+    return Promise.resolve({ connection, path: "loopback" });
   });
   const asked: string[] = [];
   store.restartsLocalHost({
@@ -246,5 +247,63 @@ test("a host that does not start again shows its cause, and no link is tried", a
   await hostFailed;
   expect(attempts).toBe(1);
   expect(store.state).toMatchObject({ phase: "host-failed", failure: { message: "Error: no hc" } });
+  store.stop();
+});
+
+test("the open state carries the path its session opened on (#446 §5)", async () => {
+  jest.useFakeTimers();
+  const live: Pick<HcConnection, "onClose" | "close"> = { onClose: () => () => undefined, close: () => undefined };
+  const connection = live as HcConnection;
+  const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" }, (): Promise<OpenConnection> =>
+    Promise.resolve({ connection, path: "direct" }),
+  );
+  const opened = new Promise<void>((resolve) => {
+    const off = store.subscribe(() => {
+      if (store.state.phase !== "open") return;
+      off();
+      resolve();
+    });
+  });
+  store.start();
+  await opened;
+  expect(store.state).toMatchObject({ phase: "open", path: "direct" });
+  store.stop();
+});
+
+test("a direct link that drops sends the next attempt to the relay at once, once (#446 §4)", async () => {
+  jest.useFakeTimers();
+  const closes: ((error?: Error) => void)[] = [];
+  const live: Pick<HcConnection, "onClose" | "close"> = {
+    onClose: (fn) => (closes.push(fn), () => undefined),
+    close: () => undefined,
+  };
+  const connection = live as HcConnection;
+  const skip: (boolean | undefined)[] = [];
+  const store = new ConnectionStore(
+    { ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" },
+    (_settings, _signal, _deps, options) => {
+      skip.push(options?.skipDirect);
+      return Promise.resolve({ connection, path: skip.length === 1 ? "direct" : "relay" });
+    },
+  );
+  const reached = (phase: string): Promise<void> =>
+    new Promise((resolve) => {
+      const off = store.subscribe(() => {
+        if (store.state.phase !== phase) return;
+        off();
+        resolve();
+      });
+    });
+  const first = reached("open");
+  store.start();
+  await first;
+  const failed = reached("failed");
+  closes[0]?.(new Error("the direct link dropped"));
+  await failed;
+  const again = reached("open");
+  store.retryNow();
+  await again;
+  expect(skip).toEqual([undefined, true]);
+  expect(store.state).toMatchObject({ phase: "open", path: "relay" });
   store.stop();
 });

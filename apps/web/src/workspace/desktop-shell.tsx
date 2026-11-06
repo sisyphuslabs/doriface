@@ -22,7 +22,7 @@ import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
 import { panelId, SplitPanes } from "./split-panes.tsx";
 import { RenameDialog } from "./rename-dialog.tsx";
-import { ReconnectStatus } from "./reconnect-status.tsx";
+import { ConnectionPathItem, ReconnectStatus } from "./reconnect-status.tsx";
 import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
 import { SkipLinks } from "./skip-links.tsx";
@@ -345,6 +345,7 @@ export function DesktopShell(props: DesktopShellProps) {
                 </span>
               ) : null}
               <ReconnectStatus />
+              <ConnectionPathItem />
             </>
           }
           end={

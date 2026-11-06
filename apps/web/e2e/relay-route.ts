@@ -12,6 +12,8 @@ import { E2E_WEB_PORT } from "./config.ts";
 export interface FakeRelayHost {
   /** A fresh pairing link: each one pairs one device, once. */
   readonly pairingLink: () => Promise<string>;
+  /** The host's LAN listener, the address a person sets as the Direct address (#446). */
+  readonly directUrl: string;
   /** Call before the page dials the relay: its `/v1/client/...` sockets go to the fake relay's client bridge. */
   readonly route: (page: Page) => Promise<void>;
   readonly stop: () => Promise<void>;
@@ -89,9 +91,13 @@ export async function startFakeRelayHost(options: { readonly machine?: boolean }
     });
   const first = await nextLine();
   const bridge = first["bridge"];
+  const directUrl = first["directUrl"];
   if (typeof bridge !== "string") throw new Error("the fake relay host printed no bridge");
+  if (typeof directUrl !== "string" || directUrl === "")
+    throw new Error("the fake relay host printed no direct address");
 
   return {
+    directUrl,
     async pairingLink() {
       input.write("link\n");
       const { link } = await nextLine();

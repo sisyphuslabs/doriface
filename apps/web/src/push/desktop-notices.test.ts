@@ -65,7 +65,7 @@ function rig({ saved = null as string | null, supported = true, shows = true, te
   };
   const listeners = new Set<() => void>();
   const connection = {
-    state: { phase: "open", connection: live as HcConnection } as ConnectionState,
+    state: { phase: "open", connection: live as HcConnection, path: "relay" } as ConnectionState,
     subscribe: (listener: () => void) => (listeners.add(listener), () => listeners.delete(listener)),
     move(state: ConnectionState) {
       this.state = state;
@@ -91,7 +91,7 @@ function rig({ saved = null as string | null, supported = true, shows = true, te
     if (last === undefined) throw new Error("no feed was opened");
     return last;
   };
-  const reopen = () => connection.move({ phase: "open", connection: live as HcConnection });
+  const reopen = () => connection.move({ phase: "open", connection: live as HcConnection, path: "relay" });
   return { notices, feeds, feed, shown, stored, connection, reopen, tick: (ms: number) => void (now += ms) };
 }
 
