@@ -3,6 +3,7 @@ import {
   type MeshMemberStatus,
   type MeshRevokedStatus,
   meshRevokeCommand,
+  replacedMachineText,
 } from "@doriface/protocol";
 import { IconButton, SettingRow, cn } from "@doriface/ui";
 import { Check, Copy, Monitor, Server } from "lucide-react";
@@ -133,7 +134,7 @@ export function MemberRow({ member, nameOf, now }: MemberRowProps) {
             </span>
           ) : null}
           {member.replacedMachine === null ? null : (
-            <span className="mt-1 block">{`Replaced the machine "${member.replacedMachine}" (doriface-host connect) with the mesh line.`}</span>
+            <span className="mt-1 block">{`R${replacedMachineText(member.replacedMachine).slice(1)}.`}</span>
           )}
           {revoke === undefined ? null : <Command command={revoke} label={`Copy the command that revokes ${name}`} />}
         </>

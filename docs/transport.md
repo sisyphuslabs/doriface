@@ -1,4 +1,4 @@
-# doriface transport contract v1.9.5
+# doriface transport contract v1.9.6
 
 This is the binding wire contract for every doriface package. Each rule below is the current one; the change log at the end records what each revision changed.
 
@@ -35,6 +35,9 @@ Layering, outermost first:
 ### This host's own offer
 
 The app that runs a host asks it for the offer it would otherwise print (v1.9.5), so a person can pair a phone without a terminal. These two routes sit on the host's plaintext listener beside `/v1/hc`, behind the same per-launch token presented as `Authorization: Bearer <token>`; a request without it is answered 401 and nothing else. The LAN listener does not serve them: it serves only `/healthz` and `/v1/e2ee`. A host started without a state directory (no identity, no pairing store) serves neither route.
+
+- `GET /v1/devices` answers this computer's paired devices in the shape the pair route names one with: `{"devices":[{"name":"…","id":"…","pairedAt":"…"}]}`, and `{"devices":[]}` when none is paired.
+- `DELETE /v1/devices/<id>` revokes the device whose 8-character id this is (v1.9.6) and answers `{"revoked":[{"name":"…","id":"…","pairedAt":"…"}]}`. It is the same act as `doriface-host devices revoke`: the device leaves the store, its live sessions close with 4401, its push subscription is dropped, and its key is refused on every path from then on. An id no device has is answered 404 with `{"error":"…"}`, and an id two devices share is answered 409 with the same shape and the instruction to revoke one by its full fingerprint from the terminal (this route takes the short id only). Both routes sit behind the same per-launch token as `/v1/pair`, and the LAN listener serves neither.
 
 - `POST /v1/pair` opens one offer, replacing any pending one, and answers it: `{"state":"pending","offer":{…}}`.
 - `GET /v1/pair` answers what stands: the same `pending` shape, `{"state":"paired","device":{"name":"…","id":"…","pairedAt":"…"}}` (or `"device": null` when the store names none), `{"state":"expired"}`, or `{"state":"none"}` when this host opened none since it started.
@@ -336,6 +339,7 @@ Web push notices (v1.7). The relay is not on the push path and does not change: 
 
 ## Change log
 
+- v1.9.6 (host behaviour, no relay change): the plaintext listener's `/v1/devices`, `GET` to list this computer's paired devices and `DELETE /v1/devices/<id>` to revoke one, behind the same per-launch bearer token as `/v1/hc` and never on the LAN listener, so the desktop app revokes a phone from the computer it was paired to without a terminal (#709).
 - v1.9.5 (host behaviour, no relay change): the plaintext listener's `/v1/pair` pair, `POST` to open this host's offer and `GET` to read what stands, behind the same per-launch bearer token as `/v1/hc` and never on the LAN listener, so the desktop app shows this computer's code, QR code, link, fingerprint and expiry without a terminal (#614).
 - v1.9.4 (host behaviour, no wire change): `doriface-host pair` prints the desktop app's `doriface://pair#…` deep link, and the QR code encodes it, unless `--web-origin` names a web app (`<web origin>/pair#…`); the printed text says which one opens the link. `mesh pair` prints the same deep link with `&m=1`, and `connect` and `mesh join` accept either form. `DEFAULT_WEB_ORIGIN` is gone: no dead web origin is advertised by default (#594).
 - v1.9.3 (documentation, no wire change): rules the relay already enforced, so a stand-in built from this section matches it (#45): a clear of a registered slot is acknowledged with PAIR_SLOT_ACK status 0 and the released slot, which the host waits for; a PAIR_SLOT whose first 3 bytes are not a slot closes the uplink with 4402 rather than status 2; a request without `cf-connecting-ip` is keyed as `unknown`, one shared bucket; and a stand-in is in effect a wrangler project (`wrangler.jsonc`, `node_modules/.bin/wrangler`, Node 22 or newer).

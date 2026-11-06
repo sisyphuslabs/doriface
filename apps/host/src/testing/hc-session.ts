@@ -138,8 +138,11 @@ function checkAtTestEnd(scratch: Scratch): void {
   }
 }
 
-/** A scratch hc session: its own core, state dir and socket under $TMPDIR. */
-export function createHcSession(prefix: string): HcSession {
+/**
+ * A scratch hc session: its own core, state dir and socket under $TMPDIR. `extra` joins the environment the core is
+ * started with (a PATH that puts a test's `ssh` first, say).
+ */
+export function createHcSession(prefix: string, extra: Readonly<Record<string, string>> = {}): HcSession {
   const hc = resolveHcBin();
   const dir = mkdtempSync(join(tmpdir(), "dh-"));
   const name = `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
@@ -151,6 +154,7 @@ export function createHcSession(prefix: string): HcSession {
     XDG_RUNTIME_DIR: join(dir, "run"),
     // A deep $TMPDIR (macOS) pushes the default socket path past the 103-byte sun_path limit.
     HC_SOCKET: socket,
+    ...extra,
   };
   const session: HcSession = {
     hc,
