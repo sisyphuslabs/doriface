@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- Settings opens as a dialog over the workspace on a wide screen: the terminals stay in view behind it and keep drawing, so a theme, density or text-size change shows on them as it is made, and Escape or a click outside returns to the focused pane. Appearance gains a Text size row beside theme and density. A phone keeps the full-screen sheet. (#673)
+
 ### Joining a mesh from a browser
 
 - A browser with no account and no pairing opens the web app, follows an invite link a member sent, checks the host's fingerprint and lands on the mesh's terminals; a revisit needs no new invite. (#709)
