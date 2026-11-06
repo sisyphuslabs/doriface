@@ -15,6 +15,7 @@
     { "path": "packages/ghostty-wasm" },
     { "path": "tests/relay" },
     { "path": "qa/live" },
-    { "path": "tests/relay-fetch" }
+    { "path": "tests/relay-fetch" },
+    { "path": "tests/ci" }
   ]
 }

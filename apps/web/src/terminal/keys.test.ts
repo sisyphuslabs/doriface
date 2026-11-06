@@ -84,6 +84,18 @@ test("cmd+ㅍ on a mac host is the paste chord, as cmd+v is", () => {
   expect(applyModifiers("ㅍ", latched("ctrl", "shift"), "other")).toEqual({ kind: "paste" });
 });
 
+// The ^C key (#673) with a modifier latched: ctrl leaves ^C as it is, alt and cmd prefix it with ESC as for any key.
+test.each([
+  [["ctrl"], "\u0003"],
+  [["alt"], "\u001b\u0003"],
+  [["cmd"], "\u001b\u0003"],
+  [[], "\u0003"],
+] as const)("^C with %p latched sends %j", (mods, bytes) => {
+  const interrupt = keySequence("interrupt");
+  if (interrupt === undefined) throw new Error("no interrupt key");
+  expect(applyModifiers(interrupt, latched(...mods), "other")).toEqual({ kind: "write", data: bytes });
+});
+
 test("cmd+v on a mac host and ctrl+shift+v elsewhere paste the device clipboard", () => {
   expect(applyModifiers("v", latched("cmd"), "mac")).toEqual({ kind: "paste" });
   expect(applyModifiers("v", latched("ctrl", "shift"), "other")).toEqual({ kind: "paste" });

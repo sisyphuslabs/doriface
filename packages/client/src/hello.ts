@@ -12,9 +12,11 @@ import {
   type JsonValue,
 } from "@doriface/protocol";
 import { HcCoreMismatchError, HcHandshakeError } from "./errors.ts";
+import { GENERATION } from "./generation.ts";
+
+export { GENERATION };
 
 const HELLO_ID = 0;
-const GENERATION = 1;
 
 /** The exact first bytes `hc attach` sends: a plain-mode JSON line asking for the framed upgrade. */
 export const HELLO_REQUEST_LINE = `${encodeRequest(HELLO_ID, "hello", { framed: true })}\n`;

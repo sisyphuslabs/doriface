@@ -1,9 +1,12 @@
+import { GENERATION } from "./generation.ts";
+
 export class HcConnectionClosedError extends Error {
   override readonly name = "HcConnectionClosedError";
 }
 
 export class HcHandshakeError extends Error {
-  override readonly name = "HcHandshakeError";
+  // string, not the literal: HcCoreMismatchError names itself.
+  override readonly name: string = "HcHandshakeError";
 }
 
 /** A core this client cannot use, and what says so: the protocol generation it speaks, or its version under the floor. */
@@ -17,13 +20,14 @@ export type HcCoreMismatch =
 
 /** A handshake that reached a core this client cannot use; retrying cannot help, an update on one side can (#651). */
 export class HcCoreMismatchError extends HcHandshakeError {
+  override readonly name = "HcCoreMismatchError";
   readonly mismatch: HcCoreMismatch;
 
   constructor(mismatch: HcCoreMismatch) {
     super(
       mismatch.kind === "core-too-old"
         ? `core is hc ${mismatch.version}, this client needs ${mismatch.need} or newer`
-        : `core speaks protocol generation ${mismatch.generation}, this client 1`,
+        : `core speaks protocol generation ${mismatch.generation}, this client ${GENERATION}`,
     );
     this.mismatch = mismatch;
   }
