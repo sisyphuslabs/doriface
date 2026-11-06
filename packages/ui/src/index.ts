@@ -3,9 +3,11 @@ export { AgentRow, type Agent, type AgentRowProps } from "./components/agent-row
 export {
   ApprovalBanner,
   approvalAnnouncement,
-  type ApprovalAnswer,
+  choiceLabel,
   type ApprovalBannerProps,
   type ApprovalBannerState,
+  type ApprovalChoice,
+  type ApprovalOption,
   type ApprovalPrompt,
 } from "./components/approval-banner.tsx";
 export { Badge, badgeVariants, type BadgeProps } from "./components/badge.tsx";

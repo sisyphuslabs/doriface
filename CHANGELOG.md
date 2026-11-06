@@ -6,6 +6,14 @@
 
 - Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
 
+### Answering agents from the card
+
+- The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
+
+### Web app and PWA
+
+- The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
+
 ### Native apps
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#705)
