@@ -3,7 +3,7 @@ import { NOTICE_KINDS, type PushNotice } from "@doriface/protocol";
 import { deliverPush, pushEndpointAllowed, type PushFetch } from "@doriface/host/push/deliver";
 import type { VapidKey } from "@doriface/host/push/web-push";
 import { decryptPushBody, receiverKeys, type ReceiverKeys } from "@doriface/host/testing/push-receiver";
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { type BridgeConfig, createBridge } from "./bridge.ts";
 
 const ORIGIN = "https://push-doriface.omo.dev";
@@ -11,6 +11,10 @@ const NOTICE: PushNotice = { v: 1, n: "AAAAAAAAAAAAAAAAAAAAAA", k: "permission",
 const APNS_TOKEN = "a".repeat(64);
 const FCM_TOKEN = "fGx1:APA91bH-token_for_a_test";
 const NOW = Date.UTC(2026, 10, 6, 7, 0, 0);
+
+// The host signs its VAPID token with Date.now and the bridge reads `now`: one clock for both, whatever the wall time.
+beforeAll(() => setSystemTime(new Date(NOW)));
+afterAll(() => setSystemTime());
 
 async function vapidKey(): Promise<VapidKey> {
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
