@@ -17,6 +17,7 @@ import { registerIpc } from "./ipc.ts";
 import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
 import { noticesSupported, showNotice } from "./notice.ts";
+import { requestPairOffer } from "./pair-offer.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
@@ -160,6 +161,13 @@ function ready(): void {
   registerIpc({
     origin,
     startLocalHost: () => localHost.start(),
+    pairOffer: async (request) => {
+      try {
+        return await requestPairOffer(await localHost.start(), request);
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
     openExternal: (url) => shell.openExternal(url),
     setWindowBackground,
     closeWindow: () => liveWindow()?.close(),

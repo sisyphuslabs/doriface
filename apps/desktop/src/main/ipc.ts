@@ -7,6 +7,7 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(Channel.openExternal, (event, candidate: unknown) => handlers.openExternal(event, candidate));
   ipcMain.handle(Channel.openLink, (event, candidate: unknown) => handlers.openLink(event, candidate));
   ipcMain.handle(Channel.startLocalHost, (event) => handlers.startLocalHost(event));
+  ipcMain.handle(Channel.pairOffer, (event, candidate: unknown) => handlers.pairOffer(event, candidate));
   ipcMain.handle(Channel.setWindowBackground, (event, candidate: unknown) =>
     handlers.setWindowBackground(event, candidate),
   );

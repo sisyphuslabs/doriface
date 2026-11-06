@@ -10,6 +10,7 @@ import {
   isDesktopNotice,
   type LocalHostEndpoint,
   type LocalHostStartFailed,
+  type PairOfferAnswer,
   type UpdateReady,
 } from "../shared/bridge.ts";
 import { LocalHostStartError } from "./local-host.ts";
@@ -28,6 +29,8 @@ export interface IpcReplySender extends IpcSender {
 export interface IpcDeps {
   readonly origin: string;
   readonly startLocalHost: () => Promise<LocalHostEndpoint>;
+  /** This computer's pairing offer: `open` replaces a pending one, `state` reads what stands. */
+  readonly pairOffer: (request: "open" | "state") => Promise<PairOfferAnswer>;
   readonly openExternal: (url: string) => Promise<void>;
   readonly setWindowBackground: (color: string) => void;
   readonly closeWindow: () => void;
@@ -49,6 +52,11 @@ export interface IpcHandlers {
   /** A link a terminal printed: any host, but only http, https and mailto (`terminalLinkTarget`). */
   openLink(event: IpcSender, candidate: unknown): Promise<boolean>;
   startLocalHost(event: IpcSender): Promise<LocalHostEndpoint | LocalHostStartFailed>;
+  /**
+   * This computer's pairing offer; anything but the two known requests is refused rather than guessed at. `open`
+   * replaces a pending offer and `state` reads it.
+   */
+  pairOffer(event: IpcSender, candidate: unknown): Promise<PairOfferAnswer | null>;
   /** Paints the window and the next launch with the in-app theme's background; only `#rrggbb` is taken. */
   setWindowBackground(event: IpcSender, candidate: unknown): Promise<boolean>;
   /** Closes the window the way its Close Window item does, so the close events (and the saved placement) run. */
@@ -111,6 +119,15 @@ export function ipcHandlers(deps: IpcDeps): IpcHandlers {
       } catch (error) {
         if (error instanceof LocalHostStartError) return { failure: error.failure };
         throw error;
+      }
+    },
+    async pairOffer(event, candidate) {
+      assertAppFrame(event, deps.origin);
+      if (candidate !== "open" && candidate !== "state") return null;
+      try {
+        return await deps.pairOffer(candidate);
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
       }
     },
     async setWindowBackground(event, candidate) {

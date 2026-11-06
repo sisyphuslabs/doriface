@@ -30,6 +30,7 @@ const setup = (
   const painted: string[] = [];
   let starts = 0;
   let closes = 0;
+  const pairs: ("open" | "state")[] = [];
   const menus: ReadonlyMap<string, string>[] = [];
   const notices: DesktopNotice[] = [];
   const handlers = ipcHandlers({
@@ -45,6 +46,10 @@ const setup = (
     startLocalHost: async () => {
       starts += 1;
       return start();
+    },
+    pairOffer: async (request) => {
+      pairs.push(request);
+      return { state: "none" };
     },
     openExternal: async (url) => {
       opened.push(url);
@@ -75,6 +80,7 @@ const setup = (
     painted,
     menus,
     notices,
+    pairs,
     starts: () => starts,
     closes: () => closes,
     chooses: () => chooses,
@@ -100,6 +106,7 @@ describe("IPC sender gate", () => {
         expect(handlers.openExternal(event, "https://github.com/")).rejects.toThrow("refused IPC"),
         expect(handlers.openLink(event, "https://example.com/")).rejects.toThrow("refused IPC"),
         expect(handlers.startLocalHost(event)).rejects.toThrow("refused IPC"),
+        expect(handlers.pairOffer(event, "open")).rejects.toThrow("refused IPC"),
         expect(handlers.setWindowBackground(event, "#131518")).rejects.toThrow("refused IPC"),
         expect(handlers.closeWindow(event)).rejects.toThrow("refused IPC"),
         expect(handlers.setMenuKeys(event, { "tab.new": "super+t" })).rejects.toThrow("refused IPC"),
@@ -273,5 +280,17 @@ describe("IPC sender gate", () => {
       refused.map(() => false),
     );
     expect(opened).toEqual(["https://anywhere.example/a%20b", "http://plain.example/", "mailto:me@example.com"]);
+  });
+
+  test("the app origin can ask for this computer's pairing offer, and only for the two known requests", async () => {
+    const { handlers, pairs } = setup();
+    expect(await handlers.pairOffer(app, "open")).toEqual({ state: "none" });
+    expect(await handlers.pairOffer(app, "state")).toEqual({ state: "none" });
+    expect(pairs).toEqual(["open", "state"]);
+    const refused = ["pair", "", null, 7, { request: "open" }];
+    expect(await Promise.all(refused.map((candidate) => handlers.pairOffer(app, candidate)))).toEqual(
+      refused.map(() => null),
+    );
+    expect(pairs).toEqual(["open", "state"]);
   });
 });

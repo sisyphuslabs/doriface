@@ -34,6 +34,8 @@ export const Channel = {
   showNotice: "doriface:show-notice",
   /** Main to renderer: a notification was clicked; carries its terminal address, or null for a test. */
   noticeClicked: "doriface:notice-clicked",
+  /** Renderer to main: this computer's pairing offer (`open` for a fresh one, `state` for what stands). */
+  pairOffer: "doriface:pair-offer",
 } as const;
 
 /** The main process hands the app version to the sandboxed preload through this argv entry. */
@@ -69,6 +71,57 @@ export interface LocalHostEndpoint {
   readonly url: string;
   /** Offered as the `doriface.token.<token>` WebSocket subprotocol after `doriface.v1`. */
   readonly token: string;
+}
+
+/** One pairing offer for this computer, as the app shows it: what `doriface-host pair` prints, minus the QR drawing. */
+export interface PairOffer {
+  readonly code: string;
+  readonly link: string;
+  /** What opens `link`: a web page, or the doriface desktop app (no web app is hosted by default, #594). */
+  readonly opens: "web" | "desktop";
+  readonly hostId: string;
+  readonly fingerprint: string;
+  /** When the offer stops working, in ms since the epoch. */
+  readonly expiresAt: number;
+  /** Whether the relay holds the typed code's slot; the link and QR work either way. */
+  readonly slot: "pending" | "registered" | "unavailable";
+  /** False once the code was used up or has no relay slot. */
+  readonly codeUsable: boolean;
+}
+
+export interface PairedDevice {
+  readonly name: string;
+  readonly id: string;
+  readonly pairedAt: string;
+}
+
+/**
+ * What `pairOffer` answers: the offer to show, the device that used it, or why this app cannot ask its host
+ * (`unavailable`, which is never a transient offer state).
+ */
+export type PairOfferAnswer =
+  | { readonly state: "pending"; readonly offer: PairOffer }
+  | { readonly state: "paired"; readonly device: PairedDevice | null }
+  | { readonly state: "expired" }
+  | { readonly state: "none" }
+  | { readonly state: "unavailable"; readonly reason: string };
+
+export function isPairOfferAnswer(value: unknown): value is PairOfferAnswer {
+  if (typeof value !== "object" || value === null) return false;
+  const state: unknown = Reflect.get(value, "state");
+  if (state === "pending") {
+    const offer: unknown = Reflect.get(value, "offer");
+    return (
+      typeof offer === "object" &&
+      offer !== null &&
+      typeof Reflect.get(offer, "code") === "string" &&
+      typeof Reflect.get(offer, "link") === "string" &&
+      typeof Reflect.get(offer, "fingerprint") === "string" &&
+      typeof Reflect.get(offer, "expiresAt") === "number"
+    );
+  }
+  if (state === "unavailable") return typeof Reflect.get(value, "reason") === "string";
+  return state === "none" || state === "expired" || state === "paired";
 }
 
 /**
@@ -127,6 +180,11 @@ export interface DorifaceBridge {
   openLink(url: string): Promise<boolean>;
   /** Starts (or reuses) doriface-host + hc on this machine; resolves with why it did not start otherwise. */
   startLocalHost(): Promise<LocalHostEndpoint | LocalHostStartFailed>;
+  /**
+   * This computer's pairing offer: `open` replaces a pending one, `state` reads what stands. Never throws; a host that
+   * cannot answer is an `unavailable` answer.
+   */
+  pairOffer(request: "open" | "state"): Promise<PairOfferAnswer>;
   /** Calls `listener` with an app path to show, e.g. `/settings` from the app menu. */
   onNavigate(listener: (path: string) => void): void;
   /** Paints the window, now and at the next launch, with the in-app theme's background (`#rrggbb`). */

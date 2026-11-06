@@ -4,6 +4,7 @@ import {
   isHcInstallAnswer,
   isLocalHostEndpoint,
   isLocalHostStartFailed,
+  isPairOfferAnswer,
   isUpdateReady,
   parsePlatform,
   VERSION_ARG,
@@ -28,6 +29,11 @@ const bridge: DorifaceBridge = {
     if (isLocalHostStartFailed(answer)) return { failure: answer.failure };
     if (!isLocalHostEndpoint(answer)) throw new Error("the main process returned no local host endpoint");
     return { url: answer.url, token: answer.token };
+  },
+  async pairOffer(request) {
+    const answer: unknown = await ipcRenderer.invoke(Channel.pairOffer, request);
+    if (!isPairOfferAnswer(answer)) throw new Error("the main process returned no pairing offer");
+    return answer;
   },
   onNavigate(listener) {
     ipcRenderer.on(Channel.navigate, (_event, path: unknown) => {
