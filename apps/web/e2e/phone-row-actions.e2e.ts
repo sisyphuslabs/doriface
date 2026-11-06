@@ -1,4 +1,4 @@
-import { devices, type Page } from "@playwright/test";
+import { devices, type Locator, type Page } from "@playwright/test";
 import { endAgent, startAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 
@@ -12,12 +12,21 @@ const reached = (page: Page, points: readonly { readonly x: number; readonly y: 
     points,
   );
 
+/** The right-most point anything the row draws reaches: every child of the row's own button, the way it is laid out. */
+const drawnEdge = (row: Locator) =>
+  row.evaluate((button) => {
+    const rights = [...button.children].map((child) => child.getBoundingClientRect().right);
+    return rights.length === 0 ? Number.NEGATIVE_INFINITY : Math.max(...rights);
+  });
+
 test("an agent row's Pin and More are on the phone, and each takes a tap just inside 10 px of its drawn box", async ({
   page,
 }) => {
   const address = startAgent("host", "tapme", "idle");
-  // A detail far longer than the row: the text that used to run under the actions.
+  // The two shapes that used to be drawn under the actions: a detail far longer than the row, and a "Blocked" chip,
+  // which is not meta at all, so hiding the meta never moved it out from under the Pin.
   const long = startAgent("host", "longrow", "idle", "a-long-space-name-for-the-detail");
+  const blocked = startAgent("host", "blockrow", "blocked");
   try {
     await page.goto("/");
     const row = page.getByRole("button", { name: /tapme/ }).first();
@@ -58,16 +67,25 @@ test("an agent row's Pin and More are on the phone, and each takes a tap just in
       expect.soft(hits[index], `a tap 10 px ${side} of "${label}" reaches it`).toBe(label),
     );
 
-    // The row made room for the actions instead of covering what it draws: a long detail stops before them, and the
-    // row's meta stays, because nothing had to give way.
-    const longRow = page.getByRole("button", { name: /longrow/ }).first();
-    const longPin = page.getByRole("button", { name: "Pin longrow" });
-    await expect(longPin).toBeVisible();
-    const detail = await longRow.locator('[data-floor="detail"]').boundingBox();
-    const longPinBox = await longPin.boundingBox();
-    if (detail === null || longPinBox === null) throw new Error("no box");
-    expect(detail.x + detail.width, "the row's text stops before its actions").toBeLessThanOrEqual(longPinBox.x);
-    await expect(longRow.locator("[data-row-meta]").first()).toHaveCSS("visibility", "visible");
+    // The two shapes that used to be drawn under the actions: a detail far longer than the row, and the "Needs you" chip
+    // of a blocked agent, which is not meta at all, so hiding the meta never moved it out from under the Pin. The chip
+    // only draws outside the compact blocked group, so the blocked agent is pinned first: Pinned keeps it.
+    await page.getByRole("button", { name: "Pin blockrow" }).tap();
+    await expect(page.getByRole("button", { name: /blockrow/ }).first()).toContainText("Needs you");
+    const shapes = ["longrow", "blockrow"] as const;
+    await Promise.all(
+      shapes.map(async (name) => {
+        const other = page.getByRole("button", { name: new RegExp(`\\b${name}\\b`) }).first();
+        await expect(other).toBeVisible();
+        const [edge, pinBox] = await Promise.all([
+          drawnEdge(other),
+          page.getByRole("button", { name: `Pin ${name}` }).boundingBox(),
+        ]);
+        if (pinBox === null) throw new Error(`no box for ${name}`);
+        expect(edge, `${name}: nothing the row draws runs under its actions`).toBeLessThanOrEqual(pinBox.x);
+        await expect(other.locator("[data-row-meta]").first()).toHaveCSS("visibility", "visible");
+      }),
+    );
 
     // A space row's meta is its own signal: its status dot and tab count stay in its name, and its "..." waits for a hover.
     await expect(page.getByRole("button", { name: /\d+ tabs/ }).first()).toBeVisible();
@@ -78,5 +96,6 @@ test("an agent row's Pin and More are on the phone, and each takes a tap just in
   } finally {
     endAgent("host", address);
     endAgent("host", long);
+    endAgent("host", blocked);
   }
 });
