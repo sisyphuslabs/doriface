@@ -73,11 +73,12 @@ function setupLive() {
       box.style.setProperty("--scale", String(entry.contentRect.width / width));
     }
   });
-  // The mockups carry React and the app's stylesheet: start loading one only when it comes within a screen of view.
+  // The mockups carry React and the app's stylesheet. They start loading after the page itself has loaded and its
+  // headline painted, and a frame the layout hides (the desktop window on phones) never loads.
   const load = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
+        if (!entry.isIntersecting || entry.target.offsetParent === null) continue;
         const frame = entry.target.querySelector("iframe");
         frame.src = frame.dataset.src;
         load.unobserve(entry.target);
@@ -85,9 +86,12 @@ function setupLive() {
     },
     { rootMargin: "50% 0px" },
   );
-  for (const box of document.querySelectorAll(".live")) {
+  const boxes = [...document.querySelectorAll(".live")];
+  const start = () => requestIdleCallback(() => boxes.forEach((box) => load.observe(box)), { timeout: 1500 });
+  if (document.readyState === "complete") start();
+  else addEventListener("load", start, { once: true });
+  for (const box of boxes) {
     resize.observe(box);
-    load.observe(box);
     const frame = box.querySelector("iframe");
     frame.addEventListener("load", () => postTheme(frame, document.documentElement.dataset.theme ?? "system"));
   }
@@ -654,16 +658,16 @@ function setupFleet() {
     if (!animate && targets.flow) {
       // the still frame parks two sealed records on their way through the relay
       packets = [
-        { from: "phone", to: "mini", start: -1, dur: 1 },
-        { from: "laptop", to: "cloud", start: -1, dur: 1 },
+        { from: "phone", to: "mini" },
+        { from: "laptop", to: "cloud" },
       ].map((p, i) => Object.assign(p, { parked: i ? 0.3 : 0.7, start: now, dur: Infinity }));
     }
   };
 
   const routesFor = () => {
-    const targets = FLEET_SCENES[scene];
     return FLEET_ROUTES.filter(
-      ([a, b]) => targets[a][0] && targets[b][0] && machines.get(a).cut.to < 0.5 && machines.get(b).cut.to < 0.5,
+      // A machine carries traffic once it has joined (its shown target) and until its revoke lands (its cut target).
+      ([a, b]) => [a, b].every((id) => machines.get(id).shown.to > 0.5 && machines.get(id).cut.to < 0.5),
     );
   };
 

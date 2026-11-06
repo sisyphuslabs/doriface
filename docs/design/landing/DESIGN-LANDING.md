@@ -64,7 +64,7 @@ Every headline is two-tone: a plain statement in `--ink`, then the consequence i
 
 4 px base: `--space-1..10` = 4, 8, 12, 16, 24, 32, 48, 64, 96, 144 px. Content width 1200 px plus a fluid gutter (`clamp(20px, 4vw, 40px)`). Sections are separated by 144 px (96 px under 760 px).
 
-Breakpoints: 640 (two-column lists; the mesh stage and the app section switch to their phone layouts), 760 (the stats tighten, the section index and the pairing output go to one column, and the nav hides Open the app), 860 (the nav hides its section links below this width), 900 (the hero scene draws its wide version from here and its tall one below; three-column cards, the relay pipe in one row, pairing side by side, the mesh log beside the stage), 1080 (hero lede and actions side by side).
+Breakpoints: 640 (two-column lists; the mesh canvas and the app frames switch to their phone layouts), 760 (the stats tighten, the section index and the pairing output go to one column, and the nav hides Open the app), 860 (the nav hides its section links below this width), 900 (the hero scene draws its wide version from here and its tall one below; three-column cards, the relay pipe in one row, pairing side by side, the mesh log beside the stage), 1080 (hero lede and actions side by side).
 
 | Radius          | Value  | Use                              |
 | --------------- | ------ | -------------------------------- |
@@ -100,7 +100,7 @@ Scenes:
 - Relay pipe: the phone types a command, the wire carries ciphertext chips both ways, the server prints the result.
 - Pairing: the QR is scanned, the fingerprint groups are compared one by one, then turn green.
 
-Every loop runs only while its scene is on screen and the tab is visible (IntersectionObserver plus `visibilitychange`); SMIL scenes are paused with `pauseAnimations()`. With `prefers-reduced-motion: reduce`, no loop starts, packets and scan lines are hidden, reveals show at once, and each scene shows a complete still frame: the pipe with its command and result, the fingerprint matched, the mesh with five members.
+Every loop runs only while its scene is on screen and the tab is visible (IntersectionObserver plus `visibilitychange`); With `prefers-reduced-motion: reduce`, no loop starts, packets and scan lines are hidden, reveals show at once, and each scene shows a complete still frame: the pipe with its command and result, the fingerprint matched, the mesh with five members.
 
 ## 5. Components
 
@@ -118,7 +118,7 @@ Every loop runs only while its scene is on screen and the tab is visible (Inters
 | Chip             | `.chip`                                    | pill, Timeless Sans 12 px, leading dot                                               | none                                                                                           |
 | Section index    | `.index`                                   | numbered rows, title, description (from 640 px)                                      | hover ink                                                                                      |
 | Relay wire       | `.wire`                                    | dashed amber container, two lanes of ciphertext chips (opposite directions), caption | marquee                                                                                        |
-| Mesh stage       | `.mesh`                                    | stage SVG, step list                                                                 | step highlight, danger step in red wash                                                        |
+| Mesh canvas      | `.fleet`                                   | step buttons, one canvas, caption                                                    | scene change, signed-record fan-out                                                            |
 | Footer           | `.footer`                                  | wordmark, four links                                                                 | hover ink                                                                                      |
 
 ### Live mockups
@@ -127,13 +127,13 @@ The window and phone in the hero are `<iframe>`s of `/mockup/?view=desktop` (128
 
 - Isolation: the iframe keeps Tailwind's preflight and the app's tokens off the landing, and the landing's styles off the app.
 - Size: `main.js` scales each frame to its box with a ResizeObserver (`--scale`), so the app keeps its own pixel layout at every width. Below 640 px only the phone is shown.
-- Loading: an iframe gets its `src` only when its box comes within half a screen of view (IntersectionObserver), so the 150 kB (gzip) mockup bundle never competes with the hero.
+- Loading: the frames sit in the hero, so each iframe gets its `src` at page start (the IntersectionObserver with a half-screen margin fires at once). The headline text stays the LCP element, and the 150 kB (gzip) mockup bundle loads in the frames after it.
 - Theme: the mockup follows `prefers-color-scheme` like the page; when the switch pins Light or Dark, `main.js` posts `{ theme }` to each frame (same origin only), which pins the app's Day or Night preset.
 - Inert: the mockup's body is `inert` and the iframe has `tabindex="-1"`, so it takes no focus or input; each iframe has a `title` saying it is the app drawn with sample data.
 
 ### Performance and headers
 
-Measured with Lighthouse 12 on the built page served with `public/_headers`' CSP: after the renewal: mobile 96-97 performance (LCP 2.6 s simulated, CLS 0, TBT 0-10 ms, 297 KiB total), desktop 100 (LCP 0.6 s); accessibility, best practices and SEO 100 on both. What keeps it there: the hero has no scroll reveal (its text is the LCP element), Timeless Sans and JetBrains Mono are preloaded so the swap moves nothing, and the mockups load lazily. `public/_headers` sets the CSP (`script-src 'self'`; the pre-paint theme script is the external `theme-init.js`), `X-Frame-Options: SAMEORIGIN` so the page can frame its own mockups, and long caching for hashed `/assets/*`. `og.png` and `robots.txt`/`sitemap.xml` come from #771.
+Measured with Lighthouse 12 on the built page served with `public/_headers`' CSP: after the renewal: mobile 96-97 performance (LCP 2.6 s simulated, CLS 0, TBT 0-10 ms, 297 KiB total), desktop 100 (LCP 0.6 s); accessibility, best practices and SEO 100 on both. What keeps it there: the hero has no scroll reveal (its text is the LCP element), Timeless Sans and JetBrains Mono are preloaded so the swap moves nothing, and the mockup frames load after the headline paints. `public/_headers` sets the CSP (`script-src 'self'`; the pre-paint theme script is the external `theme-init.js`), `X-Frame-Options: SAMEORIGIN` so the page can frame its own mockups, and long caching for hashed `/assets/*`. `og.png` and `robots.txt`/`sitemap.xml` come from #771.
 
 ## 6. Claims and their sources
 
