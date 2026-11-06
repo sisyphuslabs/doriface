@@ -14,6 +14,12 @@ const SEQUENCES: Readonly<Record<string, string>> = {
   down: "\u001b[B",
   right: "\u001b[C",
   left: "\u001b[D",
+  // xterm's own keys, so a key the person adds sends what a hardware keyboard sends.
+  home: "\u001b[H",
+  end: "\u001b[F",
+  pageup: "\u001b[5~",
+  pagedown: "\u001b[6~",
+  delete: "\u001b[3~",
   tilde: "~",
   pipe: "|",
   slash: "/",
