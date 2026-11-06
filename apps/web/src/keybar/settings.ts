@@ -64,6 +64,16 @@ function customKey(value: unknown): CustomKey | null {
   return { id, label, input, bytes };
 }
 
+/** Two favorites with one id would break removal, renaming and the list's React keys, so a stored duplicate is dropped. */
+function distinctFavorites(entries: readonly CustomKey[]): readonly CustomKey[] {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    if (seen.has(entry.id)) return false;
+    seen.add(entry.id);
+    return true;
+  });
+}
+
 /**
  * Reads a stored document. Anything unreadable falls back to the defaults, and a field that is missing takes its
  * default while a field that is present but empty stays empty: a person who removed every key keeps an empty bar.
@@ -83,7 +93,7 @@ export function reviveSettings(stored: unknown): KeyBarSettings {
     favorites:
       favorites === null || !Array.isArray(favorites)
         ? []
-        : favorites.map(customKey).filter((entry): entry is CustomKey => entry !== null),
+        : distinctFavorites(favorites.map(customKey).filter((entry): entry is CustomKey => entry !== null)),
   };
 }
 

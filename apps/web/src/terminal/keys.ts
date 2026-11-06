@@ -37,11 +37,43 @@ export function keySequence(id: string): string | undefined {
   return SEQUENCES[id];
 }
 
-function control(char: string): string {
+export function control(char: string): string {
   if (char === " ") return "\u0000";
   if (char === "?") return "\u007f";
   const code = char.toUpperCase().charCodeAt(0);
   return code >= 0x40 && code <= 0x5f ? String.fromCharCode(code & 0x1f) : char;
+}
+
+const ESC = "\u001b";
+
+export interface SequenceModifiers {
+  readonly ctrl: boolean;
+  readonly shift: boolean;
+  readonly meta: boolean;
+}
+
+/** xterm's modifier parameter: 1 + Shift 1 + Alt 2 + Ctrl 4. */
+function sequenceParameter(modifiers: SequenceModifiers): number {
+  return 1 + (modifiers.shift ? 1 : 0) + (modifiers.meta ? 2 : 0) + (modifiers.ctrl ? 4 : 0);
+}
+
+/**
+ * The modified form of a key whose plain bytes are an xterm sequence: `\e[5~` with Ctrl is `\e[5;5~`, `\eOP` with Shift
+ * is `\e[1;2P`. Null for anything that is not a sequence, so a caller falls back to typing it.
+ */
+export function modifiedSequence(bytes: string, modifiers: SequenceModifiers): string | null {
+  if (!bytes.startsWith(ESC)) return null;
+  const rest = bytes.slice(1);
+  const final = rest.slice(-1);
+  if (rest.startsWith("[")) {
+    const body = rest.slice(1, -1);
+    if (!/^[A-Za-z~]$/u.test(final) || !/^\d*$/u.test(body)) return null;
+    return `${ESC}[${body === "" ? "1" : body};${sequenceParameter(modifiers)}${final}`;
+  }
+  if (rest.startsWith("O") && rest.length === 2 && /^[A-Z]$/u.test(final)) {
+    return `${ESC}[1;${sequenceParameter(modifiers)}${final}`;
+  }
+  return null;
 }
 
 /**
@@ -57,12 +89,8 @@ export function applyModifiers(typed: string, latched: ReadonlySet<string>, host
   const data = ctrl || meta ? (twoSetKey(typed) ?? typed) : typed;
   const chord = host === "mac" ? latched.has("cmd") : ctrl && shift;
   if (chord && data.toLowerCase() === "v") return { kind: "paste" };
-  const arrow = data.length === 3 && data.startsWith("\u001b[") && "ABCD".includes(data.charAt(2));
-  if (arrow) {
-    // xterm's modifier parameter: 1 + shift 1 + alt 2 + ctrl 4.
-    const parameter = 1 + (shift ? 1 : 0) + (meta ? 2 : 0) + (ctrl ? 4 : 0);
-    return { kind: "write", data: parameter === 1 ? data : `\u001b[1;${parameter}${data.charAt(2)}` };
-  }
+  const sequence = modifiedSequence(data, { ctrl, shift, meta });
+  if (sequence !== null) return { kind: "write", data: ctrl || shift || meta ? sequence : data };
   let out = data;
   if (out === "\t" && shift) out = "\u001b[Z";
   else if (out.length === 1) {

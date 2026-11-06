@@ -108,7 +108,8 @@ export function removeFavorite(settings: KeyBarSettings, id: string): KeyBarSett
 
 export function renameFavorite(settings: KeyBarSettings, id: string, label: string): KeyBarSettings {
   const trimmed = label.trim();
-  if (trimmed === "") return settings;
+  const current = settings.favorites.find((key) => key.id === id);
+  if (trimmed === "" || current === undefined || current.label === trimmed) return settings;
   return {
     ...settings,
     favorites: settings.favorites.map((key) => (key.id === id ? { ...key, label: trimmed } : key)),
@@ -126,7 +127,10 @@ export function moveFavorite(settings: KeyBarSettings, id: string, to: number): 
 
 /** Resets the bar's own keys to the ones a new device starts with, leaving packs and Favorites alone. */
 export function resetKeys(settings: KeyBarSettings): KeyBarSettings {
-  return { ...settings, keys: DEFAULT_KEY_IDS };
+  const same =
+    settings.keys.length === DEFAULT_KEY_IDS.length &&
+    settings.keys.every((id, index) => DEFAULT_KEY_IDS[index] === id);
+  return same ? settings : { ...settings, keys: DEFAULT_KEY_IDS };
 }
 
 export { KEYBAR_VERSION };

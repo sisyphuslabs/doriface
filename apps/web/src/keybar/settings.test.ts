@@ -154,6 +154,28 @@ test("Favorites reorder, rename and remove", () => {
   expect(removeFavorite(settings, "nope")).toBe(settings);
 });
 
+test("two favorites with one id revive as one, so removal and renaming still name a single key", () => {
+  const revived = reviveSettings({
+    version: 1,
+    favorites: [
+      { id: "a", label: "First", input: "Ctrl+C", bytes: "\u0003" },
+      { id: "a", label: "Second", input: "Ctrl+X", bytes: "\u0018" },
+    ],
+  });
+  expect(revived.favorites.map((entry) => entry.label)).toEqual(["First"]);
+});
+
+test("renaming to the same label or an unknown key changes nothing", () => {
+  const settings = withFavorites(defaultSettings(), "a");
+  expect(renameFavorite(settings, "a", " Interrupt ")).toBe(settings);
+  expect(renameFavorite(settings, "nope", "Other")).toBe(settings);
+});
+
+test("resetting keys that are already the defaults changes nothing", () => {
+  const settings = defaultSettings();
+  expect(resetKeys(settings)).toBe(settings);
+});
+
 test("resetting the keys leaves packs and Favorites alone", () => {
   const settings = withFavorites(removeKey(defaultSettings(), "esc"), "a");
   const reset = resetKeys(settings);

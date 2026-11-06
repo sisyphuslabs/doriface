@@ -71,6 +71,25 @@ test("an empty key, a dangling modifier and a word after a modifier are refused 
   expect(reason("Hyper+X")).toContain("is not a modifier");
 });
 
+test.each(["Ctrl", "Control", "Shift", "Alt", "Option", "Cmd"])(
+  "the bare word %p is refused rather than sent as text",
+  (input) => {
+    expect(reason(input)).toBe(`"${input}" on its own sends nothing; add the key it presses, e.g. ${input}+X.`);
+  },
+);
+
+test.each(["1+1", "a + b", "C++", "x + y"])("text that contains a plus sign sends that text", (input) => {
+  expect(key(input).bytes).toBe(input);
+});
+
+test("a modifier that would change nothing is refused instead of dropped", () => {
+  expect(reason("Ctrl+Shift+Tab")).toBe("Ctrl does not change Tab.");
+  expect(reason("Ctrl+Esc")).toBe("Ctrl does not change Esc.");
+  expect(reason("Ctrl++")).toBe("Ctrl does not change +.");
+  expect(reason("Ctrl+git status")).toContain("is not a key");
+  expect(reason("Shift+7")).toBe("Shift does not change 7.");
+});
+
 test("text longer than a key may send is refused rather than truncated", () => {
   const long = "a".repeat(MAX_TEXT_BYTES + 1);
   expect(reason(long)).toBe(`A key sends at most ${MAX_TEXT_BYTES} characters.`);
