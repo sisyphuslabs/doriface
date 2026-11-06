@@ -32,16 +32,26 @@ describe("the mesh file format guard", () => {
     expect(meshFileJson(parsed).version).toBe(3);
   });
 
-  test("a member written by a newer reader is not read back as something else", () => {
-    const member = { signPub: "s", hostId: "h", noisePub: "n", name: "box", hcId: "c", kind: "client" };
-    const file = parseMeshFile({
+  test("a member's kind survives a persisted index, and an index that predates kinds reads as a machine", () => {
+    const client = { signPub: "s", hostId: "h", noisePub: "n", name: "phone", hcId: "c", kind: "client" };
+    const withKind = parseMeshFile({
       version: 3,
       meshId: "m",
       generation: 1,
       self: { n: 1 },
       records: [record],
-      index: { generation: 1, members: [member], overCap: [], revoked: [], superseded: [], named: [] },
+      index: { generation: 1, members: [client], overCap: [], revoked: [], superseded: [], named: [] },
     });
-    expect(file.index?.members[0]).not.toHaveProperty("kind");
+    expect(withKind.index?.members[0]?.kind).toBe("client");
+    const legacy = { signPub: "s", hostId: "h", noisePub: "n", name: "box", hcId: "c" };
+    const older = parseMeshFile({
+      version: 2,
+      meshId: "m",
+      generation: 1,
+      self: { n: 1 },
+      records: [record],
+      index: { generation: 1, members: [legacy], overCap: [], revoked: [], superseded: [], named: [] },
+    });
+    expect(older.index?.members[0]?.kind).toBe("machine");
   });
 });

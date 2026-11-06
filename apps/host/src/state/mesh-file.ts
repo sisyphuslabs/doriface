@@ -43,11 +43,13 @@ const strings = (value: unknown): value is readonly string[] =>
 
 function memberEntry(value: unknown): MemberEntry | undefined {
   if (!isRecord(value)) return undefined;
-  const { signPub, hostId, noisePub, devicePub, name, hcId } = value;
+  const { signPub, hostId, noisePub, devicePub, name, hcId, kind } = value;
   if (typeof signPub !== "string" || typeof hostId !== "string" || typeof noisePub !== "string") return undefined;
   if (typeof name !== "string" || typeof hcId !== "string") return undefined;
   if (devicePub !== undefined && typeof devicePub !== "string") return undefined;
-  return { signPub, hostId, noisePub, devicePub, name, hcId };
+  if (kind !== undefined && kind !== "machine" && kind !== "client") return undefined;
+  // An index written before the kind existed says machine, which is all those members could have been.
+  return { signPub, hostId, noisePub, devicePub, name, hcId, kind: kind === "client" ? "client" : "machine" };
 }
 
 function revokedEntry(value: unknown): RevokedEntry | undefined {
