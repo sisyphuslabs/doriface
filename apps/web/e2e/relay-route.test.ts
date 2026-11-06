@@ -70,7 +70,7 @@ class TestClock implements DeadlineClock {
 }
 
 test("a pairing link asked for long after the start gets its own deadline, not the start's (#502)", async () => {
-  // The test's clock runs the deadlines, so how long the host takes to start or to answer cannot spend them (#726).
+  // The test's clock runs the deadlines, so how long the host takes to start or to answer cannot spend them (#780).
   const clock = new TestClock();
   const host = await startFakeRelayHost({ machine: true, stageDeadlineMs: 1_500, clock });
   try {

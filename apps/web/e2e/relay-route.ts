@@ -274,7 +274,7 @@ async function startDriver(options: Startup): Promise<FakeRelayHost> {
  * `stageDeadlineFrom`: the stage whose report starts that deadline, for a test that proves which stage a blocked start
  * names: the test then decides where the deadline lands, not the host's speed (#692).
  * `clock`: what runs those deadlines, for a test that proves when a wait's deadline is armed: on a clock the test moves,
- * that is decided by the test, not by how fast the host answers (#726).
+ * that is decided by the test, not by how fast the host answers (#780).
  */
 export function startFakeRelayHost(
   options: {

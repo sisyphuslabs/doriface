@@ -310,7 +310,7 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
  * pid file is written under another name and moved into place, so a connect-* name only appears with its pid in it
  * (`echo > name` creates the file before it writes, and an empty one read as pid 0, #365). Each connect then writes its
  * pid to a FIFO this test holds open: `started` resolves as connects start, from their own lines, where a watch on the
- * directory reports only what happens once the watch is live, which the test cannot see (#726).
+ * directory reports only what happens once the watch is live, which the test cannot see (#780).
  */
 function silentHc(dir: string) {
   const hc = join(dir, "hc");
@@ -354,7 +354,7 @@ describe("the write of a host's OS", () => {
         hc: silent.hc,
         platform: "darwin",
         // The hc never answers, so each of the host's own connects would end at its handshake deadline: this test is
-        // about stop ending them, so stop is the only thing that may (#726).
+        // about stop ending them, so stop is the only thing that may (#780).
         hcHandshakeTimeoutMs: Number.POSITIVE_INFINITY,
         log: () => {},
       });
