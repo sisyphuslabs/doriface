@@ -22,6 +22,8 @@ export type Held = ReadonlyMap<string, number>;
 export interface Before {
   readonly views: readonly MachineView[];
   readonly at: number | undefined;
+  /** The page's first machine.list answer: when it was read and which machines it listed; none before it. */
+  readonly first?: { readonly at: number; readonly ids: ReadonlySet<string> };
 }
 
 /**
@@ -32,7 +34,11 @@ export interface Before {
  * clock, so it is kept between the read before (or one grace back, on a first read) and `now`: no host clock can
  * lengthen a hold, and a machine that went down while the page was hidden is not held for a drop that is older than its
  * grace. A machine that already read down at the read before is never held anew, so a grace that ended does not start
- * again. Anything else (connected, needs_login, down past the grace, gone from the list) is not held.
+ * again. A machine the page's first read listed that has been down since (it read connecting, and hc names its drop
+ * only once it reads unreachable) is held from that drop, kept no earlier than one grace before the first read and
+ * never later than `now`: a page opened mid-blip holds it for what is left of its grace, and since hc's `since_ms`
+ * stays the drop time, that hold ends once and does not start again. Anything else (connected, needs_login, down past
+ * the grace, gone from the list) is not held.
  */
 export function stepHeld(held: Held, before: Before, list: readonly MachineView[], now: number): Map<string, number> {
   const seen = new Map(before.views.map((view) => [view.id, view.state]));
@@ -43,7 +49,11 @@ export function stepHeld(held: Held, before: Before, list: readonly MachineView[
     const was = seen.get(view.id);
     const fresh = was === "connected" || (before.at === undefined && view.since_ms != null);
     const earliest = was === "connected" && before.at !== undefined ? before.at : now - OFFLINE_GRACE_MS;
-    const since = kept ?? (fresh ? Math.min(now, Math.max(earliest, view.since_ms ?? now)) : undefined);
+    const opened =
+      before.first !== undefined && before.first.ids.has(view.id) && view.since_ms != null && view.since_ms <= now
+        ? Math.max(view.since_ms, before.first.at - OFFLINE_GRACE_MS)
+        : undefined;
+    const since = kept ?? (fresh ? Math.min(now, Math.max(earliest, view.since_ms ?? now)) : opened);
     if (since !== undefined && now - since < OFFLINE_GRACE_MS) next.set(view.id, since);
   }
   return next;

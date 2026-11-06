@@ -78,12 +78,31 @@ test("needs login shows at once, and a machine long down on the page's first rea
   expect(shown(asleep, first, 1_000 + 3_600_000)).toEqual([["air", "unreachable"]]);
 });
 
-test("a machine never seen connected is held only on the page's first read, and only when hc says when it dropped", () => {
+test("a machine never seen connected is held only on the first read, and only when hc says when it dropped", () => {
   const later = { views: [machine("rack", "connected")], at: 90_000 };
   const added = [machine("rack", "connected"), machine("new", "connecting")];
   expect(stepHeld(NONE, later, added, 100_000).size).toBe(0);
   expect(stepHeld(NONE, later, [machine("new", "unreachable", 99_000)], 100_000).size).toBe(0);
   expect(stepHeld(NONE, FIRST, [machine("rack", "connecting")], 100_000).size).toBe(0);
+});
+
+test("a page opened while a line redials holds that machine once hc names its drop, and only for what is left", () => {
+  const opening = [machine("air", "connecting")];
+  const first = { at: 100_000, ids: new Set(["id-air"]) };
+  expect(stepHeld(NONE, FIRST, opening, 100_000).size).toBe(0);
+  const named = [machine("air", "unreachable", 98_000)];
+  const held = stepHeld(NONE, { views: opening, at: 100_000, first }, named, 110_000);
+  expect(held.get("id-air")).toBe(98_000);
+  expect(shown(named, held, 110_000)).toEqual([["air", "connected"]]);
+  const later = { views: named, at: 98_000 + OFFLINE_GRACE_MS, first };
+  expect(stepHeld(held, later, named, 98_000 + OFFLINE_GRACE_MS).size).toBe(0);
+  expect(stepHeld(NONE, later, named, 98_000 + OFFLINE_GRACE_MS + 10_000).size).toBe(0);
+  const ahead = [machine("air", "unreachable", 500_000)];
+  expect(stepHeld(NONE, { views: opening, at: 100_000, first }, ahead, 110_000).size).toBe(0);
+  const asleep = [machine("air", "unreachable", 1_000)];
+  expect(stepHeld(NONE, { views: opening, at: 100_000, first }, asleep, 110_000).size).toBe(0);
+  const added = [machine("new", "unreachable", 105_000)];
+  expect(stepHeld(NONE, { views: opening, at: 100_000, first }, added, 110_000).size).toBe(0);
 });
 
 test("a page opened mid-blip holds a machine only for what is left of the grace after hc's own since", () => {
