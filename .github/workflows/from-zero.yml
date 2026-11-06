@@ -1,0 +1,50 @@
+name: From zero
+
+# #672: CONTRIBUTING.md's "From zero" path, run exactly as written on a clean runner with no secrets. Only this job's
+# own runner (tests/ci/from-zero.ts) uses the setup-bun below; the guide runs with a fresh HOME, a stock PATH and no
+# credentials, installs Bun and herdr-core itself, clones the public repository and runs `bun run check` and the web
+# e2e. A step that breaks, or that needs anything private, fails the job.
+#
+# It runs after every merge to dev and once a day (a public download the guide uses can move without a commit here),
+# and on a pull request that changes the guide, its runner or what the guide installs from.
+on:
+  push:
+    branches: [dev]
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - CONTRIBUTING.md
+      - .github/workflows/from-zero.yml
+      - tests/ci/from-zero.ts
+      - package.json
+      - bun.lock
+      - bunfig.toml
+      - tests/relay/private-relay.ts
+      - apps/web/e2e/private-relay.ts
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  contributor:
+    name: From zero (contributor guide, no secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      # Only for the guide and its runner; the guide clones the repository again, anonymously, from the public URL.
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Follow CONTRIBUTING.md from zero
+        run: bun tests/ci/from-zero.ts CONTRIBUTING.md
+        env:
+          FROM_ZERO_REV: ${{ github.sha }}

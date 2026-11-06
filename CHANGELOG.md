@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Contributing from zero
+
+- CONTRIBUTING.md has a from-zero path for a new contributor: install Bun and herdr-core, clone, `bun run check` and the web e2e, with nothing private. The `From zero` workflow runs it exactly as written on a clean runner with no secrets, after every merge to dev and daily, and every suite that needs the private relay says why it skipped in one line. (#672)
+
 ### Answering agents from the card
 
 - The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
