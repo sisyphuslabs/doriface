@@ -22,16 +22,16 @@ const EVENT_ROWS: Readonly<Record<NoticeEvent, { readonly title: string; readonl
 
 const UNSUPPORTED: Readonly<Record<Exclude<PushView["support"], "supported">, { title: string; body: string }>> = {
   "install-first": {
-    title: "Add doriface to your Home Screen first",
+    title: "Add Doriterm to your Home Screen first",
     body: "On iPhone and iPad, notifications work in the installed app. In Safari, tap Share, then Add to Home Screen, and turn notifications on from there.",
   },
   "desktop-app": {
     title: "This computer cannot show notifications",
-    body: "doriface found no notification service on this system. On Linux, start your desktop's notification daemon, then come back here.",
+    body: "Doriterm found no notification service on this system. On Linux, start your desktop's notification daemon, then come back here.",
   },
   unsupported: {
-    title: "This browser cannot show notifications from doriface",
-    body: "Open doriface in a current Chrome, Edge, Firefox or Safari to turn them on.",
+    title: "This browser cannot show notifications from Doriterm",
+    body: "Open Doriterm in a current Chrome, Edge, Firefox or Safari to turn them on.",
   },
 };
 
@@ -41,7 +41,7 @@ const settings: NoticeSettings = desktopNotices ?? pushSettings;
 const desktop = desktopNotices !== null;
 
 const REMEDY =
-  "Allow doriface in your system's notification settings (on macOS: System Settings > Notifications > doriface), then check again.";
+  "Allow Doriterm in your system's notification settings (on macOS: System Settings > Notifications > Doriterm), then check again.";
 
 /** The agents already in a wanted state when the feed was read: the trigger announces changes from now on, never these. */
 function waitingText(view: PushView): string {
@@ -53,28 +53,28 @@ function waitingText(view: PushView): string {
 
 function desktopStatusText(view: PushView): string {
   if (view.permission === "denied")
-    return `Blocked by this computer: it does not show doriface's notifications. ${REMEDY}`;
+    return `Blocked by this computer: it does not show Doriterm's notifications. ${REMEDY}`;
   if (!view.on) {
     return view.permission === "default"
-      ? "Hear when an agent asks for input or permission, finishes, or stops with an error, while doriface runs. This computer asks whether to allow them when the first one is shown."
-      : "Hear when an agent asks for input or permission, finishes, or stops with an error, while doriface runs.";
+      ? "Hear when an agent asks for input or permission, finishes, or stops with an error, while Doriterm runs. This computer asks whether to allow them when the first one is shown."
+      : "Hear when an agent asks for input or permission, finishes, or stops with an error, while Doriterm runs.";
   }
   const shown =
     view.permission === "granted"
-      ? "On. This computer allows doriface's notifications; you hear about agents while doriface runs, even with its window in the background."
+      ? "On. This computer allows Doriterm's notifications; you hear about agents while Doriterm runs, even with its window in the background."
       : view.permission === "default"
-        ? "On. This computer asks whether to allow doriface's notifications when the first one is shown."
-        : `On. This computer decides whether doriface's notifications appear. If none do, ${REMEDY.charAt(0).toLowerCase()}${REMEDY.slice(1)}`;
+        ? "On. This computer asks whether to allow Doriterm's notifications when the first one is shown."
+        : `On. This computer decides whether Doriterm's notifications appear. If none do, ${REMEDY.charAt(0).toLowerCase()}${REMEDY.slice(1)}`;
   return shown + waitingText(view);
 }
 
 function statusText(view: PushView): string {
   if (desktop) return desktopStatusText(view);
-  if (view.on) return "On. You hear about agents even with doriface closed.";
+  if (view.on) return "On. You hear about agents even with Doriterm closed.";
   if (view.permission === "denied") {
     return "Blocked for this site. Allow notifications in this browser's site settings, then come back here.";
   }
-  return "Hear when an agent asks for input or permission, finishes, or stops with an error, even with doriface closed.";
+  return "Hear when an agent asks for input or permission, finishes, or stops with an error, even with Doriterm closed.";
 }
 
 function MachineMutes({
