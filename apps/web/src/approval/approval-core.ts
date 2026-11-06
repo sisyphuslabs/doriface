@@ -11,6 +11,9 @@ export function approvalCore(connection: HcConnection): ApprovalCore {
     keys: async (address, keys) => {
       await connection.call("terminal.keys", { terminal: address, keys });
     },
+    send: async (address, text) => {
+      await connection.call("terminal.send", { terminal: address, text, force: true });
+    },
     doc: (name, on) => connection.call("doc.get", { name, ...where(on) }),
     setDoc: async (name, on, value, version) => {
       try {
