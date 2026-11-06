@@ -12,7 +12,9 @@ const reached = (page: Page, points: readonly { readonly x: number; readonly y: 
     points,
   );
 
-test("an agent row's Pin and More are on the phone, and each takes a tap 10 px past its drawn box", async ({ page }) => {
+test("an agent row's Pin and More are on the phone, and each takes a tap 10 px past its drawn box", async ({
+  page,
+}) => {
   const address = startAgent("host", "tapme", "idle");
   try {
     await page.goto("/");
