@@ -63,6 +63,20 @@ test("a sidebar that throws says so in the sidebar while the terminal keeps taki
 test.describe("with clipboard access", () => {
   test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
+  test("a region's notice copies its own details, as the crash screen does", async ({ page }) => {
+    await page.goto("/");
+    const terminal = await openNewTerminal(page);
+    const address = await terminal.getAttribute("data-terminal");
+    await crashOnLoad(page, `pane:${address}`);
+    await page.reload();
+    const notice = page.getByRole("alert").filter({ hasText: "This terminal could not be drawn" });
+    await notice.getByRole("button", { name: "Copy details" }).click();
+    await expect(notice.getByRole("button", { name: "Copied" })).toBeVisible();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain(`Error: crash probe: pane:${address}`);
+    await stopCrash(page);
+  });
+
   test("an error outside every region shows the crash screen; Copy details copies it and Reload brings the app back", async ({
     page,
   }) => {

@@ -99,17 +99,24 @@ export function SettingsRoute() {
       </nav>
       <ScrollArea slot="settings-body" className="flex-1">
         <div className="flex max-w-2xl flex-col gap-8 px-4 py-6 md:px-8">
+          {/* The Update row fails alone: a throw there must not take every section with it. */}
+          {update === null ? null : (
+            <RegionBoundary
+              region="settings-update"
+              title="The update row could not be drawn"
+              detail="The sections below still work."
+            >
+              <Group title="Update">
+                <UpdateRow update={update} />
+              </Group>
+            </RegionBoundary>
+          )}
           <RegionBoundary
             key={section}
             region="settings-section"
             title="This section could not be drawn"
             detail="The other sections still open from the list."
           >
-            {update === null ? null : (
-              <Group title="Update">
-                <UpdateRow update={update} />
-              </Group>
-            )}
             {section === "connections" ? (
               <>
                 <Group title="Connection">

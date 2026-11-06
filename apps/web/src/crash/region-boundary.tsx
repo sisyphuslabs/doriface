@@ -17,8 +17,8 @@ export interface RegionBoundaryProps {
 export function RegionBoundary({ region, title, detail, children }: RegionBoundaryProps) {
   return (
     <RenderBoundary
-      fallback={(_error, retry) => (
-        <RegionCrash title={title} onRetry={retry}>
+      fallback={(error, retry) => (
+        <RegionCrash title={title} error={error} onRetry={retry}>
           {detail}
         </RegionCrash>
       )}

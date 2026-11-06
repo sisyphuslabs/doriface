@@ -16,11 +16,14 @@ function headline(error: unknown): string {
   return `Thrown value (${typeof error}): ${cut}`;
 }
 
+/** A stack frame in V8's form ("at fn (url:line:col)") or WebKit's and Firefox's ("fn@url:line:col", "@url:line:col"). */
+const isFrame = (line: string): boolean => line.startsWith("at ") || /@.*:\d+:\d+$/.test(line);
+
 function frames(error: unknown): string[] {
   if (!(error instanceof Error) || error.stack === undefined) return [];
   return error.stack
     .split("\n")
-    .filter((line) => line.trimStart().startsWith("at "))
+    .filter((line) => isFrame(line.trimStart()))
     .slice(0, STACK_FRAMES);
 }
 

@@ -25,6 +25,18 @@ describe("crashDetails", () => {
     expect(frames[0]).toContain("frame0");
   });
 
+  test("keeps WebKit and Firefox frames too (fn@url:line:col), so the iOS app and Safari carry a stack", () => {
+    const error = new Error("webkit");
+    error.stack = [
+      "render@https://app.example/assets/index.js:12:34",
+      "@https://app.example/assets/index.js:1:2",
+      "commitRoot@https://app.example/assets/react.js:900:10",
+    ].join("\n");
+    const text = crashDetails(error, context);
+    expect(text).toContain("render@https://app.example/assets/index.js:12:34");
+    expect(text).toContain("commitRoot@https://app.example/assets/react.js:900:10");
+  });
+
   test("describes a thrown value that is not an Error, cut to 500 characters", () => {
     expect(crashDetails("plain string", context)).toContain("Thrown value (string): plain string");
     const long = crashDetails("x".repeat(2_000), context);
