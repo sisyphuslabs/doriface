@@ -89,7 +89,10 @@ describe("moving a space", () => {
     await moveSpace(layouts, id("blog"), 0);
     expect(here.state.writes).toBe(0);
     expect(there.state.writes).toBe(1);
-    expect(layoutSpaces([there.layout], TERMINALS).map((each) => each.name)).toEqual(["blog", "site"]);
+    expect(layoutSpaces([{ ...there.layout, doc: there.state.doc }], TERMINALS).map((each) => each.name)).toEqual([
+      "blog",
+      "site",
+    ]);
   });
 
   test("a move to the place it already has writes nothing, and a space that is gone is refused", async () => {
