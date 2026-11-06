@@ -5,6 +5,9 @@ import {
   CLAUDE_TASKS_FOLDED_SCREEN,
   CLAUDE_TASKS_HEADER_SCREEN,
   CLAUDE_TASKS_WORKING_SCREEN,
+  OMP_TODO_DONE_SCREEN,
+  OMP_TODO_PHASES_SCREEN,
+  OMP_TODO_SCREEN,
 } from "./testing/todo-screens.ts";
 import { readTodoProgress } from "./todo-screen.ts";
 
@@ -57,9 +60,30 @@ describe("readTodoProgress: Claude Code's task list", () => {
   });
 });
 
+describe("readTodoProgress: omp's TODO list", () => {
+  test("one phase: its own count", () => {
+    expect(readTodoProgress("omp", OMP_TODO_SCREEN)).toEqual({ done: 1, total: 4 });
+  });
+
+  test("several phases, one folded: their counts added up", () => {
+    expect(readTodoProgress("omp", OMP_TODO_PHASES_SCREEN)).toEqual({ done: 1, total: 5 });
+    expect(readTodoProgress("omp", OMP_TODO_DONE_SCREEN)).toEqual({ done: 3, total: 5 });
+  });
+
+  test("the tool's own card in the transcript is not the list, and no TODO line is nothing", () => {
+    expect(readTodoProgress("omp", "╭─── ☑ Todo 4 tasks ───╮\n│ ├─ ☑ Fix the parser │")).toBeUndefined();
+    expect(readTodoProgress("omp", CLAUDE_TASKS_WORKING_SCREEN)).toBeUndefined();
+  });
+
+  test("a TODO line with no phase under it is nothing", () => {
+    expect(readTodoProgress("omp", " TODO\n\n  ⎋ Working…")).toBeUndefined();
+  });
+});
+
 describe("readTodoProgress: other agents", () => {
   test("an agent with no reader gets nothing, whatever the screen shows", () => {
     expect(readTodoProgress("codex", CLAUDE_TASKS_WORKING_SCREEN)).toBeUndefined();
+    expect(readTodoProgress("codex", OMP_TODO_SCREEN)).toBeUndefined();
     expect(readTodoProgress("", CLAUDE_TASKS_WORKING_SCREEN)).toBeUndefined();
     expect(readTodoProgress("constructor", CLAUDE_TASKS_WORKING_SCREEN)).toBeUndefined();
   });

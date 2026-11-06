@@ -53,3 +53,15 @@ test("an agent row shows its own todo list's progress as it moves, and nothing o
   await expect(shell).toHaveCount(1);
   await expect(shell.getByRole("img", { name: /tasks done$/ })).toHaveCount(0);
 });
+
+test("an omp row shows the phases of its TODO list added up (#673)", async ({ page }) => {
+  start("todo673-omp", ["bun", AGENT, "omp"]);
+  await page.goto("/");
+  const agents = page.getByRole("complementary", { name: "Workspace" }).getByRole("region", { name: "Agents" });
+  const progress = agents
+    .getByRole("button")
+    .filter({ hasText: "todo673-omp" })
+    .getByRole("img", { name: /tasks done$/ });
+  await expect(progress).toHaveText("1/4", { timeout: 20_000 });
+  await expect(progress).toHaveAccessibleName("1 of 4 tasks done");
+});

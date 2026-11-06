@@ -54,9 +54,39 @@ const readClaudeTodos: TodoReader = (lines) => {
   };
 };
 
+/** omp's TODO list over its editor: a `TODO` line, then each phase as a branch with its own `done/total`. */
+const OMP_HEADER = /^\s*TODO\s*$/u;
+/** A phase's branch, `├─ Work · 1/4` or numbered once there are several, `├─ II. Ship · 1/3`; a folded phase keeps it. */
+const OMP_PHASE = /^\s*[├└]─\s+.+?\s+·\s+(\d+)\/(\d+)\s*$/u;
+/** Any line of the tree: a branch, a task under a phase, or the closing rule. */
+const OMP_TREE = /^\s*[│├└]/u;
+
+/** omp's list, the last one on the screen: the phases' counts added up. */
+const readOmpTodos: TodoReader = (lines) => {
+  let header = -1;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    if (OMP_HEADER.test(lines[index] ?? "")) {
+      header = index;
+      break;
+    }
+  }
+  if (header === -1) return undefined;
+  let done = 0;
+  let total = 0;
+  for (const line of lines.slice(header + 1)) {
+    if (!OMP_TREE.test(line)) break;
+    const phase = OMP_PHASE.exec(line);
+    if (phase === null) continue;
+    done += Number(phase[1]);
+    total += Number(phase[2]);
+  }
+  return total === 0 ? undefined : { done, total };
+};
+
 /** Readers by the `app` an agent names itself in its OSC 7501 record; another agent has no list here. */
 const READERS: Readonly<Record<string, TodoReader>> = {
   "claude-code": readClaudeTodos,
+  omp: readOmpTodos,
 };
 
 /** Whether the agent that reported `app` draws a todo list this reads. */

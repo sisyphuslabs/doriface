@@ -4,7 +4,7 @@
 
 ### Workspace
 
-- An agent row shows how far its own todo list has got, as done/total (2/4), read from the task list Claude Code draws when its task tools are on; a long list's folded line counts too. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
+- An agent row shows how far its own todo list has got, as done/total (2/4), read from the list the agent draws: Claude Code's task list when its task tools are on (a long list's folded line counts too), and omp's TODO list with its phases added up. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
 
 ### Joining a mesh from a browser
 
