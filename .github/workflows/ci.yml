@@ -233,31 +233,47 @@ jobs:
         if: env.RELAY_TOKEN_SET == 'true'
         id: playwright
         working-directory: apps/web
-        run: echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          echo "distro=$(. /etc/os-release && echo "$ID-$VERSION_ID")" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: env.RELAY_TOKEN_SET == 'true'
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('bun.lock') }}
+      # The .deb files of the system packages Chromium is missing on the image (doriterm#1012); the install step decides
+      # whether they are enough, so this only restores them.
+      - name: Restore the Playwright system packages
+        if: env.RELAY_TOKEN_SET == 'true'
+        id: playwright-apt
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}
       - name: Install Chromium
         if: env.RELAY_TOKEN_SET == 'true'
+        id: chromium
         working-directory: apps/web
         timeout-minutes: 12
         run: |
-          # Two separate things arrive here, and only one of them is cacheable. The browser binary is cached, so a
-          # warm cache can skip its download; the system packages are not, and skipping them once cost two required
-          # tests their CJK fonts (doriterm#915: the Korean width assertions failed on a warm cache and passed cold).
-          # So the packages are ensured on every run. The pre-update carries the Acquire timeouts, the two installs are
-          # bounded by timeout, and the step by timeout-minutes - on doriterm#914 an unreachable mirror spent a whole
-          # 30-minute job inside this step, which is why nothing here waits indefinitely.
-          sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
-          timeout 300 bunx playwright install-deps chromium
+          # The browser binary and the system packages are cached separately. playwright-linux-deps.sh installs the
+          # packages from their cache only when Playwright's own check finds its whole list installed, and from the apt
+          # mirror otherwise: doriterm#1012, a mirror at ~38 kB/s ran the every-run download past its limit, and
+          # doriterm#915, skipping the packages instead cost the Korean width assertions their fonts. The installs are
+          # bounded by timeout, and the step by timeout-minutes (doriterm#914).
+          bash "$GITHUB_WORKSPACE/.github/scripts/playwright-linux-deps.sh" "$HOME/.cache/playwright-apt"
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
             echo "browser cache hit: installing the engine without downloading it again"
             timeout 300 bunx playwright install chromium
           else
             timeout 600 bunx playwright install chromium
           fi
+      - name: Save the Playwright system packages
+        if: env.RELAY_TOKEN_SET == 'true' && steps.chromium.outputs.save-debs == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-apt.outputs.cache-primary-key }}
       - name: Browser spec through the mesh
         if: env.RELAY_TOKEN_SET == 'true'
         run: bun run test:e2e e2e/mesh-attach.e2e.ts
@@ -306,29 +322,44 @@ jobs:
       - name: Playwright version
         id: playwright
         working-directory: apps/web
-        run: echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+          echo "distro=$(. /etc/os-release && echo "$ID-$VERSION_ID")" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('bun.lock') }}
+      # The .deb files of the system packages Chromium is missing on the image (doriterm#1012); the install step decides
+      # whether they are enough, so this only restores them.
+      - name: Restore the Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}
       - name: Install Chromium
+        id: chromium
         working-directory: apps/web
         timeout-minutes: 12
         run: |
-          # Two separate things arrive here, and only one of them is cacheable. The browser binary is cached, so a
-          # warm cache can skip its download; the system packages are not, and skipping them once cost two required
-          # tests their CJK fonts (doriterm#915: the Korean width assertions failed on a warm cache and passed cold).
-          # So the packages are ensured on every run. The pre-update carries the Acquire timeouts, the two installs are
-          # bounded by timeout, and the step by timeout-minutes - on doriterm#914 an unreachable mirror spent a whole
-          # 30-minute job inside this step, which is why nothing here waits indefinitely.
-          sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
-          timeout 300 bunx playwright install-deps chromium
+          # The browser binary and the system packages are cached separately. playwright-linux-deps.sh installs the
+          # packages from their cache only when Playwright's own check finds its whole list installed, and from the apt
+          # mirror otherwise: doriterm#1012, a mirror at ~38 kB/s ran the every-run download past its limit, and
+          # doriterm#915, skipping the packages instead cost the Korean width assertions their fonts. The installs are
+          # bounded by timeout, and the step by timeout-minutes (doriterm#914).
+          bash "$GITHUB_WORKSPACE/.github/scripts/playwright-linux-deps.sh" "$HOME/.cache/playwright-apt"
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
             echo "browser cache hit: installing the engine without downloading it again"
             timeout 300 bunx playwright install chromium
           else
             timeout 600 bunx playwright install chromium
           fi
+      - name: Save the Playwright system packages
+        if: steps.chromium.outputs.save-debs == 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-apt.outputs.cache-primary-key }}
       # The e2e workers follow the runner's cores (playwright.config.ts, #342): record what this runner has.
       - name: Runner resources
         run: |
