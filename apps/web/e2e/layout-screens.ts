@@ -1,5 +1,6 @@
 // The layout spec's screens: each opens one state of the app with the layout host's long names on the page.
 import type { Page } from "@playwright/test";
+import { pickFile } from "./file-input";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK, PAIRING_SETTINGS } from "./capture-relay.ts";
 import { E2E_LAYOUT_PORT, E2E_TOKEN } from "./config.ts";
 import { expect } from "./fixtures.ts";
@@ -62,22 +63,8 @@ async function section(page: Page, narrow: boolean, label: string): Promise<void
   else await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: label }).click();
 }
 
-// The import buttons click a detached <input type="file">. Waiting on Playwright's "filechooser" event
-// races the protocol call that turns interception on, so a click that wins it opens a picker no one
-// reports (#965). Hand the file to that input when the page clicks it instead, then wait on the dialog.
 async function choose(page: Page, button: string, text: string): Promise<void> {
-  await page.evaluate((contents) => {
-    const click = HTMLInputElement.prototype.click;
-    HTMLInputElement.prototype.click = function (this: HTMLInputElement) {
-      if (this.type !== "file") return click.call(this);
-      HTMLInputElement.prototype.click = click;
-      const files = new DataTransfer();
-      files.items.add(new File([contents], "config", { type: "text/plain" }));
-      this.files = files.files;
-      this.dispatchEvent(new Event("change"));
-    };
-  }, text);
-  await page.getByRole("button", { name: button }).click();
+  await pickFile(page, button, "config", text);
   await expect(page.getByRole("dialog")).toBeVisible();
 }
 
@@ -121,7 +108,7 @@ export const SCREENS: readonly Screen[] = [
   {
     name: "unreachable-settings",
     start: "unreachable",
-    open: (page, narrow) => section(page, narrow, "Connections"),
+    open: (page, narrow) => section(page, narrow, "This device"),
   },
   { name: "workspace", start: "layout", open: workspace },
   {
@@ -175,13 +162,22 @@ export const SCREENS: readonly Screen[] = [
       await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
     },
   },
-  ...(["Connections", "Appearance", "Device", "Terminal", "Keybindings", "Voice input"] as const).map(
-    (label): Screen => ({
-      name: `settings-${label.toLowerCase()}`,
-      start: "layout",
-      open: (page, narrow) => section(page, narrow, label),
-    }),
-  ),
+  ...(
+    [
+      "This device",
+      "Your machines",
+      "Pair a phone or computer",
+      "Advanced connection",
+      "Appearance",
+      "Terminal",
+      "Keybindings",
+      "Voice input",
+    ] as const
+  ).map((label): Screen => ({
+    name: `settings-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    start: "layout",
+    open: (page, narrow) => section(page, narrow, label),
+  })),
   {
     name: "settings-storage-error",
     start: "layout",
