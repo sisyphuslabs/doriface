@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { generateHostIdentity } from "./identity.ts";
 import {
+  buildPairingDeepLink,
   buildPairingUrl,
   createPairingOffer,
   DEFAULT_RELAY_URL,
@@ -12,6 +13,7 @@ import {
   PAIRING_TTL_MS,
   pairingSlotOf,
   PairingGuard,
+  parsePairingLink,
   parsePairingUrl,
 } from "./pairing.ts";
 
@@ -146,6 +148,41 @@ describe("pairing URL", () => {
   ])("rejects %s", (_, bad) => {
     expect(() => parsePairingUrl(bad)).toThrow();
   });
+});
+
+describe("pairing deep link", () => {
+  const link = {
+    hostId: identity.hostId,
+    noiseStaticPub: identity.noise.publicKey,
+    signPub: identity.sign.publicKey,
+    linkSecret: createPairingOffer().linkSecret,
+    relayUrl: DEFAULT_RELAY_URL,
+  };
+
+  test("carries the same five-key fragment under doriface://pair and parses back without a web origin", () => {
+    const deepLink = buildPairingDeepLink(link);
+    expect(deepLink.startsWith(`doriface://pair#h=${identity.hostId}&k=`)).toBe(true);
+    expect([...fragment(deepLink).keys()]).toEqual(["h", "k", "s", "p", "r"]);
+    expect(parsePairingLink(deepLink)).toEqual({
+      ...link,
+      relayUrl: "wss://relay-doriface.omo.dev",
+      mesh: false,
+    });
+  });
+
+  test("a mesh deep link carries m=1, and a web-only parser still refuses it", () => {
+    const deepLink = buildPairingDeepLink({ ...link, mesh: true });
+    expect(fragment(deepLink).get("m")).toBe("1");
+    expect(parsePairingLink(deepLink).mesh).toBe(true);
+    expect(() => parsePairingUrl(deepLink)).toThrow();
+  });
+
+  test.each(["doriface://pair/x#h=1", "doriface://elsewhere#h=1"])(
+    "a deep link of another shape is refused: %p",
+    (other) => {
+      expect(() => parsePairingLink(other)).toThrow();
+    },
+  );
 });
 
 describe("pairing URL origins", () => {
