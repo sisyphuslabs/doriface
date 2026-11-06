@@ -100,7 +100,15 @@ export function meshFixture(now: Date): MeshFixture {
       [key("tablet"), { ...idle, presence: true, lastSync: ago(DAY), owed: 1 }],
     ]),
     lines: new Map<string, LineFacts>([
-      [key("build-box"), { ...line, state: "connected", helloCoreId: "core-build-box", replaced: "build-box-old" }],
+      [
+        key("build-box"),
+        {
+          ...line,
+          state: "connected",
+          helloCoreId: "core-build-box",
+          replaced: { name: "build-box-old", kind: "ssh" },
+        },
+      ],
       [key("laptop"), { ...line, state: "unreachable", reason: "no route to host" }],
       [key("tablet"), { ...line, state: "connecting" }],
     ]),
