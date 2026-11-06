@@ -112,7 +112,9 @@ test("a screen that throws shows the crash screen inside the router, and Try aga
   await expect(page.getByRole("heading", { name: "Settings" }).first()).toBeVisible();
 });
 
-test("a Settings section that throws says so in place, under the Settings screen that still draws", async ({ page }) => {
+test("a Settings section that throws says so in place, under the Settings screen that still draws", async ({
+  page,
+}) => {
   await crashOnLoad(page, "settings-section");
   await page.goto("/settings");
   const notice = page.getByRole("alert").filter({ hasText: "This section could not be drawn" });
