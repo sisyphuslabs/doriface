@@ -16,8 +16,16 @@ on:
       - bun.lock
       - .github/scripts/probe-landing.ts
       - .github/workflows/deploy-landing.yml
+  # The deploy-staging label is shared with deploy-web.yml: the path filter keeps a web-only PR off staging.doriterm.com.
   pull_request:
     types: [labeled, synchronize]
+    paths:
+      - apps/landing/**
+      - packages/ui/**
+      - package.json
+      - bun.lock
+      - .github/scripts/probe-landing.ts
+      - .github/workflows/deploy-landing.yml
   workflow_dispatch:
     inputs:
       production:
@@ -40,8 +48,10 @@ jobs:
   staging:
     name: Landing staging
     if: >-
-      github.event_name != 'pull_request' ||
-      (contains(github.event.pull_request.labels.*.name, 'deploy-staging') &&
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev') ||
+      (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'deploy-staging') &&
       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15

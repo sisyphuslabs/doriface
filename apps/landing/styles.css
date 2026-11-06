@@ -1759,7 +1759,8 @@ pre {
   }
 }
 
-@media (max-width: 760px) {
+/* The section links need about 860 px beside the brand, the theme switch and Open the app. */
+@media (max-width: 859px) {
   .nav__links {
     display: none;
   }
@@ -1767,7 +1768,9 @@ pre {
   .nav__end {
     margin-left: auto;
   }
+}
 
+@media (max-width: 760px) {
   .nav .btn--sm {
     display: none;
   }

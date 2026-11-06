@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 type Step = { name?: string; run?: string; uses?: string };
 type Job = { needs?: string; if?: string; steps: Step[] };
-type Workflow = { on: { push: { branches: string[] } }; jobs: Record<string, Job> };
+type Workflow = {
+  on: { push: { branches: string[]; paths: string[] }; pull_request: { paths?: string[] } };
+  jobs: Record<string, Job>;
+};
 type Route = { pattern: string; custom_domain?: boolean };
 type Assets = { directory: string; html_handling?: string };
 type Wrangler = { assets: Assets; routes: Route[]; env: { staging: { assets: Assets; routes: Route[] } } };
@@ -57,4 +60,12 @@ test("the page frames the mockup at its folder index, which the host serves with
   expect(readFileSync(join(ROOT, "apps", "landing", "mockup", "index.html"), "utf8")).toContain("/src/mockup/main.tsx");
   const probe = readFileSync(join(ROOT, ".github", "scripts", "probe-landing.ts"), "utf8");
   expect(probe).toContain('path: "/mockup/"');
+});
+
+test("a labelled PR deploys staging only when it touches the landing, and a manual run only from dev", () => {
+  expect(workflow.on.pull_request.paths).toEqual(workflow.on.push.paths);
+  expect(workflow.on.pull_request.paths).toContain("apps/landing/**");
+  const staging = workflow.jobs["staging"]?.if ?? "";
+  expect(staging).toContain("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'");
+  expect(staging).toContain("github.event.pull_request.head.repo.full_name == github.repository");
 });
