@@ -7,6 +7,7 @@ import { contextMenuTemplate } from "../config/context-menu.ts";
 import { contentSecurityPolicy } from "../config/csp.ts";
 import { DEEP_LINK_SCHEME, deepLinkArg } from "../config/deep-link.ts";
 import { APP_ORIGIN, loopbackDevUrl } from "../config/origin.ts";
+import { storageDirToPin } from "../config/storage.ts";
 import { restorePlacement } from "../config/window-state.ts";
 import { launchBackground, secureWebPreferences, windowOptions } from "../config/window.ts";
 import { Channel, parsePlatform } from "../shared/bridge.ts";
@@ -19,6 +20,7 @@ import { LocalHost } from "./local-host.ts";
 import { menuTemplate } from "./menu.ts";
 import { noticesSupported, showNotice } from "./notice.ts";
 import { requestPairOffer } from "./pair-offer.ts";
+import { requestPairedDevices, revokePairedDevice } from "./devices.ts";
 import { registerAppScheme, serveApp } from "./protocol.ts";
 import { applyMacTitlebar } from "./titlebar.ts";
 import { readSaved, rememberPlacement, savedPlacement, writeSaved } from "./window-state.ts";
@@ -26,6 +28,8 @@ import { revealWhenReady } from "./window-reveal.ts";
 import { UpdateWatch } from "./updater.ts";
 
 const platform = parsePlatform(process.platform);
+const pinnedStorage = storageDirToPin(app.getPath("appData"), app.commandLine.hasSwitch("user-data-dir"));
+if (pinnedStorage !== undefined) app.setPath("userData", pinnedStorage);
 const devSetting = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
 const devUrl = devSetting === undefined || devSetting === "" ? undefined : loopbackDevUrl(devSetting);
 const origin = devUrl === undefined ? APP_ORIGIN : new URL(devUrl).origin;
@@ -179,6 +183,20 @@ function ready(): void {
         return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
       }
     },
+    pairedDevices: async () => {
+      try {
+        return await requestPairedDevices(await localHost.start());
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    revokeDevice: async (id) => {
+      try {
+        return await revokePairedDevice(await localHost.start(), id);
+      } catch (error) {
+        return { state: "unavailable", reason: error instanceof Error ? error.message : String(error) };
+      }
+    },
     openExternal: (url) => shell.openExternal(url),
     setWindowBackground,
     closeWindow: () => liveWindow()?.close(),
@@ -243,7 +261,7 @@ if (!app.requestSingleInstanceLock()) {
     .whenReady()
     .then(ready)
     .catch((error: unknown) => {
-      console.error(`doriface failed to start: ${String(error)}`);
+      console.error(`Doriterm failed to start: ${String(error)}`);
       app.exit(1);
     });
 }

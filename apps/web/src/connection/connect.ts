@@ -1,9 +1,10 @@
-import { HcConnection } from "@doriface/client";
+import { HcConnection, HcHandshakeTimeoutError } from "@doriface/client";
 import type { ByteLink } from "@doriface/client";
 import { base64urlDecode, CloseCode, type SecureLink, secureLink, SecureLinkError } from "@doriface/crypto";
 import { connectRelayClient } from "@doriface/relay-client";
 import { directDial, type PageAccess, pageAccess, parseDirectAddress } from "./direct-address.ts";
 import { attemptDirect, DIRECT_BUDGET_MS, DirectFailure, type DirectReason } from "./direct-attempt.ts";
+import { directBudgetProbe } from "./direct-budget-probe.ts";
 import { canForwardPlainWs, openForwardedLink } from "./direct-forward.ts";
 import { BROWSER_DEPS, deviceKeyFor, type RelayDeps } from "./relay-deps.ts";
 import type { ConnectionSettings } from "./settings.ts";
@@ -150,7 +151,7 @@ async function openDirect(
   if (dial.kind === "blocked") return { reason: "blocked" };
   const open =
     dial.kind === "forward" ? (url: string, attempt: AbortSignal) => openForwardedLink(url, attempt) : undefined;
-  const budgetMs = options.budgetMs ?? DIRECT_BUDGET_MS;
+  const budgetMs = options.budgetMs ?? directBudgetProbe() ?? DIRECT_BUDGET_MS;
   const startedAt = performance.now();
   try {
     const secured = await attemptDirect({
@@ -168,22 +169,30 @@ async function openDirect(
 }
 
 /**
+ * Why the framed hello did not make a session, in the words the status bar uses. The error decides, never a clock: the
+ * deadline's own timeout has a class of its own, while a handshake that finished early with an unusable answer (a core
+ * mismatch, a malformed reply, a socket that closed) is the host's answer being wrong, not its absence (#744).
+ */
+export function helloFailureReason(error: unknown): DirectReason {
+  return error instanceof HcHandshakeTimeoutError ? "no-answer" : "could-not-connect";
+}
+
+/**
  * The framed hello is the rest of the proof: it runs on what is left of the direct budget, so a host that answers the
  * Noise handshake and then stalls cannot hold the session instead of the relay (#640).
  */
 async function provedSession(link: SecureLink, leftMs: number, signal: AbortSignal | undefined): Promise<HcConnection> {
   const left = Math.max(0, leftMs);
-  const startedAt = performance.now();
   try {
     return await HcConnection.open(link, {
       handshakeTimeoutMs: left,
       ...(signal === undefined ? {} : { signal }),
     });
   } catch (error) {
-    const expired = performance.now() - startedAt >= left;
+    const reason = helloFailureReason(error);
     throw new DirectFailure(
-      expired ? "no-answer" : "could-not-connect",
-      expired ? "no answer within the budget" : "the direct session was not proved",
+      reason,
+      reason === "no-answer" ? "no answer within the budget" : "the direct session was not proved",
       { cause: error },
     );
   }
