@@ -2,6 +2,7 @@ import { base64urlEncode, type HostIdentity } from "@doriface/crypto";
 import {
   type CardBody,
   meshIdOf,
+  type MemberKind,
   parseRecord,
   type RecordBody,
   type Signed,
@@ -213,9 +214,15 @@ function persistedIndex(file: MeshFile): AuthorizeIndex {
 const nonce = (): string => base64urlEncode(crypto.getRandomValues(new Uint8Array(16)));
 
 /** The card body for this host in mesh `mesh`, invited by `inviter` (both `"-"` in a found). */
-export function cardBody(identity: HostIdentity, card: OwnCard, mesh: string, inviter: string, at = nonce()): CardBody {
-  return {
-    v: 1,
+export function cardBody(
+  identity: HostIdentity,
+  card: OwnCard,
+  mesh: string,
+  inviter: string,
+  at = nonce(),
+  kind?: MemberKind,
+): CardBody {
+  const body = {
     mesh,
     inviter,
     nonce: at,
@@ -224,6 +231,7 @@ export function cardBody(identity: HostIdentity, card: OwnCard, mesh: string, in
     noisePub: base64urlEncode(identity.noise.publicKey),
     ...card,
   };
+  return kind === undefined ? { v: 1, ...body } : { v: 2, kind, ...body };
 }
 
 const foundBody = (identity: HostIdentity, card: Signed): RecordBody => ({
