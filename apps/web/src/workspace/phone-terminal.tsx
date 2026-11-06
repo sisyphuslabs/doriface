@@ -54,6 +54,8 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
   const [keysShown, setKeysShown] = useState(false);
   const [menu, setMenu] = useState(false);
   const [pad, setPad] = useState(false);
+  // The keys bar as drawn, which grows while its field has a row of its own; the terminal keeps clear of all of it.
+  const [barHeight, setBarHeight] = useState(0);
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
   const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
   // The view that showed its program had already ended; the keys have nothing to send to under it.
@@ -116,7 +118,7 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
         style={
           keysOpen
             ? {
-                paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})`,
+                paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${barHeight > 0 ? `${barHeight}px` : KEYS_BAR_HEIGHT})`,
               }
             : undefined
         }
@@ -188,6 +190,7 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
             onMenu={setMenu}
             pad={pad}
             onPad={setPad}
+            onBarHeight={setBarHeight}
             {...(mouseOnly ? { onKeys: setKeysShown } : {})}
           />
         </>
