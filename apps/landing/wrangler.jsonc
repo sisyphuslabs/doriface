@@ -1,0 +1,20 @@
+// doriterm.com: this package's build (dist/, `bun run build`) served as Workers static assets, with no Worker code.
+// .github/workflows/deploy-landing.yml deploys staging (staging.doriterm.com), probes it, and deploys production
+// (doriterm.com) from a manual run once app.doriterm.com answers. Self-hosters: put your own hostnames in "routes".
+{
+  "name": "doriterm-landing",
+  "compatibility_date": "2026-11-06",
+  "assets": { "directory": "./dist" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "doriterm.com", "custom_domain": true }],
+  "env": {
+    "staging": {
+      "name": "doriterm-landing-staging",
+      "assets": { "directory": "./dist" },
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [{ "pattern": "staging.doriterm.com", "custom_domain": true }],
+    },
+  },
+}
