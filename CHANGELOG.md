@@ -6,6 +6,10 @@
 
 - The desktop window reopens where it was left even after a crash, a force quit or a kill: its position and size are saved once a move or a resize comes to rest, not only when the window closes. (#803)
 
+### Terminal
+
+- The terminal renderer is @wterm 0.5.9 with its Ghostty WASM rebuilt from the same source, keeping the Korean-input fixes on WebKit. (#823)
+
 ### Machine mesh
 
 - A mesh takes any number of machines: the 12-member cap is gone, so adding a thirteenth machine no longer fails and mesh status no longer reports a limit. (#814)
@@ -30,6 +34,7 @@
 
 ### Web app
 
+- Your machines lists every machine this app holds its own connection to, each with that machine's own state, so a machine that is away is one row saying so. Each machine has its own connection, which means the others stay usable while one is gone. (#942)
 - A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
 - A machine's terminal count and a space's tab count stay on one line however many digits they have: on a phone, "19" no longer breaks into "1" above "9" in the Spaces list. (#899)
 
@@ -58,6 +63,8 @@
 - The web app's brand art and the script that turns it into icons name the product that ships, `doriterm-*`; the files the app serves keep their paths, so nothing a browser loads changes. (#917)
 
 ### Machine mesh
+
+- A phone or another client can join the mesh as its own member rather than as a guest of one computer, and the approval row says what that gives it: control of every machine in the mesh. Every machine has to read the new format before one may join, and a client that does not is turned away with that reason. (#942)
 
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 75 s without it, as a laptop that went to sleep still does. (#909)
 
