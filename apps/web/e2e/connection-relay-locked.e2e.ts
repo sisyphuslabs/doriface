@@ -21,7 +21,7 @@ async function saveCustomRelay(page: Page): Promise<void> {
   await page.addInitScript((value) => localStorage.setItem("doriface.connection", value), JSON.stringify(link));
 }
 
-test("Settings > Connections offers no relay address to edit and no Loopback dev switch", async ({ page }) => {
+test("Settings > Advanced connection offers no relay address to edit and no Loopback dev switch", async ({ page }) => {
   await saveCustomRelay(page);
   // Nothing in this spec leaves the browser: the production relay is answered here and closes at once.
   await page.routeWebSocket(PRODUCTION, (ws) => ws.close());

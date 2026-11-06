@@ -27,7 +27,9 @@ async function saveRelayLink(page: Page): Promise<void> {
   await Promise.all([PRODUCTION, CUSTOM].map((relay) => page.routeWebSocket(relay, (ws) => ws.close())));
 }
 
-test("Settings > Connections has no Direct address and shows the relay with no field to edit", async ({ page }) => {
+test("Settings > Advanced connection has no Direct address and shows the relay with no field to edit", async ({
+  page,
+}) => {
   await saveRelayLink(page);
   await page.goto("/settings");
   await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Advanced connection" }).click();

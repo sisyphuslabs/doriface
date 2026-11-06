@@ -71,7 +71,7 @@ test("a connection moved to another host takes notifications along; the old host
   const service = suite.service();
   await turnOn(page);
   expect(await savedRoute(page)).toMatchObject({ pushUrl: `ws://127.0.0.1:${E2E_HOST_PORT}/v1/push` });
-  await settingsSection(page, "This device").click();
+  await settingsSection(page, "Advanced connection").click();
   const gateway = page.getByLabel("Gateway", { exact: true });
   await gateway.fill(`ws://127.0.0.1:${E2E_LAYOUT_PORT}/v1/hc`);
   await gateway.press("Enter");

@@ -1,12 +1,11 @@
-import { Button, SettingRow } from "@doriface/ui";
-import { Monitor, Server, Smartphone } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { SettingRow } from "@doriface/ui";
+import { Monitor, Server } from "lucide-react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import type { ConnectionSettings } from "../connection/settings.ts";
 import { hostFailure } from "../connection/host-failure.ts";
 import { connectionStore, useConnection, type ConnectionState } from "../connection/store.ts";
 import { hostRouteOf } from "./host-route.ts";
-import { desktopPairOffer } from "../desktop/pair-bridge.ts";
-import { PairDeviceDialog } from "./pair-device-dialog.tsx";
+import { PairDeviceOffer } from "./pair-device-offer.tsx";
 
 function useConnectionSettings(): ConnectionSettings {
   return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
@@ -53,16 +52,11 @@ function label(icon: ReactNode, text: string) {
 export function DevicesSection() {
   const state = useConnection();
   const settings = useConnectionSettings();
-  const [pairing, setPairing] = useState(false);
-  // One relay function for this page: a new one each render would reopen the offer the dialog is showing.
-  const pair = useMemo(() => desktopPairOffer(), []);
+  const route = hostRouteOf(settings);
   // The host names itself as it answers; that name is kept beside the paired host, so the row still names it once the
   // link drops or the page is loaded again while it is down (#496). The id is only left when no name was ever learned.
   const name = state.phase === "open" ? state.connection.hello.core.name : settings.hostName;
   const host = name !== "" ? name : settings.mode === "relay" ? settings.hostId || "No host" : settings.loopbackUrl;
-  // Only this computer's own host can be offered to a device: the shell relays its offer, and a host this app merely
-  // reaches over the relay runs somewhere else.
-  const offersItself = pair !== null && settings.mode === "loopback";
   return (
     <>
       <SettingRow title={label(<Monitor aria-hidden />, "This browser")} description="This device" control={null} />
@@ -71,25 +65,12 @@ export function DevicesSection() {
         description={
           <>
             {describe(state)}
-            {hostRouteOf(settings).label === undefined ? null : (
-              <span className="block text-muted-foreground">{hostRouteOf(settings).label}</span>
-            )}
+            {route.label === undefined ? null : <span className="block text-muted-foreground">{route.label}</span>}
           </>
         }
         control={null}
       />
-      {offersItself ? (
-        <SettingRow
-          title={label(<Smartphone aria-hidden />, "Pair a device")}
-          description="A phone or another computer that pairs with this computer can open its terminals, end to end encrypted."
-          control={
-            <Button size="sm" onClick={() => setPairing(true)}>
-              Pair a device
-            </Button>
-          }
-        />
-      ) : null}
-      <PairDeviceDialog open={pairing} onClose={() => setPairing(false)} pair={pair} />
+      <PairDeviceOffer />
     </>
   );
 }
