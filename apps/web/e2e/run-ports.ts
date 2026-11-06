@@ -2,8 +2,6 @@ import { spawnSync } from "node:child_process";
 import { HOST_BLOCK, PORT_TRY_LIMIT } from "./port-block.ts";
 import { describePortFailure, listPortHolders, type TriedBlock } from "./port-holders.ts";
 
-export { HOST_BLOCK };
-
 const NAMES = ["E2E_HOST_PORT", "E2E_WEB_PORT", "E2E_LAYOUT_PORT"] as const;
 
 // Binds port 0 for each, so the OS hands out ports no one holds, then releases them for this run's servers: a block of
@@ -52,7 +50,7 @@ const listen = (port) => new Promise((resolve) => {
 })();
 `;
 
-const parseTried = (output: string): readonly TriedBlock[] => {
+export const parseTried = (output: string): readonly TriedBlock[] => {
   try {
     const parsed: unknown = JSON.parse(output === "" ? "{}" : output);
     const tried = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "tried") : undefined;
@@ -73,6 +71,11 @@ const parseTried = (output: string): readonly TriedBlock[] => {
  * Playwright config, it sets them in the environment the web servers and workers inherit. A run given its ports
  * already (all three set) keeps them, and the workers and web servers find them set.
  */
+/** The ports worth asking about: the base each attempt started from and the port that refused it, once each. */
+export function portsToProbe(tried: readonly TriedBlock[]): readonly number[] {
+  return [...new Set(tried.flatMap(({ base, blocked }) => [base, blocked]).filter((port) => port > 0))];
+}
+
 export function ensureRunPorts(): void {
   if (NAMES.every((name) => process.env[name] !== undefined)) return;
   const picked = spawnSync(process.execPath, ["-e", PICK], {
@@ -81,9 +84,8 @@ export function ensureRunPorts(): void {
   });
   if (picked.status !== 0) {
     const tried = parseTried(picked.stdout);
-    const probe = [...new Set(tried.flatMap(({ base, blocked }) => [base, blocked]).filter((port) => port > 0))];
     throw new Error(
-      `could not find free ports for this e2e run: ${describePortFailure(tried, listPortHolders(probe))}${picked.stderr === "" ? "" : ` (${picked.stderr})`}`,
+      `could not find free ports for this e2e run: ${describePortFailure(tried, listPortHolders(portsToProbe(tried)))}${picked.stderr === "" ? "" : ` (${picked.stderr})`}`,
     );
   }
   const ports = JSON.parse(picked.stdout) as { host: number; web: number; layout: number };
