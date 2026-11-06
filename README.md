@@ -268,7 +268,8 @@ The [release workflow](.github/workflows/release.yml) builds every file on GitHu
 
 1. Set `version` there and merge it.
 2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the
-   uploaded Linux AppImage and macOS app, installs the Windows installer, then publishes the release.
+   uploaded Linux AppImage and macOS app, installs the Windows installer, then publishes the release. Notes come from the
+   `## vX.Y.Z` section of `CHANGELOG.md`, and a tag whose section is missing or empty fails before any build.
 
 A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is
 accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with
