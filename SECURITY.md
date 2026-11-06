@@ -2,7 +2,9 @@
 
 ## Reporting a vulnerability
 
-Report it privately through [GitHub's advisory form](https://github.com/sisyphuslabs/doriterm/security/advisories/new). Please do not open a public issue, and do not describe an unpatched problem in a discussion or a chat: everyone who could use it reads that too.
+Report it privately through [GitHub's advisory form](https://github.com/sisyphuslabs/doriterm/security/advisories/new). If that form is not open for this repository yet, open a public issue whose title is exactly `security contact request` and whose body says nothing more — a maintainer will open a private thread with you and ask for the details there. Never put an unpatched problem in a public issue, a discussion or a chat: everyone who could use it reads that too.
+
+Maintainers: the advisory form only accepts a report once **Private vulnerability reporting** is enabled in Settings → Code security. Until then the `security contact request` issue is the working channel, so that sentence stays in this file.
 
 A report that is fastest to act on carries:
 
