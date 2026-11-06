@@ -329,11 +329,10 @@ function silentHc(dir: string) {
     hc,
     connects: () => readdirSync(dir).filter((name) => name.startsWith("connect-")),
     /** Resolves once `count` connects have started. */
-    started: async (count: number): Promise<void> => {
-      for (let seen = 0; seen < count; seen += 1) {
-        const line = await reads.next();
-        if (line.done === true) throw new Error("the connects' FIFO ended");
-      }
+    started: async function started(count: number): Promise<void> {
+      if (count === 0) return;
+      if ((await reads.next()).done === true) throw new Error("the connects' FIFO ended");
+      return started(count - 1);
     },
     close: () => {
       lines.close();
