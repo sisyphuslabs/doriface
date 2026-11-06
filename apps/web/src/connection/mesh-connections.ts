@@ -76,6 +76,8 @@ export class MeshConnections {
    * saved port before the saved link is tried, and because starting here made every member dial twice (review of #994).
    */
   #running = false;
+  /** The members that have been handed to `start()`, so a settings change dials a store that never started and leaves an open one alone. */
+  readonly #started = new Set<string>();
   /**
    * The list `entries()` answers with. Rebuilt only when something changes, because it is read through
    * `useSyncExternalStore`, which compares snapshots by identity and would re-render forever on a fresh array per call.
@@ -137,9 +139,12 @@ export class MeshConnections {
   #apply(settings: ConnectionSettings): void {
     this.#settings = normalizeSettings(settings);
     saveSettings(this.#settings);
-    // A settings change is the app asking to dial with them, which is how the boot path replaces a stale saved port.
+    // A settings change is the app asking to dial with them, which is how the boot path replaces a stale saved port. Members that
+    // already dialled are left alone; one that was stopped (by `restoring()`) is dialled again, which is the boot case where the
+    // endpoint never changed and nothing else would start it (review of #994).
     this.#running = true;
     this.#sync();
+    this.#startAll();
     this.#notify();
   }
 
@@ -161,11 +166,22 @@ export class MeshConnections {
 
   start(): void {
     this.#running = true;
-    for (const store of this.#stores.values()) store.start();
+    this.#startAll();
   }
 
-  /** The desktop app restarting this computer's own host: only the member on loopback is affected. */
+  /** Starts every member that has not been started yet; a member already dialling keeps its connection. */
+  #startAll(): void {
+    for (const [hostId, store] of this.#stores) {
+      if (this.#started.has(hostId)) continue;
+      this.#started.add(hostId);
+      store.start();
+    }
+  }
+
+  /** The desktop app restarting this computer's own host: only the member on loopback is affected, and it will be dialled again. */
   restoring(): void {
+    // The store stops itself; this records that it must be dialled again by the settings the boot path hands over next.
+    this.#started.clear();
     this.selected?.restoring();
   }
 
@@ -180,6 +196,7 @@ export class MeshConnections {
 
   stop(): void {
     this.#running = false;
+    this.#started.clear();
     for (const store of this.#stores.values()) store.stop();
   }
 
@@ -248,7 +265,10 @@ export class MeshConnections {
     // roster with one member.
     const store = this.#make(scoped, () => undefined);
     if (this.#localHost !== null) store.restartsLocalHost(this.#localHost);
-    if (this.#running) store.start();
+    if (this.#running) {
+      this.#started.add(member.hostId);
+      store.start();
+    }
     this.#unsubscribes.set(
       member.hostId,
       store.subscribe(() => this.#onMember(member.hostId, store)),
@@ -270,6 +290,8 @@ export class MeshConnections {
   #onMember(hostId: string, store: MemberConnection): void {
     this.#adoptName(hostId, store);
     this.#failOver();
+    // One notification for both: a reader must see the new selection, not the dead machine the name update was about.
+    this.#notify();
   }
 
   #failOver(): void {
@@ -297,21 +319,14 @@ export class MeshConnections {
     const target = this.#targets.get(hostId);
     // Loopback is one gateway for every member, so the hello that answers says nothing about which member replied: adopting it
     // would rename every machine after the one local host.
-    if (store.settings.mode === "loopback") {
-      this.#notify();
-      return;
-    }
-    if (target === undefined || name === "" || name === target.hostName) {
-      this.#notify();
-      return;
-    }
+    if (store.settings.mode === "loopback") return;
+    if (target === undefined || name === "" || name === target.hostName) return;
     const renamed: MemberTarget = { ...target, hostName: name };
     this.#targets.set(hostId, renamed);
     const members = this.#settings.members.map((member) => (member.hostId === hostId ? renamed : member));
     const selected = this.#settings.hostId === hostId ? { hostName: name } : {};
     this.#settings = normalizeSettings({ ...this.#settings, ...selected, members });
     saveSettings(this.#settings);
-    this.#notify();
   }
 
   #refresh(): void {

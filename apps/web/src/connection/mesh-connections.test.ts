@@ -66,7 +66,11 @@ class FakeConnection implements MemberConnection {
     this.settings = settings;
   }
 
-  restoring(): void {}
+  restoring(): void {
+    this.stop();
+    this.#state = { phase: "connecting", attempt: 0, stale: null };
+    this.#emit();
+  }
 
   starters = 0;
 
@@ -120,6 +124,26 @@ afterEach(() => {
 });
 
 describe("one connection per member", () => {
+  it("dials again after restoring stops it, even when the endpoint did not change", () => {
+    const { mesh, made } = running(settingsWith([member("a")], "a"));
+    expect(made[0]?.started).toBe(1);
+    mesh.restoring();
+    expect(made[0]?.stopped).toBe(1);
+    mesh.update(settingsWith([member("a")], "a"));
+    expect(made[0]?.started).toBe(2);
+  });
+
+  it("tells listeners the selection moved when a machine fails over", () => {
+    const { mesh, made } = running(settingsWith([member("a"), member("b")], "a"));
+    let told = 0;
+    mesh.subscribe(() => {
+      told += 1;
+    });
+    made[0]?.fail();
+    expect(told).toBeGreaterThan(0);
+    expect(mesh.settings.hostId).toBe("b");
+  });
+
   it("dials nothing until it is started, so the boot path decides when and against which port", () => {
     const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
     expect(made).toHaveLength(2);
