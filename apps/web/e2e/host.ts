@@ -15,6 +15,7 @@ import {
 } from "./config.ts";
 import { LAYOUT_CORE, LAYOUT_DIR, LAYOUT_MACHINE_SPEC, LAYOUT_TERMINALS } from "./layout-seed.ts";
 import { addMachine, runSeeds } from "./machine.ts";
+import { watchParentDeath } from "./parent-death.ts";
 import { seedMeshDoc } from "./mesh-doc.ts";
 import { writeSavedEnv } from "./saved-env.ts";
 import { seed } from "./seed.ts";
@@ -111,6 +112,10 @@ async function shutdown(): Promise<void> {
 }
 process.once("SIGTERM", () => void shutdown());
 process.once("SIGINT", () => void shutdown());
+// A killed run sends this host nothing: Playwright SIGKILLs what it started, so the core and the ports it holds would
+// outlive the run and block the next one (#693). Watching the parent's identity, rather than waiting for a signal,
+// lets it stop itself. Not ppid === 1: under a subreaper or a container init the host reparents to something else.
+watchParentDeath(() => void shutdown());
 try {
   if (layout) {
     const seeds = LAYOUT_TERMINALS.map((terminal) => terminal.seed);
