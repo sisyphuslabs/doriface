@@ -68,10 +68,12 @@ export function Workspace({ connection }: WorkspaceProps) {
     refresh,
     listError,
     views,
+    heard: heardMachines,
     retry,
     listed: machineReads,
   } = useMachines(connection, fed.terminals);
-  const { layouts, heard } = useLayoutDocs(connection, views);
+  // Opened and re-read on what hc said: a document read while its line was down is read again once the line is back.
+  const { layouts, heard } = useLayoutDocs(connection, heardMachines);
   const gitOf = useGitFacts(connection, views);
   const todoOf = useTodoProgress(connection, fed.terminals);
   heardLayout.current = heard;
@@ -148,7 +150,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     },
     [dropPane],
   );
-  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, dropEnded);
+  // A pane is asked about only on what hc said: a machine held connected through a redial may have no terminals listed.
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, heardMachines, machineReads, dropEnded);
   useAdoptLoose(layouts, fed.loaded ? terminals : null, failed);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);
