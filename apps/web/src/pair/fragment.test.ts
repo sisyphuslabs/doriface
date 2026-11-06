@@ -36,6 +36,17 @@ describe("pairing fragment", () => {
     expect(parsed.ok && parsed.offer.secret).toEqual({ mode: "link", linkSecret: new Uint8Array(32).fill(3) });
   });
 
+  test("a link with no mesh flag pairs this device with the host", () => {
+    const parsed = parsePairingFragment(fragment());
+    expect(parsed.ok && parsed.offer.target).toBe("device");
+  });
+
+  // The host closes a device pairing on a mesh offer with 4401 without answering, so the web must read the flag.
+  test("a link with m=1 admits a machine, not this device", () => {
+    const parsed = parsePairingFragment(fragment({ m: "1" }));
+    expect(parsed.ok && parsed.offer.target).toBe("mesh");
+  });
+
   test("a link with a code and no link secret comes from an older host", () => {
     const old =
       "#" +
