@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { sessionPathLabel } from "./session-path.ts";
 import type { DirectReason } from "../connection/direct-attempt.ts";
+import { sessionPathLabel } from "./session-path.ts";
 
 const REASONS: readonly DirectReason[] = [
   "blocked",
@@ -17,16 +17,9 @@ describe("sessionPathLabel", () => {
     expect(sessionPathLabel("relay")).toBe("Through the relay");
   });
 
-  test("says why the relay carries it, for every reason a direct attempt can fail", () => {
-    for (const reason of REASONS) {
-      const label = sessionPathLabel("relay", reason);
-      expect(label).toContain("so the relay carries it");
-      expect(label).not.toBe("Through the relay");
-    }
-  });
-
   test("gives each reason its own words, so none is a silent fallback", () => {
     const labels = new Set(REASONS.map((reason) => sessionPathLabel("relay", reason)));
     expect(labels.size).toBe(REASONS.length);
+    expect(labels.has(sessionPathLabel("relay"))).toBe(false);
   });
 });

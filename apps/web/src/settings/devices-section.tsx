@@ -129,8 +129,9 @@ export function DevicesSection() {
                 {sessionPathLabel(state.path, state.directReason)}
                 {roundTrip === undefined ? "" : ` · ${roundTrip} ms round trip`}
               </span>
-            ) : null}
-            {route.label === undefined ? null : <span className="block text-muted-foreground">{route.label}</span>}
+            ) : route.label === undefined ? null : (
+              <span className="block text-muted-foreground">{route.label}</span>
+            )}
           </>
         }
         control={null}

@@ -7,7 +7,7 @@ const REASONS: Readonly<Record<DirectReason, string>> = {
   "unusable-address": "The saved direct address is not usable, so the relay carries it.",
   "no-answer": "The direct link did not answer, so the relay carries it.",
   "could-not-connect": "The direct link could not be opened, so the relay carries it.",
-  "authentication-failed": "The direct link refused this device, so the relay carries it.",
+  "authentication-failed": "The direct link failed its security check, so the relay carries it.",
 };
 
 /**
