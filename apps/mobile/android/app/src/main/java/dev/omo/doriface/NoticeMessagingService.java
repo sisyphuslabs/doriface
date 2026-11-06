@@ -23,8 +23,19 @@ public class NoticeMessagingService extends FirebaseMessagingService {
     static final String EXTRA_URL = "dev.omo.doriface.NOTICE_URL";
     static final String EXTRA_TAG = "dev.omo.doriface.NOTICE_TAG";
     static final String EXTRA_NONCE = "dev.omo.doriface.NOTICE_NONCE";
-    /** Rides on every notice intent this app makes; an intent from another app cannot know it. */
-    static final String NONCE = java.util.UUID.randomUUID().toString();
+    /**
+     * Rides on every notice intent this app makes; an intent from another app cannot know it. Made once and kept in the
+     * app's private storage, so a notification posted before the process was killed still opens its pane when tapped.
+     */
+    static synchronized String nonce(Context context) {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("doriface-intents", Context.MODE_PRIVATE);
+        String value = prefs.getString("nonce", null);
+        if (value == null) {
+            value = java.util.UUID.randomUUID().toString();
+            prefs.edit().putString("nonce", value).commit();
+        }
+        return value;
+    }
     static final int NOTICE_ID = 1;
     private static final String TAG = "doriface-push";
 
@@ -59,7 +70,7 @@ public class NoticeMessagingService extends FirebaseMessagingService {
             .setAction(Intent.ACTION_VIEW)
             .putExtra(EXTRA_URL, url)
             .putExtra(EXTRA_TAG, tag)
-            .putExtra(EXTRA_NONCE, NONCE)
+            .putExtra(EXTRA_NONCE, nonce(context))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         return PendingIntent.getActivity(context, request, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }

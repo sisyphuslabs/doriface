@@ -33,7 +33,8 @@ public class DorifacePushPlugin extends Plugin {
         String url = intent == null ? null : intent.getStringExtra(NoticeMessagingService.EXTRA_URL);
         if (url == null) return;
         // Only this app's own notification intents: the launcher activity is exported, so any app can start it.
-        if (!NoticeMessagingService.NONCE.equals(intent.getStringExtra(NoticeMessagingService.EXTRA_NONCE))) return;
+        String nonce = NoticeMessagingService.nonce(getContext());
+        if (!nonce.equals(intent.getStringExtra(NoticeMessagingService.EXTRA_NONCE))) return;
         // An action button does not dismiss its notification by itself; the notice is handled once the app has it.
         String tag = intent.getStringExtra(NoticeMessagingService.EXTRA_TAG);
         if (tag != null) NotificationManagerCompat.from(getContext()).cancel(tag, NoticeMessagingService.NOTICE_ID);
