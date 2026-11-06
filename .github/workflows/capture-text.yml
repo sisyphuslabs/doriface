@@ -10,13 +10,21 @@ on:
   pull_request:
     paths:
       - "docs/**/*.png"
+      - "docs/**/*.PNG"
       - "docs/**/*.jpg"
+      - "docs/**/*.JPG"
       - "docs/**/*.jpeg"
+      - "docs/**/*.JPEG"
       - "docs/**/*.webp"
+      - "docs/**/*.WEBP"
       - ".github/assets/**/*.png"
+      - ".github/assets/**/*.PNG"
       - ".github/assets/**/*.jpg"
+      - ".github/assets/**/*.JPG"
       - ".github/assets/**/*.jpeg"
+      - ".github/assets/**/*.JPEG"
       - ".github/assets/**/*.webp"
+      - ".github/assets/**/*.WEBP"
       - "tests/ci/capture-text.ts"
       - "tests/ci/capture-text.test.ts"
       - ".github/workflows/capture-text.yml"
@@ -51,7 +59,7 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only --no-renames --diff-filter=AM "$BASE...HEAD" -- '*.png' '*.jpg' '*.jpeg' '*.webp')
+          mapfile -t changed < <(git diff --name-only --no-renames --diff-filter=AM "$BASE...HEAD" -- ':(icase)*.png' ':(icase)*.jpg' ':(icase)*.jpeg' ':(icase)*.webp')
           if [ "${#changed[@]}" -eq 0 ]; then
             echo "no changed images"
             exit 0

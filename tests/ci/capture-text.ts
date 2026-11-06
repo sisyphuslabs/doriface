@@ -22,21 +22,18 @@ export const NEUTRAL_NAMES: ReadonlySet<string> = new Set([
   "work",
   "localhost",
   "root",
-  "this",
-  "machine",
 ]);
 
 const isNeutral = (name: string): boolean => NEUTRAL_NAMES.has(name.toLowerCase().replace(/^my-/, ""));
 
 /** Registry-style suffixes an `@` in prose takes; they name a package, not an account on a computer. */
-const PACKAGE_SUFFIX = /^(?:latest|next|beta|alpha|canary|stable|\d+(?:\.\d+)*)$/i;
+const PACKAGE_SUFFIX = /^(?:latest|next|beta|alpha|canary|stable)$/i;
 const REGISTRY_HOSTS = /^(?:github\.com|npmjs\.(?:com|org)|golang\.org|pypi\.org)$/i;
 
-const ACCOUNT_AT_HOST = /\b([a-z][a-z0-9._-]*)@([a-z][a-z0-9.-]*[a-z0-9])/g;
+const ACCOUNT_AT_HOST = /\b([a-z][a-z0-9._-]*)@([a-z][a-z0-9.-]*[a-z0-9])/gi;
 const HOME_PATH = /\/(?:Users|home)\/([A-Za-z][A-Za-z0-9._-]*)/g;
 const RUN_ROOT = /\/(?:srv|var\/tmp|private\/tmp|var\/folders|tmp)\/[A-Za-z]/;
 const OPT_ROOT = /\/opt\/(?!homebrew\b)[A-Za-z]/;
-const THIS_MACHINE = /\bthis machine\b/i;
 
 export interface Verdict {
   readonly ok: boolean;
@@ -54,7 +51,7 @@ export function classify(ocrText: string): Verdict {
     const account = match[1] ?? "";
     const host = match[2] ?? "";
     if (isNeutral(account) && isNeutral(host)) continue;
-    if (PACKAGE_SUFFIX.test(host) || REGISTRY_HOSTS.test(host) || isNeutral(host)) continue;
+    if (PACKAGE_SUFFIX.test(host) || REGISTRY_HOSTS.test(host)) continue;
     if (account.length < 2) continue;
     add("prompt: account at host");
   }
@@ -64,12 +61,8 @@ export function classify(ocrText: string): Verdict {
   if (RUN_ROOT.test(ocrText)) add("path: run root");
   if (OPT_ROOT.test(ocrText)) add("path: system install root");
 
-  for (const line of ocrText.split("\n")) {
-    if (!THIS_MACHINE.test(line)) continue;
-    // A host name shown only as a UI label is deliberately out of scope: on a real capture OCR puts it beside a row
-    // label like "Spaces", which no text rule can tell from a heading, and flagging headings failed 24 clean captures.
-    break;
-  }
+  // A host name shown only as a UI label is deliberately out of scope: on a real capture OCR puts it beside a row label
+  // like "Spaces", which no text rule can tell from a heading, and flagging headings failed 24 clean captures.
 
   return { ok: findings.length === 0, findings };
 }
@@ -118,4 +111,5 @@ if (import.meta.main) {
     console.error(`${failed} image(s) must not be committed: re-capture with a neutral name and prompt (#926)`);
     process.exit(1);
   }
+  console.log(`checked ${images.length} image(s), 0 with findings`);
 }

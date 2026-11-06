@@ -15,6 +15,17 @@ describe("a capture's OCR text", () => {
     expect(classify("user@localhost:~$ ls").ok).toBe(true);
   });
 
+  test("a capitalised account or host is still an account at a host", () => {
+    expect(patterns("User@Users-MacBook-Pro ~ % ls")).toContain("prompt: account at host");
+    expect(patterns("Alice@build-box:~$ ls")).toContain("prompt: account at host");
+  });
+
+  test("a named host is flagged even when the host word is neutral", () => {
+    expect(patterns("someone@localhost:~$ ls")).toContain("prompt: account at host");
+    expect(patterns("someone@my-laptop:~$ ls")).toContain("prompt: account at host");
+    expect(classify("demo@localhost:~$ ls").ok).toBe(true);
+  });
+
   test("package specs and registry hosts are not accounts on a computer", () => {
     expect(classify("bunx playwright@latest").ok).toBe(true);
     expect(classify("git@github.com:owner/repo.git").ok).toBe(true);
