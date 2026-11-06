@@ -147,6 +147,17 @@ describe("install.sh on Linux", () => {
       "curl https://github.com/sisyphuslabs/doriface/releases/download/v9.9.9/doriface-host-linux-x64",
     );
     expect(asked).not.toContain("/latest/");
+
+    // The repository copy, never stamped, asks for the latest release.
+    writeFileSync(r.log, "");
+    Bun.spawnSync(["/bin/sh", SCRIPT, "--no-service", "--no-pair"], {
+      env: { HOME: r.home, PATH: [r.stubs, "/usr/bin", "/bin"].join(":"), TMPDIR: r.root },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(readFileSync(r.log, "utf8")).toContain(
+      "curl https://github.com/sisyphuslabs/doriface/releases/latest/download/doriface-host-linux-x64",
+    );
   });
 
   test("a path with a percent sign reaches systemd as itself, not as a specifier", () => {
