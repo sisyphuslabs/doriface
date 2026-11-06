@@ -41,6 +41,10 @@ test("a dev build keeps a saved custom relay address", () => {
   expect(loadSettings(saved(CUSTOM), { devBuild: true }).relayUrl).toBe("wss://relay.custom.invalid");
 });
 
+test("a saved host name comes back on a fresh load, so a host that is not answering is still named (#496)", () => {
+  expect(loadSettings(saved({ ...CUSTOM, hostName: "studio" }), { devBuild: false }).hostName).toBe("studio");
+});
+
 test("with no localStorage at all, as under bun's test runner, the defaults (#490)", () => {
   expect(Reflect.get(globalThis, "localStorage")).toBeUndefined();
   expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
