@@ -12,7 +12,7 @@
 
 ### Notifications
 
-- Notifications say why they are not arriving: the desktop app now reads the OS authorization, shows a refusal with the remedy, retries a subscription that failed, and says how many agents are already waiting. (#783)
+- Notifications say why they are not arriving: the app reports when the OS refuses a notification, with the remedy, retries a subscription that failed, and says how many agents are already waiting. (#783)
 
 ## v0.1.4 - 2026-11-06
 
