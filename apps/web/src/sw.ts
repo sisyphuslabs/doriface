@@ -13,6 +13,7 @@ import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { planClick } from "./push/notice-click.ts";
 import { DEFAULT_MAX_ACTIONS, noticeDisplay } from "./push/notice-display.ts";
+import { deadlineAfter, exchangeWithin, type PushExchange } from "./push/over-push.ts";
 import { loadPushPrefs, loadPushRoute, openPushLink } from "./push/push-route.ts";
 import { carryOver } from "./push/reconcile.ts";
 import { asSubscription } from "./push/subscription-keys.ts";
@@ -84,23 +85,22 @@ async function promptOf(notice: PushNotice): Promise<NoticePrompt | undefined> {
   return reply.t === "notice" ? reply.prompt : undefined;
 }
 
-/**
- * One line over a fresh E2EE push session. An answer: the host checks the live prompt first and types only if it is
- * unchanged.
- */
-async function overPush(line: PushClientLine, timeoutMs = ANSWER_TIMEOUT_MS): Promise<PushHostLine> {
+async function openSession(): Promise<PushExchange> {
   const route = await loadPushRoute();
   if (route === undefined) throw new Error("notifications are off on this device");
-  const client = new PushStreamClient(await openPushLink(route));
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("the host did not answer")), timeoutMs);
-  });
+  return new PushStreamClient(await openPushLink(route));
+}
+
+/**
+ * One line over a fresh E2EE push session, all of it (route, link and reply) inside the deadline. An answer: the host
+ * checks the live prompt first and types only if it is unchanged.
+ */
+async function overPush(line: PushClientLine, timeoutMs = ANSWER_TIMEOUT_MS): Promise<PushHostLine> {
+  const deadline = deadlineAfter(timeoutMs);
   try {
-    return await Promise.race([client.request(line), timeout]);
+    return await exchangeWithin(openSession, line, deadline.expired);
   } finally {
-    clearTimeout(timer);
-    client.close();
+    deadline.cancel();
   }
 }
 
