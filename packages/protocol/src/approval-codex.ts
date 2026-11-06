@@ -1,3 +1,4 @@
+import { ASKED_CELL, CELL_LINE, headerFits, rowsFit, titleOf } from "./approval-codex-titles.ts";
 import {
   bodyText,
   contextAbove,
@@ -17,33 +18,6 @@ const AGENT = "Codex";
 /** The person's own message in the transcript: where the agent's lines above a dialog start. */
 const ASKED = /^› /;
 
-/**
- * Every title Codex's approval overlay draws (codex-rs tui `bottom_pane/approval_overlay.rs` `build_options`, upstream
- * c3d3b142d1), the group being what it asks: a command (:265), input to a terminal (:258, :260), network access (:268),
- * permissions (:286), edits (:290), an MCP server's request (:294). The last entry is any other "Would you like to …?"
- * title, which the card read before these were listed, so no approval read then goes unread now.
- */
-const TITLES: readonly { readonly title: RegExp; readonly asks: string }[] = [
-  { title: /^Would you like to (run the following command)\?$/, asks: "wants to run" },
-  { title: /^Would you like to (send input to the existing terminal)\?$/, asks: "asks for permission" },
-  { title: /^Would you like to (send input to terminal \S+)\?$/, asks: "asks for permission" },
-  { title: /^Do you want to (approve network access to ".+")\?$/, asks: "asks for permission" },
-  { title: /^Would you like to (grant these permissions)\?$/, asks: "asks for permission" },
-  { title: /^Would you like to (make the following edits)\?$/, asks: "wants to edit" },
-  { title: /^(\S.* needs your approval)\.$/, asks: "asks for permission" },
-  { title: /^Would you like to (.+)\?$/, asks: "asks for permission" },
-];
-/** The title entry a line is, with what it asks; undefined for a line that is not one of Codex's approval titles. */
-const titleOf = (line: string) =>
-  TITLES.flatMap(({ title, asks }) => {
-    const asked = title.exec(line.trim())?.[1];
-    return asked === undefined ? [] : [{ asked, asks }];
-  })[0];
-/**
- * The fields Codex draws in an approval's header (`approval_overlay.rs` `build_header`: Thread :700, Environment :707,
- * Reason :713, Permission rule :720, Input :727, Server :779; a patch's Description and Destination as recorded).
- */
-const FIELD = /^(?:Thread|Environment|Reason|Permission rule|Input|Server|Description|Destination): /;
 const PERMISSION_FOOTER = /\besc to cancel\b/;
 const KEYED = /^(.*\S)\s+\((\S+)\)$/;
 const DESTINATION = /^Destination:\s+(.+)$/;
@@ -55,31 +29,6 @@ const LABEL_DETAIL = /^(.*?\S)\s{2,}(\S.*)$/;
 const NOTES = /\(tab\)\s*$/;
 /** The notes row Tab opens under the cursor's option: `› Add notes`. */
 const NOTES_OPEN = /^\s*›\s+Add notes\b/;
-/**
- * The cell Codex draws for what it asks about, right above its approval, as its TUI source draws the header (codex-rs
- * tui): a command's `Running`, an exploring group's `Exploring`, input to a terminal's `Interacted with` or `Waited for`
- * (`exec_cell/render.rs`), a patch's `Added`, `Deleted` or `Edited` (`diff_render.rs`). A cell still running blinks its
- * bullet between `•` and `◦` when the terminal has no true colour (`motion.rs`). A permissions request draws no cell
- * (`chatwidget/tool_requests.rs`): its dialog sits under whatever cell came before, often the agent's own message. An
- * MCP server's request comes inside its tool call, whose cell says `Calling` (`history_cell/mcp.rs`, `dynamic.rs`).
- */
-const ASKED_CELL = /^[•◦] (?:Running|Exploring|Interacted with|Waited for|Added|Deleted|Edited|Calling)(?:\s|$)/;
-/** A line of the cell itself under its header: a command's `│`/`└` lines, a diff or a listing drawn four columns in. */
-const CELL_LINE = /^(?: {2}[│└]| {4})/;
-
-/**
- * Under a cell that is not Codex's own, the lines from the title to the rows are the dialog's header only when each is
- * one of Codex's fields, a field's value wrapped onto the next line, or blank. A command (`$ `) only comes under the
- * command's own cell, and any other line (a wrapped or free-form title of a real dialog below) means the title is not
- * this dialog's.
- */
-function headerOnly(header: readonly string[]): boolean {
-  return header.every((line, index) => {
-    const text = line.trim();
-    const wrapped = index > 0 && (header[index - 1] ?? "").trim() !== "" && !text.startsWith("$ ");
-    return text === "" || FIELD.test(text) || wrapped;
-  });
-}
 
 /**
  * A question's rows from row 1 to its footer: each row at row 1's number column, numbered one past the last; a line
@@ -121,10 +70,10 @@ const edgeAbove = (lines: readonly string[], at: number, column: number) =>
  * It is read from the bottom up: the footer, the option rows right above it, then the header above them. The header
  * is drawn two columns in, and so is every line of a command inside it, while the transcript above starts each cell
  * at the left edge. The dialog's title is the highest title line at the footer's column below that edge: a
- * title-shaped line in the command is below the real one (#776). Every title shape Codex draws counts: a card is read
- * only when exactly one title heads the dialog, i.e. one title in the header above the command under Codex's own
- * cell, and one title in the whole block under any other cell (a permissions request draws none), where the agent's
- * own text could sit right above the dialog at its column and pass for its header.
+ * title-shaped line in the command is below the real one (#776). Every title shape Codex draws counts, and a card is
+ * read only when the dialog provably starts at its title: its header and its rows are what that title's builders draw
+ * (approval-codex-titles.ts), it is the only title above its command, and under any cell that is not Codex's own it is
+ * the only title at all. The cell line itself is screen text an agent message can copy, so it never stands alone.
  */
 function readPermission(lines: readonly string[]): Found | undefined {
   const footer = lastIndex(lines, (line) => PERMISSION_FOOTER.test(line));
@@ -148,17 +97,21 @@ function readPermission(lines: readonly string[]): Found | undefined {
   const underCell = lines.slice(edge + 1, question).every((line) => line.trim() === "" || CELL_LINE.test(line));
   const commandAt = lines.findIndex((line, index) => index > question && index < first && /^\s*\$ /.test(line));
   const heading = titles.filter((index) => index < (commandAt === -1 ? first : commandAt)).length;
-  const read = ownCell
-    ? underCell && heading === 1
-    : titles.length === 1 && headerOnly(lines.slice(question + 1, first));
-  if (!read) return undefined;
+  const title = titleOf(lines[question] ?? "");
+  const fits =
+    title !== undefined &&
+    headerFits(lines.slice(question + 1, first), title, ownCell) &&
+    rowsFit(
+      rows.map((row) => row.label),
+      title,
+    );
+  if (!fits || !(ownCell ? underCell && heading === 1 : titles.length === 1)) return undefined;
   const details = lines
     .slice(question + 1, first)
     .map((line) => line.trim())
     .filter((line) => line !== "");
   const commandLine = details.findIndex((line) => line.startsWith("$ "));
-  const title = titleOf(lines[question] ?? "");
-  const asked = title?.asked ?? "";
+  const asked = title.asked;
   const header = commandLine === -1 ? details : details.slice(0, commandLine);
   const destination = header.map((line) => DESTINATION.exec(line)?.[1]).find((path) => path !== undefined);
   const command =
@@ -173,7 +126,7 @@ function readPermission(lines: readonly string[]): Found | undefined {
   const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "permission",
-    asks: title?.asks ?? "asks for permission",
+    asks: title.asks,
     question: (lines[question] ?? "").trim(),
     command,
     body: bodyText(header.filter((line) => !DESTINATION.test(line))),
