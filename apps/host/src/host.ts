@@ -234,7 +234,7 @@ async function serve(
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
-        .then(() => Promise.all([info?.stop(), git?.stop()]))
+        .then(() => Promise.all([info?.stop(), git?.stop(), meshDoc?.stop()]))
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => retireLock(stateDir, options.log));
