@@ -93,11 +93,11 @@ app; and the **relay** between them, which is already deployed. The shortest pat
 
 | Platform                          | File                                                                                                  |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| macOS, Apple silicon              | `doriface-<version>-arm64.dmg`, or `doriface-<version>-arm64-mac.zip`                                 |
-| macOS, Intel                      | `doriface-<version>-x64.dmg`, or `doriface-<version>-x64-mac.zip`                                     |
-| Windows, x64 and arm64            | `doriface-<version>-x64-setup.exe`, `doriface-<version>-arm64-setup.exe`                              |
-| Linux, x64 and arm64              | `doriface-<version>-x86_64.AppImage`, `-arm64.AppImage`, `doriface_<version>_amd64.deb`, `_arm64.deb` |
-| The web client, to serve yourself | `doriface-web-<version>.zip`                                                                          |
+| macOS, Apple silicon              | `Doriterm-<version>-arm64.dmg`, or `Doriterm-<version>-arm64-mac.zip`                                 |
+| macOS, Intel                      | `Doriterm-<version>-x64.dmg`, or `Doriterm-<version>-x64-mac.zip`                                     |
+| Windows, x64 and arm64            | `Doriterm-<version>-x64-setup.exe`, `Doriterm-<version>-arm64-setup.exe`                              |
+| Linux, x64 and arm64              | `Doriterm-<version>-x86_64.AppImage`, `-arm64.AppImage`, `Doriterm_<version>_amd64.deb`, `_arm64.deb` |
+| The web client, to serve yourself | `doriterm-web-<version>.zip`                                                                          |
 
 The macOS app has been signed with a Developer ID certificate and notarized since v0.1.1, and its disk image is stapled; v0.1.0
 was only ad-hoc signed, so macOS blocks its first open until you choose **Open Anyway** in System Settings > Privacy &
