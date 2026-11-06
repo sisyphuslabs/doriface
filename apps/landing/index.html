@@ -581,14 +581,18 @@
                 <li>which host ids open sessions to which, and when</li>
                 <li>the addresses they connect from</li>
                 <li>the size and timing of encrypted records</li>
+                <li>
+                  with a typed code, a relay that answers as a fake host can read the new device's name; the fingerprint
+                  check then shows a key that is not your host's
+                </li>
               </ul>
             </div>
             <div class="card reveal no" style="--delay: 80ms">
               <h3>What it never sees</h3>
               <ul>
                 <li>your keystrokes and terminal output</li>
-                <li>pairing secrets, device names, mesh records</li>
-                <li>anything it could forge, replay or splice</li>
+                <li>the pairing secret in a QR code or link, and mesh records</li>
+                <li>nothing it learns lets it forge, replay or splice a record</li>
               </ul>
             </div>
           </div>
