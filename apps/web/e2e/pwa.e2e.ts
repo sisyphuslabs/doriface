@@ -11,7 +11,7 @@ function isIcon(value: unknown): value is ManifestIcon {
 
 test("the app is installable, serves its icons and registers its service worker", async ({ page, request }, info) => {
   const manifest: unknown = await (await request.get("/manifest.webmanifest")).json();
-  expect(manifest).toMatchObject({ name: "doriface", display: "standalone", start_url: "/" });
+  expect(manifest).toMatchObject({ name: "Doriterm", display: "standalone", start_url: "/" });
   const icons: unknown = typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, "icons") : null;
   expect(Array.isArray(icons)).toBe(true);
   const listed = Array.isArray(icons) ? icons.filter(isIcon) : [];

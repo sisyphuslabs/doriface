@@ -74,9 +74,9 @@ async function appPage(): Promise<Page> {
   return page;
 }
 
-test("the app is named doriface", async () => {
+test("the app is named Doriterm", async () => {
   const name = await running().evaluate(({ app }) => app.getName());
-  expect(name).toBe("doriface");
+  expect(name).toBe("Doriterm");
 });
 
 test("a second launch and a Dock click bring back the one window", async () => {

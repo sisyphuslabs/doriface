@@ -40,7 +40,7 @@ function opensWith(opens: PairingArtifact["opens"]): string {
     case "web":
       return "Open this link in a browser";
     case "desktop":
-      return "Open this link in the doriface desktop app";
+      return "Open this link in the Doriterm desktop app";
   }
 }
 

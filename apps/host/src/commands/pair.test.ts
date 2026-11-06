@@ -34,7 +34,7 @@ describe("doriface-host pair", () => {
       await pairCommand(["--no-qr", "--state-dir", dir], (chunk) => void (text += chunk));
       expect(text).not.toContain("https://doriface.omo.dev");
       expect(text.split("\n").filter((line) => line.startsWith("http"))).toEqual([]);
-      expect(text).toContain("doriface desktop app");
+      expect(text).toContain("Doriterm desktop app");
       const link = linkOf(text, "doriface://pair#");
       expect([...fragmentOf(link).keys()]).toEqual(["h", "k", "s", "p", "r"]);
       const offer = new PairingStore(dir).read();

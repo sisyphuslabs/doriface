@@ -106,7 +106,7 @@ describe("APNs (#705)", () => {
     const payload = JSON.parse(apns?.body ?? "");
     expect(payload.aps["mutable-content"]).toBe(1);
     // A fixed text the extension replaces: it says nothing about the notice, which only the device can read.
-    expect(payload.aps.alert).toEqual({ title: "doriface", body: "Open doriface to see what changed." });
+    expect(payload.aps.alert).toEqual({ title: "Doriterm", body: "Open Doriterm to see what changed." });
     const notice = JSON.parse(new TextDecoder().decode(await decryptPushBody(forwardedBody(payload.p), receiver)));
     expect(notice).toEqual(NOTICE);
   });

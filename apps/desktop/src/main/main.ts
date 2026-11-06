@@ -26,6 +26,10 @@ import { revealWhenReady } from "./window-reveal.ts";
 import { UpdateWatch } from "./updater.ts";
 
 const platform = parsePlatform(process.platform);
+// The app is Doriterm now, but its storage keeps the directory it was installed under: userData holds the renderer's
+// localStorage and the IndexedDB store with this device's key and the hosts it paired, so letting the directory follow
+// the new name would open every existing install with no device and no settings. Pinned before anything reads a path.
+app.setPath("userData", join(app.getPath("appData"), "doriface"));
 const devSetting = app.isPackaged ? undefined : process.env["DORIFACE_DESKTOP_DEV_URL"];
 const devUrl = devSetting === undefined || devSetting === "" ? undefined : loopbackDevUrl(devSetting);
 const origin = devUrl === undefined ? APP_ORIGIN : new URL(devUrl).origin;
@@ -243,7 +247,7 @@ if (!app.requestSingleInstanceLock()) {
     .whenReady()
     .then(ready)
     .catch((error: unknown) => {
-      console.error(`doriface failed to start: ${String(error)}`);
+      console.error(`Doriterm failed to start: ${String(error)}`);
       app.exit(1);
     });
 }

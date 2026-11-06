@@ -31,8 +31,8 @@ export default defineConfig({
       filename: "sw.ts",
       includeAssets: ["icon.svg", "favicon.svg", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png"],
       manifest: {
-        name: "doriface",
-        short_name: "doriface",
+        name: "Doriterm",
+        short_name: "Doriterm",
         description: "Your terminals and agents, from any device.",
         display: "standalone",
         start_url: "/",

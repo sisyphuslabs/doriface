@@ -37,7 +37,7 @@ test("a permission notice is opaque; Allow opens the pane and the page answers o
   await deliverPush(context, JSON.stringify(posted.notice));
   await expect
     .poll(() => shownNotifications(worker))
-    .toEqual([{ title: "doriface", body: "An agent is asking for permission.", tag, actions: ["allow", "deny"] }]);
+    .toEqual([{ title: "Doriterm", body: "An agent is asking for permission.", tag, actions: ["allow", "deny"] }]);
   await tapNotification(worker, tag, "allow");
   await expect(page.locator(`[data-terminal="${agent.address}"]`)).toBeVisible({ timeout: 15_000 });
   await expect(banner(page)).toHaveAttribute("data-prompt-answer", "answered", { timeout: 15_000 });

@@ -28,7 +28,7 @@ export interface NoticeDisplay {
 export function noticeDisplay(notice: PushNotice): NoticeDisplay {
   const asks = notice.k === "permission";
   return {
-    title: "doriface",
+    title: "Doriterm",
     body: BODY[notice.k],
     tag: notice.n,
     data: notice,

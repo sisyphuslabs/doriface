@@ -69,4 +69,4 @@ const assets = readdirSync(assetsDir)
   .filter((name) => name !== "SHA256SUMS.txt")
   .toSorted();
 const changes = changelogSection(version) ?? "No CHANGELOG.md section for this version.";
-console.log([`# doriface v${version}`, changes, `## Downloads\n\n${downloads(assets)}`, SIGNING].join("\n\n"));
+console.log([`# Doriterm v${version}`, changes, `## Downloads\n\n${downloads(assets)}`, SIGNING].join("\n\n"));
