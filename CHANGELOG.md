@@ -2,13 +2,25 @@
 
 ## Unreleased
 
+### Web app
+
+- A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
+
 ### Settings
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
 
+### Pairing from a phone
+
+- The pairing link a phone opens points at **https://app.doriterm.com**, the app's own host, instead of the old `doriface.omo.dev` address; a link from either host still opens the pair page while the move completes. The desktop app accepts a pair link on both hosts for the same reason. (#759)
+
 ### Machine mesh
 
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 45 s without it, as a laptop that went to sleep still does. (#909)
+
+### Notifications
+
+- Notifications say why they are not arriving: the app reports when the OS refuses a notification, with the remedy, retries a subscription that failed, and says how many agents are already waiting. (#783)
 
 ## v0.1.4 - 2026-11-06
 
