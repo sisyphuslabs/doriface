@@ -24,12 +24,44 @@ test("the terminal font stack names a Hangul face, so a device without the Latin
 });
 
 /**
- * The reported failure is a cell that paints nothing, so the test compares the same cell's pixels before and after the
- * syllable is printed: an advance width cannot answer this (a codepoint with no glyph still reports one), and a canvas
- * cannot either (a browser paints a tofu box for a missing glyph, which is ink). Only the rendered cell separates a
- * drawn syllable from the blank space in #959.
+ * The reported failure is a cell that paints nothing, so the test counts the pixels the cell actually marks: an advance
+ * width cannot answer this (a codepoint with no glyph still reports one), and a canvas cannot either (a browser paints a
+ * tofu box for a missing glyph, which is ink).
+ *
+ * Both crops go through the same page.screenshot with INTEGER bounds. An element screenshot rounds its box outward while
+ * a clip honours its fractional values, so mixing the two yields images of different size even when both cells are empty
+ * - a byte comparison between them then passes on a blank cell and guards nothing.
  */
-async function printsInk(page: Page, terminal: Locator): Promise<boolean> {
+type Ink = { readonly ink: number; readonly width: number; readonly height: number };
+
+async function cropInk(page: Page, clip: { x: number; y: number; width: number; height: number }): Promise<Ink> {
+  const shot = await page.screenshot({ clip });
+  return page.evaluate(async (base64: string): Promise<Ink> => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.codePointAt(0) ?? 0);
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("the page has no 2d context");
+    context.drawImage(bitmap, 0, 0);
+    const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    const red = data[0] ?? 0;
+    const green = data[1] ?? 0;
+    const blue = data[2] ?? 0;
+    let ink = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const distance =
+        Math.abs((data[index] ?? 0) - red) +
+        Math.abs((data[index + 1] ?? 0) - green) +
+        Math.abs((data[index + 2] ?? 0) - blue);
+      if (distance > 24) ink += 1;
+    }
+    return { ink, width: bitmap.width, height: bitmap.height };
+  }, shot.toString("base64"));
+}
+
+async function syllableInk(page: Page, terminal: Locator): Promise<{ readonly glyph: Ink; readonly blank: Ink }> {
   await terminal.getByRole("textbox").focus();
   const octal = [...new TextEncoder().encode("안")].map((byte) => `\\${byte.toString(8)}`).join("");
   await page.keyboard.type(`printf '${octal}\\n'`);
@@ -37,36 +69,27 @@ async function printsInk(page: Page, terminal: Locator): Promise<boolean> {
   const wide = terminal.locator(".term-row:not(.term-scrollback-row) .term-wide").filter({ hasText: "안" }).first();
   await expect(wide).toBeVisible({ timeout: 15_000 });
 
-  const glyph = await wide.screenshot();
   const box = await wide.boundingBox();
-  const bounds = await terminal.boundingBox();
-  if (box === null || bounds === null) throw new Error("the syllable's cell has no box");
-  const beyond = box.x + box.width * 2;
-  const blank = await page.screenshot({
-    clip: {
-      x: Math.min(beyond, bounds.x + bounds.width - box.width),
-      y: box.y,
-      width: box.width,
-      height: box.height,
-    },
-  });
-  console.log(
-    "DBG box",
-    JSON.stringify(box),
-    "glyphBytes",
-    glyph.length,
-    "blankBytes",
-    blank.length,
-    "equal",
-    glyph.equals(blank),
-  );
-  return glyph.length > 0 && !glyph.equals(blank);
+  if (box === null) throw new Error("the syllable's cell has no box");
+  const clip = {
+    x: Math.round(box.x),
+    y: Math.round(box.y),
+    width: Math.round(box.width),
+    height: Math.round(box.height),
+  };
+  const glyph = await cropInk(page, clip);
+  const blank = await cropInk(page, { ...clip, x: clip.x + clip.width * 2 });
+  return { glyph, blank };
 }
 
 test("Hangul typed into a terminal paints its cell, two cells wide (#959)", async ({ page }) => {
   await page.goto("/");
   const terminal = await openNewTerminal(page);
-  expect(await printsInk(page, terminal)).toBe(true);
+  const { glyph, blank } = await syllableInk(page, terminal);
+  expect(glyph.width).toBe(blank.width);
+  expect(glyph.height).toBe(blank.height);
+  expect(glyph.ink).toBeGreaterThan(0);
+  expect(blank.ink).toBe(0);
 
   const ratio = await page.evaluate(() => {
     const terminalElement = document.querySelector("[data-terminal]");
