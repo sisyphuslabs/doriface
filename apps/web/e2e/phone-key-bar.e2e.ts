@@ -16,12 +16,12 @@ const BAR_KEYS = [
   "Arrow keys",
   "Paste",
   "Switch session",
-  "Type in a field",
+  "Send",
   "Hide keyboard",
 ];
 const PAD_KEYS = ["Delete", "Up arrow", "Clear screen", "Left arrow", "Return", "Right arrow", "Down arrow"];
-/** The two slots beside the row that never scroll: the input field's and the keyboard's. */
-const FIXED_KEYS = ["Type in a field", "Hide keyboard"];
+/** Send belongs to the fixed input column; the keyboard key has its own column. */
+const FIXED_KEYS = ["Send", "Hide keyboard"];
 const SCROLL_KEYS = BAR_KEYS.length - FIXED_KEYS.length;
 const names = (scope: Locator) =>
   scope.getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label") ?? ""));
@@ -39,12 +39,11 @@ for (const width of [390, 320]) {
         .filter((button) => button.getBoundingClientRect().right <= edge.right + 1)
         .map((button) => button.getAttribute("aria-label"));
     });
-    // A Mac host adds Command after Control, so Escape moves behind the swipe at 390.
-    // At 320 each host shows what fits and swipes the rest.
+    // The fixed input leaves room for the first three keys at 390; the rest are reached by swiping.
     if (width === 390) {
       // The keys in the row's own order, of which the first few fit: the row swipes for the rest (#195).
-      expect(shown.slice(0, 4)).toEqual(
-        process.platform === "darwin" ? ["Control", "Command", "Shift", "Tab"] : ["Control", "Shift", "Tab", "Escape"],
+      expect(shown.slice(0, 3)).toEqual(
+        process.platform === "darwin" ? ["Control", "Command", "Shift"] : ["Control", "Shift", "Tab"],
       );
       expect(shown.length).toBeLessThan(SCROLL_KEYS);
     }
@@ -143,7 +142,7 @@ test("swiping the bar sideways reveals ~ | / - behind an edge fade", async ({ pa
   await expect(scroller).toHaveAttribute("data-fade", "end");
   await scroller.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
   await expect(scroller).toHaveAttribute("data-fade", "start");
-  // Swiped until ~ reaches the start, the row shows ~ | / - whole.
+  // The narrow row reveals each character when scrolled into view.
   const visible = await scroller.evaluate((el) => {
     const edge = el.getBoundingClientRect();
     const buttons = [...el.querySelectorAll("button")];
@@ -156,7 +155,9 @@ test("swiping the bar sideways reveals ~ | / - behind an edge fade", async ({ pa
       })
       .map((button) => button.textContent);
   });
-  expect(visible).toEqual(expect.arrayContaining(["~", "|", "/", "-"]));
+  expect(visible).toEqual(expect.arrayContaining(["~", "|", "/"]));
+  await key(page, "Hyphen").scrollIntoViewIfNeeded();
+  await expect(key(page, "Hyphen")).toBeInViewport({ ratio: 1 });
 });
 
 test("reduced motion moves the bar without animating it", async ({ page }) => {

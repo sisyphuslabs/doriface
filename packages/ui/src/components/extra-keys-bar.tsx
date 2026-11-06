@@ -128,6 +128,8 @@ export interface ExtraKeysBarProps {
    */
   readonly inputBox?: boolean;
   readonly onInputBox?: () => void;
+  /** A real input field in the first fixed column, in place of the field toggle. */
+  readonly inputField?: ReactNode;
   readonly onHideKeyboard?: () => void;
   /** The hide button's name: Hide keyboard by default; Hide keys where the bar shows without a soft keyboard. */
   readonly hideLabel?: string;
@@ -230,18 +232,19 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
         </div>
         {divider("h-6")}
         <div className="flex shrink-0 items-center">
-          {props.onInputBox === undefined ? null : (
-            <button
-              type="button"
-              aria-label="Type in a field"
-              aria-pressed={inputBox}
-              onMouseDown={keepFocus}
-              onClick={props.onInputBox}
-              className={cn(key, inputBox ? latchedKey : idleKey)}
-            >
-              <TextCursorInput />
-            </button>
-          )}
+          {props.inputField ??
+            (props.onInputBox === undefined ? null : (
+              <button
+                type="button"
+                aria-label="Type in a field"
+                aria-pressed={inputBox}
+                onMouseDown={keepFocus}
+                onClick={props.onInputBox}
+                className={cn(key, inputBox ? latchedKey : idleKey)}
+              >
+                <TextCursorInput />
+              </button>
+            ))}
           <button
             type="button"
             aria-label={props.hideLabel ?? "Hide keyboard"}

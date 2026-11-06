@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { expectTouchTargets, key, keysBar, openPhoneTerminal, PHONE } from "./phone-key-bar.ts";
 
 test.use({ serviceWorkers: "block", ...PHONE });
@@ -19,36 +19,45 @@ const SCROLLED = [
   "Switch session",
   "Paste",
 ] as const;
-const FIXED = ["Type in a field", "Hide keyboard"] as const;
+const fixedSlots = (page: Page) => [page.getByLabel("Type into the terminal"), key(page, "Hide keyboard")];
 
-test("the row scrolls every key, and the two slots beside it never do", async ({ page }) => {
-  await openPhoneTerminal(page);
-  await Promise.all(
-    SCROLLED.map((name) => expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(1)),
-  );
-  await Promise.all(
-    FIXED.map((name) => expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(0)),
-  );
-  await expectTouchTargets(keysBar(page));
+for (const width of [320, 390]) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`at ${width} in ${colorScheme} the row scrolls while the input and keyboard stay fixed`, async ({
+      page,
+    }, testInfo) => {
+      await page.emulateMedia({ colorScheme });
+      await openPhoneTerminal(page, width);
+      await page.screenshot({ path: testInfo.outputPath("phone-keys.png") });
+      await expect(page.getByLabel("Type into the terminal")).toBeVisible();
+      await Promise.all(
+        SCROLLED.map((name) => expect(scroller(page).getByRole("button", { name, exact: true })).toHaveCount(1)),
+      );
+      await expect(scroller(page).getByRole("textbox")).toHaveCount(0);
+      await expect(scroller(page).getByRole("button", { name: "Hide keyboard", exact: true })).toHaveCount(0);
+      await expectTouchTargets(keysBar(page));
 
-  const row = scroller(page);
-  const width = await row.evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
-  expect(width.scroll).toBeGreaterThan(width.client);
+      const row = scroller(page);
+      const dimensions = await row.evaluate((el) => ({ client: el.clientWidth, scroll: el.scrollWidth }));
+      expect(dimensions.scroll).toBeGreaterThan(dimensions.client);
 
-  // The input field's key sits beside the keyboard's, and scrolling the row to its end moves neither.
-  const before = await Promise.all(FIXED.map(async (name) => await box(key(page, name))));
-  await row.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
-  await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBe(width.scroll - width.client);
-  const after = await Promise.all(FIXED.map(async (name) => await box(key(page, name))));
-  expect(after).toEqual(before);
-  for (const slot of after) {
-    expect(slot?.x ?? -1).toBeGreaterThanOrEqual(0);
-    expect((slot?.x ?? 0) + (slot?.width ?? Infinity)).toBeLessThanOrEqual(390);
+      // The real input sits beside the keyboard key, and scrolling the row moves neither.
+      const before = await Promise.all(fixedSlots(page).map(box));
+      await row.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+      await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBe(dimensions.scroll - dimensions.client);
+      const after = await Promise.all(fixedSlots(page).map(box));
+      expect(after).toEqual(before);
+      for (const slot of after) {
+        expect(slot?.x ?? -1).toBeGreaterThanOrEqual(0);
+        expect((slot?.x ?? 0) + (slot?.width ?? Infinity)).toBeLessThanOrEqual(width);
+      }
+      const [field, keyboard] = after;
+      expect((field?.x ?? 0) + (field?.width ?? 0)).toBeLessThanOrEqual(keyboard?.x ?? 0);
+      expect(keyboard?.x ?? 0).toBeGreaterThan(width - 60);
+      await page.screenshot({ path: testInfo.outputPath("phone-keys-scrolled.png") });
+    });
   }
-  const [field, keyboard] = after;
-  expect((field?.x ?? 0) + (field?.width ?? 0)).toBeLessThanOrEqual(keyboard?.x ?? 0);
-  expect(keyboard?.x ?? 0).toBeGreaterThan(390 - 60);
-});
+}
 
 test("scrolled-in keys and the fixed slots both reach the terminal", async ({ page }) => {
   const terminal = await openPhoneTerminal(page);
@@ -60,7 +69,7 @@ test("scrolled-in keys and the fixed slots both reach the terminal", async ({ pa
   await page.keyboard.type("q\r");
   await expect(terminal).toContainText(/\^\[\[D\^\[\[A\^\[\[B\^\[\[Cq/, { timeout: 15_000 });
 
-  await key(page, "Type in a field").click();
+  await page.getByLabel("Type into the terminal").click();
   await expect(page.getByLabel("Type into the terminal")).toBeFocused();
   await key(page, "Hide keyboard").click();
   await expect(keysBar(page)).toHaveCount(0);
@@ -80,4 +89,23 @@ test("ctrl and shift stay latched for the arrow that follows them", async ({ pag
   await expect(shift).toHaveAttribute("aria-pressed", "false");
   await page.keyboard.type("q\r");
   await expect(terminal).toContainText(/\^\[\[1;6Cq/, { timeout: 15_000 });
+});
+
+test.describe("desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 }, hasTouch: false, isMobile: false, deviceScaleFactor: 1 });
+
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`at desktop width in ${colorScheme} the terminal keeps its full workspace`, async ({ page }, testInfo) => {
+      await page.emulateMedia({ colorScheme });
+      await page.goto("/");
+      const terminal = await openNewTerminal(page);
+      await page.keyboard.type("echo desktop-$((6*7))\r");
+      await expect(terminal).toContainText("desktop-42");
+      await expect(page.getByLabel("Type into the terminal")).toHaveCount(0);
+      await expect(keysBar(page)).toHaveCount(0);
+      await expect(page.getByRole("contentinfo")).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
+      await page.screenshot({ path: testInfo.outputPath("desktop-terminal.png") });
+    });
+  }
 });

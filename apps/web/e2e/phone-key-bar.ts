@@ -30,11 +30,17 @@ export async function fakeSoftKeyboard(page: Page, { raiseOnFocus = true } = {})
     document.addEventListener("focusin", () => {
       if (raise && document.activeElement instanceof HTMLTextAreaElement && keyboard === 0) softKeyboard(336);
     });
-    document.addEventListener("focusout", () =>
+    document.addEventListener("focusout", (event) => {
+      const next = event.relatedTarget;
       queueMicrotask(() => {
-        if (!(document.activeElement instanceof HTMLTextAreaElement) && keyboard > 0) softKeyboard(0);
-      }),
-    );
+        if (
+          !(next instanceof HTMLTextAreaElement) &&
+          !(document.activeElement instanceof HTMLTextAreaElement) &&
+          keyboard > 0
+        )
+          softKeyboard(0);
+      });
+    });
     Object.assign(window, { softKeyboard });
   }, raiseOnFocus);
 }

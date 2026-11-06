@@ -34,7 +34,7 @@ test("a phone session through the production relay", async ({ browser }) => {
     };
     await shot("bar");
 
-    await key(page, "Type in a field").click();
+    await page.getByLabel("Type into the terminal").click();
     await expect(page.getByLabel("Type into the terminal")).toBeFocused();
     await page.keyboard.type("echo 안녕하세요");
     await shot("input");

@@ -2,9 +2,6 @@ import { SendHorizontal } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, useRef, useState } from "react";
 import { Button, cn } from "@doriface/ui";
 
-/** The field's height: its 44 pt row and the 4 px the bar's container pads it by. */
-export const INPUT_BOX_HEIGHT = "3.25rem";
-
 export interface InputBoxProps {
   /** Writes the text and presses Return: one line for the program, as the field shows it. */
   readonly onSend: (text: string) => void;
@@ -38,7 +35,7 @@ export function InputBox({ onSend, className, style }: InputBoxProps) {
       <textarea
         ref={field}
         rows={1}
-        autoFocus
+        wrap="off"
         enterKeyHint="send"
         autoComplete="off"
         autoCorrect="off"
@@ -52,7 +49,7 @@ export function InputBox({ onSend, className, style }: InputBoxProps) {
           "h-11 min-w-0 flex-1 resize-none rounded-full border border-input bg-chrome/95 px-3.5 py-2.5 font-mono text-base text-foreground",
           "shadow-lg outline-none backdrop-blur-md placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring",
         )}
-        placeholder="Type here, then Send"
+        placeholder="Type"
       />
       <Button
         type="button"
