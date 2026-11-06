@@ -4,13 +4,16 @@ import type { HostStartFailure } from "../desktop/bridge.ts";
 import { AttemptBudget, AttemptTimeoutError } from "./attempt-budget.ts";
 import { connect, type ConnectionPath, type OpenConnection } from "./connect.ts";
 import type { DirectReason } from "./direct-attempt.ts";
+import { helloName } from "./hello-name.ts";
 import { isFinal } from "./host-failure.ts";
+import { MeshConnections } from "./mesh-connections.ts";
 import {
   type ConnectionSettings,
   isConfigured,
   loadSettings,
   lockRelay,
   normalizeSettings,
+  type Saver,
   saveSettings,
   staysOnThisComputer,
 } from "./settings.ts";
@@ -87,10 +90,17 @@ export class ConnectionStore {
   #closedFor: { readonly connection: HcConnection; readonly reason: Error } | null = null;
   readonly #budget = new AttemptBudget();
   readonly #connect: typeof connect;
+  readonly #save: Saver;
 
-  constructor(settings: ConnectionSettings, open: typeof connect = connect) {
+  /**
+   * `save` is how this store records a change to its settings. A store that owns the saved settings writes them itself; one that
+   * is a single member of a mesh (`mesh-connections.ts`) passes a no-op, because its settings are a slice of a roster another
+   * object owns, and writing that slice back would replace the roster with it.
+   */
+  constructor(settings: ConnectionSettings, open: typeof connect = connect, save: Saver = saveSettings) {
     this.#settings = lockRelay(settings);
     this.#connect = open;
+    this.#save = save;
   }
 
   get settings(): ConnectionSettings {
@@ -118,7 +128,7 @@ export class ConnectionStore {
     const replaced = sameHost ? cleared : { ...cleared, members: [] };
     // The file and what the app keeps in memory obey the same roster rule, or pairing shows one list and saves another.
     this.#settings = normalizeSettings(replaced);
-    saveSettings(this.#settings);
+    this.#save(this.#settings);
     this.start();
   }
 
@@ -234,7 +244,7 @@ export class ConnectionStore {
       hostKey: next.hostKey,
       directUrl: next.directUrl,
     };
-    saveSettings(this.#settings);
+    this.#save(this.#settings);
   }
 
   /**
@@ -289,11 +299,10 @@ export class ConnectionStore {
    * must not fail over a name it could not read: Settings shows the host by id instead.
    */
   #rememberName(connection: HcConnection): void {
-    const hello: { readonly core?: { readonly name?: string } } | undefined = connection.hello;
-    const name = hello?.core?.name ?? "";
+    const name = helloName(connection);
     if (name === "" || name === this.#settings.hostName) return;
     this.#settings = { ...this.#settings, hostName: name };
-    saveSettings(this.#settings);
+    this.#save(this.#settings);
   }
 
   #retry(error: Error, attempt: number): void {
@@ -333,7 +342,7 @@ export class ConnectionStore {
     if (abort.signal.aborted || this.#settings !== asked) return undefined;
     if (where.url !== asked.loopbackUrl || where.token !== asked.token) {
       this.#settings = { ...asked, loopbackUrl: where.url, token: where.token };
-      saveSettings(this.#settings);
+      this.#save(this.#settings);
     }
     return this.#attempt(attempt);
   }
@@ -398,11 +407,14 @@ export class ConnectionStore {
   }
 }
 
-export const connectionStore = new ConnectionStore(loadSettings());
+export const connectionStore = new MeshConnections(
+  loadSettings(),
+  (settings, save) => new ConnectionStore(settings, connect, save),
+);
 
 // The page can work again: the network returned, a page came back from the cache, or a tab became visible (#653).
 resumeOnWake(connectionStore);
 
-export function useConnection(store: ConnectionStore = connectionStore): ConnectionState {
+export function useConnection(store: Pick<MeshConnections, "subscribe" | "state"> = connectionStore): ConnectionState {
   return useSyncExternalStore(store.subscribe, () => store.state);
 }

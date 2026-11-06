@@ -129,6 +129,9 @@ export function loadSettings(
   );
 }
 
+/** How a store records a change to the settings it holds; see the constructor of `ConnectionStore`. */
+export type Saver = (settings: ConnectionSettings) => void;
+
 export function saveSettings(settings: ConnectionSettings, storage: StorageLike = guardedLocalStorage()): void {
   storage.setItem(KEY, JSON.stringify(normalizeSettings(settings)));
 }
