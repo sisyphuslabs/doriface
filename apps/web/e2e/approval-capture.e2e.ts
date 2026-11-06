@@ -58,7 +58,7 @@ for (const width of ["1440", "390"] as const) {
         await openAsking(page, first, waiting);
         const banner = page.locator(`[data-approval="${first.address}"]`);
         await shoot(page, "waiting");
-        await banner.getByRole("button", { name: /^Allow/ }).click();
+        await banner.locator('[data-option="1"]').click();
         await expect(banner).toContainText("from this device", { timeout: 10_000 });
         await shoot(page, "answered");
 
@@ -71,7 +71,7 @@ for (const width of ["1440", "390"] as const) {
         second.typeInTerminal("x");
         await expect.poll(second.keys, { timeout: 10_000 }).toEqual(["x"]);
         const staleBanner = page.locator(`[data-approval="${second.address}"]`);
-        await staleBanner.getByRole("button", { name: /^Allow/ }).click();
+        await staleBanner.locator('[data-option="1"]').click();
         await expect(staleBanner).toContainText("The prompt went away.", { timeout: 10_000 });
         await shoot(page, "stale");
       } finally {
