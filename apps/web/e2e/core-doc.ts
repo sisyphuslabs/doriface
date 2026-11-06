@@ -59,9 +59,19 @@ export function coreDoc(name: string): unknown {
 export function setCoreDoc(name: string, value: unknown, on?: string, which: Core = "host"): void {
   const core = coreEnv(which);
   const where = on === undefined ? { name } : { name, on };
-  const current = call(core, "doc.get", where);
-  const version = typeof current === "object" && current !== null && "version" in current ? current.version : 0;
-  call(core, "doc.set", { ...where, value, version });
+  // The app itself writes these documents, so a write can land between this read and its set and the core answers the set with
+  // "is at version N, not M" (#896). The write is a compare-and-set at the version the core reports NOW, so a lost race is
+  // retried on a fresh read -- bounded, and only for that refusal: any other failure is thrown as it came.
+  for (let attempt = 0; ; attempt += 1) {
+    const current = call(core, "doc.get", where);
+    const version = typeof current === "object" && current !== null && "version" in current ? current.version : 0;
+    try {
+      call(core, "doc.set", { ...where, value, version });
+      return;
+    } catch (cause) {
+      if (attempt >= 4 || !/is at version \d+, not \d+/.test(String(cause))) throw cause;
+    }
+  }
 }
 
 /** A herdr document on the e2e host's core (or, with `on`, on its added machine), as another client would read it. */
