@@ -255,7 +255,13 @@ describe("parseMeshStatus", () => {
     ],
     ["herdr's reason on a line that is up", memberAt(1, { lineReason: "why" })],
     ["an empty line reason", memberAt(1, { line: "unreachable", lineReason: "" })],
-    ["a replaced machine name herdr refuses", memberAt(1, { replacedMachine: "old box" })],
+    ["a replaced machine name herdr refuses", memberAt(1, { replacedMachine: { name: "old box", kind: "ssh" } })],
+    ["a replaced machine as a bare name", memberAt(1, { replacedMachine: "old" })],
+    ["a replaced machine of an unknown kind", memberAt(1, { replacedMachine: { name: "old", kind: "telnet" } })],
+    [
+      "a replaced machine carrying its target",
+      memberAt(1, { replacedMachine: { name: "old", kind: "ssh", target: "me@box" } }),
+    ],
     ["an empty hello core id", memberAt(1, { helloCoreId: "" })],
     [
       "a read-only end that is not a time",
