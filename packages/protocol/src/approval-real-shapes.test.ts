@@ -10,9 +10,21 @@ describe("real prompts the bottom-up readers still read", () => {
     ["• Added notes.md (+1)", "a new file"],
     ["• Deleted notes.md (-2)", "a removed file"],
     ["• Edited notes.md (+1 -1)", "an edited file"],
+    ["• Edited 2 files (+3 -1)", "several files"],
   ])("Codex: an approval under its %s cell (%s) reads as the edit", (cell) => {
     const screen = recorded.CODEX_PATCH_SCREEN.replace("• Edited notes.md (+1 -1)", cell);
     expect(readScreenPrompt("codex", screen)).toMatchObject({ kind: "permission", files: ["~/work/notes.md"] });
+  });
+
+  test.each([
+    ["◦ Running touch probe-a.txt", "a running command on its blink-off frame"],
+    ["• Exploring", "an exploring group"],
+    ["◦ Exploring", "an exploring group on its blink-off frame"],
+    ["• Interacted with `bash`, sent `y`", "input to a terminal"],
+    ["• Waited for `bash`", "a wait on a terminal"],
+  ])("Codex: an approval under its %s cell (%s) reads as the command", (cell) => {
+    const screen = recorded.CODEX_EXEC_167_SCREEN.replace("• Running touch probe-a.txt", cell);
+    expect(readScreenPrompt("codex", screen)).toMatchObject({ kind: "permission", command: "touch probe-a.txt" });
   });
 
   test("Codex: a question whose row wraps on a narrow pane reads as one row with its whole description", () => {

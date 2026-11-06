@@ -30,10 +30,12 @@ const NOTES = /\(tab\)\s*$/;
 /** The notes row Tab opens under the cursor's option: `› Add notes`. */
 const NOTES_OPEN = /^\s*›\s+Add notes\b/;
 /**
- * The cell Codex draws for the command or file change it asks about, right above its approval (0.166.0, 0.167.0):
- * `• Running` for a command, `• Added`, `• Deleted` or `• Edited` for a patch (codex-rs tui `diff_render.rs`).
+ * The cell Codex draws for what it asks about, right above its approval, as its TUI source draws the header (codex-rs
+ * tui): a command's `Running`, an exploring group's `Exploring`, input to a terminal's `Interacted with` or `Waited for`
+ * (`exec_cell/render.rs`), a patch's `Added`, `Deleted` or `Edited` (`diff_render.rs`). A cell still running blinks its
+ * bullet between `•` and `◦` when the terminal has no true colour (`motion.rs`).
  */
-const ASKED_CELL = /^• (?:Running|Added|Deleted|Edited) /;
+const ASKED_CELL = /^[•◦] (?:Running|Exploring|Interacted with|Waited for|Added|Deleted|Edited)(?:\s|$)/;
 
 /**
  * A question's rows from row 1 to its footer: each row at row 1's number column, numbered one past the last; a line
