@@ -7,6 +7,10 @@
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
 - Settings > Connections has **Pair a device**: it asks this computer's host for a fresh offer and shows its QR code, link, 8-character code, fingerprint and expiry, then the device that used it — no terminal and no CLI. (#614)
 
+### Hosted web app
+
+- The web app and PWA are served at https://doriface.omo.dev, deployed from `dev` after a staging deploy at doriface-staging.omo.dev passes a probe of `/`, `/pair`, the service worker and the manifest. (#668)
+
 ## v0.1.2
 
 ### Tabs and spaces

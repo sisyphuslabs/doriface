@@ -1,0 +1,96 @@
+name: Deploy web
+
+# The hosted web app and PWA at https://doriface.omo.dev (#668), where a phone lands when it scans a host's pairing QR
+# code. A push to dev that can change the build deploys staging (doriface-staging.omo.dev), probes it, then deploys
+# production and probes that. A pull request that changes how the app is deployed deploys and probes staging only, so
+# the token and the custom domain are proven before the merge; production only ever takes a commit on dev.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - apps/web/**
+      - packages/**
+      - bun.lock
+      - package.json
+      - .github/workflows/deploy-web.yml
+  pull_request:
+    paths:
+      - apps/web/wrangler.jsonc
+      - apps/web/public/_headers
+      - apps/web/scripts/probe-web.ts
+      - .github/workflows/deploy-web.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+env:
+  WRANGLER: wrangler@4.158.0
+
+jobs:
+  deploy:
+    name: Deploy web
+    # A fork never receives the secrets.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Require the Cloudflare secrets
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != true ] || [ "$HAS_ACCOUNT" != true ]; then
+            echo "::error::Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in this repository's Actions secrets"
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      # The web build and wrangler run under Node.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Build apps/web
+        run: bun run --cwd apps/web build
+      - name: Deploy staging
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx "$WRANGLER" deploy --env staging
+      - name: Probe staging
+        run: bun apps/web/scripts/probe-web.ts https://doriface-staging.omo.dev apps/web/dist
+      - name: Deploy production
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx "$WRANGLER" deploy --env production
+      - name: Probe production
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        run: bun apps/web/scripts/probe-web.ts https://doriface.omo.dev apps/web/dist
+      - name: Workflow summary
+        if: always()
+        run: |
+          {
+            echo "## Deploy web"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Job status | ${{ job.status }} |"
+            echo "| Commit | ${{ github.sha }} |"
+            echo "| Staging | https://doriface-staging.omo.dev |"
+            echo "| Production | ${{ github.event_name == 'push' && 'https://doriface.omo.dev' || 'not on a pull request' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
