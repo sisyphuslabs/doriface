@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { pickFile } from "./file-input";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
@@ -85,11 +86,7 @@ test.describe("on a wide screen", () => {
     await expect(settingsDialog(page)).toBeVisible();
     // A dialog opened inside Settings takes Escape first: it closes alone, and Settings stays open.
     await settingsDialog(page).getByRole("button", { name: "Keybindings", exact: true }).click();
-    const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Import keybinds…" }).click();
-    await (
-      await chooser
-    ).setFiles({ name: "keybinds", mimeType: "text/plain", buffer: Buffer.from("keybind = super+t=new_tab\n") });
+    await pickFile(page, "Import keybinds…", "keybinds", "keybind = super+t=new_tab\n");
     const inner = page.getByRole("dialog", { name: "Import these keybindings?" });
     await expect(inner).toBeVisible();
     await page.keyboard.press("Escape");
