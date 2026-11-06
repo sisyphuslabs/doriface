@@ -25,7 +25,9 @@ function probes(index: string, worker: string): readonly Probe[] {
   if (asset === undefined) throw new Error("dist/index.html names no /assets/*.js");
   const shell = (response: Response, body: string): string | undefined => {
     if (!header(response, "content-type").startsWith("text/html")) return "not text/html";
+    // Byte-equal: an edge that injected a script (Web Analytics) into the page fails here.
     if (body !== index) return "not this build's index.html";
+    if (!header(response, "cache-control").includes("no-transform")) return "no no-transform";
     if (header(response, "x-content-type-options") !== "nosniff") return "no nosniff";
     return undefined;
   };
