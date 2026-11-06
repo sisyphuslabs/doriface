@@ -40,4 +40,19 @@ Each program starts one `sleep` per tick; at 50 panes that is 500 short processe
 
 ## Noise floor
 
-The thresholds are set from the spread of the candidate benched against itself (`bench/670-noise`, `self-a` against `self-b`) on the release workflow's runner (`ubuntu-24.04`); see `apps/web/bench/thresholds.json`, which records the run each limit came from.
+Measured on 2026-11-06 on GitHub's `ubuntu-24.04` runner, the one the release workflow uses: the same build benched against itself (`self-a` against `self-b`, Render bench run 42196735742, branch `bench/670-noise`), 5 rounds, medians per pane count. Each limit in `apps/web/bench/thresholds.json` records the spread it was set from.
+
+| Panes | Frame p95 ms (a / b) | Main busy (a / b) | Catch-up ms (a / b) | Drawn KiB/s (a / b) | Heap MB (a / b) | Hidden busy (a / b) | Show catch-up ms (a / b) |
+| ----- | -------------------- | ----------------- | ------------------- | ------------------- | --------------- | ------------------- | ------------------------ |
+| 1     | 16.7 / 16.8          | 8.8% / 9.3%       | 7 / 9               | 7.72 / 7.71         | 18.2 / 22.0     | 1.3% / 1.4%         | 108 / 113                |
+| 15    | 16.8 / 16.8          | 49.4% / 51.1%     | 54 / 13             | 115.1 / 115.6       | 43.6 / 35.5     | 2.8% / 2.9%         | 251 / 213                |
+| 50    | 100.0 / 100.1        | 98.4% / 98.3%     | 213 / 215           | 371.2 / 371.3       | 95.5 / 101.3    | 8.1% / 7.8%         | 473 / 651                |
+
+What the noise says:
+
+- Frame intervals come in whole 60 Hz frames (16.7 ms steps). A single run's p95 at 50 panes moves by one step (83 to 117 ms), but the median over 5 rounds moved 0.1 ms. So a one-frame shift of the median fails the gate.
+- Catch-up is read at a 50 ms poll, so single runs land near 5 or 55 ms; its floor is 100 ms.
+- Heap depends on when garbage collection ran (medians moved up to 8 MB), and the time to catch up once a hidden tab is shown moved 178 ms at 50 panes; their floors are 15 MB and 300 ms.
+- The absolute numbers differ between runners: this run's 50-pane frame p95 was 100 ms, while another `ubuntu-24.04` job measured 50 to 67 ms the same day. That is why the gate compares two builds on one runner and never with a stored number.
+
+The first comparison with the last release (Render bench run 42196737507, `v0.1.2` against the branch at dev `b5e2fec4`, 5 rounds) failed at 50 panes: frame p95 50.1 to 66.7 ms (every candidate round 66.7, four of five `v0.1.2` rounds 50), with the median long tasks per run up from 13 (756 ms) to 28 (1,695 ms). The other 20 gated medians were within their limits. That regression on dev is tracked apart from this bench.

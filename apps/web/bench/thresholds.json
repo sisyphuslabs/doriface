@@ -1,33 +1,40 @@
 {
-  "note": "provisional, replaced by the measured noise floor",
+  "measured": "A/A noise: Render bench run 42196735742 (bench/670-noise, ubuntu-24.04, 5 rounds, self-a vs self-b); A/B: run 42196737507 (bench/670, v0.1.2 vs candidate). See docs/render-bench.md.",
   "limits": {
     "frameP95": {
       "ratio": 1.25,
-      "floor": 4
+      "floor": 4,
+      "why": "A/A medians moved 0.1 ms at 1, 15 and 50 panes; intervals step by one 60 Hz frame (16.7 ms), so a one-frame shift of the median over 5 rounds fails"
     },
     "busyShare": {
       "ratio": 1.25,
-      "floor": 0.05
+      "floor": 0.05,
+      "why": "A/A medians moved at most 0.017"
     },
     "catchUpMs": {
       "ratio": 1.5,
-      "floor": 100
+      "floor": 100,
+      "why": "read at a 50 ms poll, so runs land near 5 or 55 ms; A/A medians moved 41 ms at 15 panes"
     },
     "drawnBytesPerSec": {
-      "ratio": 0.8,
-      "floor": 0
+      "ratio": 0.9,
+      "floor": 0,
+      "why": "A/A medians moved under 0.5%"
     },
     "heapMB": {
       "ratio": 1.25,
-      "floor": 10
+      "floor": 15,
+      "why": "garbage collection timing: A/A medians moved up to 8 MB"
     },
     "hiddenBusyShare": {
       "ratio": 1.5,
-      "floor": 0.05
+      "floor": 0.05,
+      "why": "A/A medians moved at most 0.003"
     },
     "showCatchUpMs": {
       "ratio": 1.5,
-      "floor": 200
+      "floor": 300,
+      "why": "A/A medians moved 178 ms at 50 panes"
     }
   }
 }
