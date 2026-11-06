@@ -1,9 +1,11 @@
 import {
   type AnswerResult,
   type Answerer,
-  type ApprovalAnswer,
   type ApprovalMark,
   type ApprovalRecord,
+  type PromptReply,
+  replyClass,
+  replyLabel,
   type Terminal,
   waitsOnApproval,
 } from "@doriface/protocol";
@@ -13,14 +15,29 @@ export function answeredWhere(record: Pick<ApprovalRecord, "by" | "client">, sel
   return record.client === self.client ? "from this device" : `Answered on another device (${record.by})`;
 }
 
-export function stateAfterAnswer(result: AnswerResult, answer: ApprovalAnswer, self: Answerer): ApprovalBannerState {
+/** A record's answer in the agent's own words; a record of an older client says only Allow or Deny. */
+export function recordLabel(record: Pick<ApprovalRecord, "answer" | "choice">): string {
+  return record.choice ?? (record.answer === "allow" ? "Allowed" : "Denied");
+}
+
+export function stateAfterAnswer(
+  result: AnswerResult,
+  mark: Pick<ApprovalMark, "prompt">,
+  choice: PromptReply,
+  self: Answerer,
+): ApprovalBannerState {
   switch (result.kind) {
     case "sent":
-      return { kind: "answered", answer, where: answeredWhere(self, self) };
+      return {
+        kind: "answered",
+        label: replyLabel(mark.prompt, choice),
+        declined: replyClass(mark.prompt, choice) === "deny",
+        where: answeredWhere(self, self),
+      };
     case "stale":
       return { kind: "stale" };
     case "failed":
-      return { kind: "failed", answer };
+      return { kind: "failed", choice };
     case "unknown":
       return { kind: "unknown" };
     case "lost":
@@ -32,7 +49,7 @@ export function stateAfterAnswer(result: AnswerResult, answer: ApprovalAnswer, s
 function stateAfterLoss(record: ApprovalRecord, self: Answerer): ApprovalBannerState {
   switch (record.outcome) {
     case "sent":
-      return { kind: "answered", answer: record.answer, where: answeredWhere(record, self) };
+      return answeredBy(record, self);
     case "claimed":
       return {
         kind: "elsewhere",
@@ -56,11 +73,20 @@ function stateAfterLoss(record: ApprovalRecord, self: Answerer): ApprovalBannerS
  */
 export function stateAfterPrompt(record: ApprovalRecord | undefined, self: Answerer): ApprovalBannerState | undefined {
   if (record?.outcome !== "sent") return undefined;
-  return { kind: "answered", answer: record.answer, where: answeredWhere(record, self) };
+  return answeredBy(record, self);
+}
+
+function answeredBy(record: ApprovalRecord, self: Answerer): ApprovalBannerState {
+  return {
+    kind: "answered",
+    label: recordLabel(record),
+    declined: record.answer === "deny",
+    where: answeredWhere(record, self),
+  };
 }
 
 /**
- * The terminal still reports the prompt the banner shows: blocked on a permission, at the same turn (each prompt comes
+ * The terminal still reports the prompt the banner shows: blocked on a permission or a question, at the same turn (each prompt comes
  * with a new one). Its `status_ms` is not compared here: hc's `status` event does not carry it, so a terminal the page
  * learned about from events never has one. `checkApproval` compares it against a fresh `terminal.get` before any key.
  */
