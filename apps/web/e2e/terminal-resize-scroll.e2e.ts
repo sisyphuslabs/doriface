@@ -16,15 +16,17 @@ const LINES = 5000;
 /**
  * An agent's transcript as pi-tui (omo, senpi) and Claude Code draw it outside a multiplexer: on every width change the
  * whole transcript again, as one synchronized update (DECSET 2026) that clears the screen and the scrollback first. A
- * native terminal swaps it in at once, and so must the view (#757). Each finished frame leaves a marker file.
+ * native terminal swaps it in at once, and so must the view (#757). Like a TUI, it builds a frame first and then writes
+ * it whole; each finished frame leaves a marker file.
  */
 const AGENT = String.raw`stty -echo
 drawn=0
 frame() {
   cols=$(tput cols)
-  printf '\033[?2026h\033[?7l\033[2J\033[H\033[3J'
   awk -v n=${LINES} -v c="$cols" 'BEGIN { fill = ""; for (k = 0; k < c - 10; k++) fill = fill "."
-    for (i = 1; i <= n; i++) printf "\033[38;5;%dmrow %05d\033[0m %s%s", 240 + i % 10, i, fill, (i < n ? "\r\n" : "") }'
+    for (i = 1; i <= n; i++) printf "\033[38;5;%dmrow %05d\033[0m %s%s", 240 + i % 10, i, fill, (i < n ? "\r\n" : "") }' > "$DRAWN.frame"
+  printf '\033[?2026h\033[?7l\033[2J\033[H\033[3J'
+  cat "$DRAWN.frame"
   printf '\033[?7h\033[?2026l'
   drawn=$((drawn + 1))
   : > "$DRAWN.$drawn"
@@ -47,7 +49,7 @@ function startAgent(dir: string): { readonly address: string; readonly frames: (
   const out = hcOn("host", ["run", "--bg", "--name", "resize-agent", "--", "env", `DRAWN=${marker}`, "bash", script]);
   const address = String((JSON.parse(out) as { address: string }).address);
   started.push(address);
-  return { address, frames: () => readdirSync(dir).filter((name) => name.startsWith("drawn.")).length };
+  return { address, frames: () => readdirSync(dir).filter((name) => /^drawn\.\d+$/.test(name)).length };
 }
 
 const terminalOf = (page: Page, address: string): Locator => page.locator(`[data-terminal="${address}"]`);
