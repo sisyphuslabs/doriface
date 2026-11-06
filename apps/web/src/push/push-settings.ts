@@ -123,9 +123,10 @@ class PushSettings {
    * at a time: one connection change can change the settings twice (the new host's name arrives with its hello), and a
    * second move that read the saved route while the first was still registering redid the whole move beside it (#780).
    */
-  retarget(next: ConnectionSettings): Promise<void> {
-    const moved = this.#moving.then(() => this.#retarget(next));
-    this.#moving = moved;
+  retarget(settings: ConnectionSettings): Promise<void> {
+    const moved = this.#moving.then(() => this.#retarget(settings));
+    // A move that throws (a gateway that is not a URL) must not stop the ones after it.
+    this.#moving = moved.catch(() => undefined);
     return moved;
   }
 
