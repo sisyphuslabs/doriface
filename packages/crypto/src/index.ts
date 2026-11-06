@@ -30,6 +30,7 @@ export {
   buildPairingDeepLink,
   buildPairingUrl,
   createPairingOffer,
+  DEFAULT_PAIRING_WEB_ORIGIN,
   DEFAULT_RELAY_URL,
   encodePairSlot,
   formatPairingCode,

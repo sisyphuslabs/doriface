@@ -65,6 +65,8 @@ interface Startup {
   readonly command: readonly string[];
   readonly cwd: string;
   readonly stageDeadlineMs: number;
+  /** The stage whose report starts the deadline's clock; without one it runs from the start of each wait. */
+  readonly stageDeadlineFrom?: string;
   /**
    * The command also serves the LAN listener and prints `directUrl`: only the spec that sets a Direct address asks for
    * that listener and reads the address (#446).
@@ -86,9 +88,14 @@ function isLine(value: unknown): value is Line {
 /**
  * The driver's lines, with the stage it is in. A wait fails at once when the driver exits, so a start that died is
  * never waited out (#502), and it fails naming the stage when that stage outlasts `deadlineMs`, so a start that is
- * blocked says where instead of running out the hook's time.
+ * blocked says where instead of running out the hook's time. With `deadlineFrom`, a wait's deadline runs only once that
+ * stage is reported, so the stage it lands in does not depend on how fast the host reached it (#692).
  */
-function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next: (what: string) => Promise<Line> } {
+function readProtocol(
+  driver: ChildProcess,
+  deadlineMs: number,
+  deadlineFrom: string | undefined,
+): { readonly next: (what: string) => Promise<Line> } {
   const out = driver.stdout;
   if (out === null) throw new Error("the fake relay host has no stdout");
   const lines = createInterface({ input: out });
@@ -97,6 +104,8 @@ function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next
   const done: string[] = [];
   let stage = "its first stage";
   let ended: Error | undefined;
+  let clockRunning = deadlineFrom === undefined;
+  const armWhenRunning: (() => void)[] = [];
 
   const where = (): string => `it is in ${stage}${done.length === 0 ? "" : ` (done: ${done.join(", ")})`}`;
   const fail = (error: Error): void => {
@@ -119,6 +128,10 @@ function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next
       if (typeof reported === "string") {
         done.push(`${reported} ${String(parsed["ms"] ?? 0)} ms`);
         stage = reported;
+        if (reported === deadlineFrom && !clockRunning) {
+          clockRunning = true;
+          for (const arm of armWhenRunning.splice(0)) arm();
+        }
         continue;
       }
       const waiter = waiting.shift();
@@ -156,17 +169,22 @@ function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next
         waiter.reject(ended);
         return;
       }
-      timer = setTimeout(() => {
-        const at = waiting.indexOf(waiter);
-        if (at < 0) return;
-        waiting.splice(at, 1);
-        reject(
-          new Error(
-            `the fake relay host did not finish ${what} within ${deadlineMs} ms: ${where()}, and it printed no error`,
-          ),
-        );
-      }, deadlineMs);
       waiting.push(waiter);
+      const arm = (): void => {
+        if (!waiting.includes(waiter)) return;
+        timer = setTimeout(() => {
+          const at = waiting.indexOf(waiter);
+          if (at < 0) return;
+          waiting.splice(at, 1);
+          reject(
+            new Error(
+              `the fake relay host did not finish ${what} within ${deadlineMs} ms: ${where()}, and it printed no error`,
+            ),
+          );
+        }, deadlineMs);
+      };
+      if (clockRunning) arm();
+      else armWhenRunning.push(arm);
     });
 
   return { next };
@@ -192,7 +210,7 @@ async function startDriver(options: Startup): Promise<FakeRelayHost> {
   const driver = spawn(program, args, { cwd: options.cwd, stdio: ["pipe", "pipe", "inherit"] });
   const input = driver.stdin;
   if (input === null) throw new Error("the fake relay host has no stdin");
-  const protocol = readProtocol(driver, deadlineMs);
+  const protocol = readProtocol(driver, deadlineMs, options.stageDeadlineFrom);
   let stopping: Promise<void> | undefined;
   const stop = (): Promise<void> => {
     stopping ??= (async () => {
@@ -239,11 +257,19 @@ async function startDriver(options: Startup): Promise<FakeRelayHost> {
  * `direct`: the host also serves `/v1/e2ee` on a LAN listener, the address a Direct-address spec sets (#446); without it
  * no listener is started and `directUrl` is empty.
  * `stageDeadlineMs`: a shorter stage deadline, for a test that proves the bound without a blocked start running 10 s.
+ * `stageDeadlineFrom`: the stage whose report starts that deadline, for a test that proves which stage a blocked start
+ * names: the test then decides where the deadline lands, not the host's speed (#692).
  */
 export function startFakeRelayHost(
-  options: { readonly machine?: boolean; readonly stageDeadlineMs?: number; readonly direct?: boolean } = {},
+  options: {
+    readonly machine?: boolean;
+    readonly stageDeadlineMs?: number;
+    readonly stageDeadlineFrom?: string;
+    readonly direct?: boolean;
+  } = {},
 ): Promise<FakeRelayHost> {
   return startDriver({
+    ...(options.stageDeadlineFrom === undefined ? {} : { stageDeadlineFrom: options.stageDeadlineFrom }),
     direct: options.direct === true,
     command: [
       "bun",

@@ -118,6 +118,16 @@ describe("HcConnection hello", () => {
     expect(error.mismatch).toEqual(mismatch);
   });
 
+  test("a core without machine.list, which the workspace calls as it starts, is a mismatch too (#694)", async () => {
+    const core = new FakeCore();
+    const opening = HcConnection.open(core.client);
+    await core.waitHello();
+    core.push(`${HELLO_REPLY_LINE.replace('"machine.list",', "")}\n`);
+    const error: unknown = await opening.catch((caught: unknown) => caught);
+    if (!(error instanceof HcCoreMismatchError)) throw new Error(`expected HcCoreMismatchError, got ${String(error)}`);
+    expect(error.mismatch).toEqual({ kind: "core-missing", methods: ["machine.list"], need: "0.1.17" });
+  });
+
   test("names a core build that lacks a method this client calls, which side to update included (#651)", async () => {
     const core = new FakeCore();
     const opening = HcConnection.open(core.client);
