@@ -53,7 +53,11 @@ test("every page runs only this origin's scripts and connects only to this origi
   );
   expect(directives.get("default-src")).toEqual(["'none'"]);
   expect(directives.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'"]);
-  expect(directives.get("connect-src")).toEqual(["'self'", "https://relay-doriface.omo.dev", "wss://relay-doriface.omo.dev"]);
+  expect(directives.get("connect-src")).toEqual([
+    "'self'",
+    "https://relay-doriface.omo.dev",
+    "wss://relay-doriface.omo.dev",
+  ]);
   expect(directives.get("img-src")).toEqual(["'self'", "blob:"]);
   expect(directives.get("font-src")).toEqual(["'self'", "data:"]);
   for (const name of ["frame-ancestors", "base-uri", "form-action", "object-src"]) {
