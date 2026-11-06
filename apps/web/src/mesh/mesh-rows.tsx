@@ -74,10 +74,10 @@ export function Command({ command, label }: { readonly command: string; readonly
   );
 }
 
-const Key = ({ fingerprint, hostId }: { readonly fingerprint: string; readonly hostId?: string }) => (
+const Key = ({ fingerprint, hostId }: { readonly fingerprint: string | null; readonly hostId: string }) => (
   <span className="mt-1 flex flex-wrap items-baseline gap-x-3 font-mono text-xs tracking-wide text-muted-foreground tabular-nums">
-    <span>{fingerprint}</span>
-    {hostId === undefined ? null : <span>{`id ${hostId}`}</span>}
+    {fingerprint === null ? null : <span>{fingerprint}</span>}
+    <span>{`id ${hostId}`}</span>
   </span>
 );
 
@@ -130,7 +130,7 @@ export function MemberRow({ member, nameOf, now }: MemberRowProps) {
               .map((part) => ` · ${part}`)
               .join("")}
           </span>
-          {member.fingerprint === null ? null : <Key fingerprint={member.fingerprint} hostId={member.hostId} />}
+          <Key fingerprint={member.fingerprint} hostId={member.hostId} />
           {undecidable ? (
             <span className="mt-1 block">
               {`A revoke of ${name} written here could not be decided`}
@@ -159,7 +159,7 @@ export function RevokedRow({ entry, nameOf }: { readonly entry: MeshRevokedStatu
           <span className="block">
             {by === "" ? REVOKE_REASON[entry.reason] : `${REVOKE_REASON[entry.reason]} by ${by}`}
           </span>
-          <Key fingerprint={entry.fingerprint} />
+          <Key fingerprint={entry.fingerprint} hostId={entry.hostId} />
         </>
       }
       control={null}

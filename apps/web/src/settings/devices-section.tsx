@@ -71,7 +71,9 @@ export function DevicesSection() {
         description={
           <>
             {describe(state)}
-            <span className="block text-muted-foreground">{hostRouteOf(settings).label}</span>
+            {hostRouteOf(settings).label === undefined ? null : (
+              <span className="block text-muted-foreground">{hostRouteOf(settings).label}</span>
+            )}
           </>
         }
         control={null}

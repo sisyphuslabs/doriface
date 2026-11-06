@@ -142,7 +142,7 @@ export function MeshSection() {
     return (
       <SettingRow
         title="Not connected"
-        description="This app is not connected to a host yet, so there is no mesh to show. Set the connection up in This device."
+        description="This app is not connected to a host yet, so there is no mesh to show. Set the connection up in Advanced connection."
         control={null}
       />
     );

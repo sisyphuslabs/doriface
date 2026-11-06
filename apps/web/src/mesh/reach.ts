@@ -1,23 +1,21 @@
 import type { MeshMemberStatus } from "@doriface/protocol";
 
-/** How this host reaches a member right now: over a herdr line of its own, through the relay, or not at all. */
-export type Reach = "this-host" | "direct-line" | "through-the-relay" | "no-session";
-
 /**
- * A member with an open mesh session and a connected herdr line is reached over that line (herdr-core native, direct).
- * A session with no connected line arrives through the relay. Presence is the only proof something is reached now: a
- * line herdr holds without a session says nothing about the mesh exchange, and a line state is the reconciler's last
- * word, not herdr's live one (#754).
+ * Whether this host is exchanging with a member right now, and whether the member is this host. It deliberately says
+ * nothing about the route: the host dials every member stream, the herdr `hc` line included, through its own relay
+ * (`apps/host/src/mesh/host-sync.ts` `#dialOnce`), and a LAN session counts as presence too, so "direct" and "relayed"
+ * cannot be told apart from here and a row must not guess (review of #772).
  */
+export type Reach = "this-host" | "open-session" | "no-session";
+
+/** Presence is the only proof something is reached now; a line herdr holds without a session proves nothing (#754). */
 export function reachOf(member: Pick<MeshMemberStatus, "line" | "presence">): Reach {
   if (member.line === "self") return "this-host";
-  if (!member.presence) return "no-session";
-  return member.line === "connected" ? "direct-line" : "through-the-relay";
+  return member.presence ? "open-session" : "no-session";
 }
 
 export const REACH_LABEL: Readonly<Record<Reach, string>> = {
   "this-host": "this host",
-  "direct-line": "session open over a direct line",
-  "through-the-relay": "session open through the relay",
+  "open-session": "session open now",
   "no-session": "no session now",
 };

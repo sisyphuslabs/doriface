@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { hostRouteOf } from "./host-route.ts";
 
 const base = {
+  hostId: "",
   mode: "relay" as const,
   relayUrl: "wss://relay.example.dev",
   directUrl: "",
@@ -10,7 +11,7 @@ const base = {
 
 describe("how this app reaches its host", () => {
   test("a paired host over the relay names the relay, and that the session is encrypted", () => {
-    expect(hostRouteOf(base)).toEqual({
+    expect(hostRouteOf({ ...base, hostId: "a-paired-host" })).toEqual({
       route: "relay",
       address: "relay.example.dev",
       label: "Through the relay relay.example.dev · end-to-end encrypted",
@@ -18,7 +19,7 @@ describe("how this app reaches its host", () => {
   });
 
   test("a known direct address is named beside the relay, never claimed for it", () => {
-    const route = hostRouteOf({ ...base, directUrl: "https://192.0.2.10:7766" });
+    const route = hostRouteOf({ ...base, hostId: "a-paired-host", directUrl: "https://192.0.2.10:7766" });
     expect(route.route).toBe("relay");
     expect(route.label).toContain("or direct to 192.0.2.10:7766 when it answers");
     expect(route.label).toContain("end-to-end encrypted");
@@ -33,6 +34,10 @@ describe("how this app reaches its host", () => {
   });
 
   test("a malformed address is shown as it was saved, never as an empty label", () => {
-    expect(hostRouteOf({ ...base, relayUrl: "not a url" }).address).toBe("not a url");
+    expect(hostRouteOf({ ...base, hostId: "a-paired-host", relayUrl: "not a url" }).address).toBe("not a url");
+  });
+
+  test("an app with no host paired gets no route label, so it cannot claim a relay it is not using", () => {
+    expect(hostRouteOf({ ...base, hostId: "" }).label).toBeUndefined();
   });
 });
