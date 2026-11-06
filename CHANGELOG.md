@@ -44,6 +44,10 @@
 
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 75 s without it, as a laptop that went to sleep still does. (#909)
 
+### Settings
+
+- Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
+
 ### Notifications
 
 - Notifications say why they are not arriving: the app reports when the OS refuses a notification, with the remedy, retries a subscription that failed, and says how many agents are already waiting. (#783)
