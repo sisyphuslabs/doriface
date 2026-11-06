@@ -4,7 +4,15 @@ import type { HostStartFailure } from "../desktop/bridge.ts";
 import { connect, type ConnectionPath, DeviceNotPairedError, type OpenConnection } from "./connect.ts";
 import type { DirectReason } from "./direct-attempt.ts";
 import { LoopbackAddressError } from "./loopback-address.ts";
-import { type ConnectionSettings, isConfigured, loadSettings, lockRelay, saveSettings } from "./settings.ts";
+import {
+  type ConnectionSettings,
+  isConfigured,
+  loadSettings,
+  lockRelay,
+  saveSettings,
+  staysOnThisComputer,
+} from "./settings.ts";
+import { resumeOnWake } from "./wake.ts";
 
 /**
  * `stale` is the connection that dropped while this one retries: its workspace stays on screen meanwhile.
@@ -44,6 +52,12 @@ function isFinal(error: Error): boolean {
   );
 }
 
+/**
+ * How long a live connection has to stay up before its next drop starts the ladder over. A link that opens and drops must
+ * keep backing off, or a flapping host reconnects on the shortest delay forever (#634); the comparable clients reset at a
+ * floor of this order — 10 s in one, 60 s in herdr (`#653`).
+ */
+const STABLE_CONNECTION_MS = 10_000;
 /** This computer's host, as the desktop app runs it: where it listens now, and why it did not start. */
 export interface LocalHostStarter {
   start(): Promise<{ readonly url: string; readonly token: string }>;
@@ -64,6 +78,13 @@ export class ConnectionStore {
   #relayFirst = false;
   /** Asked before each retry of a loopback link: this computer's host, started again if it died (the desktop app). */
   #localHost: LocalHostStarter | null = null;
+  /** The live connection has been up past {@link STABLE_CONNECTION_MS}, so its next drop starts the ladder over. */
+  #stable = false;
+  #stableTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The attempt in flight, so a wake starts a fresh one instead of waiting for it. */
+  #current = 0;
+  /** A wake already asked for this tick: several page events must cost one attempt, not three. */
+  #wakeQueued = false;
   readonly #connect: typeof connect;
 
   constructor(settings: ConnectionSettings, open: typeof connect = connect) {
@@ -126,6 +147,8 @@ export class ConnectionStore {
 
   stop(): void {
     clearTimeout(this.#timer);
+    clearTimeout(this.#stableTimer);
+    this.#stable = false;
     this.#pending = null;
     this.#abort?.abort();
     this.#abort = null;
@@ -134,6 +157,8 @@ export class ConnectionStore {
   }
 
   async #attempt(attempt: number): Promise<void> {
+    this.#current = attempt;
+    if (this.#offline()) return this.#hold(attempt);
     const abort = new AbortController();
     this.#abort = abort;
     const relayFirst = this.#relayFirst;
@@ -153,9 +178,10 @@ export class ConnectionStore {
         if (this.#abort !== abort) return;
         if (opened.path === "direct") this.#relayFirst = true;
         this.#stale = connection;
-        this.#retry(error ?? new Error("the host closed the connection"), 0);
+        this.#retry(error ?? new Error("the host closed the connection"), this.#stable ? 0 : attempt + 1);
       });
       this.#stale = null;
+      this.#armStable();
       this.#set({
         phase: "open",
         connection,
@@ -166,6 +192,52 @@ export class ConnectionStore {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * The live connection has proved itself once it stays up for {@link STABLE_CONNECTION_MS}: from then on a drop starts
+   * the ladder at its shortest delay. Anything shorter keeps the count a link has already earned.
+   */
+  #armStable(): void {
+    clearTimeout(this.#stableTimer);
+    this.#stable = false;
+    this.#stableTimer = setTimeout(() => {
+      this.#stable = true;
+    }, STABLE_CONNECTION_MS);
+  }
+
+  #disarmStable(): void {
+    clearTimeout(this.#stableTimer);
+    this.#stable = false;
+  }
+
+  /** Whether there is no network to try on, and the link would need one: a link to this computer does not. */
+  #offline(): boolean {
+    return typeof navigator !== "undefined" && navigator.onLine === false && !staysOnThisComputer(this.#settings);
+  }
+
+  /** No network to try on: keep the waiting state and its countdown, and dial nothing (#636). */
+  #hold(attempt: number): void {
+    const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
+    this.#set({
+      phase: "failed",
+      error: new Error("No network. Reconnects when the network is back."),
+      retryInMs: delay,
+      retryAt: Date.now() + delay,
+      stale: this.#stale,
+    });
+    this.#wait(attempt);
+  }
+
+  /** Arms `attempt` for its own delay without dialing anything. */
+  #wait(attempt: number): void {
+    const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
+    clearTimeout(this.#timer);
+    this.#pending = attempt;
+    this.#timer = setTimeout(() => {
+      this.#pending = null;
+      void this.#again(attempt);
+    }, delay);
   }
 
   /**
@@ -182,6 +254,7 @@ export class ConnectionStore {
   }
 
   #retry(error: Error, attempt: number): void {
+    this.#disarmStable();
     if (isFinal(error)) {
       this.#stale = null;
       this.#set({ phase: "failed", error, retryInMs: null, retryAt: null, stale: null });
@@ -189,11 +262,7 @@ export class ConnectionStore {
     }
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
     this.#set({ phase: "failed", error, retryInMs: delay, retryAt: Date.now() + delay, stale: this.#stale });
-    this.#pending = attempt;
-    this.#timer = setTimeout(() => {
-      this.#pending = null;
-      void this.#again(attempt);
-    }, delay);
+    this.#wait(attempt);
   }
 
   /** A retry: for a loopback link in the desktop app, this computer's host first, then the link to where it is now. */
@@ -220,13 +289,32 @@ export class ConnectionStore {
     return this.#attempt(attempt);
   }
 
-  /** Makes a waiting retry now instead of at the end of its back-off (the network is back); the workspace stays. */
+  /**
+   * Makes a waiting retry now instead of at the end of its back-off (the page can work again), or replaces an attempt
+   * already in flight; the workspace stays (#636).
+   */
   retryNow(): void {
+    if (this.#state.phase === "connecting") return this.#restart();
     const attempt = this.#pending;
     if (attempt === null || this.#state.phase !== "failed") return;
     clearTimeout(this.#timer);
     this.#pending = null;
     void this.#again(attempt);
+  }
+
+  /**
+   * Abandons the attempt in flight and dials again at once: after a wake, the socket that was opening before the page
+   * slept may be half-open, and waiting for it would cost the whole attempt's deadline. One wake per tick is enough.
+   */
+  #restart(): void {
+    if (this.#abort === null || this.#wakeQueued) return;
+    this.#wakeQueued = true;
+    queueMicrotask(() => {
+      this.#wakeQueued = false;
+      if (this.#state.phase !== "connecting") return;
+      this.#abort?.abort();
+      void this.#again(this.#current);
+    });
   }
 
   #set(state: ConnectionState): void {
@@ -237,8 +325,8 @@ export class ConnectionStore {
 
 export const connectionStore = new ConnectionStore(loadSettings());
 
-// The network is back: a reconnect waiting out its back-off starts at once.
-if (typeof addEventListener === "function") addEventListener("online", () => connectionStore.retryNow());
+// The page can work again: the network returned, a page came back from the cache, or a tab became visible (#653).
+resumeOnWake(connectionStore);
 
 export function useConnection(store: ConnectionStore = connectionStore): ConnectionState {
   return useSyncExternalStore(store.subscribe, () => store.state);
