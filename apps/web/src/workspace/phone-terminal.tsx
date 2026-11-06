@@ -1,15 +1,22 @@
 import type { HcConnection } from "@doriface/client";
+import { useToastManager } from "@doriface/ui";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalOverlay } from "../approval/approval-overlay.tsx";
+import { terminalConfigStore } from "../ghostty/config-store.ts";
+import { rendererOptions } from "../ghostty/render-options.ts";
 import { useMouseOnly, useSoftKeyboard } from "../terminal/keyboard-inset.ts";
+import { copiedText } from "../terminal/copied-text.ts";
 import { useHostPlatform } from "../terminal/host-os.ts";
 import { closesTab } from "../terminal/terminal-end.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
 import { TerminalView } from "../terminal/terminal-view.tsx";
+import { SelectionMenu } from "../terminal/selection-menu.tsx";
+import type { TerminalSelection } from "../terminal/use-touch-selection.ts";
 import { DictateButton } from "../voice/dictate-button.tsx";
 import { useDictation } from "../voice/use-dictation.ts";
 import { VoiceDock } from "../voice/voice-dock.tsx";
 import { MachineOffline } from "./machine-offline.tsx";
+import { COMPOSER_HEIGHT, PhoneComposer } from "./phone-composer.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import { PhoneHeader } from "./phone-header.tsx";
 import { PaneSwitcher } from "./phone-pane-switcher.tsx";
@@ -53,6 +60,10 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
   const [keysShown, setKeysShown] = useState(false);
   const [menu, setMenu] = useState(false);
   const [pad, setPad] = useState(false);
+  const [composer, setComposer] = useState(false);
+  /** Where a held touch left its selection: the menu it opens offers Copy and Paste. */
+  const [selection, setSelection] = useState<TerminalSelection | null>(null);
+  const toasts = useToastManager();
   // A rename moves the address, a restarted program changes the pid: either way the view attaches afresh.
   const viewKey = `${terminal.address}#${terminal.pid ?? ""}`;
   // The view that showed its program had already ended; the keys have nothing to send to under it.
@@ -79,6 +90,16 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
   }, [ended, offline, voice.dictation]);
   const dictating = voice.state.kind !== "idle" && !ended && !offline;
   const keysOpen = !ended && !dictating && (keyboard.up || menu || (mouseOnly && keysShown));
+  // The field lives with the bar: a keyboard closed (by its own key, or the bar's) takes both away.
+  const composerOpen = composer && keysOpen;
+  useEffect(() => {
+    if (!keysOpen) setComposer(false);
+  }, [keysOpen]);
+  const copySelection = useCallback((text: string): void => {
+    void navigator.clipboard
+      ?.writeText(copiedText(text, rendererOptions(terminalConfigStore.config).trimCopy))
+      .catch(() => toasts.add({ type: "warning", title: "Copy needs access to the clipboard" }));
+  }, [toasts]);
   // The tabs bar takes the bottom while nothing rides there: the keys bar, with the soft keyboard, and dictation do.
   const tabs = useSpaceTabs(terminals, terminal.address);
   const tabsBar = !keysOpen && !dictating && tabs.some((tab) => tab.includes(terminal.address));
@@ -110,7 +131,13 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
       <div
         ref={setScope}
         className="relative flex min-h-0 flex-1 flex-col"
-        style={keysOpen ? { paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})` } : undefined}
+        style={
+          keysOpen
+            ? {
+                paddingBottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT}${composerOpen ? ` + ${COMPOSER_HEIGHT}` : ""})`,
+              }
+            : undefined
+        }
       >
         {offline ? null : <ApprovalOverlay connection={connection} terminal={terminal} />}
         {offline ? (
@@ -132,8 +159,16 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
             closeLabel="Close"
             {...(keysControls === null ? {} : { jumpClearance: keysControls })}
             onEnded={() => setEndedView(viewKey)}
+            onSelection={setSelection}
           />
         )}
+        {composerOpen ? (
+          <PhoneComposer
+            className="absolute inset-x-0 z-10"
+            style={{ bottom: `calc(${keysBottom(keyboard.inset)} + ${KEYS_BAR_HEIGHT})` }}
+            onSend={(text) => port.current?.send(`${text}\r`)}
+          />
+        ) : null}
       </div>
       {tabsBar ? (
         <PhoneTabSwitcher
@@ -171,9 +206,17 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
           onMenu={setMenu}
           pad={pad}
           onPad={setPad}
+          composerOpen={composerOpen}
+          onComposer={setComposer}
           {...(mouseOnly ? { onKeys: setKeysShown } : {})}
         />
       )}
+      <SelectionMenu
+        selection={selection}
+        onClose={() => setSelection(null)}
+        onCopy={copySelection}
+        onPaste={sticky.paste}
+      />
     </div>
   );
 }

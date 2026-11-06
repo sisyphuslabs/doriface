@@ -72,3 +72,12 @@
   text-align: center;
   letter-spacing: 0;
 }
+
+/* A phone holds a finger down to select terminal text itself (#195): the rows are not text its own long-press gesture
+   may claim first, which would put selection handles and a document selection over the held one. */
+@media (any-pointer: coarse) {
+  .wterm .term-grid {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}

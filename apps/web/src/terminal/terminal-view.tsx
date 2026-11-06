@@ -19,6 +19,7 @@ import { useDarkScheme } from "./use-dark-scheme.ts";
 import { useBehaviors, type PendingPaste } from "./use-behaviors.ts";
 import { useFocusAfterSelect } from "./use-focus-after-select.ts";
 import { useSelectionCells } from "./use-selection-cells.ts";
+import { type TerminalSelection, useTouchSelection } from "./use-touch-selection.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import { Ended } from "./ended.tsx";
@@ -63,6 +64,11 @@ export interface TerminalViewProps {
   readonly onEnded?: () => void;
   /** A CSS length the jump-to-bottom button keeps above the terminal's bottom, for controls floating over it. */
   readonly jumpClearance?: string;
+  /**
+   * Where a held touch left its selection, for a shell that offers Copy and Paste beside it; set only by the phone.
+   * The selection is in the terminal and paints itself either way.
+   */
+  readonly onSelection?: (selection: TerminalSelection | null) => void;
 }
 
 const HISTORY_LINES = 2_000;
@@ -84,7 +90,7 @@ function handBack(event: FocusEvent<HTMLElement>): void {
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onPort, onEnd } = props;
-  const { closeLabel = "Close tab", onEnded, jumpClearance, claimed = true } = props;
+  const { closeLabel = "Close tab", onEnded, jumpClearance, claimed = true, onSelection } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -227,6 +233,7 @@ export function TerminalView(props: TerminalViewProps) {
   }, [wt, pacer]);
   useFocusAfterSelect(wt, options.trimCopy);
   useSelectionCells(wt);
+  useTouchSelection(wt, onSelection);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);
   const program = useRef(pid);
@@ -437,6 +444,8 @@ export function TerminalView(props: TerminalViewProps) {
         onPaste={(text) => {
           typed(text);
           setPaste(null);
+          // What follows the paste is typed at the program: the question took the keyboard, so it goes back.
+          handle.current?.focus();
         }}
       />
     </div>

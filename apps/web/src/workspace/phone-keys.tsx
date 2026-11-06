@@ -31,6 +31,9 @@ export interface PhoneKeysProps {
   /** The arrow pad is open over the keys bar; the terminal keeps its own controls above it. */
   readonly pad: boolean;
   readonly onPad: (open: boolean) => void;
+  /** The field that types into the terminal is open above the bar. */
+  readonly composerOpen: boolean;
+  readonly onComposer: (open: boolean) => void;
   /**
    * Set where the bar opens without a soft keyboard (a mouse-only device, #287): the round button reads Show keys and
    * calls this with true, and the bar's last key reads Hide keys and calls it with false. Unset, the button raises the
@@ -49,6 +52,7 @@ function hideKeyboard(): void {
  */
 export function PhoneKeys(props: PhoneKeysProps) {
   const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu, pad, onPad, onKeys } = props;
+  const { composerOpen, onComposer } = props;
   if (!open) {
     return (
       <KeyboardButton
@@ -80,6 +84,8 @@ export function PhoneKeys(props: PhoneKeysProps) {
         padOpen={pad}
         onPad={() => onPad(!pad)}
         onPaste={sticky.paste}
+        inputOpen={composerOpen}
+        onInput={() => onComposer(!composerOpen)}
         {...(onKeys === undefined
           ? { onHideKeyboard: hideKeyboard }
           : { hideLabel: "Hide keys", onHideKeyboard: () => onKeys(false) })}

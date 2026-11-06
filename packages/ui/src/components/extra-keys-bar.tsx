@@ -1,4 +1,15 @@
-import { ClipboardPaste, GamepadDirectional, Keyboard, KeyboardOff, List } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ClipboardPaste,
+  GamepadDirectional,
+  Keyboard,
+  KeyboardOff,
+  List,
+  TextCursorInput,
+} from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -22,14 +33,22 @@ export interface ExtraKey {
 
 const CTRL: ExtraKey = { id: "ctrl", label: "ctrl", name: "Control", modifier: true };
 const CMD: ExtraKey = { id: "cmd", label: "cmd", name: "Command", modifier: true };
-const REST: readonly ExtraKey[] = [
+const FIXED: readonly ExtraKey[] = [
   { id: "shift", label: "shift", name: "Shift", modifier: true },
   { id: "tab", label: "tab", name: "Tab" },
   { id: "esc", label: "esc", name: "Escape" },
 ];
 
+/** The arrows as keys of their own, beside the modifiers, so a phone sends them without opening the pad. */
+export const ARROW_KEYS: readonly ExtraKey[] = [
+  { id: "left", label: <ArrowLeft />, name: "Arrow left" },
+  { id: "up", label: <ArrowUp />, name: "Arrow up" },
+  { id: "down", label: <ArrowDown />, name: "Arrow down" },
+  { id: "right", label: <ArrowRight />, name: "Arrow right" },
+];
+
 export function extraKeys(command: boolean): readonly ExtraKey[] {
-  return command ? [CTRL, CMD, ...REST] : [CTRL, ...REST];
+  return command ? [CTRL, CMD, ...FIXED, ...ARROW_KEYS] : [CTRL, ...FIXED, ...ARROW_KEYS];
 }
 
 export const DEFAULT_EXTRA_KEYS: readonly ExtraKey[] = extraKeys(false);
@@ -86,7 +105,9 @@ function useEdgeFade(): [Fade, (el: HTMLDivElement | null) => void] {
 }
 
 export interface ExtraKeysBarProps {
+  /** The keys that scroll: modifiers, Esc, Tab and the arrows by default. */
   readonly keys?: readonly ExtraKey[];
+  /** The keys behind the scroll's end, after a divider: the swiped-in symbols and `alt` by default. */
   readonly swipeKeys?: readonly ExtraKey[];
   /** Ids of modifiers currently latched. */
   readonly latched?: readonly string[];
@@ -94,6 +115,9 @@ export interface ExtraKeysBarProps {
   readonly padOpen?: boolean;
   readonly onPad?: () => void;
   readonly onPaste?: () => void;
+  /** Opens the field that types into the terminal instead of the terminal itself. */
+  readonly onInput?: () => void;
+  readonly inputOpen?: boolean;
   readonly onHideKeyboard?: () => void;
   /** The hide button's name: Hide keyboard by default; Hide keys where the bar shows without a soft keyboard. */
   readonly hideLabel?: string;
@@ -104,10 +128,11 @@ export interface ExtraKeysBarProps {
 }
 
 /**
- * The phone's terminal keys, one rounded pill riding on the soft keyboard: modifiers and Tab/Esc on the left (swipe for
- * more, behind an edge fade), then the arrow pad toggle, Paste, Switch session and Hide keyboard. Every key is a 44 pt
- * target, and pressing one leaves the text focus (and so the keyboard) where it was. A latched modifier inverts to
- * solid ink with a bar under its label, so it reads as on in both themes.
+ * The phone's terminal keys, one rounded pill riding on the soft keyboard: one row that scrolls sideways (the sticky
+ * modifiers, Tab and Esc, the arrows, the arrow pad, Switch session, Paste, then the swiped-in symbols behind an edge
+ * fade), and beside it two slots that never scroll — the field that types into the terminal, and the keyboard's own
+ * show/hide. Every key is a 44 pt target, and pressing one leaves the text focus (and so the keyboard) where it was. A
+ * latched modifier inverts to solid ink with a bar under its label, so it reads as on in both themes.
  */
 export function ExtraKeysBar(props: ExtraKeysBarProps) {
   const { keys = DEFAULT_EXTRA_KEYS, swipeKeys = SWIPE_KEYS, latched = [], onKey, padOpen = false } = props;
@@ -132,8 +157,27 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
       </button>
     );
   };
+  const iconKey = (name: string, icon: ReactNode, on: boolean | undefined, onPress: (() => void) | undefined) => (
+    <button
+      type="button"
+      key={name}
+      aria-label={name}
+      aria-pressed={on}
+      onMouseDown={keepFocus}
+      onClick={onPress}
+      className={cn(key, on === true ? latchedKey : idleKey)}
+    >
+      {icon}
+    </button>
+  );
   const sessions = (
-    <button type="button" aria-label="Switch session" onMouseDown={keepFocus} className={cn(key, idleKey)}>
+    <button
+      type="button"
+      key="session"
+      aria-label="Switch session"
+      onMouseDown={keepFocus}
+      className={cn(key, idleKey)}
+    >
       <List />
     </button>
   );
@@ -160,31 +204,16 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
           )}
         >
           {keys.map(textKey)}
+          {iconKey("Arrow keys", <GamepadDirectional />, padOpen, props.onPad)}
+          {props.renderSessions === undefined ? sessions : props.renderSessions(sessions)}
+          {iconKey("Paste", <ClipboardPaste />, undefined, props.onPaste)}
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {swipeKeys.map(textKey)}
         </div>
         <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-border" />
         <div className="flex shrink-0 items-center">
-          <button
-            type="button"
-            aria-label="Arrow keys"
-            aria-pressed={padOpen}
-            onMouseDown={keepFocus}
-            onClick={props.onPad}
-            className={cn(key, padOpen ? latchedKey : idleKey)}
-          >
-            <GamepadDirectional />
-          </button>
-          <button
-            type="button"
-            aria-label="Paste"
-            onMouseDown={keepFocus}
-            onClick={props.onPaste}
-            className={cn(key, idleKey)}
-          >
-            <ClipboardPaste />
-          </button>
-          {props.renderSessions === undefined ? sessions : props.renderSessions(sessions)}
+          {/* The field that types into the terminal sits beside the keyboard's own key: both always in reach. */}
+          {iconKey("Type in a field", <TextCursorInput />, props.inputOpen, props.onInput)}
           <button
             type="button"
             aria-label={props.hideLabel ?? "Hide keyboard"}

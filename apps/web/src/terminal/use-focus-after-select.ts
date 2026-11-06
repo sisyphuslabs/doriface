@@ -4,6 +4,12 @@ import { copiedText } from "./copied-text.ts";
 import { heldSelection, holdSelection, releaseSelection } from "./held-selection.ts";
 import { mayTakeFocus } from "./may-take-focus.ts";
 
+/**
+ * How long after a touch's pointerdown its compatibility mouse events still belong to that touch: a browser sends
+ * mousedown and mouseup after the finger lifts, and neither may drop the selection a held touch made.
+ */
+const TOUCH_COMPAT_MS = 1000;
+
 /** Keys that leave the held selection for a copy that is about to read it. */
 function keepsSelection(event: KeyboardEvent): boolean {
   if (/^(Shift|Control|Alt|Meta|AltGraph|CapsLock|Fn)$/.test(event.key)) return true;
@@ -37,14 +43,19 @@ export function useFocusAfterSelect(wt: WTerm | null, trimCopy: boolean): void {
       keepPressSelection(document.getSelection(), element, range);
     };
     const press = (event: MouseEvent): void => {
-      if (event.button === 0) document.addEventListener("mouseup", restore, { once: true });
+      if (event.button === 0 && !fromTouchPress()) document.addEventListener("mouseup", restore, { once: true });
     };
     const multiClick = (event: MouseEvent): void => {
       if (event.button === 0 && event.detail >= 2) restore();
     };
     const drop = (): void => releaseSelection(element);
+    let touchedAt = Number.NEGATIVE_INFINITY;
+    const fromTouchPress = (): boolean => performance.now() - touchedAt < TOUCH_COMPAT_MS;
+    const pointerDown = (event: PointerEvent): void => {
+      if (event.pointerType === "touch") touchedAt = performance.now();
+    };
     const buttonDown = (event: MouseEvent): void => {
-      if (event.button === 0) drop();
+      if (event.button === 0 && !fromTouchPress()) drop();
     };
     const copy = (event: ClipboardEvent): void => {
       const held = heldSelection(element);
@@ -76,6 +87,7 @@ export function useFocusAfterSelect(wt: WTerm | null, trimCopy: boolean): void {
     };
     element.addEventListener("mousedown", press);
     element.addEventListener("click", multiClick);
+    document.addEventListener("pointerdown", pointerDown, true);
     document.addEventListener("mousedown", buttonDown, true);
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("selectionchange", selectionChanged);
@@ -84,6 +96,7 @@ export function useFocusAfterSelect(wt: WTerm | null, trimCopy: boolean): void {
       element.removeEventListener("mousedown", press);
       element.removeEventListener("click", multiClick);
       document.removeEventListener("mouseup", restore);
+      document.removeEventListener("pointerdown", pointerDown, true);
       document.removeEventListener("mousedown", buttonDown, true);
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("selectionchange", selectionChanged);
