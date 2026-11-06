@@ -72,7 +72,7 @@ export function PackSheet({ open, onOpenChange, settings }: PackSheetProps) {
         className="mt-3 w-full"
         onClick={() => {
           onOpenChange(false);
-          void navigate({ to: "/settings" });
+          void navigate({ to: "/settings", hash: "keyboard" });
         }}
       >
         Edit keys and packs

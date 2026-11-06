@@ -1,5 +1,5 @@
 import { IconButton, RowDropCaret, RowDropIndicator, rowPlacement, useListDrag } from "@doriface/ui";
-import { GripVertical, Minus, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Minus, Plus } from "lucide-react";
 import { useRef } from "react";
 import { specialKeysOn } from "../keybar/catalog.ts";
 import { specialEntries } from "../keybar/entries.ts";
@@ -20,7 +20,8 @@ const move = (id: string, to: number): void => {
 
 /**
  * Edit mode, as an iOS list editor: the keys in the bar with a red minus and a grip to drag, and the keys left out with
- * a green plus. Nothing here exists while the page is not editing.
+ * a green plus. Nothing here exists while the page is not editing. The earlier and later buttons are the reorder path
+ * for anyone who cannot drag, since a row that only moves under a pointer is not reachable by keyboard or switch control.
  */
 export function KeyboardEdit({ settings, host, readOnly }: KeyboardEditProps) {
   const list = useRef<HTMLUListElement | null>(null);
@@ -56,6 +57,22 @@ export function KeyboardEdit({ settings, host, readOnly }: KeyboardEditProps) {
                   onClick={() => void keyBarStore.update((current) => removeKey(current, entry.id))}
                 />
                 <span className="min-w-0 flex-1 truncate text-base text-foreground">{entry.label}</span>
+                <IconButton
+                  data-drag-ignore
+                  label={`Move ${entry.name} earlier`}
+                  icon={<ChevronUp />}
+                  className="size-8 rounded-full text-muted-foreground hover:bg-selected"
+                  disabled={readOnly || index === 0}
+                  onClick={() => move(entry.id, index - 1)}
+                />
+                <IconButton
+                  data-drag-ignore
+                  label={`Move ${entry.name} later`}
+                  icon={<ChevronDown />}
+                  className="size-8 rounded-full text-muted-foreground hover:bg-selected"
+                  disabled={readOnly || index === shown.length - 1}
+                  onClick={() => move(entry.id, index + 1)}
+                />
                 <span aria-hidden className="text-muted-foreground">
                   <GripVertical className="size-4" />
                 </span>

@@ -1,8 +1,7 @@
-import { DirectionPad, ExtraKeysBar, type ExtraKey, KeyboardButton, Menu, MenuItem } from "@doriface/ui";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { DirectionPad, ExtraKeysBar, KeyboardButton, Menu, MenuItem } from "@doriface/ui";
 import type { RefObject } from "react";
-import type { BarIcon } from "../keybar/catalog.ts";
-import { type BarEntry, activeEntries, specialEntries } from "../keybar/entries.ts";
+import { activeEntries, specialEntries } from "../keybar/entries.ts";
+import { toExtra } from "../keybar/render.tsx";
 import { useKeyBarSettings } from "../keybar/store.ts";
 import type { HostPlatform } from "../terminal/keys.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
@@ -22,21 +21,6 @@ export const KEYBOARD_BUTTON_CLEARANCE = "calc(max(1rem, calc(var(--safe-bottom)
 
 /** How far up from the terminal's bottom the arrow pad reaches: its 0.5rem gap, three 3rem rows with their gaps and padding. */
 export const DIRECTION_PAD_CLEARANCE = "calc(0.5rem + 9rem + 0.5rem + 0.75rem + 2px)";
-
-const GLYPHS: Readonly<Record<BarIcon, typeof ArrowLeft>> = {
-  left: ArrowLeft,
-  right: ArrowRight,
-  up: ArrowUp,
-  down: ArrowDown,
-};
-
-function toExtra(entry: BarEntry): ExtraKey {
-  const Glyph = entry.icon === null ? null : GLYPHS[entry.icon];
-  const label = Glyph === null ? entry.label : <Glyph aria-hidden />;
-  return entry.bytes === null
-    ? { id: entry.id, label, name: entry.name, modifier: true }
-    : { id: entry.id, label, name: entry.name };
-}
 
 export interface PhoneKeysProps {
   readonly port: RefObject<TerminalPort | null>;

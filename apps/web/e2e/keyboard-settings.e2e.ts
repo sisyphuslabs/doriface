@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { devices, type Locator, type Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { fakeSoftKeyboard, PHONE, showKeyboard } from "./phone-key-bar.ts";
 
@@ -54,6 +54,7 @@ test("the page shows the bar itself, and Edit reveals the only place keys can be
   // Command sits after Control on a Mac host and Shift does elsewhere; the bar's own order starts with Control either way.
   expect(names[0]).toBe("Control");
   expect(names).toContain("Escape");
+
   await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await expect(page.getByRole("button", { name: "Done", exact: true })).toBeVisible();
@@ -67,6 +68,40 @@ test("the page shows the bar itself, and Edit reveals the only place keys can be
   await page.getByRole("button", { name: "Done", exact: true }).click();
   const back = await barNames(hero(page));
   expect(back).toContain("Escape");
+});
+
+// The bar belongs to the host the phone talks to, not to the phone: this browser is an Android phone, whose own OS has
+// no Command key, and the host under test is a Mac, so Command has to be on the bar. Keyed on the phone's OS it was not.
+test.describe("an Android phone with a Mac host", () => {
+  test.use({ userAgent: devices["Pixel 7"].userAgent, viewport: { width: 390, height: 844 } });
+
+  test("shows the Command key its host has, not the keys its own OS would", async ({ page }) => {
+    await openSettings(page);
+    const names = await barNames(hero(page));
+    expect(names).toContain("Command");
+    await page.getByRole("button", { name: /^Keys/ }).click();
+    const picker = page.getByRole("dialog", { name: "Add keys" });
+    await expect(picker.getByRole("button", { name: "Command" })).toBeVisible();
+  });
+});
+
+test("the earlier and later buttons move a key, so a drag is not the only way to reorder", async ({ page }) => {
+  await openSettings(page);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const order = async (): Promise<readonly string[]> =>
+    page.locator("[data-edit-key]").evaluateAll((rows) => rows.map((row) => row.getAttribute("data-edit-key") ?? ""));
+  const before = await order();
+  const at = before.indexOf("esc");
+  expect(at).toBeGreaterThan(-1);
+  await page.getByRole("button", { name: "Move Escape earlier" }).click();
+  const earlier = await order();
+  expect(earlier.indexOf("esc")).toBe(at - 1);
+  await page.getByRole("button", { name: "Move Escape later" }).click();
+  expect(await order()).toEqual(before);
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  const names = await barNames(hero(page));
+  // The residual assertion the drag test cannot make: the hero draws the order the list holds.
+  expect(names[before.indexOf("esc")]).toBe("Escape");
 });
 
 test("a pack added from the Add keys sheet leads the hero and the terminal's bar", async ({ page }) => {
@@ -104,16 +139,17 @@ test("a key of the person's own previews the bytes it sends, and the bar sends t
   await openSettings(page);
   await page.getByRole("button", { name: /^Your keys/ }).click();
   const sheet = page.getByRole("dialog", { name: "Your keys" });
-  await sheet.getByLabel("Key label").fill("Shout");
-  await sheet.getByLabel("Keys it sends").fill("Ctrl+C");
-  await expect(sheet.getByText("sends: \\x03")).toBeVisible();
+  await sheet.getByLabel("Key label").fill("Where");
+  await sheet.getByLabel("Keys it sends").fill("pwd");
+  await expect(sheet.getByText("sends: pwd")).toBeVisible();
   await sheet.getByRole("button", { name: "Add key" }).click();
   await expect(sheet.locator("[data-custom-key]")).toHaveCount(1);
   await sheet.getByRole("button", { name: "Done", exact: true }).click();
 
   const terminal = await openTerminal(page);
-  await page.getByRole("button", { name: "Shout", exact: true }).click();
-  await expect(terminal).toBeVisible();
+  await page.getByRole("button", { name: "Where", exact: true }).click();
+  // The text the key carries has to reach the terminal, not just the bar: the PTY echoes what it received.
+  await expect(terminal).toContainText("pwd", { timeout: 10_000 });
 });
 
 test("an entry that names no key is refused with its reason and stored nowhere", async ({ page }) => {

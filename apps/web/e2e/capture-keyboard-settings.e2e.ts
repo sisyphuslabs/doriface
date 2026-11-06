@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { E2E_HOST_PORT, E2E_TOKEN } from "./config.ts";
 import { expect, test } from "./fixtures.ts";
+import { openPhoneTerminal, PHONE, showKeyboard } from "./phone-key-bar.ts";
 
 const OUT = join(import.meta.dirname, "../../../docs/design/app");
 const CONNECTION = JSON.stringify({
@@ -16,6 +17,8 @@ const CONNECTION = JSON.stringify({
 });
 const BODY = "[data-slot='settings-body']";
 const HERO = "[data-key-bar-hero]";
+
+test.use({ serviceWorkers: "block", ...PHONE });
 
 test.skip(process.env["CAPTURE"] !== "1", "captures run only with CAPTURE=1");
 
@@ -120,6 +123,16 @@ async function settled(page: Page, dialog?: Locator): Promise<void> {
       { timeout: 5_000, intervals: [80] },
     )
     .toBe(true);
+}
+
+for (const theme of ["day", "night"] as const) {
+  test(`keys bar ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openPhoneTerminal(page, 390);
+    await showKeyboard(page, 336);
+    await expect(page.getByRole("toolbar", { name: "Terminal keys" })).toBeVisible();
+    await page.screenshot({ path: join(OUT, `keys-bar-390-${theme}.png`) });
+  });
 }
 
 function slug(title: string): string {

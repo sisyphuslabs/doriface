@@ -1,10 +1,11 @@
 import { Button, Notice } from "@doriface/ui";
 import { ChevronRight } from "lucide-react";
-import { useState } from "react";
-import { currentPlatform } from "../keys/trigger.ts";
+import { useState, useSyncExternalStore } from "react";
+import { connectionStore, useConnection } from "../connection/store.ts";
 import { packName, specialEntries } from "../keybar/entries.ts";
 import { useKeyBarError, useKeyBarSettings } from "../keybar/store.ts";
 import { asSentence } from "../storage/sentence.ts";
+import { useHostPlatform } from "../terminal/host-os.ts";
 import { CustomKeySheet } from "./custom-key-sheet.tsx";
 import { KeyBarHero } from "./key-bar-hero.tsx";
 import { KeyboardEdit } from "./keyboard-edit.tsx";
@@ -12,6 +13,22 @@ import { KeyPickerSheet } from "./key-picker-sheet.tsx";
 import { PacksSheet } from "./packs-sheet.tsx";
 
 type SheetId = "keys" | "packs" | "custom" | null;
+
+/**
+ * The platform the bar is drawn for: the connected host's, exactly as the terminal decides it, not this phone's. An
+ * iPhone is not a Mac, so a preview keyed on the device would promise \`cmd\` to someone whose host has no Command key.
+ */
+function useBarHost() {
+  const state = useConnection();
+  const settings = useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
+  const live =
+    state.phase === "open"
+      ? state.connection
+      : state.phase === "connecting" || state.phase === "failed"
+        ? state.stale
+        : null;
+  return useHostPlatform(live, settings.hostId === "" ? undefined : settings.hostId, state.phase !== "open");
+}
 
 function LinkRow({
   title,
@@ -46,7 +63,7 @@ function LinkRow({
 export function KeyboardSection() {
   const settings = useKeyBarSettings();
   const error = useKeyBarError();
-  const host = currentPlatform();
+  const host = useBarHost();
   const readOnly = error !== null;
   const [editing, setEditing] = useState(false);
   const [sheet, setSheet] = useState<SheetId>(null);

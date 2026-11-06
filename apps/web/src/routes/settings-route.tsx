@@ -45,6 +45,12 @@ const SECTIONS = [
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
+/** The section a link asked for (a hash, so it survives a reload), else the one Settings always opens on. */
+function firstSection(): SectionId {
+  const asked = window.location.hash.slice(1);
+  return SECTIONS.some((entry) => entry.id === asked) ? (asked as SectionId) : "connections";
+}
+
 function Group({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return (
     <section className="flex flex-col">
@@ -56,7 +62,7 @@ function Group({ title, children }: { readonly title: string; readonly children:
 
 /** Section navigation beside the form; changes apply as they are made. */
 export function SettingsRoute() {
-  const [section, setSection] = useState<SectionId>("connections");
+  const [section, setSection] = useState<SectionId>(firstSection);
   const close = useCloseSettings();
   const update = usePendingUpdate();
   const back = (

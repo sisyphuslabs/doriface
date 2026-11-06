@@ -13,6 +13,17 @@ export interface StickyKeys {
   readonly paste: () => void;
 }
 
+/** What one press sends: the key's bytes through the latched modifiers, or a paste instead of a write. */
+export function sentBy(
+  bytes: string,
+  latched: ReadonlySet<string>,
+  host: HostPlatform,
+): { readonly kind: "write"; readonly data: string } | { readonly kind: "paste" } {
+  if (latched.size === 0) return { kind: "write", data: bytes };
+  const input = applyModifiers(bytes, latched, host);
+  return input.kind === "write" ? { kind: "write", data: input.data } : { kind: "paste" };
+}
+
 /** The phone's modifiers as t3code has them: tap to latch, applied to the next key or typed character, then off. */
 export function useStickyKeys(port: RefObject<TerminalPort | null>, host: HostPlatform): StickyKeys {
   const [latched, setLatched] = useState<ReadonlySet<string>>(new Set());
@@ -29,8 +40,8 @@ export function useStickyKeys(port: RefObject<TerminalPort | null>, host: HostPl
   const transform = (data: string): string => {
     if (latched.size === 0) return data;
     setLatched(new Set());
-    const input = applyModifiers(data, latched, host);
-    if (input.kind === "write") return input.data;
+    const sent = sentBy(data, latched, host);
+    if (sent.kind === "write") return sent.data;
     pasteClipboard();
     return "";
   };
