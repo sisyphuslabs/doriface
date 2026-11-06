@@ -29,6 +29,9 @@ export interface MemberEntry {
   readonly state: ConnectionState;
 }
 
+/** The one object `state` answers with when there is no connection to show: a fresh one per read would loop any rendering store. */
+const UNSET: ConnectionState = { phase: "unconfigured" };
+
 /**
  * One connection per member, so a machine going away removes that machine and nothing else.
  *
@@ -65,13 +68,17 @@ export class MeshConnections {
     return this.#settings;
   }
 
-  /** The selected member's connection, which is the one the workspace shows. */
+  /** The selected member's connection, which is the one the workspace shows: the saved selection, or the first member. */
   get selected(): MemberConnection | undefined {
-    return this.#stores.get(this.#settings.hostId);
+    const chosen = this.#stores.get(this.#settings.hostId);
+    if (chosen !== undefined) return chosen;
+    // A saved selection the roster does not hold cannot be dialled, and reporting it as unset would make every screen read "not
+    // connected" while members are up. The first member answers for it until the person picks another.
+    return this.#stores.values().next().value;
   }
 
   get state(): ConnectionState {
-    return this.selected?.state ?? { phase: "unconfigured" };
+    return this.selected?.state ?? UNSET;
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -135,13 +142,14 @@ export class MeshConnections {
 
   /** The members this app dials: the roster, plus the selected host when the two disagree so it is never left unreachable. */
   #roster(): readonly MemberTarget[] {
-    const { members, hostId, hostName, hostKey, directUrl, mode } = this.#settings;
+    const { members, hostId, hostName, hostKey, directUrl } = this.#settings;
     const selected: MemberTarget = { hostId, hostName, hostKey, directUrl };
-    if (members.some((member) => member.hostId === hostId)) return members;
-    // Loopback is this computer's own host, which has no mesh id to pair with: it is still the one member it dials, and leaving
-    // it out would show the desktop app unconfigured while its own host is running.
-    if (hostId === "" && mode !== "loopback") return members;
-    return [selected, ...members];
+    if (members.length > 0) {
+      return hostId !== "" && !members.some((member) => member.hostId === hostId) ? [selected, ...members] : members;
+    }
+    // No roster yet: this computer's own host over loopback is the one machine there is. In relay mode with nothing paired
+    // there is nothing to dial at all.
+    return hostId === "" && this.#settings.mode !== "loopback" ? [] : [selected];
   }
 
   #sync(): void {
@@ -193,6 +201,12 @@ export class MeshConnections {
   #adoptName(hostId: string, store: MemberConnection): void {
     const name = store.settings.hostName;
     const target = this.#targets.get(hostId);
+    // Loopback is one gateway for every member, so the hello that answers says nothing about which member replied: adopting it
+    // would rename every machine after the one local host.
+    if (store.settings.mode === "loopback") {
+      this.#notify();
+      return;
+    }
     if (target === undefined || name === "" || name === target.hostName) {
       this.#notify();
       return;
@@ -209,7 +223,7 @@ export class MeshConnections {
   #refresh(): void {
     this.#snapshot = [...this.#targets.values()].map((target) => ({
       target,
-      state: this.#stores.get(target.hostId)?.state ?? { phase: "unconfigured" },
+      state: this.#stores.get(target.hostId)?.state ?? UNSET,
     }));
   }
 
