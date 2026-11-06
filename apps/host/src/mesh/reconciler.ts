@@ -1,6 +1,5 @@
 import { HcRpcError, type MachineView, type MeshReplacedMachine, replacedMachineText } from "@doriface/protocol";
 import type { Clock } from "./clock.ts";
-import { DIAL_LIMITS } from "./dial-policy.ts";
 import type { HcMachines } from "./hc-machines.ts";
 import { fallbacks } from "@doriface/mesh";
 import type { MemberEntry } from "./authorize-index.ts";
@@ -9,6 +8,8 @@ import { type AddReservation, BUDGET_REFUSAL } from "./line-grants.ts";
 import { meshHostOf, meshVia } from "./via.ts";
 import { renameToMeshName } from "./line-names.ts";
 import { replacedOf } from "./replaced.ts";
+import { ProbeBackoff } from "./probe-backoff.ts";
+import { migrate } from "./migration.ts";
 
 /** Section 8.1: a named STUCK state is retried when the view or `machine.list` changes, or every 10 minutes. */
 export const STUCK_RETRY_MS = 600_000;
@@ -42,18 +43,11 @@ interface Attempt {
   readonly list: readonly MachineView[];
   readonly key: string;
   readonly via: string;
-  /** Set once the earlier entry for the member's core is removed: the add that follows is the migration's. */
-  readonly replaced?: MeshReplacedMachine;
 }
 
 interface Stuck {
   readonly key: string;
   readonly until: number;
-}
-
-interface Retry {
-  readonly attempts: number;
-  readonly cancel: () => void;
 }
 
 const DIFFERENT_CORE = "a different core answers there";
@@ -68,8 +62,8 @@ export class Reconciler {
   readonly status = new Map<string, LineStatus>();
   readonly #options: ReconcilerOptions;
   readonly #stuck = new Map<string, Stuck>();
-  /** Members whose add failed with herdr's retryable kinds, on section 8.2's probe backoff. */
-  readonly #retries = new Map<string, Retry>();
+  /** Unreachable, hc_missing, incompatible; a line refused for the dial budget is re-added by the policy's due. */
+  readonly #retries: ProbeBackoff;
   /** Newly admitted members whose add waits for the 0-5 s jitter (section 8.2). */
   readonly #held = new Set<string>();
   #latest: MeshView | undefined;
@@ -81,6 +75,9 @@ export class Reconciler {
 
   constructor(options: ReconcilerOptions) {
     this.#options = options;
+    this.#retries = new ProbeBackoff(options.clock, () => {
+      if (this.#latest !== undefined) void this.reconcile(this.#latest);
+    });
   }
 
   /** Coalesces: while one run is busy, the next runs once with the newest view. */
@@ -104,7 +101,7 @@ export class Reconciler {
   /** The host is stopping: no retry fires after this. */
   stop(): void {
     this.#cancelRetry();
-    for (const hostId of this.#retries.keys()) this.#retried(hostId);
+    this.#retries.clearExcept();
     this.#latest = undefined;
   }
 
@@ -175,7 +172,7 @@ export class Reconciler {
     const inView = view.members.some((m) => m.hostId === selfHostId);
     const others = inView ? view.members.filter((m) => m.hostId !== selfHostId) : [];
     const desired = new Map(others.map((m) => [m.hostId, m]));
-    for (const hostId of this.#retries.keys()) if (!desired.has(hostId)) this.#retried(hostId);
+    this.#retries.clearExcept((hostId) => desired.has(hostId));
     const entries = await this.#entries();
     const stale = entries.filter(
       (entry) => !desired.has(entry.hostId) || (entry.machine.why ?? "").includes(DIFFERENT_CORE),
@@ -221,42 +218,20 @@ export class Reconciler {
     }
     try {
       await this.#reservedAdd(member, name, attempt.via);
-      this.#retried(member.hostId);
-      const { replaced } = attempt;
-      this.status.set(member.hostId, replaced === undefined ? { state: "ok" } : { state: "ok", replaced });
-      this.#options.log(
-        `mesh: added machine ${name}${replaced === undefined ? "" : `, ${replacedMachineText(replaced)}`}`,
-      );
+      this.#retries.clear(member.hostId);
+      this.status.set(member.hostId, { state: "ok" });
+      this.#options.log(`mesh: added machine ${name}`);
     } catch (error) {
       const kind = kindOf(error);
       if (kind === "name_taken") return this.#addAs(member, attempt, rest);
       if (kind === "invalid_params") {
         return this.#stick(member, attempt.key, `invalid_name: herdr refused "${name}": ${messageOf(error)}`);
       }
-      if (kind === "already_added") return this.#migrate(member, attempt);
+      if (kind === "already_added") return this.#migrate(member, attempt, name);
       this.status.set(member.hostId, { state: "retrying", reason: `${kind}: ${messageOf(error)}` });
       this.#options.log(`mesh: adding machine ${name} failed (${kind}): ${messageOf(error)}; retrying`);
-      if (!messageOf(error).includes(BUDGET_REFUSAL)) this.#retryLater(member.hostId);
+      if (!messageOf(error).includes(BUDGET_REFUSAL)) this.#retries.later(member.hostId);
     }
-  }
-
-  /**
-   * Unreachable, hc_missing, incompatible: retried 30 s later, doubling to 5 minutes, and at once on presence. A line
-   * refused for the dial budget arms no clock here: the policy's "budget" due re-adds it once a token is free for it.
-   */
-  #retryLater(hostId: string): void {
-    const attempts = (this.#retries.get(hostId)?.attempts ?? 0) + 1;
-    this.#retries.get(hostId)?.cancel();
-    const wait = Math.min(DIAL_LIMITS.probeFirstMs * 2 ** (attempts - 1), DIAL_LIMITS.probeMaxMs);
-    const cancel = this.#options.clock.after(wait, () => {
-      if (this.#latest !== undefined) void this.reconcile(this.#latest);
-    });
-    this.#retries.set(hostId, { attempts, cancel });
-  }
-
-  #retried(hostId: string): void {
-    this.#retries.get(hostId)?.cancel();
-    this.#retries.delete(hostId);
   }
 
   /**
@@ -266,21 +241,26 @@ export class Reconciler {
    * hold, and that entry may hold the member's own name. The machine keeps its core id, so its documents, terminals and
    * the tabs keyed by that id carry over. A second `already_added` means another entry still holds the core.
    */
-  async #migrate(member: MemberEntry, attempt: Attempt): Promise<void> {
-    const { program, stateDir, machines } = this.#options;
+  async #migrate(member: MemberEntry, attempt: Attempt, tried: string): Promise<void> {
+    const { program, stateDir, machines, reserve, log } = this.#options;
     const old = attempt.list.find((machine) => machine.id === member.hcId);
-    if (
-      attempt.replaced !== undefined ||
-      old === undefined ||
-      meshHostOf(old.target, program, stateDir) !== undefined
-    ) {
-      return this.#stick(member, attempt.key, `copied core: ${member.name}'s core is another member's`);
+    const copied = `copied core: ${member.name}'s core is another member's`;
+    if (old === undefined || meshHostOf(old.target, program, stateDir) !== undefined) {
+      return this.#stick(member, attempt.key, copied);
     }
-    await machines.rm(old.name);
-    this.#options.log(`mesh: removed machine ${old.name} to replace it with the mesh line`);
-    const list = attempt.list.filter((machine) => machine !== old);
     const names = [member.name, ...fallbacks(member.name, member.hostId)];
-    await this.#addAs(member, { ...attempt, list, replaced: replacedOf(old) }, names);
+    const parts = { machines, log, reserve: reserve === undefined ? undefined : () => reserve(member.hostId) };
+    const done = await migrate(parts, old, names, attempt.via);
+    if (done.kind === "copied") return this.#stick(member, attempt.key, copied);
+    if (done.kind === "added") {
+      this.#retries.clear(member.hostId);
+      const replaced = replacedOf(old);
+      this.status.set(member.hostId, { state: "ok", replaced });
+      return log(`mesh: added machine ${done.name}, ${replacedMachineText(replaced)}`);
+    }
+    this.status.set(member.hostId, { state: "retrying", reason: done.reason });
+    log(`mesh: replacing machine ${old.name} with ${tried}'s mesh line is retried: ${done.reason}`);
+    if (!done.reason.includes(BUDGET_REFUSAL)) this.#retries.later(member.hostId);
   }
 
   /** `machine.add` once both of its upgrades are reserved; a refused reservation throws as herdr's refusal would. */
@@ -296,7 +276,8 @@ export class Reconciler {
     try {
       await this.#options.machines.add(name, via);
     } catch (error) {
-      if (reserved?.ok === true) reserved.failed();
+      // An `already_added` keeps the pair held: the migration that follows adds the line again and spends what is left.
+      if (reserved?.ok === true && kindOf(error) !== "already_added") reserved.failed();
       throw error;
     }
   }

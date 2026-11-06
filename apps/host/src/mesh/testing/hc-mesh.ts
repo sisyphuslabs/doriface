@@ -157,5 +157,9 @@ export function recorded(machines: HcMachines): Recorded {
       calls.push(`rename ${name} ${newName}`);
       return machines.rename(name, newName);
     },
+    restore: (machine) => {
+      calls.push(`restore ${machine.name}`);
+      return machines.restore(machine);
+    },
   };
 }

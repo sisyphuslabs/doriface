@@ -8,6 +8,8 @@ export interface HcMachines {
   add(name: string, via: string): Promise<Machine>;
   rm(name: string): Promise<void>;
   rename(name: string, newName: string): Promise<void>;
+  /** Adds `machine` back as it was listed: its name, session and how it is reached (ssh target or via). */
+  restore(machine: MachineView): Promise<void>;
   connect(name: string): Promise<MachineView>;
 }
 
@@ -23,6 +25,11 @@ export function hcMachines(connection: HcConnection): HcMachines {
     rename: async (machine, newName) =>
       void (await connection.call("machine.rename", { machine, new_name: newName }, options)),
     connect: (machine) => connection.call("machine.connect", { machine }, options),
+    restore: async (machine) => {
+      const reach = machine.via === true ? { via: machine.target } : { target: machine.target };
+      const extra = { session: machine.session ?? null, temporary: machine.temporary ?? false };
+      await connection.call("machine.add", { name: machine.name, ...reach, ...extra }, options);
+    },
   };
 }
 

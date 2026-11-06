@@ -18,6 +18,7 @@ import {
 import { fallbacks } from "@doriface/mesh";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshView } from "./mesh-view.ts";
+import type { MachineView } from "@doriface/protocol";
 import { meshHostOf, meshVia } from "./via.ts";
 
 const LONG = 60_000;
@@ -32,6 +33,7 @@ afterAll(async () => {
   await Promise.all(started.filter((core) => !dialers.has(core)).map((core) => core.dispose()));
 });
 
+const shapeOf = (m: MachineView) => [m.name, m.id, m.target, m.via ?? false, m.session ?? null];
 const viewOf = (...members: readonly MemberEntry[]): MeshView => ({ members, overCap: [], revoked: [] });
 const fakeMember = (name: string): MemberEntry => ({
   signPub: `sign-${name}`,
@@ -171,6 +173,26 @@ describe("the reconciler against real hc (R-1, R-2, R-9, R-10, R-11)", () => {
       expect(listed.map((m) => m.name)).toEqual(["b"]);
       expect(meshHostOf(listed[0]?.target ?? "", local.program, local.stateDir)).toBe(b.member.hostId);
       expect(reconciler.status.get(b.member.hostId)).toEqual({ state: "ok", replaced: { name: "old", kind: "ssh" } });
+    },
+    LONG,
+  );
+
+  test(
+    "an entry added back after a failed migration is listed as it was, over ssh and with a via",
+    async () => {
+      const { self, members, list } = await mesh(["b", "c"], "b");
+      const [b, c] = members;
+      if (b === undefined || c === undefined) throw new Error("cores");
+      await addOverSsh(self, "old", "build-box");
+      await self.control.machines.add("other", directVia(c));
+      const before = (await list()).map(shapeOf).toSorted();
+      await Promise.all(
+        (await list()).map(async (machine) => {
+          await self.control.machines.rm(machine.name);
+          await self.control.machines.restore(machine);
+        }),
+      );
+      expect((await list()).map(shapeOf).toSorted()).toEqual(before);
     },
     LONG,
   );
