@@ -53,7 +53,6 @@ export interface RecordBody {
   readonly at?: string;
 }
 
-export const MAX_MESH_MEMBERS = 12;
 export const MAX_BODY_BYTES = 2048;
 export const MAX_PREV = 64;
 export const MAX_REVOKE_SUBJECTS = 16;

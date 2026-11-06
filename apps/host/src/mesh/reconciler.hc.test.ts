@@ -21,7 +21,7 @@ afterAll(async () => {
   await Promise.all(started.filter((core) => !dialers.has(core)).map((core) => core.dispose()));
 });
 
-const viewOf = (...members: readonly MemberEntry[]): MeshView => ({ members, overCap: [], revoked: [] });
+const viewOf = (...members: readonly MemberEntry[]): MeshView => ({ members, revoked: [] });
 const fakeMember = (name: string): MemberEntry => ({
   signPub: `sign-${name}`,
   hostId: hostIdFor(name),

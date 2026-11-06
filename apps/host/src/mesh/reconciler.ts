@@ -167,7 +167,7 @@ export class Reconciler {
 
   async #run(view: MeshView): Promise<void> {
     const { machines, selfHostId } = this.#options;
-    // Section 6.4: a host its own view does not list (revoked, over the cap) keeps no mesh machine until it is again.
+    // Section 6.4: a host its own view does not list (revoked) keeps no mesh machine until it is again.
     const inView = view.members.some((m) => m.hostId === selfHostId);
     const others = inView ? view.members.filter((m) => m.hostId !== selfHostId) : [];
     const desired = new Map(others.map((m) => [m.hostId, m]));

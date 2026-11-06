@@ -11,8 +11,8 @@ export type Peer =
   | { readonly kind: "refused"; readonly reason: string };
 
 /**
- * The mesh check (section 9.2, first column steps 1 and 2): a current member's Noise key is a member; a revoked or
- * over-cap member's key, or a member's device key, is refused; anything else is not the mesh's to decide.
+ * The mesh check (section 9.2, first column steps 1 and 2): a current member's Noise key is a member; a revoked
+ * member's key, or a member's device key, is refused; anything else is not the mesh's to decide.
  */
 export function meshPeer(index: AuthorizeIndex | undefined, key: string): Peer | undefined {
   const member = index?.member(key);
