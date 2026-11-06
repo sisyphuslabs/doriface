@@ -251,7 +251,7 @@ test("a host that does not start again shows its cause, and no link is tried", a
 });
 
 test("the open state carries the path its session opened on (#446 §5)", async () => {
-  // no fake timers: the direct race settles on its budget timer, which fake timers would freeze
+  jest.useFakeTimers();
   const live: Pick<HcConnection, "onClose" | "close" | "hello"> = {
     onClose: () => () => undefined,
     close: () => undefined,
@@ -282,7 +282,7 @@ test("the open state carries the path its session opened on (#446 §5)", async (
 });
 
 test("a direct link that drops sends the next attempt to the relay at once, once (#446 §4)", async () => {
-  // no fake timers: the direct race settles on its budget timer, which fake timers would freeze
+  jest.useFakeTimers();
   const closes: ((error?: Error) => void)[] = [];
   const live: Pick<HcConnection, "onClose" | "close" | "hello"> = {
     onClose: (fn) => (closes.push(fn), () => undefined),
