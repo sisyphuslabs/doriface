@@ -115,20 +115,20 @@ export function TabBar({
   }
 
   return (
+    // The row is the titlebar's drag box, padding and gaps included, so the window drags everywhere in it but its
+    // controls. A shell that puts a control over the row's start moves the row past it (a margin) rather than unmarking
+    // the row: Electron applies the regions in layout order and the last one over a point wins (#643, #688).
     <div
+      data-titlebar
       className={cn(
         "flex h-(--tabbar-height) shrink-0 items-center gap-[3px] border-b border-border bg-chrome px-2.5",
         className,
       )}
     >
       {leading}
-      {/* The strip's own box drags the window, not the row it is drawn in: with the sidebar hidden the row starts under
-          the shell's sidebar toggle, and a drag region that comes later in layout order takes the press (Electron applies
-          them in that order, the last one over the point winning), so a row marked here would swallow the toggle's click
-          (#643). py-1 holds the buttons' 4 px hit area (after:-inset-1) inside the strip: past its edge it was scrollable
+      {/* py-1 holds the buttons' 4 px hit area (after:-inset-1) inside the strip: past its edge it was scrollable
           overflow, and classic scrollbars drew a vertical bar for it (#343). The strip scrolls only sideways. */}
       <div
-        data-titlebar
         ref={list}
         role="tablist"
         aria-label="Tabs"
