@@ -10,7 +10,7 @@ import { onlyThisMachine } from "./machines.ts";
 import type { Session } from "./model.ts";
 import { ConnectionLine, ConnectionPathItem, ReconnectStatus } from "./reconnect-status.tsx";
 import { usePendingUpdate } from "../update/update-store.ts";
-import { FirstRunGuideCard, useGuideOpened } from "../pair/first-run-guide-card.tsx";
+import { FirstRunGuideCard } from "../pair/first-run-guide-card.tsx";
 import { PhoneEmpty } from "./phone-empty.tsx";
 import { PhoneTerminal } from "./phone-terminal.tsx";
 import { RovingLists } from "./roving-lists.tsx";
@@ -42,7 +42,6 @@ export function PhoneShell(props: PhoneShellProps) {
   const update = usePendingUpdate();
   const terminal = terminals.find((entry) => entry.address === open);
   const empty = !terminals.some((entry) => entry.state === "live");
-  useGuideOpened(terminal !== undefined);
   if (terminal === undefined) {
     const route = connectionStore.settings.mode === "relay" ? "relay" : "loopback";
     return (

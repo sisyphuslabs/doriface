@@ -19,7 +19,8 @@ import { VoiceDock } from "../voice/voice-dock.tsx";
 import { agentStatus } from "./attention.ts";
 import { machineOf, programKind, type Session, spaceName, tabTitle, terminalTitle } from "./model.ts";
 import { NewTabMenu } from "./new-tab-menu.tsx";
-import { FirstRunGuideCard, useGuideOpened } from "../pair/first-run-guide-card.tsx";
+import { FirstRunGuideCard } from "../pair/first-run-guide-card.tsx";
+import { guideStore } from "../pair/first-run-guide.ts";
 import { NoTerminal } from "./no-terminal.tsx";
 import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
@@ -127,7 +128,6 @@ export function DesktopShell(props: DesktopShellProps) {
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   const focusedAddress = layout.focused?.address ?? null;
-  useGuideOpened(focusedAddress !== null);
   const voice = useDictation();
   const sends = usePaneSends();
   const mic = useRef<HTMLButtonElement>(null);
@@ -234,7 +234,15 @@ export function DesktopShell(props: DesktopShellProps) {
         onNew={onNew}
       />
       {sidebar ? (
-        <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
+        <Sidebar
+          terminals={terminals}
+          active={focusedAddress}
+          onOpen={(address) => {
+            guideStore.opened();
+            layout.openTerminal(address);
+          }}
+          onPalette={onPalette}
+        />
       ) : null}
       {/* The titlebar's leading strip, beside the toggle and, with the sidebar hidden, before it: it keeps the chrome and
           the window drag where the tab strip's own box used to reach (#643). It comes before the toggle so the toggle's

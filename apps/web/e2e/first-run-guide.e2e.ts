@@ -34,7 +34,7 @@ async function pairFromQrLink(page: Page, host: FakeRelayHost): Promise<void> {
   await page.getByRole("button", { name: "They match" }).click();
   await expect(page.getByRole("status").getByText("Paired")).toBeVisible({ timeout: 30_000 });
   await page.getByRole("link", { name: "Open terminals" }).click();
-  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 60_000 });
+  await expect(guide(page)).toBeVisible({ timeout: 60_000 });
 }
 
 test("from the QR code's link, the first-run steps complete in order on their real events", async ({ page }) => {
@@ -76,4 +76,24 @@ test("Skip puts the guide away", async ({ page }) => {
   } finally {
     await host.stop();
   }
+});
+
+test.describe("on a desktop, with a terminal the host already had", () => {
+  test.use({ viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false });
+
+  test("the agent step waits for this device to open one, whatever the restored layout shows", async ({ page }) => {
+    test.setTimeout(180_000);
+    const host = await startFakeRelayHost({ terminal: true });
+    try {
+      await pairFromQrLink(page, host);
+      const existing = page.getByRole("complementary", { name: "Workspace" }).getByText("existing").first();
+      await expect(existing).toBeVisible({ timeout: 30_000 });
+      // The host's own shell is listed and may be in focus, and still completes nothing.
+      await expect.poll(() => stepStates(page)).toEqual(["pair:done", "agent:current", "list:todo"]);
+      await existing.click();
+      await expect.poll(() => stepStates(page), { timeout: 30_000 }).toEqual(["pair:done", "agent:done", "list:done"]);
+    } finally {
+      await host.stop();
+    }
+  });
 });

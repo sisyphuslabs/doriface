@@ -1,15 +1,6 @@
 import { Button, cn } from "@doriface/ui";
 import { Check } from "lucide-react";
-import { useEffect } from "react";
 import { type GuideFacts, guideStore, guideSteps, useGuide } from "./first-run-guide.ts";
-
-/** Counts the "start or open an agent" step done when a terminal fills this device's screen or holds focus. */
-export function useGuideOpened(terminalShown: boolean): void {
-  const { status } = useGuide();
-  useEffect(() => {
-    if (terminalShown) guideStore.opened();
-  }, [terminalShown, status]);
-}
 
 export interface FirstRunGuideCardProps extends GuideFacts {
   readonly onNew: () => void;
