@@ -10,6 +10,15 @@
 
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 45 s without it, as a laptop that went to sleep still does. (#909)
 
+### The phone
+
+- Korean typed straight into the terminal on an iPhone, an iPad or Safari on a Mac reaches the program as the syllables you see, instead of separate letters (`한글` used to arrive as `ㅎㅏㄴㄱㅡㄹ`); the syllable you are still typing shows at the cursor until it is finished. (#960)
+- The key bar's Type field shows the whole line you are writing: it takes a row of its own above the keys, wraps and grows, and every key stays in reach under it. A line you have not sent yet is still there when the keyboard closes and opens again. (#960)
+
+### Fonts, Korean text and the terminal
+
+- Nerd Font icons, powerline separators, box drawing, braille spinners and agent marks such as `⏺ ⎿` are drawn from fonts the app ships, so they show on an iPhone instead of empty boxes. The icon font is only downloaded the first time a terminal shows an icon. (#960)
+
 ## v0.1.4 - 2026-11-06
 
 ### The product is Doriterm
