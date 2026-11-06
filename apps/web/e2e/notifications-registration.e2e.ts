@@ -77,5 +77,9 @@ test("a connection moved to another host takes notifications along; the old host
   await gateway.press("Enter");
   await expect.poll(() => endpoints(E2E_LAYOUT_PORT)).toEqual([service.endpoint]);
   expect(await endpoints()).toEqual([]);
-  expect(await savedRoute(page)).toMatchObject({ pushUrl: `ws://127.0.0.1:${E2E_LAYOUT_PORT}/v1/push` });
+  await expect
+    .poll(async () => await savedRoute(page))
+    .toMatchObject({
+      pushUrl: `ws://127.0.0.1:${E2E_LAYOUT_PORT}/v1/push`,
+    });
 });
