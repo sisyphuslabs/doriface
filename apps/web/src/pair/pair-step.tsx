@@ -42,7 +42,7 @@ export function PairStep({
       <div className="text-center">
         <h1 className="text-2xl font-semibold text-balance text-foreground">Pair this device</h1>
         <p className="mt-1.5 text-base text-muted-foreground">
-          Scan the code shown by the host with this device's camera, or type its pairing code.
+          Open the invite link a member sent you, or type the code their computer shows.
         </p>
       </div>
       <form
