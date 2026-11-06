@@ -36,8 +36,10 @@ const HERE: JsonObject = {
     space("spc-docs", "docs", [tab("d1", "t3")]),
   ],
 };
-const THERE: JsonObject = { spaces: [space("spc-site", "site", [tab("s1", "box/t1")])] };
-const TERMINALS = [terminal("t1"), terminal("t2"), terminal("t3"), terminal("box/t1")];
+const THERE: JsonObject = {
+  spaces: [space("spc-site", "site", [tab("s1", "box/t1")]), space("spc-blog", "blog", [tab("s2", "box/t2")])],
+};
+const TERMINALS = [terminal("t1"), terminal("t2"), terminal("t3"), terminal("box/t1"), terminal("box/t2")];
 
 /** A machine's layout that applies edits as LayoutDoc does: an edit returning null writes nothing. */
 function machineLayout(machine: string | null, doc: JsonObject, readOnly: string | null = null) {
@@ -79,14 +81,15 @@ describe("moving a space", () => {
     expect(here.state.writes).toBe(1);
     expect(there.state.writes).toBe(0);
     const listed = layoutSpaces([{ ...here.layout, doc: here.state.doc }, there.layout], TERMINALS);
-    expect(listed.map((each) => each.name)).toEqual(["docs", "api", "web", "site"]);
+    expect(listed.map((each) => each.name)).toEqual(["docs", "api", "web", "site", "blog"]);
   });
 
   test("a space of another machine moves in that machine's document, this one untouched", async () => {
     const { here, there, layouts, id } = setup();
-    await moveSpace(layouts, id("site"), 0);
+    await moveSpace(layouts, id("blog"), 0);
     expect(here.state.writes).toBe(0);
     expect(there.state.writes).toBe(1);
+    expect(layoutSpaces([there.layout], TERMINALS).map((each) => each.name)).toEqual(["blog", "site"]);
   });
 
   test("a move to the place it already has writes nothing, and a space that is gone is refused", async () => {
