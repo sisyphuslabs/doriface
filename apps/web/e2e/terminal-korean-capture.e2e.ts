@@ -11,7 +11,10 @@ import { loadKoreanFonts } from "./korean-fonts.ts";
 test.skip(process.env["CAPTURE"] !== "1", "captures run only with CAPTURE=1");
 test.use({ serviceWorkers: "block" });
 
+// The first line clears the screen and the scrollback: these images are published, and the command that started the
+// TUI carries this run's scratch directory. Nothing above the TUI's own first row survives into the capture.
 const TUI = [
+  "printf '\\033[H\\033[2J\\033[3J'",
   "printf '\\033[1;36m도리페이스 터미널\\033[0m \\033[2m— 렌더링 점검\\033[0m\\n'",
   "printf '──────────────────────────────────────────────\\n'",
   "printf '\\033[1;33m작업\\033[0m          \\033[1;32m완료\\033[0m    한글 렌더링 정상\\n'",
@@ -23,7 +26,7 @@ const TUI = [
   "printf 'Mixed Latin 한글 abcdef 1234 뷁힣똠쀼톴 혼합\\n'",
   "printf '\\033[1;34m$\\033[0m \\033[2m한글 렌더링 확인\\033[0m 완료\\n'",
 ].join("\n");
-const SCRIPT = join(tmpdir(), "doriface-f410-tui.sh");
+const SCRIPT = join(tmpdir(), "korean-tui.sh");
 writeFileSync(SCRIPT, `${TUI}\n`);
 const DIR = process.env["F410_DIR"] ?? ".";
 const STATE = process.env["F410_STATE"] ?? "after";
