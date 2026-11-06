@@ -247,8 +247,9 @@ jobs:
           # Two separate things arrive here, and only one of them is cacheable. The browser binary is cached, so a
           # warm cache can skip its download; the system packages are not, and skipping them once cost two required
           # tests their CJK fonts (doriterm#915: the Korean width assertions failed on a warm cache and passed cold).
-          # So the packages are ensured on every run, and apt is bounded either way - on doriterm#914 an unreachable
-          # mirror spent a whole 30-minute job inside this step, which is why nothing here waits indefinitely.
+          # So the packages are ensured on every run. The pre-update carries the Acquire timeouts, the two installs are
+          # bounded by timeout, and the step by timeout-minutes - on doriterm#914 an unreachable mirror spent a whole
+          # 30-minute job inside this step, which is why nothing here waits indefinitely.
           sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
           timeout 300 bunx playwright install-deps chromium
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
@@ -317,8 +318,9 @@ jobs:
           # Two separate things arrive here, and only one of them is cacheable. The browser binary is cached, so a
           # warm cache can skip its download; the system packages are not, and skipping them once cost two required
           # tests their CJK fonts (doriterm#915: the Korean width assertions failed on a warm cache and passed cold).
-          # So the packages are ensured on every run, and apt is bounded either way - on doriterm#914 an unreachable
-          # mirror spent a whole 30-minute job inside this step, which is why nothing here waits indefinitely.
+          # So the packages are ensured on every run. The pre-update carries the Acquire timeouts, the two installs are
+          # bounded by timeout, and the step by timeout-minutes - on doriterm#914 an unreachable mirror spent a whole
+          # 30-minute job inside this step, which is why nothing here waits indefinitely.
           sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
           timeout 300 bunx playwright install-deps chromium
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then

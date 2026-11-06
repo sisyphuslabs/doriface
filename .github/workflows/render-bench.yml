@@ -86,7 +86,8 @@ jobs:
         timeout-minutes: 12
         run: |
           # This job had no browser cache, so its warm branch could never hit and every run paid a full download.
-          # It has one now; the system packages are still ensured every run, because they are not in that cache.
+          # It has one now; the system packages are still ensured every run, because they are not in that cache. The
+          # pre-update carries the Acquire timeouts; the rest is bounded by timeout and by the step's timeout-minutes.
           sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
           timeout 300 bunx playwright install-deps chromium
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
