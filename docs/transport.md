@@ -1,4 +1,4 @@
-# Doriterm transport contract v1.9.6
+# Doriterm transport contract v1.9.7
 
 This is the binding wire contract for every Doriterm package. Each rule below is the current one; the change log at the end records what each revision changed.
 
@@ -297,6 +297,7 @@ membership(S, eff):
 - `line.sock` is a Unix socket (0600) in the host's state directory. `doriface-host connect --mesh <hostId>` connects to it and sends `{"v":1,"hostId":"<hostId>"}`; the running host answers `{"ok":true}` and dials that member with its own Noise key, or `{"ok":false,"code":<close code>,"reason":"..."}` when the hostId is not a current member within the cap or the dialing rules hold the dial back. After `ok` the connection is a byte pipe to the member's hc line.
 - `doriface-host mesh status [--json]` shows, from this host's view, each member's name, hostId, Noise fingerprint, admitter and line state, the over-cap and revoked keys, the new-member notices, pending joins awaiting approval, each member's revoke-time witness pool, and the sync state.
 - `doriface-host mesh rename <member> <name>` signs a `name` record about a current member. The name follows the mesh-name rule above; when two members end up with the same name, the later one in member order takes the first free fallback name.
+- One-line Add a machine (v1.9.7, #668): a client writes `{"request": <nonce>}` to the `doriface-mesh-offer` herdr document of the core it reaches. The host whose core it is answers in the same document with `{"request", "link", "expiresAt"}`: a single-use mesh offer (as `mesh pair --auto`, admitting without asking until it expires) and its `doriface://pair#…&m=1` link, or `{"request", "error"}`. When a machine joins on that offer the host writes `{"request", "joined": {"name", "hostId"}}` in place of the link, and an offer that expires unused leaves `{"request", "expired": true}`. A request already answered opens nothing again. Anyone who can write this core's documents already reaches its shells, so the request grants nothing they lack.
 - New-member notice: for 7 days after it merges a member's admission, every member shows "`<name>` joined via `<inviting member>`, admitted by `<admitter>`, fingerprint `<fingerprint>`" in `mesh status` and in its `doriface-mesh` herdr document, so an admission written with a compromised member's key is visible on every member.
 
 ### What the relay learns from a mesh
@@ -339,6 +340,7 @@ Web push notices (v1.7). The relay is not on the push path and does not change: 
 
 ## Change log
 
+- v1.9.7 (host behaviour, no relay change): the `doriface-mesh-offer` document, a client's request for a single-use mesh offer that the host answers with the link and then with who joined (#668).
 - v1.9.6 (host behaviour, no relay change): the plaintext listener's `/v1/devices`, `GET` to list this computer's paired devices and `DELETE /v1/devices/<id>` to revoke one, behind the same per-launch bearer token as `/v1/hc` and never on the LAN listener, so the desktop app revokes a phone from the computer it was paired to without a terminal (#709).
 - v1.9.5 (host behaviour, no relay change): the plaintext listener's `/v1/pair` pair, `POST` to open this host's offer and `GET` to read what stands, behind the same per-launch bearer token as `/v1/hc` and never on the LAN listener, so the desktop app shows this computer's code, QR code, link, fingerprint and expiry without a terminal (#614).
 - v1.9.4 (host behaviour, no wire change): `doriface-host pair` prints the desktop app's `doriface://pair#…` deep link, and the QR code encodes it, unless `--web-origin` names a web app (`<web origin>/pair#…`); the printed text says which one opens the link. `mesh pair` prints the same deep link with `&m=1`, and `connect` and `mesh join` accept either form. `DEFAULT_WEB_ORIGIN` is gone: no dead web origin is advertised by default (#594).
