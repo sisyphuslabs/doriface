@@ -5,6 +5,7 @@
 ### Answering agents from the card
 
 - The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
+- A notification for a waiting agent offers its prompt's own rows, a question's included, fetched over the encrypted push stream: the agent's No row answers from the notification, any other row opens the app and is sent once it is on screen, and a prompt with several steps, boxes or a typed answer opens the card. (#669)
 
 ### Web app and PWA
 
