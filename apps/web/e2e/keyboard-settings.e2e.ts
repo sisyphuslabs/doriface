@@ -1,5 +1,6 @@
 import { devices, type Locator, type Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
+import { fakeHostOs } from "./host-os.ts";
 import { fakeSoftKeyboard, PHONE, showKeyboard } from "./phone-key-bar.ts";
 
 test.use({ serviceWorkers: "block", ...PHONE });
@@ -76,6 +77,8 @@ test.describe("an Android phone with a Mac host", () => {
   test.use({ userAgent: devices["Pixel 7"].userAgent, viewport: { width: 390, height: 844 } });
 
   test("shows the Command key its host has, not the keys its own OS would", async ({ page }) => {
+    // The runner may be a Linux machine: name the host's OS so this asserts the host's keys, not the runner's.
+    await fakeHostOs(page, "darwin");
     await openSettings(page);
     const names = await barNames(hero(page));
     expect(names).toContain("Command");

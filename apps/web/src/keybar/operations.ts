@@ -33,13 +33,18 @@ export function removeKey(settings: KeyBarSettings, id: string): KeyBarSettings 
  * Puts a removed key back where the catalog places it among the keys already shown, so restoring two keys puts them
  * back in the order of the list rather than in the order they were restored.
  */
+/**
+ * Where a key sits in the bar's default row. A restored key lands between the same neighbours a person saw before it
+ * went away; one the default row does not carry joins after those it does, in the order the list offers it.
+ */
+const rowRank = (entry: string): number => {
+  const inRow = DEFAULT_KEY_IDS.indexOf(entry);
+  return inRow === -1 ? DEFAULT_KEY_IDS.length + SPECIAL_KEYS.findIndex((one) => one.id === entry) : inRow;
+};
+
 export function restoreKey(settings: KeyBarSettings, id: string): KeyBarSettings {
   if (settings.keys.includes(id) || specialKey(id) === undefined) return settings;
-  const rank = SPECIAL_KEYS.findIndex((entry) => entry.id === id);
-  const before = settings.keys.filter((entry) => {
-    const other = SPECIAL_KEYS.findIndex((candidate) => candidate.id === entry);
-    return other !== -1 && other < rank;
-  }).length;
+  const before = settings.keys.filter((entry) => rowRank(entry) < rowRank(id)).length;
   const keys = [...settings.keys];
   keys.splice(before, 0, id);
   return { ...settings, keys };
