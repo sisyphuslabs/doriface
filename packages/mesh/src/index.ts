@@ -21,6 +21,8 @@ export {
   MAX_PREV,
   MAX_RECORDS,
   MAX_REVOKE_SUBJECTS,
+  MEMBER_KINDS,
+  type MemberKind,
   type NameSubject,
   RECORD_TYPES,
   type RecordBody,
