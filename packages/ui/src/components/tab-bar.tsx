@@ -116,16 +116,19 @@ export function TabBar({
 
   return (
     <div
-      data-titlebar
       className={cn(
         "flex h-(--tabbar-height) shrink-0 items-center gap-[3px] border-b border-border bg-chrome px-2.5",
         className,
       )}
     >
       {leading}
-      {/* py-1 holds the buttons' 4 px hit area (after:-inset-1) inside the strip: past its edge it was scrollable
+      {/* The strip's own box drags the window, not the row it is drawn in: with the sidebar hidden the row starts under
+          the shell's sidebar toggle, and a drag region that comes later in layout order takes the press (Electron applies
+          them in that order, the last one over the point winning), so a row marked here would swallow the toggle's click
+          (#643). py-1 holds the buttons' 4 px hit area (after:-inset-1) inside the strip: past its edge it was scrollable
           overflow, and classic scrollbars drew a vertical bar for it (#343). The strip scrolls only sideways. */}
       <div
+        data-titlebar
         ref={list}
         role="tablist"
         aria-label="Tabs"
