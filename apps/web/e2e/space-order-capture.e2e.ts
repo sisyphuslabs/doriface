@@ -87,8 +87,8 @@ for (const width of ["1440", "390"] as const) {
           await page.screenshot({ path: join(OUT, `space-order-menu-${width}-${theme}.png`) });
           await page.keyboard.press("Escape");
         } else {
-          // Below md the shell is the phone's - a header, the terminal and its own bar - with no sidebar to reorder in.
-          await expect(page.locator("[data-terminal]").first()).toBeVisible({ timeout: 20_000 });
+          // Below md the shell is the phone's - a title bar, the terminal and its own bar - with no sidebar to reorder.
+          await expect(page.locator("[data-titlebar]").first()).toBeVisible({ timeout: 20_000 });
         }
         await page.evaluate(() => document.fonts.ready);
         await page.screenshot({ path: join(OUT, `space-order-${width}-${theme}.png`) });
