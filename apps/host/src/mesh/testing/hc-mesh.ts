@@ -21,8 +21,11 @@ export interface Core {
 /** A hostId the relay client accepts (`[a-z2-7]{25}[aeimquy4]`), derived from a short name. */
 export const hostIdFor = (name: string): string => `${name.replaceAll(/[^a-z2-7]/g, "")}host`.padEnd(25, "z") + "a";
 
-export async function startCore(name: string): Promise<Core> {
-  const session = createHcSession(`mesh-${name}`);
+export const startCore = (name: string): Promise<Core> => startCoreWith(name, {});
+
+/** As startCore, with `env` joining the environment the core starts with (sshTo's PATH, say). */
+export async function startCoreWith(name: string, env: Readonly<Record<string, string>>): Promise<Core> {
+  const session = createHcSession(`mesh-${name}`, env);
   const control = await openHcControl({ hc: session.hc, session: session.name, env: session.env });
   const member: MemberEntry = {
     signPub: `sign-${name}`,
@@ -48,6 +51,31 @@ export function directVia(core: Core): string {
   const { env, hc, name } = core.session;
   const vars = ["HC_SOCKET", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"].map((key) => `${key}=${shellQuote(env[key] ?? "")}`);
   return `${vars.join(" ")} ${shellQuote(hc)} connect --session ${name} #`;
+}
+
+/**
+ * The environment of a core whose `ssh` reaches `core` whatever the target: an `ssh` first on its PATH that runs
+ * `core`'s `hc connect`, so `machine.add` with a plain target adds `core` the way it adds a machine over ssh.
+ */
+export function sshTo(core: Core): { readonly env: { readonly PATH: string }; readonly dispose: () => void } {
+  const bin = mkdtempSync(join(tmpdir(), "ssh-"));
+  const { env, hc, name } = core.session;
+  const vars = ["HC_SOCKET", "XDG_STATE_HOME", "XDG_RUNTIME_DIR"].map((key) => `${key}=${shellQuote(env[key] ?? "")}`);
+  writeFileSync(
+    join(bin, "ssh"),
+    `#!/bin/sh\nexec env ${vars.join(" ")} ${shellQuote(hc)} connect --session ${name}\n`,
+  );
+  chmodSync(join(bin, "ssh"), 0o755);
+  const path = { PATH: `${bin}:${process.env["PATH"] ?? "/usr/bin:/bin"}` };
+  return { env: path, dispose: () => rmSync(bin, { recursive: true, force: true }) };
+}
+
+/** `hc machine add <target> --name <name>` on `core`: herdr dials the target with `ssh`, as a person's add does. */
+export async function addOverSsh(core: Core, name: string, target: string): Promise<void> {
+  const { hc, env } = core.session;
+  const add = Bun.spawn([hc, "machine", "add", target, "--name", name], { env, stdout: "ignore", stderr: "pipe" });
+  const why = new Response(add.stderr).text();
+  if ((await add.exited) !== 0) throw new Error(`hc machine add ${target} failed: ${await why}`);
 }
 
 export interface LocalHost {
@@ -128,6 +156,10 @@ export function recorded(machines: HcMachines): Recorded {
     rename: (name, newName) => {
       calls.push(`rename ${name} ${newName}`);
       return machines.rename(name, newName);
+    },
+    restore: (machine) => {
+      calls.push(`restore ${machine.name}`);
+      return machines.restore(machine);
     },
   };
 }

@@ -1,14 +1,15 @@
 import { isNoticeId } from "@doriface/protocol";
 import { useEffect, useSyncExternalStore } from "react";
 import { noticeBridge } from "./desktop-notices.ts";
+import type { PageAnswer } from "./notice-click.ts";
 import { pushChannel } from "./push-channel.ts";
-import { allowFromPage, whenVisible } from "./prompt-answer.ts";
+import { answerFromPage, whenVisible } from "./prompt-answer.ts";
 
 export interface PendingNotice {
   readonly id: string;
   readonly host: string;
-  /** Allow was tapped on the notification: the page sends it once visible, after the pane opens. */
-  readonly allow: boolean;
+  /** Allow, or one of the prompt's rows, was tapped on the notification: the page sends it once visible. */
+  readonly answer: PageAnswer | undefined;
 }
 
 /** A clicked desktop notification names its terminal itself: no host round trip. */
@@ -23,11 +24,18 @@ const set = (next: PendingNotice | ClickedTerminal | null): void => {
   for (const listener of listeners) listener();
 };
 
-/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow]`), or null. */
+/** The answer a tapped action left in the address: `allow`, or `option:<id>` for one of the prompt's rows. */
+function answerOf(value: string | null): PageAnswer | undefined {
+  if (value === "allow") return { kind: "allow" };
+  const option = /^option:(\d{1,3})$/.exec(value ?? "")?.[1];
+  return option === undefined ? undefined : { kind: "option", option };
+}
+
+/** A notice a tap opened the app with (`/?notice=<id>&host=<hostId>[&answer=allow|option:<id>]`), or null. */
 export function noticeOf(url: URL): PendingNotice | null {
   const id = url.searchParams.get("notice");
   if (!isNoticeId(id)) return null;
-  return { id, host: url.searchParams.get("host") ?? "", allow: url.searchParams.get("answer") === "allow" };
+  return { id, host: url.searchParams.get("host") ?? "", answer: answerOf(url.searchParams.get("answer")) };
 }
 
 /** Reads a tapped notice from the address once and takes it out of the address bar and history. */
@@ -101,10 +109,16 @@ async function openNotice(notice: PendingNotice, open: (address: string) => void
   }
   if (terminal === null) return;
   open(terminal);
-  if (!notice.allow) return;
-  await allowFromPage(
+  const answer = notice.answer;
+  if (answer === undefined) return;
+  await answerFromPage(
     terminal,
-    () => pushChannel.requestOnce({ t: "answer", id: notice.id, answer: "allow" }),
+    () =>
+      pushChannel.requestOnce(
+        answer.kind === "allow"
+          ? { t: "answer", id: notice.id, answer: "allow" }
+          : { t: "choose", id: notice.id, option: answer.option },
+      ),
     () => whenVisible(document),
   );
 }
