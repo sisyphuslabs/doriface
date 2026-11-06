@@ -241,6 +241,13 @@ else
 </plist>
 EOF
   launchctl bootout "gui/$(id -u)/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+  # bootout returns before launchd has unloaded the old agent, and bootstrap fails with 5 (EIO) until it has.
+  waited=0
+  while launchctl print "gui/$(id -u)/${SERVICE_LABEL}" >/dev/null 2>&1; do
+    waited=$((waited + 1))
+    [ "$waited" -le 100 ] || fail "the old ${SERVICE_LABEL} did not unload within 10 s; run: launchctl bootout gui/$(id -u)/${SERVICE_LABEL}"
+    sleep 0.1
+  done
   launchctl bootstrap "gui/$(id -u)" "$plist"
   say "doriface-host runs as the LaunchAgent ${SERVICE_LABEL} (logs: ~/Library/Logs/doriface-host.log)"
 fi
