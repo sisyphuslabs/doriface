@@ -65,6 +65,7 @@ async function join(members: number) {
     list: () => Promise.resolve([...table]),
     rm: () => Promise.resolve(),
     rename: () => Promise.resolve(),
+    restore: () => Promise.resolve(),
     connect: () => Promise.reject(new HcRpcError({ code: -32000, message: "no", data: { kind: "not_found" } })),
     add: async (name, via): Promise<Machine> => {
       await grant(via);
