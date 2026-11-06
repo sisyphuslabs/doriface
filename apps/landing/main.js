@@ -25,11 +25,15 @@ function whileVisible(element, start, stop) {
 
 const sleep = (ms, signal) =>
   new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
+    const onAbort = () => {
       clearTimeout(timer);
       reject(signal.reason);
-    });
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 
 /** Runs each step after the previous one settles; a rejected step (an aborted sleep) stops the rest. */
