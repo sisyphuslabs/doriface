@@ -75,9 +75,10 @@ app; and the **relay** between them, which is already deployed. Install the clie
 | Linux, x64 and arm64              | `doriface-<version>-x86_64.AppImage`, `-arm64.AppImage`, `_amd64.deb`, `_arm64.deb` |
 | The web client, to serve yourself | `doriface-web-<version>.zip`                                                        |
 
-The macOS app has been signed with a Developer ID certificate and notarized since v0.1.1, and its disk image is stapled. The
-Windows installers are not code signed yet, so SmartScreen warns about an unknown publisher: choose **More info**, then
-**Run anyway**. `SHA256SUMS.txt` sits beside every asset.
+The macOS app has been signed with a Developer ID certificate and notarized since v0.1.1, and its disk image is stapled; v0.1.0
+was only ad-hoc signed, so macOS blocks its first open until you choose **Open Anyway** in System Settings > Privacy &
+Security, or run `xattr -dr com.apple.quarantine` on the app. The Windows installers are not code signed yet, so SmartScreen
+warns about an unknown publisher: choose **More info**, then **Run anyway**. `SHA256SUMS.txt` sits beside every asset.
 
 The desktop app starts a host on the computer it runs on, so that computer's terminals appear as soon as it opens.
 
