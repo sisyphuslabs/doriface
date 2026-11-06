@@ -12,7 +12,9 @@ export interface SpacePlace {
 export function spacePlace(layouts: readonly MachineLayout[], id: string): SpacePlace | undefined {
   for (const layout of layouts) {
     const space =
-      layout.doc === null ? undefined : docSpaces(layout.doc).find((each) => spaceKey(layout.machineId, each.id) === id);
+      layout.doc === null
+        ? undefined
+        : docSpaces(layout.doc).find((each) => spaceKey(layout.machineId, each.id) === id);
     if (space !== undefined) return { layout, space: space.id };
   }
   return undefined;

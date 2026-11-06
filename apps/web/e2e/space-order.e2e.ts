@@ -64,20 +64,37 @@ async function order(page: Page): Promise<readonly string[]> {
   return names.filter((name): name is string => name !== null && nextTo.has(name));
 }
 
+/** A shell of this spec's own, in `folder`, killed once the test ends. */
+function startShellIn(name: string, folder: string): string {
+  const out = hcOn("host", ["run", "--bg", "--name", name, "--cwd", folder, "--", "env", "PS1=$ ", "sh"]);
+  const address = String((JSON.parse(out) as { address: string }).address);
+  started.push(address);
+  return address;
+}
+
 /** Three spaces of one machine, each with its own shell in its own folder, and no name another spec writes. */
 function threeSpaces(): void {
   const root = mkdtempSync(join(tmpdir(), "space-order-"));
-  const start = (name: string, folder: string): string => {
-    const out = hcOn("host", ["run", "--bg", "--name", name, "--cwd", folder, "--", "env", "PS1=$ ", "sh"]);
-    const address = String((JSON.parse(out) as { address: string }).address);
-    started.push(address);
-    return address;
-  };
   const space = (name: string, id: string) => {
     const folder = mkdtempSync(join(root, `${name}-`));
-    return { id, name, folder, tabs: [{ id: `tb-${id}`, name: `${name} tab`, terminal: start(`space-order-${name.toLowerCase()}`, folder) }] };
+    return {
+      id,
+      name,
+      folder,
+      tabs: [
+        { id: `tb-${id}`, name: `${name} tab`, terminal: startShellIn(`space-order-${name.toLowerCase()}`, folder) },
+      ],
+    };
   };
   seedSpaces([space("Alpha", "spc-alpha"), space("Beta", "spc-beta"), space("Gamma", "spc-gamma")]);
+}
+
+/** How many spaces the added machine's own layout document holds. */
+function remoteSpaceCount(): number {
+  const doc = getCoreDoc(LAYOUT_DOC, MACHINE_NAME);
+  return typeof doc === "object" && doc !== null && "spaces" in doc && Array.isArray(doc.spaces)
+    ? doc.spaces.length
+    : 0;
 }
 
 /** Presses `from`'s row and moves it until its centre passes `onto`'s, as a hand does; `release` lets go. */
@@ -97,9 +114,7 @@ async function drag(page: Page, from: string, onto: string, release = true): Pro
 /** The chords that move a focused row on this browser's platform, as the Machines list's move keys test reads them. */
 async function moveKeys(page: Page): Promise<readonly [string, string]> {
   const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
-  return mac
-    ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"]
-    : ["Control+Shift+PageUp", "Control+Shift+PageDown"];
+  return mac ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+PageUp", "Control+Shift+PageDown"];
 }
 
 test("a space dragged above another is written to its machine's layout, shown on a second device, and kept by a reload", async ({
@@ -151,17 +166,13 @@ test("the row's menu moves a space up and down and offers no move past either en
   await page.goto("/");
   await expect(spaceRow(page, "Gamma")).toBeVisible({ timeout: 20_000 });
   await spaceRow(page, "Gamma").hover();
-  await sidebar(page)
-    .getByRole("button", { name: "More for Gamma" })
-    .click();
+  await sidebar(page).getByRole("button", { name: "More for Gamma" }).click();
   await expect(page.getByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
   await page.getByRole("menuitem", { name: "Move up" }).click();
   await expect.poll(() => savedIds(), { timeout: 15_000 }).toEqual(["spc-alpha", "spc-gamma", "spc-beta"]);
 
   await spaceRow(page, "Alpha").hover();
-  await sidebar(page)
-    .getByRole("button", { name: "More for Alpha" })
-    .click();
+  await sidebar(page).getByRole("button", { name: "More for Alpha" }).click();
   await expect(page.getByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
   await page.getByRole("menuitem", { name: "Move down" }).click();
   await expect.poll(() => savedIds(), { timeout: 15_000 }).toEqual(["spc-gamma", "spc-alpha", "spc-beta"]);
@@ -173,13 +184,7 @@ test("a space dragged onto another machine's rows keeps both machines' orders as
   try {
     await page.goto("/");
     await expect(spaceRow(page, REMOTE_SPACE)).toBeVisible({ timeout: 30_000 });
-    const remote = () => {
-      const doc = getCoreDoc(LAYOUT_DOC, MACHINE_NAME);
-      return typeof doc === "object" && doc !== null && "spaces" in doc && Array.isArray(doc.spaces)
-        ? doc.spaces.length
-        : 0;
-    };
-    expect(remote()).toBe(1);
+    expect(remoteSpaceCount()).toBe(1);
 
     // Alpha first here, so a drop that were taken would land it last: only the refusal keeps the order.
     await drag(page, "Alpha", REMOTE_SPACE);
@@ -187,7 +192,7 @@ test("a space dragged onto another machine's rows keeps both machines' orders as
     await expect(spaceRow(page, "Alpha")).toBeVisible({ timeout: 20_000 });
     await expect.poll(() => order(page)).toEqual(["Alpha", "Beta", "Gamma"]);
     expect(savedIds()).toEqual(["spc-alpha", "spc-beta", "spc-gamma"]);
-    expect(remote()).toBe(1);
+    expect(remoteSpaceCount()).toBe(1);
   } finally {
     setCoreDoc(LAYOUT_DOC, null, MACHINE_NAME);
   }

@@ -37,12 +37,7 @@ const HERE: JsonObject = {
   ],
 };
 const THERE: JsonObject = { spaces: [space("spc-site", "site", [tab("s1", "box/t1")])] };
-const TERMINALS = [
-  terminal("t1"),
-  terminal("t2"),
-  terminal("t3"),
-  terminal("box/t1"),
-];
+const TERMINALS = [terminal("t1"), terminal("t2"), terminal("t3"), terminal("box/t1")];
 
 /** A machine's layout that applies edits as LayoutDoc does: an edit returning null writes nothing. */
 function machineLayout(machine: string | null, doc: JsonObject, readOnly: string | null = null) {

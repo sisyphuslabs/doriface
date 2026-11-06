@@ -153,13 +153,7 @@ function SpacesLists({
         className="contents"
         {...(reorder === undefined ? {} : { "data-reorder-keys": "", onKeyDown: reorder.onKeyDown })}
       >
-        <SpaceRow
-          space={space}
-          selected={space.id === selected}
-          onSelect={select}
-          rail={rail}
-          hideMachine={grouped}
-        />
+        <SpaceRow space={space} selected={space.id === selected} onSelect={select} rail={rail} hideMachine={grouped} />
       </div>
     );
     if (rail) return button;
