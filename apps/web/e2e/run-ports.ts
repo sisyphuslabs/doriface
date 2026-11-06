@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { describePortFailure, listPortHolders } from "./port-holders.ts";
 
 /** How many consecutive ports the worker hosts get: slot n's host listens on E2E_HOST_PORT + n. */
 export const HOST_BLOCK = 32;
@@ -17,11 +18,13 @@ const listen = (port) => new Promise((resolve) => {
   server.listen(port, "127.0.0.1", () => resolve(server));
 });
 (async () => {
+  const tried = [];
   let held = [];
   for (let tries = 0; tries < 100 && held.length === 0; tries++) {
     const first = await listen(0);
     if (first === undefined) continue;
     const base = first.address().port;
+    tried.push(base);
     const run = [first];
     for (let i = 1; i < block && base + i < 65536; i++) {
       const server = await listen(base + i);
@@ -31,7 +34,10 @@ const listen = (port) => new Promise((resolve) => {
     if (run.length === block) held = run;
     else for (const server of run) server.close();
   }
-  if (held.length === 0) process.exit(1);
+  if (held.length === 0) {
+    process.stdout.write(JSON.stringify({ tried: tried.slice(-10) }));
+    process.exit(1);
+  }
   const web = await listen(0);
   const layout = await listen(0);
   process.stdout.write(JSON.stringify({ host: held[0].address().port, web: web.address().port, layout: layout.address().port }));
@@ -44,13 +50,28 @@ const listen = (port) => new Promise((resolve) => {
  * Playwright config, it sets them in the environment the web servers and workers inherit. A run given its ports
  * already (all three set) keeps them, and the workers and web servers find them set.
  */
+const parseTried = (output: string): readonly number[] => {
+  try {
+    const parsed: unknown = JSON.parse(output === "" ? "{}" : output);
+    const tried = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "tried") : undefined;
+    return Array.isArray(tried) ? tried.filter((port): port is number => typeof port === "number") : [];
+  } catch {
+    return [];
+  }
+};
+
 export function ensureRunPorts(): void {
   if (NAMES.every((name) => process.env[name] !== undefined)) return;
   const picked = spawnSync(process.execPath, ["-e", PICK], {
     env: { ...process.env, E2E_HOST_BLOCK: String(HOST_BLOCK) },
     encoding: "utf8",
   });
-  if (picked.status !== 0) throw new Error(`could not find free ports for this e2e run: ${picked.stderr}`);
+  if (picked.status !== 0) {
+    const tried = parseTried(picked.stdout);
+    throw new Error(
+      `could not find free ports for this e2e run: ${describePortFailure(tried, listPortHolders(tried))}${picked.stderr === "" ? "" : ` (${picked.stderr})`}`,
+    );
+  }
   const ports = JSON.parse(picked.stdout) as { host: number; web: number; layout: number };
   process.env["E2E_HOST_PORT"] = String(ports.host);
   process.env["E2E_WEB_PORT"] = String(ports.web);
