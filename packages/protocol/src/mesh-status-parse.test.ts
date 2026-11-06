@@ -168,6 +168,14 @@ describe("parseMeshStatus", () => {
     expect(parseMeshStatus(JSON.parse(JSON.stringify(status)))).toEqual(status);
   });
 
+  test("reads a member's dial time, and still parses a document an older host wrote without it", () => {
+    const reached = { ...status.members[0], dialMs: 240 };
+    const withDial = { ...status, members: [reached, ...status.members.slice(1)] };
+    expect(parseMeshStatus(withDial)?.members[0]?.dialMs).toBe(240);
+    const withoutDial = { ...status, members: status.members.map((each) => ({ ...each, dialMs: undefined })) };
+    expect(parseMeshStatus(withoutDial)).toBeDefined();
+  });
+
   test("drops a top-level key a newer writer added instead of passing it through", () => {
     expect(parseMeshStatus({ ...status, later: true })).toEqual(status);
   });

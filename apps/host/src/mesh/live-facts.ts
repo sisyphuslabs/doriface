@@ -16,6 +16,8 @@ export interface LiveParts {
   readonly reconciler: { lines(): readonly MeshEntry[] };
   /** Whether an authenticated session from this Noise key (an hc line, say) is open on this host now. */
   readonly openFrom: (noisePub: string) => boolean;
+  /** How long this host's last dial to that member took, in ms; undefined before it dials one. */
+  readonly dialMs?: (signPub: string) => number | undefined;
 }
 
 const LINE_STATES: readonly Exclude<MeshLineState, "self">[] = [
@@ -59,6 +61,7 @@ export function liveFactsOf(parts: LiveParts, clock: Clock, wallNow = Date.now()
     peers.set(signPub, {
       // Section 8.6: presence is an authenticated session from the member open now.
       presence: gossip.session(signPub) !== undefined || parts.openFrom(noisePub),
+      dialMs: parts.dialMs?.(signPub) ?? null,
       lastSync: wall(gossip.lastSync(signPub)),
       owed: gossip.owedCount(signPub),
       // A 4429 is this host's own rate limit, which the budget's halvedUntil names (section 8.2), not an offline member.

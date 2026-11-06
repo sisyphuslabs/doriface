@@ -46,6 +46,8 @@ export interface LocalFacts {
 
 export interface PeerFacts {
   readonly presence: boolean;
+  /** How long the last successful dial to it took, or null when this host has not dialed it since it started. */
+  readonly dialMs: number | null;
   readonly lastSync: Date | null;
   readonly owed: number;
   /** Set after a 4404: the 4404s in a row and when the next probe is due (the local timer's wall time). */

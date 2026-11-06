@@ -34,7 +34,7 @@ function recordOf<T>(make: (name: FixtureName) => T): Record<FixtureName, T> {
 }
 
 const line: LineFacts = { state: "absent", reason: null, stuck: null, helloCoreId: null, replaced: null };
-const idle: PeerFacts = { presence: false, lastSync: null, owed: 0, gate: null, unreachableSince: null };
+const idle: PeerFacts = { presence: false, dialMs: null, lastSync: null, owed: 0, gate: null, unreachableSince: null };
 
 /**
  * studio is this host and the founder. build-box is online, laptop has been unreachable for 9 days, tablet joined a day
@@ -88,7 +88,7 @@ export function meshFixture(now: Date): MeshFixture {
       },
     ],
     peers: new Map<string, PeerFacts>([
-      [key("build-box"), { ...idle, presence: true, lastSync: ago(2 * MINUTE) }],
+      [key("build-box"), { ...idle, presence: true, dialMs: null, lastSync: ago(2 * MINUTE) }],
       [
         key("laptop"),
         {
@@ -97,7 +97,7 @@ export function meshFixture(now: Date): MeshFixture {
           unreachableSince: ago(9 * DAY),
         },
       ],
-      [key("tablet"), { ...idle, presence: true, lastSync: ago(DAY), owed: 1 }],
+      [key("tablet"), { ...idle, presence: true, dialMs: null, lastSync: ago(DAY), owed: 1 }],
     ]),
     lines: new Map<string, LineFacts>([
       [key("build-box"), { ...line, state: "connected", helloCoreId: "core-build-box", replaced: "build-box-old" }],

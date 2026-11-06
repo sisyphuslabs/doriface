@@ -24,6 +24,11 @@ export const isTime = (value: unknown): value is string =>
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/.test(value) &&
   Number.isFinite(Date.parse(value));
 
+/** A field a newer writer may add: absent reads as undefined, and a writer that sends it is checked like any other. */
+export const optional =
+  <T>(guard: Guard<T>): Guard<T | undefined> =>
+  (value): value is T | undefined =>
+    value === undefined || guard(value);
 export const nullable =
   <T>(guard: Guard<T>): Guard<T | null> =>
   (value): value is T | null =>

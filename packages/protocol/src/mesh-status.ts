@@ -75,6 +75,11 @@ export type MeshMemberStatus = {
   readonly replacedMachine: string | null;
   /** An authenticated session from it is open now. */
   readonly presence: boolean;
+  /**
+   * How long the last dial to it took, in milliseconds, measured from this host: the cost of opening the link through
+   * this host's relay, not a ping. Optional so that a document an older host wrote still parses (#787).
+   */
+  readonly dialMs?: number | null;
   readonly lastSync: string | null;
   /** Records it has not confirmed yet. */
   readonly owed: number;

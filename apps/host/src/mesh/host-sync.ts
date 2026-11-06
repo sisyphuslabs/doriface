@@ -61,6 +61,8 @@ export class HostSync {
   #running: HostRuntime | undefined;
   #stopped = false;
   readonly #stopPasses: () => void;
+  /** The last successful dial to each member by its signPub, in ms; the status shows it as a reach cost (#787). */
+  readonly #dialMs = new Map<string, number>();
 
   constructor(options: HostSyncOptions) {
     this.#options = options;
@@ -76,7 +78,10 @@ export class HostSync {
     const runtime = this.#running?.runtime;
     return runtime === undefined
       ? NOT_RUNNING
-      : liveFactsOf({ ...runtime, openFrom: this.#options.openFrom }, this.#clock());
+      : liveFactsOf(
+          { ...runtime, openFrom: this.#options.openFrom, dialMs: (signPub) => this.#dialMs.get(signPub) },
+          this.#clock(),
+        );
   }
 
   /** The running mesh (sync, reconciler, lines) once this host has a mesh.json. */
@@ -191,8 +196,14 @@ export class HostSync {
 
   async #dial(member: MemberEntry, stream: "mesh" | "hc"): Promise<SecureLink> {
     const { proofs, url } = this.#options.relay;
-    if (url === undefined) return this.#dialOnce(member, stream);
-    return withPassRetry(() => this.#dialOnce(member, stream), proofs, url);
+    const started = this.#clock().now();
+    const link =
+      url === undefined
+        ? await this.#dialOnce(member, stream)
+        : await withPassRetry(() => this.#dialOnce(member, stream), proofs, url);
+    // Only a dial that reached it teaches how long reaching it takes; a failure says nothing about the cost.
+    this.#dialMs.set(member.signPub, Math.max(0, Math.round(this.#clock().now() - started)));
+    return link;
   }
 
   /** Through this host's own relay only: a host that keeps no uplink dials no member rather than a default relay. */
