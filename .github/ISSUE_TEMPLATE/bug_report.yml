@@ -5,8 +5,8 @@ body:
     attributes:
       value: |
         Thanks for taking the time. A report that names what you ran and what came back is one we can act on.
-        If the problem is a security one, do not file it here: the model is in README.md ("Security") and in
-        docs/architecture.md §12.
+        If the problem is a security one, do not file it here: report it privately to a maintainer instead of in a public issue.
+        The model it belongs to is in README.md ("Security") and docs/architecture.md §12.
 
   - type: textarea
     id: what-happened

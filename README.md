@@ -96,7 +96,7 @@ The desktop app starts a host on the computer it runs on, so that computer's ter
 
 The web client is the same app and needs no install. It moves to [app.doriterm.com](https://app.doriterm.com) when that domain
 lands; until then it is live at [doriface.omo.dev](https://doriface.omo.dev). Use your browser's "install" or "add to home
-screen" if you want it in a window of its own; an installed PWA opens full screen and precaches its shell, so a dropped
+screen" if you want it in a window of its own; an installed PWA opens in its own window and precaches its shell, so a dropped
 network does not empty the window. A release build reaches your machines through the relay only — a development build
 (`bun run --cwd apps/web dev`) also offers "Loopback dev" in Settings > Connections, with the token from
 `doriface-host --print-token`.
@@ -205,7 +205,7 @@ bun run --cwd apps/host start --print-token   # the host gateway on 127.0.0.1:77
 bun run --cwd apps/web dev                    # the web client
 bun run --cwd apps/desktop start              # the desktop app
 bun run --cwd packages/ui showcase            # every component and screen mockup
-bun run capture:readme                        # the README's app screenshots, 1280x720 CSS at 3x (3840x2160)
+bun run capture:readme                        # the README's app screenshots, 1280x900 CSS at 3x (3840x2700)
 ```
 
 `bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`.
