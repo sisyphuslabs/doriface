@@ -3,7 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { desktopPairOffer, type DesktopPairAnswer } from "../desktop/pair-bridge.ts";
 import { qrModules } from "../pair/qr.ts";
 import { useNow } from "../workspace/use-now.ts";
-import { expiryLine, linkOpens, offerCode, pairDeviceView, slotNote, type PairDeviceView } from "./pair-device.ts";
+import {
+  expiryLine,
+  linkOpens,
+  offerCode,
+  pairDeviceView,
+  qrLink,
+  slotNote,
+  type PairDeviceView,
+} from "./pair-device.ts";
 
 /** How often the dialog asks the host what stands while an offer is live. */
 const POLL_MS = 1_000;
@@ -30,8 +38,8 @@ export function PairDeviceDialog({ open, onClose, pair }: PairDeviceDialogProps)
     ask === null
       ? { kind: "unavailable", reason: "This build has no way to ask this computer's host for an offer." }
       : pairDeviceView(answer, now);
-  const link = view.kind === "offer" ? view.offer.link : null;
-  const modules = useMemo(() => (link === null ? null : qrModules(link)), [link]);
+  const scanned = view.kind === "offer" ? qrLink(view.offer) : null;
+  const modules = useMemo(() => (scanned === null ? null : qrModules(scanned)), [scanned]);
 
   useEffect(() => {
     if (!open || ask === null) return;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DesktopPairAnswer, DesktopPairOffer } from "../desktop/pair-bridge.ts";
-import { countdown, expiryLine, linkOpens, offerCode, pairDeviceView, remainingMs, slotNote } from "./pair-device.ts";
+import { countdown, expiryLine, offerCode, pairDeviceView, qrLink, remainingMs, slotNote } from "./pair-device.ts";
 
 const NOW = 1_800_000_000_000;
 
@@ -70,10 +70,12 @@ describe("the pairing offer dialog's view of the host's answer", () => {
     expect(slotNote(offer({ slot: "unavailable", codeUsable: false }))).toContain("needs the relay");
   });
 
-  test("the link names what opens it, because the app has no hosted web page by default", () => {
-    expect(linkOpens("desktop")).toBe(
-      "Opens the doriface desktop app on another computer. On a phone, type the code above.",
-    );
-    expect(linkOpens("web")).toBe("Opens the doriface web app on the device you pair.");
+  test("the QR code encodes the phone's web link, not the desktop deep link (#700)", () => {
+    const phoneLink = "https://doriface.omo.dev/pair#h=1&k=x";
+    expect(qrLink(offer({ phoneLink }))).toBe(phoneLink);
+  });
+
+  test("a host older than #700 sends no phone link, so the QR code encodes its link", () => {
+    expect(qrLink(offer())).toBe("doriface://pair#h=1&k=x");
   });
 });
