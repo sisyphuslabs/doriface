@@ -15,9 +15,9 @@ const DORIFACE_ONLY: Readonly<Record<"mac" | "other", readonly string[]>> = {
   mac: ["layout.focus:sidebar", "tab.move:left", "tab.move:right"],
   other: [
     "layout.focus:sidebar",
-    // herdr-app cycles spaces with Ctrl+Shift+PgUp/PgDn here; doriface's terminal keeps those, so it cycles with Ctrl+Alt+[ / ].
-    "space.next",
-    "space.prev",
+    // herdr-app cycles spaces with Ghostty's move_tab chord here, so moving a tab takes a chord of doriface's own.
+    "tab.move:left",
+    "tab.move:right",
     "pane.resize:left",
     "pane.resize:right",
     "pane.resize:up",
@@ -42,11 +42,11 @@ describe("doriface-only bindings", () => {
     expect(triggers.filter((trigger) => trigger in PLATFORM_RESERVED)).toEqual([]);
   });
 
-  test("on Linux and Windows moving a tab takes Ghostty's move_tab chord, not its previous/next tab", () => {
+  test("on Linux and Windows moving a tab takes Ctrl+Alt+Shift+PgUp / PgDn, since herdr-app's spaces take Ctrl+Shift", () => {
     const keymap = defaultKeymap("other");
     expect([triggersFor(keymap, "tab.move:left"), triggersFor(keymap, "tab.move:right")]).toEqual([
-      ["ctrl+shift+page_up"],
-      ["ctrl+shift+page_down"],
+      ["ctrl+alt+shift+page_up"],
+      ["ctrl+alt+shift+page_down"],
     ]);
   });
 });

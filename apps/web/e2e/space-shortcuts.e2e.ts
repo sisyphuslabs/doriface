@@ -1,5 +1,5 @@
-// herdr-app's space keys: Ctrl+1-9 show a space, and the bracket pair cycles them (defaults/keys.macos.json, keys.json).
-// Ctrl and a digit is a control key a focused terminal program reads, so the app keeps its hands off it there.
+// herdr-app's space keys: Ctrl+1-9 on a Mac and Alt+1-9 elsewhere show a space, and the bracket pair cycles them
+// (defaults/keys.macos.json, keys.json). A focused terminal program reads either chord, so the app keeps its hands off it there.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +21,9 @@ const spaceRow = (page: Page, name: string) =>
     .getByRole("region", { name: "Spaces" })
     .getByRole("button", { name: new RegExp(`^${name}\\b`) });
 const mac = (page: Page) => page.evaluate(() => /mac/i.test(navigator.platform));
+
+/** The space number chord's modifier as the platform binds it: Ctrl on a Mac, Alt elsewhere (#702). */
+const numberMod = async (page: Page): Promise<string> => ((await mac(page)) ? "Control" : "Alt");
 
 /** The cycle chord as the platform binds it: Cmd+Alt+[ / ] on a Mac, Ctrl+Alt+[ / ] elsewhere. */
 const cycle = async (page: Page, side: "[" | "]"): Promise<string> =>
@@ -59,24 +62,25 @@ async function pressOutsideTerminal(page: Page, chord: string): Promise<void> {
   await page.keyboard.press(chord);
 }
 
-test("1: Ctrl+2 shows the second space, and a number with no space in the sidebar leaves the space in view", async ({
+test("1: the number chord 2 shows the second space, and a number with no space in the sidebar leaves the space in view", async ({
   page,
 }) => {
   threeSpaces();
   await page.goto("/");
   await expect(tabBar(page)).toHaveText([/alpha-one/], { timeout: 20_000 });
+  const mod = await numberMod(page);
 
-  await pressOutsideTerminal(page, "Control+2");
+  await pressOutsideTerminal(page, `${mod}+2`);
   await expect(tabBar(page)).toHaveText([/beta-one/]);
   await expect(selected(page)).toHaveText(/beta-one/);
 
   // herdr-app's space.select: an index with no space behind it leaves the space in view alone.
-  await pressOutsideTerminal(page, "Control+9");
+  await pressOutsideTerminal(page, `${mod}+9`);
   await expect(tabBar(page)).toHaveText([/beta-one/]);
 
-  await pressOutsideTerminal(page, "Control+1");
+  await pressOutsideTerminal(page, `${mod}+1`);
   await expect(tabBar(page)).toHaveText([/alpha-one/]);
-  await pressOutsideTerminal(page, "Control+3");
+  await pressOutsideTerminal(page, `${mod}+3`);
   await expect(tabBar(page)).toHaveText([/gamma-one/]);
 });
 
@@ -101,7 +105,7 @@ test("2: the cycle keys step through the spaces in order and wrap at either end,
   await expect(tabBar(page)).toHaveText([/gamma-one/]);
 });
 
-test("3: a focused terminal program keeps Ctrl+1: the terminal sees it uncancelled and the space stays", async ({
+test("3: a focused terminal program keeps the space number chord: the key reaches the terminal and the space stays", async ({
   page,
 }) => {
   const root = mkdtempSync(join(tmpdir(), "space-keys-kept-"));
@@ -142,16 +146,21 @@ test("3: a focused terminal program keeps Ctrl+1: the terminal sees it uncancell
       const press = event as KeyboardEvent;
       Reflect.set(window, "spaceKeySeen", {
         ctrl: press.ctrlKey,
+        alt: press.altKey,
         key: press.key,
         prevented: press.defaultPrevented,
       });
     });
   });
-  await page.keyboard.press("Control+1");
+  const onMac = await mac(page);
+  await page.keyboard.press(onMac ? "Control+1" : "Alt+1");
+  // Reaching this listener at all means the app left the key alone: a key it takes stops there. The terminal's own input
+  // cancels Alt+1 itself, as it sends it to the program as a Meta digit, so only Ctrl+1 arrives uncancelled.
   expect(await page.evaluate(() => Reflect.get(window, "spaceKeySeen"))).toEqual({
-    ctrl: true,
+    ctrl: onMac,
+    alt: !onMac,
     key: "1",
-    prevented: false,
+    prevented: !onMac,
   });
   await expect(selected(page)).toHaveText(/b-two/);
   await expect(tabBar(page)).toHaveText([/b-one/, /b-two/]);
@@ -169,7 +178,7 @@ test("4: Settings lists the space keys with the keys that run them, and says a t
   const row = (action: string) => page.locator(`[id="keybinding-${action}"]`).locator("xpath=../..");
   const chips = (await mac(page))
     ? { select: "⌃2", next: "⌘⌥]", previous: "⌘⌥[", ninth: "⌃9" }
-    : { select: "Ctrl2", next: "CtrlAlt]", previous: "CtrlAlt[", ninth: "Ctrl9" };
+    : { select: "Alt2", next: "CtrlShiftPgDn", previous: "CtrlShiftPgUp", ninth: "Alt9" };
 
   await expect(row("space.select:2")).toContainText("Go to space 2");
   await expect(row("space.select:2")).toContainText(chips.select);
