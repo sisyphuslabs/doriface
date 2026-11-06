@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
+import { BAD_LINK, fakeRelay, MESH_LINK, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
 import { agentRow, endAgent, startAgent, startShell } from "./agents.ts";
 import { SPACE_CLOSE_SHOTS } from "./capture-space-close-shots.ts";
@@ -150,6 +150,14 @@ export const SHOTS: readonly Shot[] = [
     },
   },
   { name: "pair-refused-4410", start: "pairing", run: refusedWith(4410) },
+  {
+    name: "mesh-invite",
+    start: "pairing",
+    run: async (page) => {
+      await page.goto(MESH_LINK);
+      await expect(page.getByRole("heading", { name: "This link adds a machine to a mesh" })).toBeVisible();
+    },
+  },
   { name: "pair-refused-4429", start: "pairing", run: refusedWith(4429) },
   {
     name: "workspace",
