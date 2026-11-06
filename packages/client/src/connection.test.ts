@@ -118,6 +118,16 @@ describe("HcConnection hello", () => {
     expect(error.mismatch).toEqual(mismatch);
   });
 
+  test("names a core build that lacks a method this client calls, which side to update included (#651)", async () => {
+    const core = new FakeCore();
+    const opening = HcConnection.open(core.client);
+    await core.waitHello();
+    core.push(`${HELLO_REPLY_LINE.replace('"terminal.keys",', "")}\n`);
+    const error: unknown = await opening.catch((caught: unknown) => caught);
+    if (!(error instanceof HcCoreMismatchError)) throw new Error(`expected HcCoreMismatchError, got ${String(error)}`);
+    expect(error.mismatch).toEqual({ kind: "core-missing", methods: ["terminal.keys"], need: "0.1.17" });
+  });
+
   test("rejects a core that stayed in plain mode", async () => {
     const core = new FakeCore();
     const opening = HcConnection.open(core.client);

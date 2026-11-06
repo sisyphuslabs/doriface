@@ -16,7 +16,21 @@ export type HcCoreMismatch =
   /** The core speaks an older protocol generation: the core needs an update to at least `need`. */
   | { readonly kind: "core-older"; readonly generation: number; readonly need: string }
   /** The core's version is under the floor: it needs an update to at least `need`. */
-  | { readonly kind: "core-too-old"; readonly version: string; readonly need: string };
+  | { readonly kind: "core-too-old"; readonly version: string; readonly need: string }
+  /** The core's build lacks methods this client calls: the core needs an update to at least `need`. */
+  | { readonly kind: "core-missing"; readonly methods: readonly string[]; readonly need: string };
+
+function mismatchMessage(mismatch: HcCoreMismatch): string {
+  switch (mismatch.kind) {
+    case "core-too-old":
+      return `core is hc ${mismatch.version}, this client needs ${mismatch.need} or newer`;
+    case "core-missing":
+      return `core lacks ${mismatch.methods.join(", ")}, which this client calls`;
+    case "core-newer":
+    case "core-older":
+      return `core speaks protocol generation ${mismatch.generation}, this client ${GENERATION}`;
+  }
+}
 
 /** A handshake that reached a core this client cannot use; retrying cannot help, an update on one side can (#651). */
 export class HcCoreMismatchError extends HcHandshakeError {
@@ -24,11 +38,7 @@ export class HcCoreMismatchError extends HcHandshakeError {
   readonly mismatch: HcCoreMismatch;
 
   constructor(mismatch: HcCoreMismatch) {
-    super(
-      mismatch.kind === "core-too-old"
-        ? `core is hc ${mismatch.version}, this client needs ${mismatch.need} or newer`
-        : `core speaks protocol generation ${mismatch.generation}, this client ${GENERATION}`,
-    );
+    super(mismatchMessage(mismatch));
     this.mismatch = mismatch;
   }
 }
