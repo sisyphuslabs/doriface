@@ -1,10 +1,11 @@
 import type { HcConnection } from "@doriface/client";
 import {
   answerApproval,
+  approvalKey,
   CLAIM_TTL_MS,
-  type ApprovalAnswer,
   type ApprovalCore,
   type ApprovalMark,
+  type PromptReply,
   readApproval,
   readApprovalRecord,
   waitsOnApproval,
@@ -26,13 +27,15 @@ export interface ApprovalView {
 }
 
 export interface Approval extends ApprovalView {
-  readonly answer: (answer: ApprovalAnswer) => void;
+  readonly answer: (choice: PromptReply) => void;
   readonly dismiss: () => void;
 }
 
 /** The status event can land before the agent has drawn its dialog: read again a few times, backing off. */
 const DRAW_WAITS_MS = [0, 150, 300, 600, 1200];
 const ANSWERED_MS = 4000;
+/** How long the card watches for the next step of several after an answer; two reads in a row must agree on it. */
+const NEXT_STEP_WAITS_MS = [100, 150, 300, 600, 1200];
 
 const pause = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -55,7 +58,28 @@ async function readWhenDrawn(
 }
 
 /**
- * The permission prompt a terminal's agent waits on, as a banner: found from the agent's status (`blocked`,
+ * The step after one just answered, when the agent asks several questions in one turn: the same turn and status, a new
+ * dialog on the live screen. Nothing when the screen moves on to anything else.
+ */
+async function readNextStep(
+  core: ApprovalCore,
+  answered: ApprovalMark,
+  signal: AbortSignal,
+  waits: readonly number[] = NEXT_STEP_WAITS_MS,
+  seen?: ApprovalMark,
+): Promise<ApprovalMark | undefined> {
+  const [wait, ...later] = waits;
+  if (wait === undefined || signal.aborted) return undefined;
+  await pause(wait, signal);
+  const now = await readApproval(core, answered.terminal);
+  const next = now !== undefined && now.turn === answered.turn && approvalKey(now) !== approvalKey(answered);
+  // The answer's keys may still be landing (boxes toggled, → not yet): a step counts once two reads agree on it.
+  if (next && seen !== undefined && approvalKey(seen) === approvalKey(now)) return now;
+  return readNextStep(core, answered, signal, later, next ? now : undefined);
+}
+
+/**
+ * The prompt a terminal's agent waits on (a permission, a question, a plan), as a card: found from the agent's status (`blocked`,
  * `kind: permission`) plus its live screen, answered once across every client, and resolved when the agent moves on.
  */
 export function useApproval(connection: HcConnection, terminal: Session): Approval | undefined {
@@ -118,30 +142,34 @@ export function useApproval(connection: HcConnection, terminal: Session): Approv
   if (view === undefined) return undefined;
   return {
     ...view,
-    answer: (answer) => {
+    answer: (choice) => {
       if (view.state.kind !== "waiting" && view.state.kind !== "failed") return;
       const { mark, retake } = view;
-      setView({ mark, state: { kind: "sending", answer } });
+      setView({ mark, state: { kind: "sending", choice } });
       const self = thisAnswerer();
       const send = async () => {
         try {
           const result = await answerApproval(
             core,
             mark,
-            answer,
+            choice,
             self,
             Date.now(),
             retake === undefined ? {} : { retake },
           );
-          const state = stateAfterAnswer(result, answer, self);
+          const state = stateAfterAnswer(result, mark, choice, self);
           // Another answer's claim lapses after CLAIM_TTL_MS of this client's own watch, which starts now; the claimer's
           // own clock (its `atMs`) is never compared with this one.
           const retryAtMs = state.kind === "elsewhere" ? Date.now() + CLAIM_TTL_MS : undefined;
           if (result.kind === "failed") setView({ mark, state, retake: result.attempt });
           else setView(retryAtMs === undefined ? { mark, state } : { mark, state, retryAtMs });
+          if (result.kind !== "sent") return;
+          const next = await readNextStep(core, mark, new AbortController().signal).catch(() => undefined);
+          if (next !== undefined)
+            setView((now) => (now?.mark === mark ? { mark: next, state: { kind: "waiting" } } : now));
         } catch {
           // The claim itself did not get through (a dropped connection): nothing was sent; offer it again.
-          setView({ mark, state: { kind: "failed", answer } });
+          setView({ mark, state: { kind: "failed", choice } });
         }
       };
       void send();

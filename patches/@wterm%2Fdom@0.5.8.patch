@@ -23,7 +23,7 @@ index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02
      private handleCompositionEnd;
      private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..8963de57e37a787a3fbedd570592ba28f8e913e2 100644
+index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..e13afdf5746a190a47fcb35356ab7cb8a262c679 100644
 --- a/dist/input.js
 +++ b/dist/input.js
 @@ -86,6 +86,8 @@ export class InputHandler {
@@ -92,6 +92,32 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..8963de57e37a787a3fbedd570592ba28
      hideComposition() {
          this.compositionWidth = 0;
          const s = this.textarea.style;
+@@ -816,7 +846,7 @@ export class InputHandler {
+     }
+     keyToSequence(e) {
+         if (e.ctrlKey && !e.altKey && !e.metaKey) {
+-            const control = legacyControlByte(e.key);
++            const control = legacyControlByte(e.key) ?? physicalControlByte(e);
+             if (control !== null)
+                 return control;
+             if (e.key === "Backspace")
+@@ -850,4 +880,15 @@ export class InputHandler {
+         return null;
+     }
+ }
++/**
++ * The control byte of a Ctrl chord whose key is not an ASCII character, read from the physical letter key: an input
++ * method (a Korean 2-set layout, for one) can report its own letter in `key` while the chord is on `code`'s key.
++ * A layout that reports a Latin letter keeps using it, so the chord stays on the printed letter there.
++ */
++function physicalControlByte(e) {
++    if (/^[\x00-\x7f]$/.test(e.key))
++        return null;
++    const letter = /^Key([A-Z])$/.exec(e.code ?? "");
++    return letter ? String.fromCharCode(letter[1].charCodeAt(0) - 64) : null;
++}
+ //# sourceMappingURL=input.js.map
+\ No newline at end of file
 diff --git a/dist/renderer.d.ts b/dist/renderer.d.ts
 index 208021ab4fefce3dda7da7f337850a59113cc514..b6c3f70309d5e78e15d656d09f406f268b869f8b 100644
 --- a/dist/renderer.d.ts
