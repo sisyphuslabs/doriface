@@ -1,10 +1,16 @@
 import { $ } from "bun";
+import { cpus } from "node:os";
 
 /**
- * Screenshots in a public repository must not show an account name, a host name or an internal path. A reviewer's eye
- * missed five of these for weeks (#926), so the check is mechanical: OCR the image and match the shapes those leak in.
+ * Screenshots in a public repository must not show an account name, a host name or an internal run path. Six did, and a
+ * reviewer's eye missed five of them for weeks (#926), so the check is mechanical.
  *
- * The patterns describe the SHAPE, never the value. A list of the actual fleet names would put them back in the repo.
+ * The checks describe the SHAPE of a leak and never a value: a list of the real fleet names would put them back in the
+ * repository that removed them, and a finding names the pattern, never the matched text, because the match is the leak.
+ *
+ * Known limit: a host name shown as a UI label is caught only where OCR reads the label line as "this machine". At the
+ * 768 capture's size it reads a mangled form of it, so that shape is not caught there - which is why the 768 workspace
+ * shot stayed out instead of being re-added (#926).
  */
 export const NEUTRAL_NAMES: ReadonlySet<string> = new Set([
   "demo",
@@ -14,42 +20,86 @@ export const NEUTRAL_NAMES: ReadonlySet<string> = new Set([
   "example",
   "project",
   "laptop",
-  "my-laptop",
   "box",
   "sandbox",
   "dev",
+  "work",
+  "localhost",
+  "root",
 ]);
 
-export const LEAK_PATTERNS: readonly { readonly name: string; readonly pattern: RegExp }[] = [
-  { name: "path: home directory", pattern: /(?:\/Users\/|\/home\/)[A-Za-z]/ },
-  { name: "path: run root", pattern: /\/(?:srv|opt|var\/tmp|private\/tmp)\/[A-Za-z]/i },
-  { name: "host: ssh target", pattern: /\bssh\s+[a-z][a-z0-9._-]*@[a-z]/i },
-];
+const isNeutral = (name: string): boolean => NEUTRAL_NAMES.has(name.toLowerCase().replace(/^my-/, ""));
 
-const PROMPT = /\b([a-z][a-z0-9._-]{1,})@([a-z][a-z0-9-]{1,})[:~]/gi;
+const ACCOUNT_AT_HOST = /\b([a-z][a-z0-9._-]*)@([a-z][a-z0-9._-]*)/gi;
+const HOME_PATH = /\/(?:Users|home)\/([A-Za-z][A-Za-z0-9._-]*)/g;
+const RUN_ROOT = /\/(?:srv|var\/tmp|private\/tmp|var\/folders|tmp)\/[A-Za-z]/;
+const OPT_ROOT = /\/opt\/(?!homebrew\b)[A-Za-z]/;
+const THIS_MACHINE = /\bthis machine\b/i;
+const LABEL_TOKEN = /^[a-z][a-z0-9-]{2,}$/i;
+
+/** The first token of the nearest non-empty line above `index`, stripped of punctuation an ellipsis adds. */
+function nearestAbove(lines: readonly string[], index: number): string {
+  for (let up = index - 1; up >= 0 && up >= index - 3; up -= 1) {
+    const line = (lines[up] ?? "").trim();
+    if (line === "") continue;
+    return (line.split(/\s+/)[0] ?? "").replace(/[^A-Za-z0-9-]+$/g, "");
+  }
+  return "";
+}
 
 export interface Verdict {
   readonly ok: boolean;
   readonly findings: readonly { readonly pattern: string }[];
 }
 
-/** Which patterns a piece of OCR text trips, by name only: the matched text is the leak and is never returned. */
+/** Which shapes a piece of OCR text trips, by name only: the matched text is the leak and is never returned. */
 export function classify(ocrText: string): Verdict {
-  const findings = LEAK_PATTERNS.filter((one) => one.pattern.test(ocrText)).map((one) => ({ pattern: one.name }));
-  for (const match of ocrText.matchAll(PROMPT)) {
-    const account = match[1] ?? "";
-    const host = match[2] ?? "";
-    if (NEUTRAL_NAMES.has(account.toLowerCase()) && NEUTRAL_NAMES.has(host.toLowerCase())) continue;
-    findings.push({ pattern: "prompt: account@host" });
-    break;
+  const findings: { pattern: string }[] = [];
+  const add = (pattern: string): void => {
+    if (!findings.some((one) => one.pattern === pattern)) findings.push({ pattern });
+  };
+
+  for (const match of ocrText.matchAll(ACCOUNT_AT_HOST)) {
+    if (isNeutral(match[1] ?? "") && isNeutral(match[2] ?? "")) continue;
+    add("prompt: account at host");
   }
+  for (const match of ocrText.matchAll(HOME_PATH)) {
+    if (!isNeutral(match[1] ?? "")) add("path: home directory");
+  }
+  if (RUN_ROOT.test(ocrText)) add("path: run root");
+  if (OPT_ROOT.test(ocrText)) add("path: system install root");
+
+  const lines = ocrText.split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (!THIS_MACHINE.test(line)) continue;
+    const above = nearestAbove(lines, index);
+    if (LABEL_TOKEN.test(above) && !isNeutral(above)) add("label: host name beside this machine");
+  }
+
   return { ok: findings.length === 0, findings };
 }
 
 async function ocr(path: string): Promise<string> {
-  const result = await $`tesseract ${path} -`.quiet().nothrow();
+  const result = await $`tesseract ${path} -`
+    .env({ ...process.env, OMP_THREAD_LIMIT: "1" })
+    .quiet()
+    .nothrow();
   if (result.exitCode !== 0) throw new Error(`${path}: tesseract exited ${result.exitCode}`);
   return result.stdout.toString();
+}
+
+async function mapWithLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = Array.from({ length: items.length });
+  let next = 0;
+  const drain = async (): Promise<void> => {
+    const index = next;
+    next += 1;
+    if (index >= items.length) return;
+    out[index] = await run(items[index] as T);
+    await drain();
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, drain));
+  return out;
 }
 
 if (import.meta.main) {
@@ -58,13 +108,16 @@ if (import.meta.main) {
     console.error("usage: bun tests/ci/capture-text.ts <image>...");
     process.exit(2);
   }
-  const verdicts = await Promise.all(images.map(async (image) => ({ image, verdict: classify(await ocr(image)) })));
+  const limit = Math.max(1, Math.min(8, cpus().length));
+  const verdicts = await mapWithLimit(images, limit, async (image) => ({
+    image,
+    verdict: classify(await ocr(image)),
+  }));
   let failed = 0;
   for (const { image, verdict } of verdicts) {
     if (verdict.ok) continue;
     failed += 1;
-    const names = verdict.findings.map((one) => one.pattern).join(", ");
-    console.error(`${image}: shows internal identifiers (${names})`);
+    console.error(`${image}: shows internal identifiers (${verdict.findings.map((one) => one.pattern).join(", ")})`);
   }
   if (failed > 0) {
     console.error(`${failed} image(s) must not be committed: re-capture with a neutral name and prompt (#926)`);
