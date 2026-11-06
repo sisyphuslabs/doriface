@@ -30,6 +30,7 @@
 
 ### Web app
 
+- Your machines lists every machine this app holds its own connection to, each with that machine's own state, so a machine that is away is one row saying so. Each machine has its own connection, which means the others stay usable while one is gone. (#942)
 - A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
 - A machine's terminal count and a space's tab count stay on one line however many digits they have: on a phone, "19" no longer breaks into "1" above "9" in the Spaces list. (#899)
 
