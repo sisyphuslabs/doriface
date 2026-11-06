@@ -61,6 +61,13 @@ test("on the phone an agent row draws More alone, which takes a tap just inside 
       expect.soft(hits[index], `a tap 10 px ${side} of "${label}" reaches it`).toBe(label),
     );
 
+    // A keyboard on a touch screen (a tablet's) still reaches More from the row: ArrowRight skips the Pin it does not draw.
+    await row.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(more).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(row).toBeFocused();
+
     // The blocked agent is pinned first from its own More, so Pinned keeps it and its "Needs you" chip draws.
     await page.getByRole("button", { name: "More for blockrow" }).tap();
     await page.getByRole("menuitem", { name: "Pin to top" }).tap();
