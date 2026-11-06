@@ -99,6 +99,12 @@ try {
   stage("host");
   await relay.answers.next();
   stage("uplink");
+  // With --terminal, the host's core already runs a shell before any device pairs, as a host in use does (#668).
+  if (process.argv.includes("--terminal")) {
+    const ran = Bun.spawnSync([hc.hc, "run", "--bg", "--name", "existing", "--", "env", "PS1=$ ", "sh"], { env });
+    if (ran.exitCode !== 0) throw new Error(`hc run failed: ${ran.stderr.toString()}`);
+    stage("terminal");
+  }
   // With --machine, the host's core also has an added machine, as a host with more than one computer does.
   if (process.argv.includes("--machine")) {
     stopMachine = await addMachine(hc.hc, env, join(stateDir, "machine"), false, {
