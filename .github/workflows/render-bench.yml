@@ -73,19 +73,26 @@ jobs:
           echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/hc/hc" --version
       - run: bun install --frozen-lockfile
+      - name: Playwright version
+        id: playwright
+        working-directory: apps/web
+        run: echo "version=$(bunx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('bun.lock') }}
       - name: Install Chromium
         working-directory: apps/web
         timeout-minutes: 12
         run: |
-          # apt retries an unreachable mirror for as long as it is allowed: on doriterm#914 that spent a whole
-          # 30-minute job inside this step and the suite never started. A warm browser cache skips apt; a cold one
-          # bounds the update and the install, so a mirror blip fails here in minutes instead of eating the job.
+          # This job had no browser cache, so its warm branch could never hit and every run paid a full download.
+          # It has one now; the system packages are still ensured every run, because they are not in that cache.
+          sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
+          timeout 300 bunx playwright install-deps chromium
           if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
-            echo "browser cache hit: installing engines without system packages"
             timeout 300 bunx playwright install chromium
           else
-            sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
-            timeout 600 bunx playwright install --with-deps chromium
+            timeout 600 bunx playwright install chromium
           fi
       - name: Pick the baseline
         env:
