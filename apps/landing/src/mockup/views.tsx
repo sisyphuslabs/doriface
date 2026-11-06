@@ -20,7 +20,7 @@ import {
   AGENTS_IDLE,
   AGENTS_NEEDS_YOU,
   AGENTS_WORKING,
-  CLAUDE_LINES,
+  OMO_LINES,
   CODEX_LINES,
   SPACES,
   TABS,
@@ -100,7 +100,7 @@ export function DesktopView() {
           trailing={<IconButton label="Split" icon={<Columns2 />} pressed />}
         />
         <div className="flex min-h-0 flex-1 gap-2 p-2">
-          <Pane title="Claude Code" lines={CLAUDE_LINES} />
+          <Pane title="OmO" lines={OMO_LINES} />
           <Pane title="Codex" lines={CODEX_LINES} />
         </div>
         <StatusBar
@@ -131,13 +131,13 @@ export function PhoneView() {
       <header className="box-content flex h-12 shrink-0 items-center gap-1 border-b border-border bg-chrome px-1.5 pt-(--safe-top)">
         <IconButton label="Back to agents" icon={<ChevronLeft />} size="md" />
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h1 className="truncate text-base font-semibold text-foreground">Claude Code</h1>
+          <h1 className="truncate text-base font-semibold text-foreground">OmO</h1>
           <StatusChip status="blocked" />
         </div>
         <IconButton label="Terminal actions" icon={<Ellipsis />} size="md" />
       </header>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <TerminalPreview lines={CLAUDE_LINES} cursor label="Claude Code output" className="flex-1 text-[0.75rem]" />
+        <TerminalPreview lines={OMO_LINES} cursor label="OmO output" className="flex-1 text-[0.75rem]" />
       </div>
       <ExtraKeysBar latched={["ctrl"]} className="pb-[calc(var(--safe-bottom)+0.25rem)]" />
       <span
