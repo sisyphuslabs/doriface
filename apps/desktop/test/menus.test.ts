@@ -117,7 +117,8 @@ describe("menus", () => {
     const select = shell.find((item) => item.label === "Select Space");
     expect(submenuOf(select).map((item) => item.label)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
     expect(submenuOf(select)[1]).toMatchObject({ accelerator: "Ctrl+2", registerAccelerator: false });
-    expect(shell.find((item) => item.label === "Next Space")).toMatchObject({ accelerator: "Command+Option+]" });
+    // The page reports triggers normalized (trigger.ts), so the modifiers reach Electron in that order.
+    expect(shell.find((item) => item.label === "Next Space")).toMatchObject({ accelerator: "Option+Command+]" });
     submenuOf(select)[1]?.click?.(Object.create(null), undefined, Object.create(null));
     shell.find((item) => item.label === "Previous Space")?.click?.(Object.create(null), undefined, Object.create(null));
     expect(ran).toEqual(["space.select:2", "space.prev"]);
