@@ -346,6 +346,7 @@ export class Gossip implements SyncHost {
   #changed(result: MergeResult, owedOnwards: boolean): void {
     this.#view = result.view;
     this.#known.remember(result.view);
+    this.#formats.keep(new Set(result.view.members.map((member) => member.signPub)));
     this.#options.onView?.(result.view, result);
     for (const session of this.#sessions.values()) session.flush();
     if (owedOnwards) this.#push(result);
