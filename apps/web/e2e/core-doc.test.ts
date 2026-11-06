@@ -59,13 +59,36 @@ describe("coreCompareAndSet (#896)", () => {
       const doc = current as { spaces: { tabs: { id: string; name: string }[] }[] };
       if (!raced) {
         raced = true;
-        core.otherClient(layout([{ id: "space-1", tabs: [{ id: "tab-1", name: "renamed" }, { id: "tab-2", name: "two" }] }]));
+        core.otherClient(
+          layout([
+            {
+              id: "space-1",
+              tabs: [
+                { id: "tab-1", name: "renamed" },
+                { id: "tab-2", name: "two" },
+              ],
+            },
+          ]),
+        );
       }
-      return { ...doc, spaces: doc.spaces.map((space) => Object.assign({}, space, { tabs: space.tabs.map((tab) => Object.assign({}, tab, { name: `${tab.name}!` })) })) };
+      return {
+        ...doc,
+        spaces: doc.spaces.map((space) =>
+          Object.assign({}, space, { tabs: space.tabs.map((tab) => Object.assign({}, tab, { name: `${tab.name}!` })) }),
+        ),
+      };
     });
 
     expect(core.read().value).toEqual({
-      spaces: [{ id: "space-1", tabs: [{ id: "tab-1", name: "renamed!" }, { id: "tab-2", name: "two!" }] }],
+      spaces: [
+        {
+          id: "space-1",
+          tabs: [
+            { id: "tab-1", name: "renamed!" },
+            { id: "tab-2", name: "two!" },
+          ],
+        },
+      ],
     });
   });
 
@@ -76,7 +99,9 @@ describe("coreCompareAndSet (#896)", () => {
       sets += 1;
       throw new Error("doc.set failed: the machine is not connected");
     };
-    expect(() => coreCompareAndSet(send, { name: DOC }, () => ({ kept: true }))).toThrow("the machine is not connected");
+    expect(() => coreCompareAndSet(send, { name: DOC }, () => ({ kept: true }))).toThrow(
+      "the machine is not connected",
+    );
     expect(sets).toBe(1);
   });
 });

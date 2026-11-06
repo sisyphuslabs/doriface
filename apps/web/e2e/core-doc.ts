@@ -73,7 +73,11 @@ export function coreCompareAndSet(
     const read = send("doc.get", where);
     const reply = typeof read === "object" && read !== null ? (read as Record<string, unknown>) : {};
     try {
-      send("doc.set", { ...where, value: next("value" in reply ? reply["value"] : null), version: reply["version"] ?? 0 });
+      send("doc.set", {
+        ...where,
+        value: next("value" in reply ? reply["value"] : null),
+        version: reply["version"] ?? 0,
+      });
       return;
     } catch (cause) {
       if (attempt >= 4 || !/is at version \d+, not \d+/.test(String(cause))) throw cause;
@@ -81,12 +85,7 @@ export function coreCompareAndSet(
   }
 }
 
-function writeCoreDoc(
-  name: string,
-  next: (current: unknown) => unknown,
-  on: string | undefined,
-  which: Core,
-): void {
+function writeCoreDoc(name: string, next: (current: unknown) => unknown, on: string | undefined, which: Core): void {
   const core = coreEnv(which);
   const where = on === undefined ? { name } : { name, on };
   coreCompareAndSet((method, params) => call(core, method, params), where, next);
@@ -108,7 +107,7 @@ export function updateCoreDoc(
   on?: string,
   which: Core = "host",
 ): void {
-  writeCoreDoc(name, (current) => update(current), on, which);
+  writeCoreDoc(name, update, on, which);
 }
 
 /** A herdr document on the e2e host's core (or, with `on`, on its added machine), as another client would read it. */
