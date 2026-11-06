@@ -83,6 +83,19 @@ test.describe("on a wide screen", () => {
     await terminalCount(page);
     await page.getByRole("link", { name: "Settings" }).click();
     await expect(settingsDialog(page)).toBeVisible();
+    // A dialog opened inside Settings takes Escape first: it closes alone, and Settings stays open.
+    await settingsDialog(page).getByRole("button", { name: "Keybindings", exact: true }).click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Import keybinds…" }).click();
+    await (
+      await chooser
+    ).setFiles({ name: "keybinds", mimeType: "text/plain", buffer: Buffer.from("keybind = super+t=new_tab\n") });
+    const inner = page.getByRole("dialog", { name: "Import these keybindings?" });
+    await expect(inner).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(inner).toHaveCount(0);
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(settingsDialog(page)).toBeVisible();
     const box = await settingsDialog(page).boundingBox();
     if (box === null) throw new Error("the Settings dialog has no box");
     // Left of the panel, halfway down: the backdrop.
