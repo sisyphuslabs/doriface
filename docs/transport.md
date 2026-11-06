@@ -1,4 +1,4 @@
-# doriface transport contract v1.9.6
+# doriface transport contract v1.9.7
 
 This is the binding wire contract for every doriface package. Each rule below is the current one; the change log at the end records what each revision changed.
 
