@@ -19,6 +19,7 @@ import { VoiceDock } from "../voice/voice-dock.tsx";
 import { agentStatus } from "./attention.ts";
 import { machineOf, programKind, type Session, spaceName, tabTitle, terminalTitle } from "./model.ts";
 import { NewTabMenu } from "./new-tab-menu.tsx";
+import { FirstRunGuideCard, useGuideOpened } from "../pair/first-run-guide-card.tsx";
 import { NoTerminal } from "./no-terminal.tsx";
 import { QuietBusy } from "../terminal/quiet-busy.tsx";
 import { usePaneSends } from "./pane-sends.ts";
@@ -126,6 +127,7 @@ export function DesktopShell(props: DesktopShellProps) {
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
   const focusedAddress = layout.focused?.address ?? null;
+  useGuideOpened(focusedAddress !== null);
   const voice = useDictation();
   const sends = usePaneSends();
   const mic = useRef<HTMLButtonElement>(null);
@@ -225,6 +227,12 @@ export function DesktopShell(props: DesktopShellProps) {
     // herdr-app's 12 px gap.
     <div className="relative flex h-dvh overflow-hidden bg-background pt-(--safe-top) pr-(--safe-right) pb-(--safe-bottom) pl-(--safe-left) [--titlebar-leading:calc(var(--titlebar-inset-start,0.5rem)+var(--control-sm)+0.75rem)]">
       <SkipLinks onSidebar={focusSidebar} />
+      <FirstRunGuideCard
+        className="absolute right-4 bottom-10 z-30 m-0 w-72 shadow-lg"
+        listVisible={sidebar}
+        listedLive={terminals.some((terminal) => terminal.state === "live")}
+        onNew={onNew}
+      />
       {sidebar ? (
         <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
       ) : null}
