@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Choosing the phone's keys
+
+- Settings > Keyboard puts the keys bar in your own hands: the bar itself at the top, the keys it carries with the order you set by dragging or by keyboard, and Add keys for the ones you took out. Packs (Navigation, Ctrl chords, Tmux, Herdr, coding agents) are rows you switch on, and Your keys carries your own entries — a label plus the exact bytes or chord it sends, checked against the chord grammar so a bare modifier is refused rather than sent as text. The bar belongs to the host the phone talks to, so an iPhone on a Linux machine is offered no Command key. (#770)
+
 ### Setting up your machines
 
 - [docs/install.md](docs/install.md) and the README show how to run the host as a user service on every Linux and macOS machine you own, join them into one mesh, and pair phones and browsers. The [doriterm-setup skill](skills/doriterm-setup/SKILL.md) lets a coding agent do it with `apps/host/scripts/setup/cli.ts` (`install`, `verify`, `invite`, `join`, `pair`, `uninstall`), which is safe to re-run and never prints a join link or key. (#778)
