@@ -63,6 +63,13 @@ export class MeshConnections {
   readonly #listeners = new Set<() => void>();
   readonly #unsubscribes = new Map<string, () => void>();
   /**
+   * The desktop app's own-host starter, kept here rather than handed to one connection.
+   *
+   * A fresh install has no member yet when the app registers it, and every connection built afterwards (a pairing, a roster
+   * change) needs it too; forwarding it to whatever happened to exist at boot lost it for all of them (review of #994).
+   */
+  #localHost: LocalHostStarter | null = null;
+  /**
    * The list `entries()` answers with. Rebuilt only when something changes, because it is read through
    * `useSyncExternalStore`, which compares snapshots by identity and would re-render forever on a fresh array per call.
    */
@@ -115,7 +122,9 @@ export class MeshConnections {
    * mesh, and a machine the person paired away from must not stay in it and be dialled forever after (review of #994).
    */
   pair(settings: ConnectionSettings): void {
-    this.#apply({ ...settings, members: [] });
+    // The name belongs to the host that said it (#496): the machine just paired has not said one yet, so the previous
+    // machine's name must not travel with the rest of the settings (review of #994).
+    this.#apply({ ...settings, hostName: "", members: [] });
   }
 
   #apply(settings: ConnectionSettings): void {
@@ -151,7 +160,8 @@ export class MeshConnections {
   }
 
   restartsLocalHost(starter: LocalHostStarter): void {
-    this.selected?.restartsLocalHost(starter);
+    this.#localHost = starter;
+    for (const store of this.#stores.values()) store.restartsLocalHost(starter);
   }
 
   hostStartFailed(failure: HostStartFailure): void {
@@ -221,6 +231,7 @@ export class MeshConnections {
     // A member's store holds a slice of a roster this object owns, so it must not write: saving its slice would replace the
     // roster with one member.
     const store = this.#make(scoped, () => undefined);
+    if (this.#localHost !== null) store.restartsLocalHost(this.#localHost);
     store.start();
     this.#unsubscribes.set(
       member.hostId,

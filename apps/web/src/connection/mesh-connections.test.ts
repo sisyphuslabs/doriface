@@ -60,7 +60,11 @@ class FakeConnection implements MemberConnection {
 
   restoring(): void {}
 
-  restartsLocalHost(): void {}
+  starters = 0;
+
+  restartsLocalHost(): void {
+    this.starters += 1;
+  }
 
   hostStartFailed(): void {}
 
@@ -156,6 +160,23 @@ describe("one connection per member", () => {
     const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "loopback", loopbackUrl: "ws://127.0.0.1:7766/v1/hc" });
     expect(made).toHaveLength(1);
     expect(mesh.entries()).toHaveLength(1);
+  });
+
+  it("keeps this computer's own-host starter for every connection built later", () => {
+    const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "relay" });
+    expect(made).toHaveLength(0);
+    mesh.restartsLocalHost({ start: async () => ({ url: "ws://127.0.0.1:1", token: "t" }), failure: () => ({}) as never });
+    mesh.pair({ ...settingsWith([member("c")], "c"), members: [] });
+    expect(made).toHaveLength(1);
+    expect(made[0]?.starters).toBe(1);
+  });
+
+  it("does not give a newly paired machine the name of the one before it", () => {
+    const previous = settingsWith([member("a", "Air")], "a");
+    const { mesh } = harness(previous);
+    mesh.pair({ ...previous, hostId: "c", hostKey: "k-c", directUrl: "", members: [] });
+    expect(mesh.settings.hostName).toBe("");
+    expect(mesh.entries().map((entry) => entry.target.hostName)).toEqual([""]);
   });
 
   it("pairing replaces the roster, so a machine paired away from is not dialled again", () => {
