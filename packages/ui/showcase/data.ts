@@ -1,4 +1,12 @@
-import type { Agent, ApprovalPrompt, Command, Space, TerminalLine, WorkspaceTab } from "../src/index.ts";
+import type {
+  Agent,
+  ApprovalOption,
+  ApprovalPrompt,
+  Command,
+  Space,
+  TerminalLine,
+  WorkspaceTab,
+} from "../src/index.ts";
 
 export const SPACES: readonly Space[] = [
   { id: "api", name: "api-server", tabs: 3, attention: "blocked" },
@@ -151,11 +159,107 @@ export const CLAUDE_PROMPT_GONE_LINES: readonly TerminalLine[] = [
   [{ text: "> ", color: 8 }, { text: "show me the rollback script first" }],
 ];
 
+const row = (id: string, label: string, more: Partial<ApprovalOption> = {}): ApprovalOption => ({
+  id,
+  label,
+  keys: [id],
+  declines: false,
+  typed: false,
+  ...more,
+});
+
+/** Claude Code's Bash permission dialog, every row as it draws them. */
 export const APPROVAL_PROMPT: ApprovalPrompt = {
   agent: "Claude Code",
+  kind: "permission",
   asks: "wants to run",
+  question: "Do you want to proceed?",
   command: "bun run db:migrate --env staging",
-  keys: { allow: "1", deny: "esc" },
+  body: "Apply the session-keys migration to staging",
+  context: [
+    "● Reading migrations/0042_session_keys.sql",
+    "● The migration adds the session_keys table; I'll apply it to staging.",
+  ],
+  files: [],
+  multi: false,
+  options: [
+    row("1", "Yes"),
+    row("2", "Yes, and don't ask again for bun run db:migrate commands in ~/api-server"),
+    row("3", "No", { declines: true }),
+  ],
+  cancel: { key: "esc", label: "Cancel" },
+};
+
+/** Claude Code asking the first of two questions, with a typed answer. */
+export const QUESTION_PROMPT: ApprovalPrompt = {
+  agent: "Claude Code",
+  kind: "question",
+  asks: "asks a question",
+  question: "Which database should the migration target?",
+  command: "Which database should the migration target?",
+  body: "",
+  context: ["● I need to know which database to use before I write the migration."],
+  files: [],
+  multi: false,
+  options: [
+    row("1", "Postgres", { detail: "The production database" }),
+    row("2", "SQLite", { detail: "The local test database" }),
+    row("3", "Type something.", { typed: true }),
+    row("4", "Chat about this"),
+  ],
+  cancel: { key: "esc", label: "Cancel" },
+  step: { index: 1, count: 3, titles: ["Database", "Deploy", "Submit"] },
+};
+
+/** Claude Code asking a multi-select question. */
+export const MULTI_PROMPT: ApprovalPrompt = {
+  ...QUESTION_PROMPT,
+  question: "Which checks should CI run on every push?",
+  command: "Which checks should CI run on every push?",
+  context: ["● I can add several checks to CI."],
+  multi: true,
+  options: [
+    row("1", "Lint", { detail: "oxlint over the repo", checked: true }),
+    row("2", "Typecheck", { detail: "tsc -b", checked: false }),
+    row("3", "Unit tests", { detail: "bun test", checked: false }),
+    row("5", "Chat about this"),
+  ],
+  step: { index: 1, count: 2, titles: ["CI checks", "Submit"] },
+};
+
+/** Claude Code asking to edit a file, with its diff. */
+export const EDIT_PROMPT: ApprovalPrompt = {
+  ...APPROVAL_PROMPT,
+  asks: "wants to edit",
+  question: "Do you want to make this edit to migrations/0042_session_keys.sql?",
+  command: "migrations/0042_session_keys.sql",
+  body: "12  CREATE TABLE session_keys (\n13 -  id TEXT PRIMARY KEY\n13 +  id TEXT PRIMARY KEY,\n14 +  expires_at INTEGER NOT NULL",
+  context: ["● The table needs an expiry column.", "● Update(migrations/0042_session_keys.sql)"],
+  files: ["migrations/0042_session_keys.sql"],
+  options: [
+    row("1", "Yes"),
+    row("2", "Yes, and switch to accept edits for this session (shift+tab)"),
+    row("3", "No", { declines: true }),
+  ],
+};
+
+/** Claude Code in plan mode asking to approve its plan. */
+export const PLAN_PROMPT: ApprovalPrompt = {
+  agent: "Claude Code",
+  kind: "plan",
+  asks: "has a plan ready",
+  question: "Claude has written up a plan and is ready to execute. Would you like to proceed?",
+  command: "Add the users migration",
+  body: "Add the users migration\n\n1. Add migrations/004_users.sql with the users table.\n2. Run it against SQLite in bun test.\n3. Note the new table in README.md.",
+  context: ["● The plan is ready."],
+  files: ["~/.claude/plans/users-migration.md"],
+  multi: false,
+  options: [
+    row("1", "Yes, and use auto mode"),
+    row("2", "Yes, manually approve edits"),
+    row("3", "Tell Claude what to change", { typed: true }),
+  ],
+  cancel: { key: "esc", label: "Cancel" },
 };
 
 /** A Korean and an English sentence, as the dictation acceptance criteria ask. */

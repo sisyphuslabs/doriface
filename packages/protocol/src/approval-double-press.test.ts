@@ -6,7 +6,7 @@ import { answerApproval, CLAIM_TTL_MS, readApprovalRecord } from "./approval-ans
 import { markApproval } from "./approval-prompt.ts";
 import { MemoryApprovalCore } from "./testing/approval-core.ts";
 import { CLAUDE_PROMPT_SCREEN } from "./testing/approval-screens.ts";
-import { CLAUDE_BLOCKED, terminalAt } from "./testing/approval-terminal.ts";
+import { ALLOW, CLAUDE_BLOCKED, DENY, terminalAt } from "./testing/approval-terminal.ts";
 
 const phone = { by: "phone", client: "phone-1" };
 const laptop = { by: "laptop", client: "laptop-1" };
@@ -53,8 +53,8 @@ describe("one key press per prompt, whatever the clocks, links and ids", () => {
   test("P1: two answers at once under one client id (a device's worker and page) press once", async () => {
     const { core, mark } = asking(plain);
     await Promise.all([
-      answerApproval(core, mark, "deny", phone, 1_000),
-      answerApproval(core, mark, "allow", phone, 1_000),
+      answerApproval(core, mark, DENY, phone, 1_000),
+      answerApproval(core, mark, ALLOW, phone, 1_000),
     ]);
     expect(core.pressed).toHaveLength(1);
   });
@@ -62,8 +62,8 @@ describe("one key press per prompt, whatever the clocks, links and ids", () => {
   test("P2: a claimer whose clock runs CLAIM_TTL_MS behind still holds the prompt against another device", async () => {
     const { core, mark } = asking(plain);
     await Promise.all([
-      answerApproval(core, mark, "allow", phone, 0),
-      answerApproval(core, mark, "allow", laptop, CLAIM_TTL_MS + 1),
+      answerApproval(core, mark, ALLOW, phone, 0),
+      answerApproval(core, mark, ALLOW, laptop, CLAIM_TTL_MS + 1),
     ]);
     expect(core.pressed).toHaveLength(1);
   });
@@ -72,9 +72,9 @@ describe("one key press per prompt, whatever the clocks, links and ids", () => {
     const { core, mark } = asking((terminal) => new StalledKeysCore(terminal, CLAUDE_PROMPT_SCREEN));
     core.stall = Promise.withResolvers<void>();
     const release = core.stall;
-    const first = answerApproval(core, mark, "allow", phone, 1_000);
+    const first = answerApproval(core, mark, ALLOW, phone, 1_000);
     await core.stalled.promise;
-    const second = await answerApproval(core, mark, "allow", laptop, 1_000 + CLAIM_TTL_MS + 1);
+    const second = await answerApproval(core, mark, ALLOW, laptop, 1_000 + CLAIM_TTL_MS + 1);
     release.resolve();
     await first;
     expect(second.kind).toBe("lost");
@@ -83,8 +83,8 @@ describe("one key press per prompt, whatever the clocks, links and ids", () => {
 
   test("P4: a key press whose reply was lost holds the prompt, so trying again before the agent redraws presses nothing", async () => {
     const { core, mark } = asking((terminal) => new LostReplyCore(terminal, CLAUDE_PROMPT_SCREEN));
-    const first = await answerApproval(core, mark, "allow", phone, 1_000);
-    const again = await answerApproval(core, mark, "allow", phone, 2_000);
+    const first = await answerApproval(core, mark, ALLOW, phone, 1_000);
+    const again = await answerApproval(core, mark, ALLOW, phone, 2_000);
     expect(first.kind).not.toBe("sent");
     expect(again.kind).not.toBe("sent");
     expect(core.pressed).toHaveLength(1);
@@ -95,11 +95,11 @@ describe("one key press per prompt, whatever the clocks, links and ids", () => {
     // The claimer's clock is 10 minutes ahead; its check fails and its `failed` record cannot be written.
     core.failNext("screen", 1);
     core.failNext("setDoc", 1, 1);
-    await answerApproval(core, mark, "allow", phone, 10 * 60_000);
+    await answerApproval(core, mark, ALLOW, phone, 10 * 60_000);
     const clock = ownClock();
-    expect((await answerApproval(core, mark, "allow", laptop, 60_000, { clock })).kind).toBe("lost");
+    expect((await answerApproval(core, mark, ALLOW, laptop, 60_000, { clock })).kind).toBe("lost");
     clock.at = CLAIM_TTL_MS;
-    expect((await answerApproval(core, mark, "allow", laptop, 60_000 + CLAIM_TTL_MS, { clock })).kind).toBe("sent");
+    expect((await answerApproval(core, mark, ALLOW, laptop, 60_000 + CLAIM_TTL_MS, { clock })).kind).toBe("sent");
     expect(core.pressed).toHaveLength(1);
   });
 });
@@ -115,7 +115,7 @@ describe("the claimer's own fence", () => {
       }
     }
     const { core, mark } = asking((terminal) => new SlowScreenCore(terminal, CLAUDE_PROMPT_SCREEN));
-    expect(await answerApproval(core, mark, "allow", phone, 1, { clock })).toMatchObject({ kind: "failed" });
+    expect(await answerApproval(core, mark, ALLOW, phone, 1, { clock })).toMatchObject({ kind: "failed" });
     expect(core.pressed).toEqual([]);
   });
 
@@ -139,7 +139,7 @@ describe("the claimer's own fence", () => {
       }
     }
     const { core, mark } = asking((terminal) => new OvertakenCore(terminal, CLAUDE_PROMPT_SCREEN));
-    expect(await answerApproval(core, mark, "allow", phone, 1, { clock: ownClock() })).toMatchObject({
+    expect(await answerApproval(core, mark, ALLOW, phone, 1, { clock: ownClock() })).toMatchObject({
       kind: "failed",
     });
     expect(core.pressed).toEqual([]);
@@ -151,11 +151,11 @@ describe("#275: the claim's own guards, and the limit that needs hc", () => {
     const { core, mark } = asking((terminal) => new StalledKeysCore(terminal, CLAUDE_PROMPT_SCREEN));
     core.stall = Promise.withResolvers<void>();
     const release = core.stall;
-    const first = answerApproval(core, mark, "allow", phone, 1, { clock: ownClock() });
+    const first = answerApproval(core, mark, ALLOW, phone, 1, { clock: ownClock() });
     await core.stalled.promise;
     const theirs = (await readApprovalRecord(core, mark))?.attempt;
     if (theirs === undefined) throw new Error("the first answer's claim carries no attempt id");
-    const second = await answerApproval(core, mark, "allow", laptop, 2, { clock: ownClock(), retake: theirs });
+    const second = await answerApproval(core, mark, ALLOW, laptop, 2, { clock: ownClock(), retake: theirs });
     release.resolve();
     await first;
     expect(second.kind).toBe("lost");
@@ -173,7 +173,7 @@ describe("#275: the claim's own guards, and the limit that needs hc", () => {
       }
     }
     const { core, mark } = asking((terminal) => new SuspendedCheckCore(terminal, CLAUDE_PROMPT_SCREEN));
-    const result = await answerApproval(core, mark, "allow", phone, wall.at, { clock, wall: () => wall.at });
+    const result = await answerApproval(core, mark, ALLOW, phone, wall.at, { clock, wall: () => wall.at });
     expect(result.kind).toBe("failed");
     expect(core.pressed).toEqual([]);
   });
@@ -187,11 +187,11 @@ describe("#275: the claim's own guards, and the limit that needs hc", () => {
       const [a, b] = [ownClock(), ownClock()];
       core.stall = Promise.withResolvers<void>();
       const release = core.stall;
-      const first = answerApproval(core, mark, "allow", phone, 1, { clock: a });
+      const first = answerApproval(core, mark, ALLOW, phone, 1, { clock: a });
       await core.stalled.promise;
-      expect((await answerApproval(core, mark, "allow", laptop, 2, { clock: b })).kind).toBe("lost");
+      expect((await answerApproval(core, mark, ALLOW, laptop, 2, { clock: b })).kind).toBe("lost");
       b.at += CLAIM_TTL_MS;
-      await answerApproval(core, mark, "allow", laptop, 3, { clock: b });
+      await answerApproval(core, mark, ALLOW, laptop, 3, { clock: b });
       release.resolve();
       await first;
       expect(core.pressed).toHaveLength(1);
