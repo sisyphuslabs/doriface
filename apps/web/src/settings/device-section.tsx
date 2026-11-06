@@ -28,7 +28,7 @@ export function DeviceSection() {
       <SettingRow
         key="install"
         inline
-        title="Install doriface"
+        title="Install Doriterm"
         description="Opens in its own window, from the Dock or the home screen."
         control={
           <Button size="sm" onClick={() => void install(offer.prompt)}>
@@ -40,7 +40,7 @@ export function DeviceSection() {
       <SettingRow
         key="install"
         title="Add to Home Screen"
-        description="In Safari, tap Share, then Add to Home Screen. doriface then opens in its own window."
+        description="In Safari, tap Share, then Add to Home Screen. Doriterm then opens in its own window."
         control={null}
       />
     ) : null,
