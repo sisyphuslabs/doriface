@@ -156,11 +156,12 @@ after that, with a ChaCha20-Poly1305 record layer that rekeys every 2^20 message
 
 - **The relay forwards records it cannot read.** It can drop, replay or reorder them — a delayed record in order fails
   nothing — and when it does, the session fails: it cannot read or forge `hc` bytes, impersonate either side, or splice two
-  sessions. Its known leverage is the pairing window: the device name rides in IKpsk2 msg1 in the clear, and a code allows one
-  online preshared-key guess.
+  sessions. Its leverage is the pairing window: the device name is in IKpsk2 msg1, which a relay that answers the pairing
+  lookup itself can read, and a typed code can be tried online a bounded number of times before the host retires it.
 - **What the relay does see:** the `hostId`, source addresses, timing and sizes, session ids, the pairing slots and their
-  public keys, the device name in the first IKpsk2 message, and — for a session a host proves with a relay pass, which is the
-  machine-to-machine dials — which host dialled which, so it learns the shape of your mesh. Nothing a terminal prints.
+  public keys, the device name in the first IKpsk2 message when it answers that lookup itself, and — for a session a host
+  proves with a relay pass, which is the machine-to-machine dials — which host dialled which, so it learns the shape of your
+  mesh. Nothing a terminal prints.
 - **Keys stay on your machines.** The host's Ed25519 identity and X25519 static live in its state directory, mode 0600, beside
   the paired-device store; the web client's device key is non-extractable wherever WebCrypto allows, which stops export but not
   same-origin use of the key.
