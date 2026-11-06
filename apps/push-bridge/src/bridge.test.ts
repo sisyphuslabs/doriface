@@ -119,7 +119,9 @@ describe("APNs (#705)", () => {
     const vapid = await vapidKey();
     const post: PushFetch = (url, init) => bridge(new Request(url, init));
     await Promise.all(
-      [1, 2].map(() => deliverPush({ endpoint: `${ORIGIN}/v1/apns/${APNS_TOKEN}`, ...keys }, NOTICE, vapid, post)),
+      [1, 2].map(() =>
+        deliverPush({ endpoint: `${ORIGIN}/v1/apns/${APNS_TOKEN}`, ...keys }, NOTICE, vapid, post, { now: () => NOW }),
+      ),
     );
     const tokens = sent.map((request) => request.headers.get("authorization"));
     expect(tokens[0]).toBe(tokens[1]);
@@ -185,7 +187,9 @@ describe("FCM (#705)", () => {
     const vapid = await vapidKey();
     const post: PushFetch = (url, init) => bridge(new Request(url, init));
     await Promise.all(
-      [1, 2].map(() => deliverPush({ endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys }, NOTICE, vapid, post)),
+      [1, 2].map(() =>
+        deliverPush({ endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys }, NOTICE, vapid, post, { now: () => NOW }),
+      ),
     );
     const grants = sent.filter((request) => request.url === "https://oauth2.googleapis.com/token");
     expect(grants).toHaveLength(1);
@@ -232,10 +236,10 @@ async function bridgeAnswer(init: {
   return { status: reply.status, forwarded: sent.length };
 }
 
-/** A real host body and headers for the APNs path, captured from the host's own sender. */
 /**
- * `now` is the clock the VAPID header is signed with. Every case here pairs it with the clock its bridge checks the
- * header against, so no assertion depends on the wall clock (#750).
+ * A real host body and headers for the APNs path, captured from the host's own sender. `now` is the clock the VAPID
+ * header is signed with: every case here pairs it with the clock its bridge checks that header against, so no assertion
+ * depends on the wall clock (#750).
  */
 async function captured(now: () => number = () => NOW): Promise<{ headers: Record<string, string>; body: Uint8Array }> {
   let headers: Record<string, string> = {};
@@ -337,11 +341,18 @@ test("every notice kind forwards a payload of one length, so APNs and FCM cannot
     NOTICE_KINDS.map(async (k) => {
       const { sent, fetch } = upstream();
       const bridge = createBridge(await config(), { fetch, now: () => NOW });
-      await deliverPush({ endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys }, { ...NOTICE, k }, vapid, (url, init) =>
-        bridge(new Request(url, init)),
+      await deliverPush(
+        { endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys },
+        { ...NOTICE, k },
+        vapid,
+        (url, init) => bridge(new Request(url, init)),
+        { now: () => NOW },
       );
       return sent.find((request) => request.url.startsWith("https://fcm.googleapis.com/"))?.body.length ?? -1;
     }),
   );
+  // Every kind reached FCM, and all of them with one length: a refusal would leave the -1 above and still pass the set
+  // check, so the floor is what keeps this case honest.
+  for (const length of lengths) expect(length).toBeGreaterThan(0);
   expect(new Set(lengths).size).toBe(1);
 });
