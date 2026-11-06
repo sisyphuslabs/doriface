@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import { actionFor, type Scope } from "./actions.ts";
 import { resolveKeymap } from "./keymap.ts";
 import { useOverrides } from "./keymap-store.ts";
@@ -29,11 +29,16 @@ export function runAction(id: string): boolean {
   return action !== null && dispatch(action.scope, id);
 }
 
+/** True under a view that is kept but not shown (the workspace under Settings): its handlers take no action. */
+export const ActionsPaused = createContext(false);
+
 export function useActionHandler(scope: Scope, handler: ActionHandler): void {
   const latest = useRef(handler);
   latest.current = handler;
+  const paused = useRef(false);
+  paused.current = useContext(ActionsPaused);
   useEffect(() => {
-    const entry: ActionHandler = (action) => latest.current(action);
+    const entry: ActionHandler = (action) => !paused.current && latest.current(action);
     handlers[scope].add(entry);
     return () => {
       handlers[scope].delete(entry);

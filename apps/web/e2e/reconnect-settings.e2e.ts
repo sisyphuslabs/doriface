@@ -21,7 +21,7 @@ async function echoes(page: Page, marker: string): Promise<void> {
   await expect(terminal).toContainText(`${marker}-5`, { timeout: 20_000 });
 }
 
-/** Settings and back, inside the app: the workspace unmounts and mounts again, the page does not reload. */
+/** Settings and back, inside the app: the workspace stays mounted under Settings, the page does not reload. */
 async function settingsRoundTrip(page: Page): Promise<void> {
   await page.getByRole("link", { name: "Settings" }).first().click();
   await expect(page.getByRole("navigation", { name: "Settings" })).toBeVisible();
@@ -48,6 +48,20 @@ test("while the link is down, Settings and back keeps the terminal list and pane
   socket.restore();
   await expect(notice(page, RECONNECTING)).toHaveCount(0, { timeout: 15_000 });
   await echoes(page, "after-round-trip");
+});
+
+test("Settings and back keeps the terminal it showed: no reattach, no replay, and the keyboard back in it", async ({ page }) => {
+  await page.goto("/");
+  await openNewTerminal(page);
+  await echoes(page, "before-settings");
+  const terminal = page.locator("[data-terminal]").filter({ visible: true }).first();
+  // The element itself is marked: a workspace that mounted again draws a new one, which replays the whole history.
+  await terminal.evaluate((element) => element.setAttribute("data-kept", ""));
+
+  await settingsRoundTrip(page);
+  await expect(page.locator("[data-terminal][data-kept]").filter({ visible: true })).toHaveCount(1);
+  await expect(terminal.getByRole("textbox")).toBeFocused();
+  await echoes(page, "after-settings");
 });
 
 test("coming back from Settings while a reconnect waits out its back-off reconnects at once, on one new socket", async ({
