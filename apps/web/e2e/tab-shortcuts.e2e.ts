@@ -3,20 +3,19 @@
 import type { Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
 import { endOwnTerminals } from "./own-terminals.ts";
+import { tabNumberChord, tabs } from "./tab-strip.ts";
 
 endOwnTerminals();
 
 test.use({ serviceWorkers: "block" });
 
-const tabs = (page: Page) => page.getByRole("tablist", { name: "Tabs" }).getByRole("tab");
-
-/** Presses ControlOrMeta+N for each tab in turn and checks that it selected the Nth tab. */
+/** Presses the platform's number chord for each tab in turn and checks that it selected the Nth tab. */
 async function pressEach(page: Page): Promise<void> {
   const count = Math.min(9, await tabs(page).count());
   await Array.from({ length: count }, (_unused, index) => index).reduce<Promise<void>>(async (previous, index) => {
     await previous;
     await page.locator('[data-focused="true"] [data-terminal]').getByRole("textbox").focus();
-    await page.keyboard.press(`ControlOrMeta+${index + 1}`);
+    await page.keyboard.press(await tabNumberChord(page, index + 1));
     await expect(tabs(page).nth(index)).toHaveAttribute("aria-selected", "true");
   }, Promise.resolve());
 }

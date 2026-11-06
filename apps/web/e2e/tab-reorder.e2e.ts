@@ -10,6 +10,7 @@ import {
   rearranged,
   selectedIndex,
   strip,
+  tabNumberChord,
   tabs,
 } from "./tab-strip.ts";
 
@@ -25,7 +26,7 @@ test("dragging a tab past two others moves it there, keeps the selection, and th
   await expect(tabs(page).nth(selected)).toHaveAttribute("aria-selected", "true");
   const after = rearranged(before, [1, 2, 0, 3]);
   expect(await order(page)).toEqual(after);
-  await page.keyboard.press("ControlOrMeta+3");
+  await page.keyboard.press(await tabNumberChord(page, 3));
   expect(await focusedAddress(page)).toBe(before[0]);
 
   await page.reload();

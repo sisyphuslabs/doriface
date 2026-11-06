@@ -19,12 +19,20 @@ export const focusedAddress = (page: Page) =>
 export const selectedIndex = (page: Page) =>
   tabs(page).evaluateAll((els) => els.findIndex((el) => el.getAttribute("aria-selected") === "true"));
 
-/** The strip's order as the terminals ⌘1..⌘N select, then the tab that was selected is selected again. */
+/**
+ * The number chord that selects a tab by its place: Cmd+N on a Mac, Alt+N elsewhere, since Ctrl+N selects a space there.
+ */
+export async function tabNumberChord(page: Page, place: number): Promise<string> {
+  const mac = await page.evaluate(() => /mac/i.test(navigator.platform));
+  return `${mac ? "Meta" : "Alt"}+${place}`;
+}
+
+/** The strip's order as the platform's number chords select each tab, then the tab that was selected is selected again. */
 export async function order(page: Page): Promise<string[]> {
   const count = await tabs(page).count();
   const selected = await selectedIndex(page);
   const select = async (index: number) => {
-    await page.keyboard.press(`ControlOrMeta+${index + 1}`);
+    await page.keyboard.press(await tabNumberChord(page, index + 1));
     await expect(tabs(page).nth(index)).toHaveAttribute("aria-selected", "true");
   };
   const addresses = await Array.from({ length: count }, (_unused, index) => index).reduce<Promise<string[]>>(
