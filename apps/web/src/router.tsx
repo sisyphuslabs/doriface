@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { connectionStore } from "./connection/store.ts";
+import { TerminalsOnScreen } from "./device/keep-awake.ts";
 import { ActionsPaused } from "./keys/dispatcher.ts";
 import { keyboardIsIdle, mayTakeFocus } from "./terminal/may-take-focus.ts";
 import { capturePairingLink } from "./pair/link-capture.ts";
@@ -28,7 +29,9 @@ function Root() {
   return (
     <>
       {settings ? (
-        <div className="fixed inset-0 z-50 bg-background">
+        // No z-index: a menu or dialog Settings portals to the body paints in DOM order, and a layer above it would
+        // cover the menu (the workspace behind is invisible, so this layer only has to paint over nothing).
+        <div className="fixed inset-0 bg-background">
           <Outlet />
         </div>
       ) : null}
@@ -36,7 +39,9 @@ function Root() {
           workspace kept under Settings is invisible, so it must not come first. */}
       <div className={settings ? "invisible contents" : "contents"} inert={settings}>
         <ActionsPaused.Provider value={settings}>
-          <WorkspaceRoute />
+          <TerminalsOnScreen.Provider value={!settings}>
+            <WorkspaceRoute />
+          </TerminalsOnScreen.Provider>
         </ActionsPaused.Provider>
       </div>
     </>

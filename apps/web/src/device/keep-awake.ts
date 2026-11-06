@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { ScreenAwake, type ScreenWakeLock } from "./wake-lock.ts";
 import { guardedLocalStorage } from "../storage/guarded.ts";
 
@@ -48,14 +48,23 @@ let screens = 0;
 const sync = (): void => void awake?.want(keepAwakeStore.value && screens > 0);
 keepAwakeStore.subscribe(sync);
 
-/** Marks a terminal as on screen for as long as the calling component is mounted, so the screen stays awake. */
+/**
+ * Whether the terminals in this subtree are on screen. Settings keeps the workspace mounted but hidden, so a terminal
+ * there is still mounted while nothing of it shows: it must not hold the screen awake, and it takes the lock back when
+ * the workspace shows again.
+ */
+export const TerminalsOnScreen = createContext(true);
+
+/** Marks a terminal as on screen while it is mounted in a shown workspace, so the screen stays awake. */
 export function useScreenAwake(): void {
+  const onScreen = useContext(TerminalsOnScreen);
   useEffect(() => {
+    if (!onScreen) return;
     screens += 1;
     sync();
     return () => {
       screens -= 1;
       sync();
     };
-  }, []);
+  }, [onScreen]);
 }
