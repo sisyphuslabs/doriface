@@ -80,10 +80,12 @@ describe("an existing service", () => {
     expect(readExistingService(renderUnit(linux), src, "/home/u")).toEqual({
       kind: "checkout",
       stateDir: "/home/u/.local/state/doriface-host-mesh",
+      logFile: linux.logFile,
     });
     expect(readExistingService(renderPlist(mac), "/Users/u/.local/share/doriface-host/src", "/Users/u")).toEqual({
       kind: "checkout",
       stateDir: "/Users/u/.local/state/doriface-host-mesh",
+      logFile: mac.logFile,
     });
   });
 
@@ -93,6 +95,16 @@ describe("an existing service", () => {
     expect(readExistingService(kit, src, "/home/u")).toEqual({
       kind: "checkout",
       stateDir: "/home/u/.local/state/doriface-host",
+      logFile: undefined,
+    });
+  });
+
+  test("the mesh kit's plist is adopted with its state dir and its log", () => {
+    const kit = renderPlist({ ...mac, logFile: "/Users/u/Library/Logs/doriface-host.log" });
+    expect(readExistingService(kit, "/Users/u/.local/share/doriface-host/src", "/Users/u")).toEqual({
+      kind: "checkout",
+      stateDir: "/Users/u/.local/state/doriface-host-mesh",
+      logFile: "/Users/u/Library/Logs/doriface-host.log",
     });
   });
 

@@ -183,11 +183,11 @@ export function resolvePaths(context: SetupContext, hc: string): SetupPaths {
       `${first.serviceFile} runs another install (${existing.program}); remove it first, or pass --label to install beside it`,
     );
   }
-  if (context.options.stateDir !== undefined || existing.stateDir === undefined) return first;
   return setupPaths(context.os, context.home, context.env, tools, {
     ...context.options,
     src: first.src,
-    stateDir: existing.stateDir,
+    stateDir: context.options.stateDir ?? existing.stateDir,
+    logFile: existing.logFile,
   });
 }
 
@@ -345,6 +345,13 @@ export async function waitForRelay(
   );
 }
 
+/** The log file the service writes, or, for a unit installed without one (the mesh kit's), its journal. */
+async function hostLog(context: SetupContext, paths: SetupPaths): Promise<string> {
+  if (existsSync(paths.logFile) || context.os === "mac") return readLog(paths.logFile, 0);
+  const journal = await context.run(["journalctl", "--user", "-u", `${paths.label}.service`, "-o", "cat", "-n", "500"]);
+  return journal.stdout;
+}
+
 export interface Verified {
   readonly running: boolean;
   readonly relay: RelayState | undefined;
@@ -361,7 +368,7 @@ export async function verify(context: SetupContext, paths: SetupPaths, minMember
     running ? "ok" : "fail",
     running ? `${paths.label} is running` : `${paths.label} is not running; see ${paths.logFile}`,
   );
-  const relay = lastRelayState(readLog(paths.logFile, 0));
+  const relay = lastRelayState(await hostLog(context, paths));
   context.report("relay", relay === "connected" ? "ok" : "fail", `last relay line: ${relay ?? "none"}`);
   const status = await context.run([
     paths.bun,

@@ -52,6 +52,7 @@ export interface PathOptions {
   readonly stateDir?: string | undefined;
   readonly label?: string | undefined;
   readonly listen?: string | undefined;
+  readonly logFile?: string | undefined;
 }
 
 export function stateRoot(home: string, env: Readonly<Record<string, string | undefined>>): string {
@@ -87,9 +88,10 @@ export function setupPaths(
         ? join(home, "Library", "LaunchAgents", `${label}.plist`)
         : join(configHome, "systemd", "user", `${label}.service`),
     logFile:
-      os === "mac"
+      options.logFile ??
+      (os === "mac"
         ? join(home, "Library", "Logs", `${label}.log`)
-        : join(stateRoot(home, env), "doriterm-setup", `${label}.log`),
+        : join(stateRoot(home, env), "doriterm-setup", `${label}.log`)),
     bun: tools.bun,
     hc: tools.hc,
     listen: options.listen,
@@ -198,7 +200,7 @@ export function renderService(paths: SetupPaths): string {
 }
 
 export type ExistingService =
-  | { readonly kind: "checkout"; readonly stateDir: string | undefined }
+  | { readonly kind: "checkout"; readonly stateDir: string | undefined; readonly logFile: string | undefined }
   | { readonly kind: "other"; readonly program: string };
 
 /**
@@ -215,7 +217,10 @@ export function readExistingService(text: string, src: string, home: string): Ex
     return { kind: "other", program: args.join(" ") || "(no program)" };
   }
   const at = args.indexOf("--state-dir");
-  return { kind: "checkout", stateDir: at >= 0 ? args[at + 1] : undefined };
+  const log = text.includes("<plist")
+    ? /<key>StandardOutPath<\/key>\s*<string>([^<]*)<\/string>/.exec(text)?.[1]
+    : /^StandardOutput=append:(\S+)$/m.exec(text)?.[1];
+  return { kind: "checkout", stateDir: at >= 0 ? args[at + 1] : undefined, logFile: log };
 }
 
 function unitArgs(text: string): string[] {
