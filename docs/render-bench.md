@@ -50,7 +50,7 @@ Measured on 2026-11-06 on GitHub's `ubuntu-24.04` runner, the one the release wo
 
 What the noise says:
 
-- Frame intervals come in whole 60 Hz frames (16.7 ms steps). A single run's p95 at 50 panes moves by one step (83 to 117 ms), but the median over 5 rounds moved 0.1 ms. So a one-frame shift of the median fails the gate.
+- Frame intervals come in whole 60 Hz frames (16.7 ms steps). A single run's p95 at 50 panes spread over two steps (83 to 117 ms), but the median over 5 rounds moved 0.1 ms. The limit is the larger of 1.25 times the baseline and the baseline plus 4 ms: at a baseline of three frames or fewer (50 ms or less, as at 1 and 15 panes and v0.1.2's 50) a one-frame shift of the median fails; at a 66.7 ms baseline the limit is 83.4 ms, so a one-frame shift sits at the line; at 100 ms (the noise run's 50-pane baseline) the limit is 125 ms and one frame passes, two fail.
 - Catch-up is read at a 50 ms poll, so single runs land near 5 or 55 ms; its floor is 100 ms.
 - Heap depends on when garbage collection ran (medians moved up to 8 MB), and the time to catch up once a hidden tab is shown moved 178 ms at 50 panes; their floors are 15 MB and 300 ms.
 - The absolute numbers differ between runners: this run's 50-pane frame p95 was 100 ms, while another `ubuntu-24.04` job measured 50 to 67 ms the same day. That is why the gate compares two builds on one runner and never with a stored number.

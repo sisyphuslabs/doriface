@@ -4,7 +4,7 @@
     "frameP95": {
       "ratio": 1.25,
       "floor": 4,
-      "why": "A/A medians moved 0.1 ms at 1, 15 and 50 panes; intervals step by one 60 Hz frame (16.7 ms), so a one-frame shift of the median over 5 rounds fails"
+      "why": "A/A medians moved 0.1 ms at 1, 15 and 50 panes; intervals step by one 60 Hz frame (16.7 ms), so a one-frame shift of the median fails at baselines of 50 ms or less, and 1.25x of the baseline governs above that (docs/render-bench.md)"
     },
     "busyShare": {
       "ratio": 1.25,
