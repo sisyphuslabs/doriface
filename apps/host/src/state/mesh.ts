@@ -17,7 +17,7 @@ import { DeviceStore } from "./devices.ts";
 import { createPrivateJson, ensureStateDir, readJson, writePrivateJson } from "./files.ts";
 import { KnownHosts } from "./known-hosts.ts";
 import { DEFAULT_LOCK_TIMEOUT_MS, withStateLock } from "./lock.ts";
-import { MESH_FILE, type MeshFile, meshFileJson, parseMeshFile } from "./mesh-file.ts";
+import { MESH_FILE, type MeshFile, meshFileJson, newMeshFile, parseMeshFile } from "./mesh-file.ts";
 import { type MergeResult, type MeshTx, ownN, Transaction } from "./mesh-tx.ts";
 
 export { CounterBehindError, type MergeResult, type MeshTx } from "./mesh-tx.ts";
@@ -141,17 +141,7 @@ export class MeshStore {
   }
 
   #create(meshId: string, records: readonly Signed[], selfN: number): boolean {
-    const file: MeshFile = {
-      meshId,
-      generation: 1,
-      selfN,
-      records,
-      dangling: [],
-      local: {},
-      notices: {},
-      readOnlyUntil: null,
-      index: undefined,
-    };
+    const file: MeshFile = newMeshFile(meshId, records, selfN);
     const indexed = this.#indexed(file);
     if (!createPrivateJson(this.#path, meshFileJson(indexed), this.#options.durable ?? true)) return false;
     this.#cleanup(indexed);

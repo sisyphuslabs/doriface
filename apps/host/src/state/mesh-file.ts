@@ -3,13 +3,21 @@ import type { IndexData, MemberEntry, NamingEntry, RevokedEntry } from "../mesh/
 import { isRecord } from "./files.ts";
 
 export const MESH_FILE = "mesh.json";
-const VERSION = 2;
+/**
+ * The formats this build reads. A file above the highest is refused at the guard below, before any index is rebuilt or
+ * authorization runs, which is what makes an old reader refuse new semantics instead of silently dropping them.
+ */
+const READ_VERSIONS: ReadonlySet<number> = new Set([2, 3]);
+/** The format this build writes while it carries nothing a v2 reader cannot hold: a reader on 2 keeps working. */
+const WRITE_VERSION = 2;
 
 /**
  * `mesh.json` (section 10.1). `records` is the only source of trust; `index` is what `authorize` reads, derived from
  * the records at this `generation` by the writer, and `local`, `notices` and `readOnlyUntil` are display state.
  */
 export interface MeshFile {
+  /** The format this file is written in; a v2 reader only accepts 2. */
+  readonly version: number;
   readonly meshId: string;
   readonly generation: number;
   /** The counter this host last signed with (or is about to: it is written before the record is signed). */
@@ -79,13 +87,15 @@ function indexData(value: unknown): IndexData | undefined {
 const objectOr = (value: unknown): Readonly<Record<string, unknown>> => (isRecord(value) ? value : {});
 
 export function parseMeshFile(value: unknown): MeshFile {
-  if (!isRecord(value) || value["version"] !== VERSION) throw new Error(`${MESH_FILE}: unsupported format`);
+  if (!isRecord(value) || !READ_VERSIONS.has(Number(value["version"])))
+    throw new Error(`${MESH_FILE}: unsupported format`);
   const { meshId, generation, self, readOnlyUntil } = value;
   const selfN = isRecord(self) ? self["n"] : undefined;
   if (typeof meshId !== "string" || !Number.isSafeInteger(generation) || !Number.isSafeInteger(selfN)) {
     throw new Error(`${MESH_FILE}: malformed`);
   }
   return {
+    version: Number(value["version"]),
     meshId,
     generation: Number(generation),
     selfN: Number(selfN),
@@ -98,8 +108,22 @@ export function parseMeshFile(value: unknown): MeshFile {
   };
 }
 
+/** A new mesh's first file, in the format this build writes today. */
+export const newMeshFile = (meshId: string, records: readonly Signed[], selfN: number): MeshFile => ({
+  version: WRITE_VERSION,
+  meshId,
+  generation: 1,
+  selfN,
+  records,
+  dangling: [],
+  local: {},
+  notices: {},
+  readOnlyUntil: null,
+  index: undefined,
+});
+
 export const meshFileJson = (file: MeshFile) => ({
-  version: VERSION,
+  version: file.version,
   meshId: file.meshId,
   generation: file.generation,
   self: { n: file.selfN },
