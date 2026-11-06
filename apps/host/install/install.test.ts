@@ -40,7 +40,8 @@ function rig(system: "Linux" | "Darwin", machine = "x86_64"): Rig {
   writeFileSync(log, "");
   stub(stubs, "uname", `[ "$1" = -s ] && echo ${system} || echo ${machine}`);
   stub(stubs, "systemctl", `echo "systemctl $*" >> "${log}"`);
-  stub(stubs, "launchctl", `echo "launchctl $*" >> "${log}"`);
+  // No agent is loaded: `print` finds nothing, as on a computer that never ran the host.
+  stub(stubs, "launchctl", `echo "launchctl $*" >> "${log}"; [ "$1" = print ] && exit 113; exit 0`);
   const os = system === "Linux" ? "linux" : "mac";
   const arch = machine === "x86_64" ? "x64" : "arm64";
   const host = [
@@ -243,6 +244,30 @@ describe("install.sh on Linux", () => {
 });
 
 describe("install.sh on macOS", () => {
+  test("running it again over a loaded agent waits for the old one to go before it registers the new one", () => {
+    const r = rig("Darwin", "arm64");
+    const state = join(r.root, "agent");
+    // launchd unloads asynchronously: after bootout, print still finds the job twice, and bootstrap fails with 5 meanwhile.
+    writeFileSync(state, "loaded");
+    stub(
+      r.stubs,
+      "launchctl",
+      [
+        `echo "launchctl $*" >> "${r.log}"`,
+        `s=$(cat "${state}")`,
+        `case "$1" in`,
+        `  bootout) echo 2 > "${state}" ;;`,
+        `  print) case "$s" in gone) exit 113 ;; loaded) exit 0 ;; 0) echo gone > "${state}"; exit 113 ;; *) echo $((s - 1)) > "${state}"; exit 0 ;; esac ;;`,
+        `  bootstrap) [ "$s" = gone ] || { echo "Bootstrap failed: 5: Input/output error" >&2; exit 5; }; echo loaded > "${state}" ;;`,
+        `esac`,
+      ].join("\n"),
+    );
+    const run = install(r, ["--no-pair"]);
+    expect(run.err).toBe("");
+    expect(run.code).toBe(0);
+    expect(readFileSync(state, "utf8").trim()).toBe("loaded");
+  });
+
   test("registers a LaunchAgent that keeps the host running, then pairs", () => {
     const r = rig("Darwin", "arm64");
     const run = install(r);
@@ -252,6 +277,7 @@ describe("install.sh on macOS", () => {
     expect(run.calls).toEqual([
       "doriface-host --install-hc",
       `launchctl bootout gui/${uid}/dev.omo.doriface-host`,
+      `launchctl print gui/${uid}/dev.omo.doriface-host`,
       `launchctl bootstrap gui/${uid} ${join(r.home, "Library", "LaunchAgents", "dev.omo.doriface-host.plist")}`,
       `doriface-host pair --wait-host 60 --state-dir ${join(r.home, ".local", "state", "doriface-host")}`,
     ]);

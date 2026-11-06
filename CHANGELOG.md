@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Host install
+
+- On macOS, running `install.sh` again over a host already installed waits for launchd to unload the old LaunchAgent before it registers the new one, instead of failing with `Bootstrap failed: 5`. (#668)
+
 ## v0.1.3
 
 ### This computer on the relay, and pairing from a phone
