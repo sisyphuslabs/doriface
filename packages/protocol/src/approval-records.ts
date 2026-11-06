@@ -19,7 +19,10 @@ export type ApprovalOutcome = "claimed" | "sent" | "stale" | "failed" | "unknown
 
 export interface ApprovalRecord extends Answerer {
   readonly prompt: string;
+  /** Allow or Deny, as clients that only know those two read it: a decline (the agent's No row, its cancel) or not. */
   readonly answer: ApprovalAnswer;
+  /** The answer in the agent's own words (a row's label, the checked rows); missing from records of older clients. */
+  readonly choice?: string;
   /** The claimer's wall clock when it claimed: for people only, never compared with another device's clock. */
   readonly atMs: number;
   /** One answer's own id: only that answer settles its record or presses under it. */
@@ -44,6 +47,7 @@ function isRecord(value: unknown): value is ApprovalRecord {
   if (typeof value !== "object" || value === null) return false;
   const field = (name: string): unknown => Reflect.get(value, name);
   const attempt = field("attempt");
+  const choice = field("choice");
   return (
     typeof field("prompt") === "string" &&
     (field("answer") === "allow" || field("answer") === "deny") &&
@@ -51,6 +55,7 @@ function isRecord(value: unknown): value is ApprovalRecord {
     typeof field("client") === "string" &&
     typeof field("atMs") === "number" &&
     (attempt === undefined || typeof attempt === "string") &&
+    (choice === undefined || typeof choice === "string") &&
     OUTCOMES.has(field("outcome"))
   );
 }
@@ -63,6 +68,7 @@ function recordsIn(value: JsonValue): ApprovalRecord[] {
 export const recordJson = (record: ApprovalRecord, outcome = record.outcome): JsonValue => ({
   prompt: record.prompt,
   answer: record.answer,
+  ...(record.choice === undefined ? {} : { choice: record.choice }),
   by: record.by,
   client: record.client,
   atMs: record.atMs,
