@@ -12,6 +12,7 @@ import {
 } from "@doriface/ui";
 import { Bot, Columns2, Folder, Monitor, PanelLeft, Rows2, SquareTerminal, Terminal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useActionHandler } from "../keys/dispatcher.ts";
 import { useActionKeys } from "../keys/use-action-keys.ts";
 import { DictateButton } from "../voice/dictate-button.tsx";
 import { useDictation } from "../voice/use-dictation.ts";
@@ -27,6 +28,7 @@ import { RenameDialog } from "./rename-dialog.tsx";
 import { ConnectionPathItem, ReconnectStatus } from "./reconnect-status.tsx";
 import { SessionMenu } from "./session-menu.tsx";
 import { Sidebar } from "./sidebar.tsx";
+import { sidebarFilter } from "./sidebar-filter-field.tsx";
 import { SkipLinks } from "./skip-links.tsx";
 import { useAppActions, type SessionVerb } from "./use-app-actions.ts";
 import { useArrivalReady, workspaceSettled } from "./use-arrival-ready.ts";
@@ -118,13 +120,21 @@ export function DesktopShell(props: DesktopShellProps) {
     onSession,
   } = props;
   const [sidebar, setSidebar] = useSidebarShown();
-  const [{ rail }] = useSidebarSize();
+  const [{ rail }, setSidebarSize] = useSidebarSize();
   const paletteKeys = useActionKeys("app.palette");
   const sidebarKeys = useActionKeys("layout.toggle:sidebar");
   const newTabKeys = useActionKeys("tab.new");
   const moveLeftKeys = useActionKeys("tab.move:left");
   const moveRightKeys = useActionKeys("tab.move:right");
   const focusSidebar = useFocusSidebar(sidebar, () => setSidebar(true));
+  // The filter key shows the whole sidebar (out of hiding, off the rail) with its field focused.
+  useActionHandler("app", (action) => {
+    if (action !== "layout.filter:sidebar") return false;
+    setSidebar(true);
+    if (rail) setSidebarSize({ rail: false });
+    sidebarFilter.ask();
+    return true;
+  });
   const focusedAddress = layout.focused?.address ?? null;
   const voice = useDictation();
   const sends = usePaneSends();
