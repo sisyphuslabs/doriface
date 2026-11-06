@@ -62,14 +62,15 @@ const octal = (text: string): string =>
 
 /**
  * The core's own cursor column (1-based) after a program prints `text` on a fresh line: the program asks the core with a
- * cursor position report (ESC [6n), which the core's libghostty answers itself, prints the column and exits.
+ * cursor position report (ESC [6n), which the core's libghostty answers itself, prints the column and exits. bash, not
+ * sh: `read -d` is a bash builtin option, and Linux runners' /bin/sh (dash) has no such option.
  */
 async function coreColumnAfter(text: string): Promise<number> {
   if (connection === undefined) throw new Error("no connection");
   const script = `printf '${octal(text)}'; printf '\\033[6n'; IFS= read -r -d R reply; printf '\\nCOL=%s=\\n' "\${reply##*;}"`;
   const run = await connection.call(
     "terminal.run",
-    { argv: ["/bin/sh", "-c", script], cwd: scratch },
+    { argv: ["bash", "-c", script], cwd: scratch },
     { timeoutMs: STEP_MS },
   );
   const waited = await connection.call("terminal.wait", { terminal: run.address, timeout: 15 }, { timeoutMs: STEP_MS });
