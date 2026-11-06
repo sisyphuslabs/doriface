@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The host installer
+
+- The host installer and the command the web app prints to join a mesh fetch from the product's own repository, and the installer's messages, help text and systemd description say the product's name. (#922)
+
 ## v0.1.4 - 2026-11-06
 
 ### The product is Doriterm
