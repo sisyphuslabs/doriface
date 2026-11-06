@@ -272,6 +272,8 @@ async function startDriver(options: Startup): Promise<FakeRelayHost> {
 export function startFakeRelayHost(
   options: {
     readonly machine?: boolean;
+    /** The host's core already runs one shell, named `existing`, before any device pairs. */
+    readonly terminal?: boolean;
     readonly stageDeadlineMs?: number;
     readonly stageDeadlineFrom?: string;
     readonly direct?: boolean;
@@ -286,6 +288,7 @@ export function startFakeRelayHost(
       `http://127.0.0.1:${E2E_WEB_PORT}`,
       FAKE_RELAY,
       ...(options.machine === true ? ["--machine"] : []),
+      ...(options.terminal === true ? ["--terminal"] : []),
       ...(options.direct === true ? ["--direct"] : []),
     ],
     cwd: join(import.meta.dirname, ".."),
