@@ -83,8 +83,10 @@ export interface LocalHostEndpoint {
 export interface PairOffer {
   readonly code: string;
   readonly link: string;
-  /** What opens `link`: a web page, or the doriface desktop app (no web app is hosted by default, #594). */
+  /** What opens `link`: a web page, or the doriface desktop app (`doriface://pair#…`, the default). */
   readonly opens: "web" | "desktop";
+  /** What the QR code encodes for a phone, `<web origin>/pair#…`; absent from a host older than #700. */
+  readonly phoneLink?: string;
   readonly hostId: string;
   readonly fingerprint: string;
   /** When the offer stops working, in ms since the epoch. */

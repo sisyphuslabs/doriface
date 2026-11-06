@@ -139,6 +139,7 @@ export function PhoneTerminal(props: PhoneTerminalProps) {
               focused
               label={`${title} output`}
               transformInput={sticky.transform}
+              typesComposition={sticky.latched.size > 0}
               onPort={onPort}
               // An End of this session leaves the screen only once it has removed the terminal (see afterEnd).
               onEnd={(address, end) => (closesTab(end) ? afterEnd(address, onBack) : undefined)}

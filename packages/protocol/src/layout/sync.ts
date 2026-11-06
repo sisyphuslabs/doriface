@@ -157,9 +157,14 @@ export class LayoutDoc {
       this.#publish({ phase: "ready", doc: next, version });
       return true;
     } catch (cause) {
+      // Any other failure is why the edit was not saved. The re-read still replaces the unsaved edit on screen, but when
+      // the link closed under the write it is refused too, and that refusal must not stand in for the cause (#698).
+      if (!isConflict(cause)) {
+        await this.refresh();
+        throw cause;
+      }
       const { value, version } = await this.#calls.get(this.#on);
       this.#show(value, version);
-      if (!isConflict(cause)) throw cause;
     }
     return this.#attempt(change, left - 1);
   }
