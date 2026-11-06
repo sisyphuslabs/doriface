@@ -13,7 +13,24 @@ export * from "./push.ts";
 export { isMeshName, meshRevokeCommand } from "./mesh-name.ts";
 export { parseMeshStatus } from "./mesh-status-parse.ts";
 export { isTerminal } from "./event-guards.ts";
-export { readScreenPrompt, type ApprovalAnswer, type ScreenPrompt } from "./approval-screen.ts";
+export {
+  readScreenPrompt,
+  type ApprovalAnswer,
+  type PromptKind,
+  type PromptOption,
+  type PromptStep,
+  type ScreenPrompt,
+} from "./approval-screen.ts";
+export {
+  binaryReply,
+  MAX_TYPED_ANSWER,
+  replyClass,
+  replyFits,
+  replyKeys,
+  replyLabel,
+  typedAnswer,
+  type PromptReply,
+} from "./approval-reply.ts";
 export {
   approvalKey,
   checkApproval,
@@ -22,7 +39,7 @@ export {
   type ApprovalCheck,
   type ApprovalMark,
 } from "./approval-prompt.ts";
-export { promptStillThere, readApproval, type ApprovalCore } from "./approval-live.ts";
+export { livePrompt, promptStillThere, readApproval, type ApprovalCore } from "./approval-live.ts";
 export {
   answerApproval,
   approvalClock,

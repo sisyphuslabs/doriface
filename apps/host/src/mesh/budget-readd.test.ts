@@ -41,6 +41,7 @@ async function churn(pressure: { perMinute: number; minutes: number }, minutes: 
     list: () => Promise.resolve([...table]),
     rm: () => Promise.resolve(),
     rename: () => Promise.resolve(),
+    restore: () => Promise.resolve(),
     connect: () => Promise.reject(new HcRpcError({ code: -32000, message: "no", data: { kind: "not_found" } })),
     add: async (name, via): Promise<Machine> => {
       addsAt.push(clock.now());

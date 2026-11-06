@@ -69,14 +69,21 @@ async function config(): Promise<BridgeConfig> {
 async function hostSends(endpoint: string, upstreamFetch: PushFetch, keys?: ReceiverKeys) {
   const receiver = keys ?? (await receiverKeys());
   const bridge = createBridge(await config(), { fetch: upstreamFetch, now: () => NOW });
-  const post: PushFetch = (url, init) => bridge(new Request(url, init));
+  const statuses: number[] = [];
+  const post: PushFetch = async (url, init) => {
+    const reply = await bridge(new Request(url, init));
+    statuses.push(reply.status);
+    return reply;
+  };
   const delivery = await deliverPush(
     { endpoint, p256dh: receiver.p256dh, auth: receiver.auth },
     NOTICE,
     await vapidKey(),
     post,
+    { now: () => NOW },
   );
-  return { delivery, receiver };
+  // What the bridge itself answered: the host folds 429 and 5xx into one `failed`, so the status is checked here.
+  return { delivery, receiver, status: statuses.at(-1) };
 }
 
 const forwardedBody = (payload: string): Uint8Array => base64urlDecode(payload);
@@ -106,7 +113,7 @@ describe("APNs (#705)", () => {
     const payload = JSON.parse(apns?.body ?? "");
     expect(payload.aps["mutable-content"]).toBe(1);
     // A fixed text the extension replaces: it says nothing about the notice, which only the device can read.
-    expect(payload.aps.alert).toEqual({ title: "doriface", body: "Open doriface to see what changed." });
+    expect(payload.aps.alert).toEqual({ title: "Doriterm", body: "Open Doriterm to see what changed." });
     const notice = JSON.parse(new TextDecoder().decode(await decryptPushBody(forwardedBody(payload.p), receiver)));
     expect(notice).toEqual(NOTICE);
   });
@@ -118,7 +125,9 @@ describe("APNs (#705)", () => {
     const vapid = await vapidKey();
     const post: PushFetch = (url, init) => bridge(new Request(url, init));
     await Promise.all(
-      [1, 2].map(() => deliverPush({ endpoint: `${ORIGIN}/v1/apns/${APNS_TOKEN}`, ...keys }, NOTICE, vapid, post)),
+      [1, 2].map(() =>
+        deliverPush({ endpoint: `${ORIGIN}/v1/apns/${APNS_TOKEN}`, ...keys }, NOTICE, vapid, post, { now: () => NOW }),
+      ),
     );
     const tokens = sent.map((request) => request.headers.get("authorization"));
     expect(tokens[0]).toBe(tokens[1]);
@@ -143,20 +152,26 @@ describe("APNs (#705)", () => {
     [410, "Unregistered"],
     [400, "BadDeviceToken"],
     [400, "DeviceTokenNotForTopic"],
+    [400, "ExpiredToken"],
   ])("APNs %i %s answers 410, so the host drops the subscription", async (status, reason) => {
     const { fetch } = upstream(() => Response.json({ reason }, { status }));
     const { delivery } = await hostSends(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, fetch);
     expect(delivery).toBe("gone");
   });
 
-  test("APNs throttling or an outage is a failure the host logs, and the subscription stays", async () => {
-    const deliveries = await Promise.all(
+  test("APNs throttling stays 429 and an outage is 502: a failure the host logs, and the subscription stays", async () => {
+    const answers = await Promise.all(
       [429, 500, 503].map(async (status) => {
         const { fetch } = upstream(() => Response.json({ reason: "TooManyRequests" }, { status }));
-        return (await hostSends(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, fetch)).delivery;
+        const { delivery, status: answered } = await hostSends(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, fetch);
+        return [delivery, answered];
       }),
     );
-    expect(deliveries).toEqual(["failed", "failed", "failed"]);
+    expect(answers).toEqual([
+      ["failed", 429],
+      ["failed", 502],
+      ["failed", 502],
+    ]);
   });
 });
 
@@ -184,7 +199,9 @@ describe("FCM (#705)", () => {
     const vapid = await vapidKey();
     const post: PushFetch = (url, init) => bridge(new Request(url, init));
     await Promise.all(
-      [1, 2].map(() => deliverPush({ endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys }, NOTICE, vapid, post)),
+      [1, 2].map(() =>
+        deliverPush({ endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys }, NOTICE, vapid, post, { now: () => NOW }),
+      ),
     );
     const grants = sent.filter((request) => request.url === "https://oauth2.googleapis.com/token");
     expect(grants).toHaveLength(1);
@@ -207,9 +224,11 @@ describe("FCM (#705)", () => {
         { status: 404 },
       ),
     );
-    expect((await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, gone.fetch)).delivery).toBe("gone");
+    const unregistered = await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, gone.fetch);
+    expect([unregistered.delivery, unregistered.status]).toEqual(["gone", 410]);
     const busy = upstream(() => Response.json({ error: { code: 429, status: "RESOURCE_EXHAUSTED" } }, { status: 429 }));
-    expect((await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, busy.fetch)).delivery).toBe("failed");
+    const throttled = await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, busy.fetch);
+    expect([throttled.delivery, throttled.status]).toEqual(["failed", 429]);
   });
 });
 
@@ -231,8 +250,12 @@ async function bridgeAnswer(init: {
   return { status: reply.status, forwarded: sent.length };
 }
 
-/** A real host body and headers for the APNs path, captured from the host's own sender. */
-async function captured(): Promise<{ headers: Record<string, string>; body: Uint8Array }> {
+/**
+ * A real host body and headers for the APNs path, captured from the host's own sender. `now` is the clock the VAPID
+ * header is signed with: every case here pairs it with the clock its bridge checks that header against, so no assertion
+ * depends on the wall clock (#750).
+ */
+async function captured(now: () => number = () => NOW): Promise<{ headers: Record<string, string>; body: Uint8Array }> {
   let headers: Record<string, string> = {};
   let body = new Uint8Array();
   const keys = await receiverKeys();
@@ -245,6 +268,7 @@ async function captured(): Promise<{ headers: Record<string, string>; body: Uint
       body = new Uint8Array(await new Response(init.body).arrayBuffer());
       return new Response(null, { status: 201 });
     },
+    { now },
   );
   return { headers, body };
 }
@@ -291,6 +315,28 @@ describe("what the bridge refuses before anything reaches APNs or FCM", () => {
     expect(misaddressed.status).toBe(401);
   });
 
+  // A token signed at `at` must be expired at `at + 13 h` and still good at `at`, for any `at`. The offsets include a
+  // past and a future one: signing from the real clock would pass only for instants close to the wall clock, which is
+  // how this case went red at 2026-11-06T08:00Z.
+  test.each([
+    ["three days before the anchor", -3 * 24 * 60 * 60 * 1000],
+    ["at the anchor", 0],
+    ["thirty-seven days after the anchor", 37 * 24 * 60 * 60 * 1000],
+  ])("the header's life is measured from the clock that signed it, %s (#750)", async (_where, offset) => {
+    const twelveHours = 12 * 60 * 60 * 1000;
+    const at = NOW + offset;
+    const { headers, body } = await captured(() => at);
+    const lapsed = createBridge(await config(), {
+      fetch: upstream().fetch,
+      now: () => at + twelveHours + 60 * 60 * 1000,
+    });
+    const late = await lapsed(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
+    expect(late.status).toBe(401);
+    const live = createBridge(await config(), { fetch: upstream().fetch, now: () => at });
+    const onTime = await live(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
+    expect(onTime.status).toBe(201);
+  });
+
   test("a provider with no credentials answers 503, and the other still works", async () => {
     const { sent, fetch } = upstream();
     const { fcm } = await config();
@@ -298,6 +344,41 @@ describe("what the bridge refuses before anything reaches APNs or FCM", () => {
     const { headers, body } = await captured();
     const reply = await bridge(new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, { method: "POST", headers, body }));
     expect(reply.status).toBe(503);
+    expect(sent).toHaveLength(0);
+    const keys = await receiverKeys();
+    const fcmDelivery = await deliverPush(
+      { endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys },
+      NOTICE,
+      await vapidKey(),
+      (url, init) => bridge(new Request(url, init)),
+      { now: () => NOW },
+    );
+    expect(fcmDelivery).toBe("sent");
+    expect(sent.some((request) => request.url.startsWith("https://fcm.googleapis.com/"))).toBe(true);
+  });
+
+  test("a body sent without a length is refused once it passes the cap, before it is read whole", async () => {
+    const { sent, fetch } = upstream();
+    const bridge = createBridge(await config(), { fetch, now: () => NOW });
+    const { headers } = await captured();
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(512));
+      },
+    });
+    const { "content-length": _length, ...chunked } = headers;
+    const reply = await bridge(
+      new Request(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, {
+        method: "POST",
+        headers: chunked,
+        body: endless,
+        duplex: "half",
+      } as RequestInit),
+    );
+    expect(reply.status).toBe(413);
+    expect(pulled).toBeLessThan(5);
     expect(sent).toHaveLength(0);
   });
 });
@@ -309,11 +390,109 @@ test("every notice kind forwards a payload of one length, so APNs and FCM cannot
     NOTICE_KINDS.map(async (k) => {
       const { sent, fetch } = upstream();
       const bridge = createBridge(await config(), { fetch, now: () => NOW });
-      await deliverPush({ endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys }, { ...NOTICE, k }, vapid, (url, init) =>
-        bridge(new Request(url, init)),
+      await deliverPush(
+        { endpoint: `${ORIGIN}/v1/fcm/${FCM_TOKEN}`, ...keys },
+        { ...NOTICE, k },
+        vapid,
+        (url, init) => bridge(new Request(url, init)),
+        { now: () => NOW },
       );
       return sent.find((request) => request.url.startsWith("https://fcm.googleapis.com/"))?.body.length ?? -1;
     }),
   );
+  // Every kind reached FCM, and all of them with one length: a refusal would leave the -1 above and still pass the set
+  // check, so the floor is what keeps this case honest.
+  for (const length of lengths) expect(length).toBeGreaterThan(0);
   expect(new Set(lengths).size).toBe(1);
+});
+
+/** One bridge whose clock the test moves, and the host signing on that same clock. */
+async function clockedBridge(answer?: (url: string) => Response) {
+  let at = NOW;
+  const { sent, fetch } = upstream(answer);
+  const bridge = createBridge(await config(), { fetch, now: () => at });
+  const keys = await receiverKeys();
+  const vapid = await vapidKey();
+  const send = async (endpoint: string, when: number) => {
+    at = when;
+    let status = 0;
+    const delivery = await deliverPush(
+      { endpoint, ...keys },
+      NOTICE,
+      vapid,
+      async (url, init) => {
+        const reply = await bridge(new Request(url, init));
+        status = reply.status;
+        return reply;
+      },
+      { now: () => when },
+    );
+    return { delivery, status };
+  };
+  return { sent, send };
+}
+
+const MINUTE = 60 * 1000;
+const authOf = (sent: readonly Sent[], prefix: string): (string | null)[] =>
+  sent.filter((request) => request.url.startsWith(prefix)).map((request) => request.headers.get("authorization"));
+
+describe("provider tokens: reuse, expiry and renewal (#717 review)", () => {
+  test("the APNs provider token is reused for 40 minutes and made again after", async () => {
+    const { sent, send } = await clockedBridge();
+    const apns = `${ORIGIN}/v1/apns/${APNS_TOKEN}`;
+    await send(apns, NOW);
+    await send(apns, NOW + 39 * MINUTE);
+    await send(apns, NOW + 41 * MINUTE);
+    const [first, reused, renewed] = authOf(sent, "https://api.push.apple.com/");
+    expect(reused).toBe(first);
+    expect(renewed).not.toBe(first);
+  });
+
+  test("an APNs 403 for an expired or invalid provider token is retried once with a new token", async () => {
+    for (const reason of ["ExpiredProviderToken", "InvalidProviderToken"]) {
+      let calls = 0;
+      // oxlint-disable-next-line no-await-in-loop -- each reason gets its own bridge and its own call count
+      const { sent, send } = await clockedBridge(() =>
+        ++calls === 1 ? Response.json({ reason }, { status: 403 }) : new Response(null, { status: 200 }),
+      );
+      // oxlint-disable-next-line no-await-in-loop -- see above
+      expect(await send(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, NOW)).toEqual({ delivery: "sent", status: 201 });
+      const tokens = authOf(sent, "https://api.push.apple.com/");
+      expect(tokens).toHaveLength(2);
+      expect(tokens[1]).not.toBe(tokens[0]);
+    }
+  });
+
+  test("the FCM access token is reused until a minute before it expires, then granted again", async () => {
+    const { sent, send } = await clockedBridge();
+    const fcm = `${ORIGIN}/v1/fcm/${FCM_TOKEN}`;
+    await send(fcm, NOW);
+    await send(fcm, NOW + 58 * MINUTE);
+    expect(sent.filter((request) => request.url === "https://oauth2.googleapis.com/token")).toHaveLength(1);
+    // Inside the last minute before `expires_in` (3600 s): a new grant, not the token about to lapse.
+    await send(fcm, NOW + 59.5 * MINUTE);
+    expect(sent.filter((request) => request.url === "https://oauth2.googleapis.com/token")).toHaveLength(2);
+  });
+
+  test("an FCM 401 is granted a new access token and sent once more", async () => {
+    let sends = 0;
+    const { sent, send } = await clockedBridge((url) =>
+      url.startsWith("https://fcm.googleapis.com/") && ++sends === 1
+        ? Response.json({ error: { code: 401, status: "UNAUTHENTICATED" } }, { status: 401 })
+        : new Response(null, { status: 200 }),
+    );
+    expect(await send(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, NOW)).toEqual({ delivery: "sent", status: 201 });
+    expect(sent.filter((request) => request.url === "https://oauth2.googleapis.com/token")).toHaveLength(2);
+    expect(sends).toBe(2);
+  });
+
+  test("an FCM 404 without UNREGISTERED (a wrong project) is a failure, so the host keeps the subscription", async () => {
+    const { send } = await clockedBridge(() =>
+      Response.json(
+        { error: { code: 404, status: "NOT_FOUND", message: "Requested entity was not found." } },
+        { status: 404 },
+      ),
+    );
+    expect(await send(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, NOW)).toEqual({ delivery: "failed", status: 502 });
+  });
 });

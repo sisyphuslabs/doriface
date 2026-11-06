@@ -1,9 +1,10 @@
-import { HcCoreMismatchError, type HcConnection } from "@doriface/client";
+import { type HcConnection, HcLinkSilentError, HcTimeoutError } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
-import { connect, type ConnectionPath, DeviceNotPairedError, type OpenConnection } from "./connect.ts";
+import { AttemptBudget, AttemptTimeoutError } from "./attempt-budget.ts";
+import { connect, type ConnectionPath, type OpenConnection } from "./connect.ts";
 import type { DirectReason } from "./direct-attempt.ts";
-import { LoopbackAddressError } from "./loopback-address.ts";
+import { isFinal } from "./host-failure.ts";
 import {
   type ConnectionSettings,
   isConfigured,
@@ -41,23 +42,17 @@ export type ConnectionState =
 const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
 
 /**
- * A failure a retry cannot fix: the host does not know this device, the address is not on this computer, or its core has to
- * be updated on one side or the other (#462, #515, #651). None of them is helped by dialing again.
- */
-function isFinal(error: Error): boolean {
-  return (
-    error instanceof DeviceNotPairedError ||
-    error instanceof LoopbackAddressError ||
-    error instanceof HcCoreMismatchError
-  );
-}
-
-/**
  * How long a live connection has to stay up before its next drop starts the ladder over. A link that opens and drops must
  * keep backing off, or a flapping host reconnects on the shortest delay forever (#634); the comparable clients reset at a
  * floor of this order — 10 s in one, 60 s in herdr (`#653`).
  */
 const STABLE_CONNECTION_MS = 10_000;
+
+/**
+ * How long a wake gives an open link to answer one call before it is treated as gone: a socket the page slept on can be
+ * half-open, and the heartbeat alone would take its whole timeout to notice (#653).
+ */
+const WAKE_PROBE_MS = 10_000;
 /** This computer's host, as the desktop app runs it: where it listens now, and why it did not start. */
 export interface LocalHostStarter {
   start(): Promise<{ readonly url: string; readonly token: string }>;
@@ -85,6 +80,11 @@ export class ConnectionStore {
   #current = 0;
   /** A wake already asked for this tick: several page events must cost one attempt, not three. */
   #wakeQueued = false;
+  /** The open connection a wake is asking right now, so several page events cost one call. */
+  #probing: HcConnection | null = null;
+  /** Why the store closed a connection itself, kept with that connection so no other drop can take it. */
+  #closedFor: { readonly connection: HcConnection; readonly reason: Error } | null = null;
+  readonly #budget = new AttemptBudget();
   readonly #connect: typeof connect;
 
   constructor(settings: ConnectionSettings, open: typeof connect = connect) {
@@ -146,6 +146,8 @@ export class ConnectionStore {
   }
 
   stop(): void {
+    this.#probing = null;
+    this.#closedFor = null;
     clearTimeout(this.#timer);
     clearTimeout(this.#stableTimer);
     this.#stable = false;
@@ -165,11 +167,9 @@ export class ConnectionStore {
     this.#relayFirst = false;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
     try {
-      const opened: OpenConnection = await this.#connect(
-        this.#settings,
-        abort.signal,
-        undefined,
-        relayFirst ? { skipDirect: true } : {},
+      const opened: OpenConnection = await this.#budget.bounded(
+        this.#connect(this.#settings, abort.signal, undefined, relayFirst ? { skipDirect: true } : {}),
+        abort,
       );
       const { connection } = opened;
       if (abort.signal.aborted) return connection.close();
@@ -178,9 +178,13 @@ export class ConnectionStore {
         if (this.#abort !== abort) return;
         if (opened.path === "direct") this.#relayFirst = true;
         this.#stale = connection;
-        this.#retry(error ?? new Error("the host closed the connection"), this.#stable ? 0 : attempt + 1);
+        const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
+        this.#closedFor = null;
+        const reason = error ?? closedFor ?? new Error("the host closed the connection");
+        this.#retry(reason, this.#stable ? 0 : attempt + 1);
       });
       this.#stale = null;
+      this.#budget.reset();
       this.#armStable();
       this.#set({
         phase: "open",
@@ -189,6 +193,12 @@ export class ConnectionStore {
         ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
       });
     } catch (error) {
+      if (this.#abort !== abort) return;
+      if (error instanceof AttemptTimeoutError) {
+        this.#budget.timedOut();
+        this.#retry(error, attempt + 1);
+        return;
+      }
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
@@ -295,6 +305,7 @@ export class ConnectionStore {
    */
   retryNow(): void {
     if (this.#state.phase === "connecting") return this.#restart();
+    if (this.#state.phase === "open") return this.#probe(this.#state.connection);
     const attempt = this.#pending;
     if (attempt === null || this.#state.phase !== "failed") return;
     clearTimeout(this.#timer);
@@ -312,9 +323,34 @@ export class ConnectionStore {
     queueMicrotask(() => {
       this.#wakeQueued = false;
       if (this.#state.phase !== "connecting") return;
+      this.#budget.reset();
       this.#abort?.abort();
       void this.#again(this.#current);
     });
+  }
+
+  /**
+   * Asks the open link one call the core answers at once. An answer of any kind, an error included, proves the link and
+   * leaves it alone; no answer within {@link WAKE_PROBE_MS} closes it, and the drop reconnects as any other drop does.
+   */
+  #probe(connection: HcConnection): void {
+    if (this.#probing === connection) return;
+    this.#probing = connection;
+    connection
+      .call("terminal.list", {}, { timeoutMs: WAKE_PROBE_MS })
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          // A stop, or a newer connection, ended this probe's claim on the link while it waited.
+          if (!(error instanceof HcTimeoutError) || this.#probing !== connection) return;
+          if (this.#state.phase !== "open" || this.#state.connection !== connection) return;
+          this.#closedFor = { connection, reason: new HcLinkSilentError(WAKE_PROBE_MS) };
+          connection.close();
+        },
+      )
+      .finally(() => {
+        if (this.#probing === connection) this.#probing = null;
+      });
   }
 
   #set(state: ConnectionState): void {
