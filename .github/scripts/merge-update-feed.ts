@@ -3,9 +3,14 @@
 // each write a latest-mac.yml and the two Windows runners each write a latest.yml. A release carries one file per name,
 // listing every architecture's download; the updater picks its own by file name (MacUpdater.filterFilesForArch on
 // "arm64", Provider.findFile on process.arch). This merges the runners' copies into one file per name in the assets
-// directory, after checking that every file a feed names is in the directory at the size and SHA-512 the feed says.
+// directory.
 //
-// usage: bun .github/scripts/merge-update-feed.ts <assets dir>
+// The size and SHA-512 of every file the feed names come from the file in the assets directory, the bytes the release
+// uploads, not from the runner's feed: electron-builder writes the feed while it builds, and the macOS runner staples
+// the notarization ticket to the dmg after that, which changes the dmg's bytes. An entry whose numbers changed is
+// printed. A feed that names a file the release does not carry, or a version other than the release's, stops it.
+//
+// usage: bun .github/scripts/merge-update-feed.ts <assets dir> <version>
 // Reads <assets dir>/feed-<os>-<arch>/latest*.yml, writes <assets dir>/latest*.yml and removes the feed-* directories.
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -32,9 +37,9 @@ function sha512(file: string): string {
   return new Bun.CryptoHasher("sha512").update(readFileSync(file)).digest("base64");
 }
 
-const assetsDir = Bun.argv[2];
-if (assetsDir === undefined) {
-  console.error("usage: bun .github/scripts/merge-update-feed.ts <assets dir>");
+const [assetsDir, version] = Bun.argv.slice(2);
+if (assetsDir === undefined || version === undefined || version === "") {
+  console.error("usage: bun .github/scripts/merge-update-feed.ts <assets dir> <version>");
   process.exit(2);
 }
 
@@ -47,28 +52,34 @@ const byName = new Map<string, Feed[]>();
 for (const dir of feedDirs) {
   const names = readdirSync(join(assetsDir, dir)).filter((name) => /^latest.*\.yml$/.test(name));
   if (names.length === 0) fail(`${dir} has no latest*.yml`);
-  for (const name of names) byName.set(name, [...(byName.get(name) ?? []), readFeed(join(assetsDir, dir, name))]);
+  for (const name of names) {
+    const feed = readFeed(join(assetsDir, dir, name));
+    if (feed.version !== version) fail(`${dir}/${name} is for version ${feed.version}, the release is ${version}`);
+    byName.set(name, [...(byName.get(name) ?? []), feed]);
+  }
+}
+
+function measured(name: string, url: string): { size: number; sha512: string } {
+  const path = join(assetsDir, url);
+  if (!existsSync(path)) fail(`${name} names ${url}, which is not among the release's files`);
+  return { size: statSync(path).size, sha512: sha512(path) };
 }
 
 for (const [name, feeds] of [...byName].toSorted(([a], [b]) => a.localeCompare(b))) {
-  const versions = new Set(feeds.map((feed) => feed.version));
-  if (versions.size !== 1) fail(`${name}: the runners disagree on the version (${[...versions].join(", ")})`);
   const files = new Map<string, FeedFile>();
   for (const file of feeds.flatMap((feed) => feed.files)) {
     if (files.has(file.url)) fail(`${name}: ${file.url} is listed twice`);
-    files.set(file.url, file);
-  }
-  for (const file of files.values()) {
-    const path = join(assetsDir, file.url);
-    if (!existsSync(path)) fail(`${name} names ${file.url}, which is not among the release's files`);
-    if (statSync(path).size !== file.size)
-      fail(`${name}: ${file.url} is ${statSync(path).size} bytes, the feed says ${file.size}`);
-    if (sha512(path) !== file.sha512) fail(`${name}: ${file.url} does not match the feed's sha512`);
+    const actual = measured(name, file.url);
+    if (actual.size !== file.size || actual.sha512 !== file.sha512) {
+      console.log(`${name}: ${file.url} is ${actual.size} bytes as uploaded, the runner's feed said ${file.size}`);
+    }
+    files.set(file.url, { ...file, ...actual });
   }
   const [first] = feeds;
   const merged: Feed = { ...first, files: [...files.values()] };
+  if (first.path !== undefined) merged.sha512 = measured(name, first.path).sha512;
   writeFileSync(join(assetsDir, name), Bun.YAML.stringify(merged, null, 2) + "\n");
-  console.log(`${name}: version ${first.version}, ${[...files.keys()].join(", ")}`);
+  console.log(`${name}: version ${version}, ${[...files.keys()].join(", ")}`);
 }
 
 for (const dir of feedDirs) rmSync(join(assetsDir, dir), { recursive: true });
