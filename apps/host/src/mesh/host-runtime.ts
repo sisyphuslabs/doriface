@@ -82,6 +82,7 @@ export function lazyMachines(
     add: (name, via) => call((m) => m.add(name, via)),
     rm: (name) => call((m) => m.rm(name)),
     rename: (name, newName) => call((m) => m.rename(name, newName)),
+    restore: (machine) => call((m) => m.restore(machine)),
     connect: (name) => call((m) => m.connect(name)),
   };
   const close = async (): Promise<void> => {
