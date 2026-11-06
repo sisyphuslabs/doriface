@@ -106,6 +106,8 @@ async function serve(
   // The host's OS goes on its core once a client opens a pipe, as the end sweeper starts: every hc call starts its
   // session's core when none runs, and a host that no one uses must not start one (#306).
   const core = { hc: options.hc, session: options.session, env: options.env };
+  // One expression for the status: the publisher and the control channel must answer from the same function (review #761).
+  const meshStatus = options.meshStatus ?? e2ee?.meshStatus;
   let info: HostInfoPublisher | undefined;
   let git: GitFactsPublisher | undefined;
   let meshDoc: MeshStatusPublisher | undefined;
@@ -137,7 +139,9 @@ async function serve(
       info ??= publishHostInfo(core, options.platform ?? process.platform, options.log);
       git ??= publishGitFacts(core, options.log);
       meshDoc ??=
-        e2ee?.meshStatus === undefined ? undefined : publishMeshStatusOnCore(core, e2ee.meshStatus, options.log);
+        meshStatus === undefined || e2ee === undefined
+          ? undefined
+          : publishMeshStatusOnCore(core, meshStatus, e2ee.identity.hostId, options.log);
       return new HcPipe({ hc: options.hc, session: options.session, env: options.env, log: options.log });
     },
   });
@@ -201,7 +205,7 @@ async function serve(
     control =
       options.stateDir === undefined || e2ee === undefined
         ? undefined
-        : openControl(options.stateDir, e2ee, options.meshStatus ?? e2ee.meshStatus, push);
+        : openControl(options.stateDir, e2ee, meshStatus, push);
   } catch (error) {
     throw new Error(`cannot open the control socket that devices revoke uses: ${String(error)}`, { cause: error });
   }
@@ -230,11 +234,12 @@ async function serve(
       const pushStopped = push?.stop();
       e2ee?.slots.stop();
       control?.stop();
-      stopping ??= Promise.resolve(e2ee?.sync.stop())
+      stopping ??= Promise.resolve(meshDoc?.stop())
+        .then(() => e2ee?.sync.stop())
         .then(() => uplink?.stop())
         .then(() => gateway.closeAll())
         .then(() => ends.stop())
-        .then(() => Promise.all([info?.stop(), git?.stop(), meshDoc?.stop()]))
+        .then(() => Promise.all([info?.stop(), git?.stop()]))
         .then(() => pushStopped)
         .then(() => Promise.all([server.stop(true), lanServer?.stop(true)]))
         .then(() => retireLock(stateDir, options.log));

@@ -34,6 +34,7 @@ test("a tick writes the host's status on its core, over a child that has exited 
   const publisher = publishMeshStatusOnCore(
     target,
     () => status,
+    status.self,
     () => {},
     (core) => {
       const link = spawnHcLink(core);
@@ -58,6 +59,7 @@ test("a status that did not change writes nothing; one that did is written on th
   const publisher = publishMeshStatusOnCore(
     { hc: session.hc, session: session.name, env: session.env },
     () => ({ ...status, generation }),
+    status.self,
     () => {},
     spawnHcLink,
     NEVER,
@@ -84,6 +86,7 @@ test("a host in no mesh clears the document the mesh it left had written", async
   const publisher = publishMeshStatusOnCore(
     { hc: session.hc, session: session.name, env: session.env },
     () => undefined,
+    status.self,
     () => {},
     spawnHcLink,
     NEVER,
@@ -97,11 +100,33 @@ test("a host in no mesh clears the document the mesh it left had written", async
   }
 }, 30_000);
 
+test("a document another host wrote is never cleared, so a seeded fixture survives", async () => {
+  const session = createHcSession("dh-mesh-publish-foreign");
+  await withCore(session, (core) => core.call("doc.set", { name: MESH_STATUS_DOC, value: status, version: 0 }));
+  const publisher = publishMeshStatusOnCore(
+    { hc: session.hc, session: session.name, env: session.env },
+    () => undefined,
+    "a-host-that-is-not-in-this-mesh",
+    () => {},
+    spawnHcLink,
+    NEVER,
+  );
+  try {
+    await publisher.tick();
+    await publisher.tick();
+    expect(await docOf(session)).toMatchObject({ value: status, version: 1 });
+  } finally {
+    await publisher.stop();
+    await session.dispose();
+  }
+}, 30_000);
+
 test("a core that cannot be reached is logged once, not on every tick", async () => {
   const logs: string[] = [];
   const publisher = publishMeshStatusOnCore(
     { hc: "/nonexistent/hc-for-this-test", env: {} },
     () => status,
+    status.self,
     (line) => logs.push(line),
     spawnHcLink,
     NEVER,

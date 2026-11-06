@@ -24,11 +24,12 @@ export interface MeshStatusPublisher {
 /**
  * Keeps this host's mesh status on its own core, in the `doriface-mesh` document a client reads (contract 1.5, design
  * sections 8.6). `current` is the function `mesh status` answers from, so the document and the command cannot disagree,
- * and an undefined status — this host is in no mesh — clears a document left behind by the mesh it was in.
+ * and `self` is this host's own hostId, which decides whether a document left behind is its to clear.
  */
 export function publishMeshStatusOnCore(
   core: HcTarget,
   current: () => MeshStatus | undefined,
+  self: string,
   log: (line: string) => void,
   link: (core: HcTarget) => KillableLink = spawnHcLink,
   tickMs: number = TICK_MS,
@@ -57,7 +58,7 @@ export function publishMeshStatusOnCore(
       try {
         const connection = await HcConnection.open(opened);
         try {
-          await publishMeshStatus(docStoreOf(connection), current);
+          await publishMeshStatus(docStoreOf(connection), current, self);
           lastError = undefined;
         } finally {
           connection.close();

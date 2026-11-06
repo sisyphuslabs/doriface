@@ -11,6 +11,8 @@ import { type Host, startHost } from "../host.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { createHcSession, HELLO, type HcSession } from "../testing/hc-session.ts";
 import { type Machine, machine, MeshFixture } from "../testing/mesh-history.ts";
+import { meshFixture } from "../testing/mesh-fixture.ts";
+import { meshStatus } from "./status.ts";
 import { openWsClient, type WsClient } from "../testing/ws-client.ts";
 import { spawnHcLink } from "./hc-machines.ts";
 
@@ -129,11 +131,19 @@ describe("the running host answers mesh status from its mesh.json", () => {
   test("a host that is in no mesh clears the document a mesh it left had written", async () => {
     const dir = mkdtempSync(join(tmpdir(), "dh-host-mesh-"));
     dirs.push(dir);
+    // The document a mesh it left would have written: a status whose own line, and `self`, name this host.
+    const own = meshStatus(meshFixture(new Date()).sources, new Date());
+    const hostId = loadHostIdentity(dir).hostId;
+    const members = [...own.members];
+    const index = members.findIndex((member) => member.line === "self");
+    const ownLine = members[index];
+    if (ownLine !== undefined) members[index] = { ...ownLine, hostId };
+    const left = { ...own, self: hostId, members };
     const { host, token, session } = await hostIn(dir);
     const link = spawnHcLink({ hc: session.hc, session: session.name, env: session.env });
     const core = await HcConnection.open(link);
     try {
-      await core.call("doc.set", { name: MESH_STATUS_DOC, value: { meshId: "a mesh this host left" }, version: 0 });
+      await core.call("doc.set", { name: MESH_STATUS_DOC, value: left, version: 0 });
     } finally {
       core.close();
       link.close();
@@ -142,6 +152,29 @@ describe("the running host answers mesh status from its mesh.json", () => {
     try {
       await host.meshStatusSettled();
       expect(await docValue(session)).toBeNull();
+    } finally {
+      client.socket.close();
+    }
+  });
+
+  test("a host in no mesh leaves a document another host wrote untouched, the way the web e2e seeds one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dh-host-mesh-"));
+    dirs.push(dir);
+    // The seeded fixture names its own founder, never the host under test: that is what mesh.e2e.ts writes.
+    const seeded = meshStatus(meshFixture(new Date()).sources, new Date());
+    const { host, token, session } = await hostIn(dir);
+    const link = spawnHcLink({ hc: session.hc, session: session.name, env: session.env });
+    const core = await HcConnection.open(link);
+    try {
+      await core.call("doc.set", { name: MESH_STATUS_DOC, value: seeded, version: 0 });
+    } finally {
+      core.close();
+      link.close();
+    }
+    const client = await openPipeOf(host, token);
+    try {
+      await host.meshStatusSettled();
+      expect(await docValue(session)).toEqual(seeded);
     } finally {
       client.socket.close();
     }
