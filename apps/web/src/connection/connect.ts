@@ -37,6 +37,11 @@ export interface OpenOptions {
   readonly budgetMs?: number | undefined;
   /** This attempt dials the relay at once: the one before it was a direct link that dropped (#446 §4). */
   readonly skipDirect?: boolean | undefined;
+  /**
+   * How long the whole attempt may take before it fails and everything it opened is closed (#653). The store grows this
+   * after an attempt times out, so a slower path still gets a chance while a dead one cannot hold the UI.
+   */
+  readonly deadlineMs?: number | undefined;
 }
 
 /**
@@ -49,6 +54,58 @@ export async function connect(
   signal?: AbortSignal,
   deps: RelayDeps = BROWSER_DEPS,
   options: OpenOptions = {},
+): Promise<OpenConnection> {
+  const deadlineMs = options.deadlineMs;
+  if (deadlineMs === undefined) return openOnPath(settings, signal, deps, options);
+  return withinDeadline(settings, signal, deps, options, deadlineMs);
+}
+
+/**
+ * The attempt bounded by `deadlineMs`: when it runs out, or the caller cancels, the attempt fails at once and anything
+ * that arrives afterwards is closed instead of adopted (#653). Every step the attempt runs takes the controller's
+ * signal, so a dial or handshake still in flight is closed rather than left to its own timeout.
+ */
+async function withinDeadline(
+  settings: ConnectionSettings,
+  signal: AbortSignal | undefined,
+  deps: RelayDeps,
+  options: OpenOptions,
+  deadlineMs: number,
+): Promise<OpenConnection> {
+  const deadline = new AbortController();
+  const fail = (reason: unknown): void => deadline.abort(reason instanceof Error ? reason : new Error(String(reason)));
+  const timer = setTimeout(() => fail(new Error(`no session within ${deadlineMs} ms`)), deadlineMs);
+  const onCaller = (): void => fail(signal?.reason);
+  if (signal?.aborted === true) onCaller();
+  else signal?.addEventListener("abort", onCaller, { once: true });
+  const attempt = openOnPath(settings, deadline.signal, deps, options);
+  try {
+    return await Promise.race([
+      attempt,
+      new Promise<never>((_, reject) => {
+        const onExpire = (): void => reject(deadline.signal.reason);
+        if (deadline.signal.aborted) onExpire();
+        else deadline.signal.addEventListener("abort", onExpire, { once: true });
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onCaller);
+    void attempt.then(
+      (opened) => {
+        if (deadline.signal.aborted) opened.connection.close();
+        return undefined;
+      },
+      () => undefined,
+    );
+  }
+}
+
+async function openOnPath(
+  settings: ConnectionSettings,
+  signal: AbortSignal | undefined,
+  deps: RelayDeps,
+  options: OpenOptions,
 ): Promise<OpenConnection> {
   if (settings.mode === "loopback") {
     const link = await openWebSocketLink(
