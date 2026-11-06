@@ -48,6 +48,8 @@ const manager = async (): Promise<PushManager> => (await navigator.serviceWorker
 class PushSettings {
   #view: PushView = INITIAL;
   readonly #listeners = new Set<() => void>();
+  /** The move in flight; the next one starts once it is done (see `retarget`). */
+  #moving: Promise<void> = Promise.resolve();
 
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
@@ -117,9 +119,17 @@ class PushSettings {
 
   /**
    * The connection moved to another host or token: the old host stops notifying this browser, the saved route (and the
-   * loopback token in it) is dropped, and notifications that were on are registered with the new host.
+   * loopback token in it) is dropped, and notifications that were on are registered with the new host. One move runs
+   * at a time: one connection change can change the settings twice (the new host's name arrives with its hello), and a
+   * second move that read the saved route while the first was still registering redid the whole move beside it (#780).
    */
-  async retarget(next: ConnectionSettings): Promise<void> {
+  retarget(next: ConnectionSettings): Promise<void> {
+    const moved = this.#moving.then(() => this.#retarget(next));
+    this.#moving = moved;
+    return moved;
+  }
+
+  async #retarget(next: ConnectionSettings): Promise<void> {
     const route = await loadPushRoute().catch(() => undefined);
     if (route === undefined) return;
     const target = isConfigured(next) ? routeOf(next) : undefined;
