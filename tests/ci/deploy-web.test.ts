@@ -42,7 +42,7 @@ test("both hostnames serve the build with the SPA fallback, so /pair loads the a
   }
 });
 
-test("every page runs only this origin's scripts and connects only to the relay or a direct address", () => {
+test("every page runs only this origin's scripts and connects only to this origin and the relay", () => {
   const headersFile = readFileSync(join(ROOT, "apps", "web", "public", "_headers"), "utf8");
   const policy = /^\/\*\n(?:  .*\n)*?  Content-Security-Policy: (.+)$/m.exec(headersFile)?.[1] ?? "";
   const directives = new Map(
@@ -53,7 +53,7 @@ test("every page runs only this origin's scripts and connects only to the relay 
   );
   expect(directives.get("default-src")).toEqual(["'none'"]);
   expect(directives.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'"]);
-  expect(directives.get("connect-src")).toEqual(["'self'", "https://relay-doriface.omo.dev", "wss:", "ws:"]);
+  expect(directives.get("connect-src")).toEqual(["'self'", "https://relay-doriface.omo.dev", "wss://relay-doriface.omo.dev"]);
   expect(directives.get("img-src")).toEqual(["'self'", "blob:"]);
   expect(directives.get("font-src")).toEqual(["'self'", "data:"]);
   for (const name of ["frame-ancestors", "base-uri", "form-action", "object-src"]) {
