@@ -33,7 +33,8 @@ const NOTES_OPEN = /^\s*›\s+Add notes\b/;
  * The cell Codex draws for what it asks about, right above its approval, as its TUI source draws the header (codex-rs
  * tui): a command's `Running`, an exploring group's `Exploring`, input to a terminal's `Interacted with` or `Waited for`
  * (`exec_cell/render.rs`), a patch's `Added`, `Deleted` or `Edited` (`diff_render.rs`). A cell still running blinks its
- * bullet between `•` and `◦` when the terminal has no true colour (`motion.rs`).
+ * bullet between `•` and `◦` when the terminal has no true colour (`motion.rs`). A permissions request draws no cell
+ * (`chatwidget/tool_requests.rs`): its dialog sits under whatever cell came before, often the agent's own message.
  */
 const ASKED_CELL = /^[•◦] (?:Running|Exploring|Interacted with|Waited for|Added|Deleted|Edited)(?:\s|$)/;
 
@@ -77,9 +78,9 @@ const edgeAbove = (lines: readonly string[], at: number, column: number) =>
  * It is read from the bottom up: the footer, the option rows right above it, then the header above them. The header
  * is drawn two columns in, and so is every line of a command inside it, while the transcript above starts each cell
  * at the left edge. The dialog's title is the highest title line at the footer's column below that edge: a
- * title-shaped line in the command is below the real one (#776). The edge must be the cell Codex draws for what it
- * asks about (`• Running ...`, `• Edited ...`); under any other cell the agent's own text could sit right above the
- * dialog at its column and pass for its header, so nothing is read.
+ * title-shaped line in the command is below the real one (#776). Under any other cell (a permissions request draws
+ * none), the agent's own text could sit right above the dialog at its column and pass for its header, so there the
+ * block must hold exactly one title, or nothing is read.
  */
 function readPermission(lines: readonly string[]): Found | undefined {
   const footer = lastIndex(lines, (line) => PERMISSION_FOOTER.test(line));
@@ -93,11 +94,11 @@ function readPermission(lines: readonly string[]): Found | undefined {
 
   const column = indent(lines[footer] ?? "");
   const edge = edgeAbove(lines, first, column);
-  if (!ASKED_CELL.test(lines[edge] ?? "")) return undefined;
-  const question = lines.findIndex(
-    (line, index) => index > edge && index < first && indent(line) === column && PERMISSION_QUESTION.test(line),
+  const titles = lines.flatMap((line, index) =>
+    index > edge && index < first && indent(line) === column && PERMISSION_QUESTION.test(line) ? [index] : [],
   );
-  if (question === -1) return undefined;
+  const question = titles[0] ?? -1;
+  if (question === -1 || (titles.length > 1 && !ASKED_CELL.test(lines[edge] ?? ""))) return undefined;
   const details = lines
     .slice(question + 1, first)
     .map((line) => line.trim())
