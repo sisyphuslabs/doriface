@@ -1,3 +1,5 @@
+import { twoSetKey } from "./hangul-keys.ts";
+
 /** Bytes for each key the phone's keys bar and arrow pad send. */
 const SEQUENCES: Readonly<Record<string, string>> = {
   esc: "\u001b",
@@ -39,10 +41,12 @@ function control(char: string): string {
  * ESC prefix), like alt. ctrl+v stays ^V on every host (vim's visual block, a shell's quoted insert); the paste chord
  * is cmd+v on a mac host and ctrl+shift+v elsewhere, so a wrong guess of the host only moves the Cmd key.
  */
-export function applyModifiers(data: string, latched: ReadonlySet<string>, host: HostPlatform): ModifiedInput {
+export function applyModifiers(typed: string, latched: ReadonlySet<string>, host: HostPlatform): ModifiedInput {
   const ctrl = latched.has("ctrl");
   const shift = latched.has("shift");
   const meta = latched.has("alt") || latched.has("cmd");
+  // With a chord latched, a Hangul letter from a Korean keyboard reads as the key it sits on: ctrl+ㅊ is ^C.
+  const data = ctrl || meta ? (twoSetKey(typed) ?? typed) : typed;
   const chord = host === "mac" ? latched.has("cmd") : ctrl && shift;
   if (chord && data.toLowerCase() === "v") return { kind: "paste" };
   const arrow = data.length === 3 && data.startsWith("\u001b[") && "ABCD".includes(data.charAt(2));
