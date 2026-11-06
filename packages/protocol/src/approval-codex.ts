@@ -23,19 +23,27 @@ const ASKED = /^› /;
  * permissions (:286), edits (:290), an MCP server's request (:294). The last entry is any other "Would you like to …?"
  * title, which the card read before these were listed, so no approval read then goes unread now.
  */
-const TITLES: readonly RegExp[] = [
-  /^Would you like to (run the following command)\?$/,
-  /^Would you like to (send input to the existing terminal)\?$/,
-  /^Would you like to (send input to terminal \S+)\?$/,
-  /^Do you want to (approve network access to ".+")\?$/,
-  /^Would you like to (grant these permissions)\?$/,
-  /^Would you like to (make the following edits)\?$/,
-  /^(\S.* needs your approval)\.$/,
-  /^Would you like to (.+)\?$/,
+const TITLES: readonly { readonly title: RegExp; readonly asks: string }[] = [
+  { title: /^Would you like to (run the following command)\?$/, asks: "wants to run" },
+  { title: /^Would you like to (send input to the existing terminal)\?$/, asks: "asks for permission" },
+  { title: /^Would you like to (send input to terminal \S+)\?$/, asks: "asks for permission" },
+  { title: /^Do you want to (approve network access to ".+")\?$/, asks: "asks for permission" },
+  { title: /^Would you like to (grant these permissions)\?$/, asks: "asks for permission" },
+  { title: /^Would you like to (make the following edits)\?$/, asks: "wants to edit" },
+  { title: /^(\S.* needs your approval)\.$/, asks: "asks for permission" },
+  { title: /^Would you like to (.+)\?$/, asks: "asks for permission" },
 ];
-/** What a title line asks, or undefined for a line that is not one of Codex's approval titles. */
-const askedBy = (line: string) =>
-  TITLES.map((title) => title.exec(line.trim())?.[1]).find((asked) => asked !== undefined);
+/** The title entry a line is, with what it asks; undefined for a line that is not one of Codex's approval titles. */
+const titleOf = (line: string) =>
+  TITLES.flatMap(({ title, asks }) => {
+    const asked = title.exec(line.trim())?.[1];
+    return asked === undefined ? [] : [{ asked, asks }];
+  })[0];
+/**
+ * The fields Codex draws in an approval's header (`approval_overlay.rs` `build_header`: Thread :700, Environment :707,
+ * Reason :713, Permission rule :720, Input :727, Server :779; a patch's Description and Destination as recorded).
+ */
+const FIELD = /^(?:Thread|Environment|Reason|Permission rule|Input|Server|Description|Destination): /;
 const PERMISSION_FOOTER = /\besc to cancel\b/;
 const KEYED = /^(.*\S)\s+\((\S+)\)$/;
 const DESTINATION = /^Destination:\s+(.+)$/;
@@ -52,9 +60,26 @@ const NOTES_OPEN = /^\s*›\s+Add notes\b/;
  * tui): a command's `Running`, an exploring group's `Exploring`, input to a terminal's `Interacted with` or `Waited for`
  * (`exec_cell/render.rs`), a patch's `Added`, `Deleted` or `Edited` (`diff_render.rs`). A cell still running blinks its
  * bullet between `•` and `◦` when the terminal has no true colour (`motion.rs`). A permissions request draws no cell
- * (`chatwidget/tool_requests.rs`): its dialog sits under whatever cell came before, often the agent's own message.
+ * (`chatwidget/tool_requests.rs`): its dialog sits under whatever cell came before, often the agent's own message. An
+ * MCP server's request comes inside its tool call, whose cell says `Calling` (`history_cell/mcp.rs`, `dynamic.rs`).
  */
-const ASKED_CELL = /^[•◦] (?:Running|Exploring|Interacted with|Waited for|Added|Deleted|Edited)(?:\s|$)/;
+const ASKED_CELL = /^[•◦] (?:Running|Exploring|Interacted with|Waited for|Added|Deleted|Edited|Calling)(?:\s|$)/;
+/** A line of the cell itself under its header: a command's `│`/`└` lines, a diff or a listing drawn four columns in. */
+const CELL_LINE = /^(?: {2}[│└]| {4})/;
+
+/**
+ * Under a cell that is not Codex's own, the lines from the title to the rows are the dialog's header only when each is
+ * one of Codex's fields, a field's value wrapped onto the next line, or blank. A command (`$ `) only comes under the
+ * command's own cell, and any other line (a wrapped or free-form title of a real dialog below) means the title is not
+ * this dialog's.
+ */
+function headerOnly(header: readonly string[]): boolean {
+  return header.every((line, index) => {
+    const text = line.trim();
+    const wrapped = index > 0 && (header[index - 1] ?? "").trim() !== "" && !text.startsWith("$ ");
+    return text === "" || FIELD.test(text) || wrapped;
+  });
+}
 
 /**
  * A question's rows from row 1 to its footer: each row at row 1's number column, numbered one past the last; a line
@@ -114,19 +139,26 @@ function readPermission(lines: readonly string[]): Found | undefined {
   const column = indent(lines[footer] ?? "");
   const edge = edgeAbove(lines, first, column);
   const titles = lines.flatMap((line, index) =>
-    index > edge && index < first && indent(line) === column && askedBy(line) !== undefined ? [index] : [],
+    index > edge && index < first && indent(line) === column && titleOf(line) !== undefined ? [index] : [],
   );
   const question = titles[0] ?? -1;
+  if (question === -1) return undefined;
+  const ownCell = ASKED_CELL.test(lines[edge] ?? "");
+  // Under Codex's own cell the title is the dialog's first line: nothing but the cell's own lines comes before it.
+  const underCell = lines.slice(edge + 1, question).every((line) => line.trim() === "" || CELL_LINE.test(line));
   const commandAt = lines.findIndex((line, index) => index > question && index < first && /^\s*\$ /.test(line));
   const heading = titles.filter((index) => index < (commandAt === -1 ? first : commandAt)).length;
-  const ownCell = ASKED_CELL.test(lines[edge] ?? "");
-  if (question === -1 || heading > 1 || (titles.length > 1 && !ownCell)) return undefined;
+  const read = ownCell
+    ? underCell && heading === 1
+    : titles.length === 1 && headerOnly(lines.slice(question + 1, first));
+  if (!read) return undefined;
   const details = lines
     .slice(question + 1, first)
     .map((line) => line.trim())
     .filter((line) => line !== "");
   const commandLine = details.findIndex((line) => line.startsWith("$ "));
-  const asked = askedBy(lines[question] ?? "") ?? "";
+  const title = titleOf(lines[question] ?? "");
+  const asked = title?.asked ?? "";
   const header = commandLine === -1 ? details : details.slice(0, commandLine);
   const destination = header.map((line) => DESTINATION.exec(line)?.[1]).find((path) => path !== undefined);
   const command =
@@ -141,7 +173,7 @@ function readPermission(lines: readonly string[]): Found | undefined {
   const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "permission",
-    asks: /^run\b/.test(asked) ? "wants to run" : /\bedits?\b/.test(asked) ? "wants to edit" : "asks for permission",
+    asks: title?.asks ?? "asks for permission",
     question: (lines[question] ?? "").trim(),
     command,
     body: bodyText(header.filter((line) => !DESTINATION.test(line))),
