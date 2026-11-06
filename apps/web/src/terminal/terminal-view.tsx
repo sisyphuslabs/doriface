@@ -58,6 +58,11 @@ export interface TerminalViewProps {
   readonly className?: string;
   /** Rewrites typed input before it is sent (latched phone modifiers); an empty result sends nothing. */
   readonly transformInput?: (data: string) => string;
+  /**
+   * A composition is typed as it starts instead of when the input method ends it, through `transformInput`: set while a
+   * phone modifier is latched, so ctrl and a Korean keyboard's ㅊ is ^C at once rather than waiting for the next jamo.
+   */
+  readonly typesComposition?: boolean;
   /** The view's port for keys pressed outside it (the phone's keys bar); null once it unmounts. */
   readonly onPort?: (port: TerminalPort | null) => void;
   /** Every time the stream ends, with why; see TerminalEnd. */
@@ -89,7 +94,7 @@ function handBack(event: FocusEvent<HTMLElement>): void {
 /** One libghostty terminal attached to one hc channel; output credit returns once it is written. */
 export function TerminalView(props: TerminalViewProps) {
   const { connection, address, pid, live, focused, label, className, transformInput, onPort, onEnd } = props;
-  const { closeLabel = "Close tab", onEnded, jumpClearance, claimed = true } = props;
+  const { closeLabel = "Close tab", onEnded, jumpClearance, claimed = true, typesComposition = false } = props;
   const config = useTerminalConfig();
   const options = useMemo(() => rendererOptions(config), [config]);
   const dark = useDarkScheme();
@@ -190,16 +195,38 @@ export function TerminalView(props: TerminalViewProps) {
   const send = useCallback((data: TerminalInput): void => {
     if (stream.current?.write(data) !== true) pending.current.push(data);
   }, []);
+  // Input typed into the renderer, rewritten as the host asks (latched phone modifiers).
+  const typedInto = (data: string): void => {
+    const input = transformInput?.(data) ?? data;
+    if (input !== "") send(input);
+  };
   // Typed input from outside the renderer (the phone's keys, a bound key, a confirmed paste) scrolls to the bottom, as
-  // wterm already does for keys typed into it.
+  // wterm already does for keys typed into it. A syllable still composing in the renderer's field goes first, as typed:
+  // the key must not overtake it (#652).
   const typed = useCallback(
     (data: TerminalInput): void => {
       const instance = handle.current?.instance;
-      if (instance !== null && instance !== undefined) scrollTerminal(instance, { to: "bottom" });
+      if (instance !== null && instance !== undefined) {
+        const preedit = instance.takeComposition();
+        if (preedit !== "") send(preedit);
+        scrollTerminal(instance, { to: "bottom" });
+      }
       send(data);
     },
     [send],
   );
+  const typesCompositionNow = useRef(typedInto);
+  typesCompositionNow.current = typedInto;
+  useEffect(() => {
+    if (wt === null || !typesComposition) return undefined;
+    const onInput = (event: Event): void => {
+      if (!(event instanceof InputEvent) || !event.isComposing) return;
+      const preedit = wt.takeComposition();
+      if (preedit !== "") typesCompositionNow.current(preedit);
+    };
+    wt.element.addEventListener("input", onInput);
+    return () => wt.element.removeEventListener("input", onInput);
+  }, [wt, typesComposition]);
   const scroll = useTerminalScroll(wt);
   const outputShown = useRef(scroll.changed);
   outputShown.current = scroll.changed;
@@ -436,10 +463,7 @@ export function TerminalView(props: TerminalViewProps) {
           focusWhenFree(ready);
           attach(ready);
         }}
-        onData={(data) => {
-          const input = transformInput?.(data) ?? data;
-          if (input !== "") send(input);
-        }}
+        onData={typedInto}
         onResize={(cols, rows) => stream.current?.resize(cols, rows)}
         onFocus={(event) => {
           // wterm focuses every terminal as it starts (@wterm/dom 0.5.8 wterm.js:410). Only the focused pane's keeps

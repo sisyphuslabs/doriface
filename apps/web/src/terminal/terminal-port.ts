@@ -7,6 +7,11 @@ export interface TerminalPort {
   readonly send: (data: TerminalInput) => void;
   /** Pastes as a clipboard paste does: bracketed when the program asked, and through clipboard-paste-protection. */
   readonly paste: (text: string) => void;
+  /**
+   * Sends a syllable still composing in the terminal's field now, as typed, and ends that composition (#652): a
+   * modifier latched after it applies to the next key only. `send` and `paste` do this first themselves.
+   */
+  readonly commitComposition: () => void;
   readonly focus: () => void;
 }
 
@@ -22,17 +27,23 @@ export function useTerminalPort(
   send: (data: TerminalInput) => void,
   onPort: ((port: TerminalPort | null) => void) | undefined,
 ): void {
-  const port = useMemo<TerminalPort>(
-    () => ({
+  const port = useMemo<TerminalPort>(() => {
+    const commitComposition = (): void => {
+      const preedit = handle.current?.instance?.takeComposition() ?? "";
+      if (preedit !== "") send(preedit);
+    };
+    return {
       send,
       paste: (text) => {
         const element = handle.current?.instance?.element;
-        if (element !== undefined) pasteInto(element, text);
+        if (element === undefined) return;
+        commitComposition();
+        pasteInto(element, text);
       },
+      commitComposition,
       focus: () => handle.current?.focus(),
-    }),
-    [handle, send],
-  );
+    };
+  }, [handle, send]);
   useEffect(() => {
     onPort?.(port);
     return () => onPort?.(null);
