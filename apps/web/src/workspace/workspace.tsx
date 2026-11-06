@@ -400,7 +400,7 @@ export function Workspace({ connection }: WorkspaceProps) {
             autoCorrect="off"
             spellCheck={false}
           />
-          <AddMachineDialog open={adding} onClose={() => setAdding(false)} />
+          <AddMachineDialog open={adding} onClose={() => setAdding(false)} connection={connection} machines={entries} />
           <SessionDialogs
             connection={connection}
             terminals={terminals}
