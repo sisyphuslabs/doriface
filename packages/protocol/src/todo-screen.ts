@@ -12,6 +12,10 @@ const CLAUDE_ROW = /^\s*(?:⎿\s+)?([✔◼◻])\s+\S/u;
 const CLAUDE_FOLD = /^\s*…\s*\+(.+)$/u;
 /** The count line over the list once the turn is over: `4 tasks (2 done, 1 in progress, 1 open)`. */
 const CLAUDE_COUNT = /^\s*(\d+) tasks? \((\d+) done\b/u;
+/** The spinner line the list hangs off while the agent works: `✶ Running the suite… (13s · ↓ 162 tokens)`. */
+const CLAUDE_SPINNER = /^\S\s.*…\s*\(\d+s\b/u;
+/** The list's first row while the agent works, hung off the spinner line. */
+const CLAUDE_HUNG_ROW = /^\s*⎿\s+[✔◼◻]\s/u;
 const DONE_WORDS = /^(?:completed|done)$/u;
 
 /** The folded line's counts: every number toward the total, the done ones toward done. */
@@ -30,28 +34,34 @@ function foldCounts(fold: string): TodoProgress {
 
 /**
  * Claude Code's task list (TaskCreate and TaskUpdate), the last one on the screen: its count line when it has one, else
- * its rows plus the line the rest folds into. An AskUserQuestion tab row (`←  ☐ Runtime  ✔ Submit  →`) is not a row.
+ * its rows plus the line the rest folds into. Only a list Claude Code anchors counts: one under its count line, or one
+ * hung off the spinner line by `⎿`. Check marks in a reply or in a tool's output under `⎿` have neither, and an
+ * AskUserQuestion tab row (`←  ☐ Runtime  ✔ Submit  →`) is not a row.
  */
 const readClaudeTodos: TodoReader = (lines) => {
-  let end = -1;
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (CLAUDE_ROW.test(lines[index] ?? "")) {
-      end = index;
-      break;
+  let end = lines.length - 1;
+  while (end >= 0) {
+    if (!CLAUDE_ROW.test(lines[end] ?? "")) {
+      end -= 1;
+      continue;
     }
+    let start = end;
+    while (start > 0 && CLAUDE_ROW.test(lines[start - 1] ?? "")) start -= 1;
+    const above = lines[start - 1] ?? "";
+    const count = CLAUDE_COUNT.exec(above);
+    if (count !== null) return { done: Number(count[2]), total: Number(count[1]) };
+    if (CLAUDE_SPINNER.test(above) && CLAUDE_HUNG_ROW.test(lines[start] ?? "")) {
+      const rows = lines.slice(start, end + 1).map((line) => CLAUDE_ROW.exec(line)?.[1]);
+      const fold = CLAUDE_FOLD.exec(lines[end + 1] ?? "");
+      const folded = fold === null ? { done: 0, total: 0 } : foldCounts(fold[1] ?? "");
+      return {
+        done: rows.filter((mark) => mark === "✔").length + folded.done,
+        total: rows.length + folded.total,
+      };
+    }
+    end = start - 1;
   }
-  if (end === -1) return undefined;
-  let start = end;
-  while (start > 0 && CLAUDE_ROW.test(lines[start - 1] ?? "")) start -= 1;
-  const count = CLAUDE_COUNT.exec(lines[start - 1] ?? "");
-  if (count !== null) return { done: Number(count[2]), total: Number(count[1]) };
-  const rows = lines.slice(start, end + 1).map((line) => CLAUDE_ROW.exec(line)?.[1]);
-  const fold = CLAUDE_FOLD.exec(lines[end + 1] ?? "");
-  const folded = fold === null ? { done: 0, total: 0 } : foldCounts(fold[1] ?? "");
-  return {
-    done: rows.filter((mark) => mark === "✔").length + folded.done,
-    total: rows.length + folded.total,
-  };
+  return undefined;
 };
 
 /** omp's TODO list over its editor: a `TODO` line, then each phase as a branch with its own `done/total`. */

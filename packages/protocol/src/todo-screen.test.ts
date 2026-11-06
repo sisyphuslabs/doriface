@@ -55,6 +55,37 @@ describe("readTodoProgress: Claude Code's task list", () => {
     expect(readTodoProgress("claude-code", screen.join("\n"))).toEqual({ done: 2, total: 3 });
   });
 
+  test("check marks in the agent's reply are not a task list", () => {
+    const screen = [
+      "❯ Do the task.",
+      "",
+      "● Done. Summary:",
+      "  ✔ Fixed the parser",
+      "  ✔ Ran the suite",
+      "",
+      "─".repeat(20),
+      "❯ ",
+    ];
+    expect(readTodoProgress("claude-code", screen.join("\n"))).toBeUndefined();
+  });
+
+  test("test output under a tool call is not a task list", () => {
+    const screen = [
+      "● Bash(node --test)",
+      "  ⎿  ✔ parses a header (2ms)",
+      "     ✔ folds a long list (1ms)",
+      "",
+      "─".repeat(20),
+      "❯ ",
+    ];
+    expect(readTodoProgress("claude-code", screen.join("\n"))).toBeUndefined();
+  });
+
+  test("rows under the spinner count only when the spinner line is right above them", () => {
+    const screen = ["● Ran 1 shell command", "  ⎿  ✔ First", "     ◻ Second", "─".repeat(20), "❯ "];
+    expect(readTodoProgress("claude-code", screen.join("\n"))).toBeUndefined();
+  });
+
   test("an AskUserQuestion tab row is not a task list", () => {
     expect(readTodoProgress("claude-code", "←  ☒ Runtime  ☐ Deploy  ✔ Submit  →")).toBeUndefined();
   });
