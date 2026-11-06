@@ -54,9 +54,9 @@ crosses the network is a Noise session, not a remote-desktop stream.
 - **Installs and stays installed.** The desktop app starts the host and `hc` on the computer it runs on, starts the host again
   if it stops, and installs herdr-core for this user when it is missing or too old.
 
-| Needs you, day theme                                                                                              | The same workspace on a phone                                                                                                                                   |
-| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![The agent list in the day theme, one agent waiting for approval](docs/design/app/agents-attention-1440-day.png) | <img src="docs/design/app/mobile-keys-bar-390-night.png" width="260" alt="A terminal on a phone, with a key bar for ctrl, shift, tab, esc, arrows and paste" /> |
+| Needs you, day theme                                                                                                                          | The same workspace on a phone                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <img src="docs/design/app/agents-attention-1440-day.png" width="620" alt="The agent list in the day theme, one agent waiting for approval" /> | <img src="docs/design/app/mobile-keys-bar-390-night.png" width="210" alt="A terminal on a phone, with a key bar for ctrl, shift, tab, esc, arrows and paste" /> |
 
 ## Install
 
