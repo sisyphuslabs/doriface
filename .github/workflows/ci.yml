@@ -46,6 +46,10 @@ jobs:
           echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/hc/hc" --version
       - run: bun install --frozen-lockfile
+      # The read-only token that fetches the private relay expires (#38): warn from 60 days out and error once it has
+      # passed, on every push, so the date reaches the run page without anyone watching a calendar.
+      - name: Relay read token expiry
+        run: bun tests/relay-fetch/token-expiry.ts
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run fmt:check

@@ -74,7 +74,8 @@ hc machine add --via 'doriface-host connect <B hostId>' --name b   # on A: B's t
 
 The relay server (Cloudflare Workers + Durable Objects, `relay-doriface.omo.dev`) is deployed separately. Its public
 contract is the relay section of [docs/transport.md](docs/transport.md), which every package here is built against, so
-any server that follows it can stand in.
+any server that follows it can stand in. The read-only token CI uses to fetch that private relay expires, and
+[docs/relay-token-rotation.md](docs/relay-token-rotation.md) is how it is rotated.
 
 ## Development
 
