@@ -77,6 +77,7 @@ test("on the phone every Settings switch takes a tap anywhere in its 44x44 box, 
   await expect(tabs.first()).toBeVisible({ timeout: 20_000 });
   const body = page.locator("[data-slot=settings-body]");
   const found: string[] = [];
+  let switches = 0;
   for (const label of await tabs.allTextContents()) {
     // oxlint-disable-next-line no-await-in-loop -- one section at a time: each tap changes the page the next one reads
     await tabs.filter({ hasText: label }).first().click();
@@ -93,6 +94,10 @@ test("on the phone every Settings switch takes a tap anywhere in its 44x44 box, 
       // oxlint-disable-next-line no-await-in-loop -- as above
       found.push(...(await shortTargets(page)).map((entry) => `${label}: ${entry}`));
     }
+    // oxlint-disable-next-line no-await-in-loop -- counted per section, after its scroll positions
+    switches += await body.getByRole("switch").count();
   }
+  // An empty list only means something when switches were there to measure.
+  expect(switches).toBeGreaterThan(0);
   expect([...new Set(found)]).toEqual([]);
 });
