@@ -8,7 +8,7 @@ struct Notice {
     let host: String
 
     private static let shape = try! NSRegularExpression(
-        pattern: #"^\{"v":1,"n":"([A-Za-z0-9_-]{22})","k":"(input|permission|done|error|test)","h":"([a-z2-7]{26})"\}$"#
+        pattern: #"^\{"v":1,"n":"([A-Za-z0-9_-]{22})","k":"(input|permission|done|error|test)","h":"([a-z2-7]{26})"\}\z"#
     )
 
     /// Nil for anything but the host's exact notice.

@@ -18,7 +18,6 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		5D7DCBC7D3B7311E6214CB3C /* NoticeCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504DA7ABB559265C95FFC940 /* NoticeCategory.swift */; };
-		6B70FA0FA3C72F3A62967370 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 78BC45EF63EEB2912BAC65D2 /* Foundation.framework */; };
 		7C67620B0D99D053BC35F002 /* DorifaceShellPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 728D736107B1F43E192A67FF /* DorifaceShellPlugin.swift */; };
 		7D1719B84D5721F6676CDA14 /* NoticeService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7F6D48E8CA3FF8611AD39BCB /* NoticeService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		804651C20A1B5161D361FD22 /* NoticeKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C34D6694708C19AA054782C /* NoticeKeys.swift */; };
@@ -74,7 +73,6 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		66BA9D09E5CF9915E40C5111 /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		728D736107B1F43E192A67FF /* DorifaceShellPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DorifaceShellPlugin.swift; sourceTree = "<group>"; };
-		78BC45EF63EEB2912BAC65D2 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		7F6D48E8CA3FF8611AD39BCB /* NoticeService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NoticeService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		811B7F8C583CFB63D4DD7F4B /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -88,7 +86,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B70FA0FA3C72F3A62967370 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -106,7 +103,6 @@
 		3F10D79347BF0B352DC75FFE /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				78BC45EF63EEB2912BAC65D2 /* Foundation.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";

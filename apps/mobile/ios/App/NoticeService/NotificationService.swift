@@ -17,7 +17,7 @@ final class NotificationService: UNNotificationServiceExtension {
             let plain = try? keys.open(body),
             let notice = Notice.parse(String(decoding: plain, as: UTF8.self))
         else {
-            handler(content)
+            finish(content)
             return
         }
         content.title = "doriface"
@@ -25,10 +25,18 @@ final class NotificationService: UNNotificationServiceExtension {
         content.threadIdentifier = notice.host
         content.userInfo = ["doriface-url": notice.url(), "doriface-id": notice.id, "doriface-host": notice.host]
         if notice.kind == "permission" { content.categoryIdentifier = NoticeCategory.permission }
-        handler(content)
+        finish(content)
+    }
+
+    /// Hands iOS one content, once: a later expiry callback finds nothing left to deliver.
+    private func finish(_ content: UNNotificationContent) {
+        let handler = deliver
+        deliver = nil
+        fallback = nil
+        handler?(content)
     }
 
     override func serviceExtensionTimeWillExpire() {
-        if let deliver, let fallback { deliver(fallback) }
+        if let fallback { finish(fallback) }
     }
 }

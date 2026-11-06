@@ -23,6 +23,7 @@ public class DorifacePushPlugin: CAPPlugin, CAPBridgedPlugin {
     /// A tap that arrived before the page listened; handed over once by `takeLaunchTap`.
     static var launchURL: String?
     private var pendingRegister: CAPPluginCall?
+    private var pendingCalls: [CAPPluginCall] = []
     private static let tokenKey = "dev.omo.doriface.push.token"
 
     private var sandbox: Bool {
@@ -71,22 +72,37 @@ public class DorifacePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func register(_ call: CAPPluginCall) {
+        // One registration at a time: a call while one waits gets the same answer instead of leaving the first unsettled.
+        if let waiting = pendingRegister {
+            pendingCalls.append(call)
+            return
+        }
         pendingRegister = call
         DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
     }
 
     @objc private func registered(_ note: Notification) {
         guard let call = pendingRegister, let token = note.object as? Data else { return }
+        let calls = [call] + pendingCalls
         pendingRegister = nil
+        pendingCalls = []
         let hex = token.map { String(format: "%02x", $0) }.joined()
         UserDefaults.standard.set(hex, forKey: Self.tokenKey)
-        do { call.resolve(try registration(hex)) } catch { call.reject("The notification keys could not be made", "keys", error) }
+        do {
+            let answer = try registration(hex)
+            calls.forEach { $0.resolve(answer) }
+        } catch {
+            calls.forEach { $0.reject("The notification keys could not be made", "keys", error) }
+        }
     }
 
     @objc private func failed(_ note: Notification) {
         guard let call = pendingRegister else { return }
+        let calls = [call] + pendingCalls
         pendingRegister = nil
-        call.reject("APNs gave no token: \((note.object as? Error)?.localizedDescription ?? "unknown")", "no-token")
+        pendingCalls = []
+        let reason = (note.object as? Error)?.localizedDescription ?? "unknown"
+        calls.forEach { $0.reject("APNs gave no token: \(reason)", "no-token") }
     }
 
     @objc func current(_ call: CAPPluginCall) {
