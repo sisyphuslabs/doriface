@@ -36,6 +36,8 @@ export interface SpacesGroupProps {
   readonly rail?: boolean;
   /** The sidebar filter's query; the selected space stays listed whatever it is. */
   readonly query?: string;
+  /** Shows the filter button in the header: only where the filter field is (the desktop sidebar, not the phone list). */
+  readonly filterable?: boolean;
 }
 
 const ALARM = new Set(["unreachable", "needs_login"]);
@@ -124,10 +126,10 @@ function NewSpaceThere({ disabled, onClick }: { readonly disabled: boolean; read
  * The spaces. With one machine they are one list whose header starts a new space; once more than one machine is
  * known, each machine is a list headed by its row (state, terminal count, New space there), in the machines' order.
  */
-export function SpacesGroup({ onOpen, rail = false, query = "" }: SpacesGroupProps) {
+export function SpacesGroup({ onOpen, rail = false, query = "", filterable = false }: SpacesGroupProps) {
   const machines = useMachinesContext();
   if (!machines.machinesListed) return <SpacesLoading rail={rail} />;
-  return <SpacesLists onOpen={onOpen} rail={rail} query={query} machines={machines} />;
+  return <SpacesLists onOpen={onOpen} rail={rail} query={query} filterable={filterable} machines={machines} />;
 }
 
 /** Holds the spaces' place, labeled, until the first machine.list answer: one row, where the first machine row goes. */
@@ -149,10 +151,12 @@ function SpacesLists({
   onOpen,
   rail,
   query,
+  filterable,
   machines,
 }: SpacesGroupProps & {
   readonly rail: boolean;
   readonly query: string;
+  readonly filterable: boolean;
   readonly machines: ReturnType<typeof useMachinesContext>;
 }) {
   // The layout documents' spaces (#404): picking one shows it on the tab it showed last.
@@ -213,6 +217,7 @@ function SpacesLists({
   const local = machines.entries.find((machine) => machine.local);
   const newSpaceOn = (machine: MachineEntry): void =>
     machine.local ? machines.start({}) : machines.newTerminalOn(machine.name);
+  const showFilter = filterable && !rail;
   const newHere =
     allGrouped !== undefined || local === undefined || rail ? undefined : (
       <IconButton label="New space" icon={<Plus />} onClick={() => machines.start({})} />
@@ -240,17 +245,17 @@ function SpacesLists({
     <SidebarSection
       title="Spaces"
       {...(grouped === undefined ? { count: shownSpaces.length } : {})}
-      {...(rail
-        ? {}
-        : {
+      {...(showFilter || newHere !== undefined
+        ? {
             action: (
-              // One right margin for the pair, as the lone New space had, so neither button spills past the header.
+              // One right margin for the header's buttons, as the lone New space had, so none spills past the header.
               <span className="-mr-1 flex items-center gap-0.5">
-                <FilterButton />
+                {showFilter ? <FilterButton /> : null}
                 {newHere}
               </span>
             ),
-          })}
+          }
+        : {})}
       {...(rail ? { className: "[&>header]:sr-only" } : {})}
     >
       {/* While the link is down the connection notice says it once; the failed list would only repeat it (#545). */}

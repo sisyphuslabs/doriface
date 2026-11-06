@@ -45,7 +45,7 @@ export function SidebarLists({
       spaces={
         terminalsLoaded ? (
           <div className={pad}>
-            <SpacesGroup onOpen={onOpen} rail={rail} query={query} />
+            <SpacesGroup onOpen={onOpen} rail={rail} query={query} filterable />
           </div>
         ) : (
           <div aria-busy="true" className={pad} />

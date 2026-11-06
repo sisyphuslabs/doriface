@@ -115,3 +115,14 @@ test("behind the command palette the filter key does nothing: the palette keeps 
   await expect(sidebar.getByRole("searchbox", { name: "Filter sidebar" })).toHaveCount(0);
   expect(await page.evaluate(() => document.activeElement?.outerHTML ?? "")).toBe(focused);
 });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("the phone list has no filter button, since it has no filter field (#673)", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "New tab" }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/^Spaces$/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Filter sidebar" })).toHaveCount(0);
+  });
+});
