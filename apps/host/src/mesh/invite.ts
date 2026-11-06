@@ -181,6 +181,7 @@ export async function serveJoin(lines: MeshLines, peerStatic: Uint8Array, deps: 
       hostId: card.hostId,
       fingerprint,
       noisePub: card.noisePub,
+      kind: card.kind === "client" ? ("client" as const) : ("machine" as const),
       expiresAt: deps.expiresAt,
     };
     await decision(lines, deps, join);
