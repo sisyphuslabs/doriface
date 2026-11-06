@@ -27,6 +27,7 @@ export { SessionKind } from "./kinds.ts";
 export type { PairingSecret } from "./client-flight.ts";
 export type { HostPairingSecret } from "./host-flight.ts";
 export {
+  buildPairingDeepLink,
   buildPairingUrl,
   createPairingOffer,
   DEFAULT_RELAY_URL,
@@ -40,16 +41,20 @@ export {
   PAIRING_ALPHABET,
   PAIRING_CODE_ATTEMPTS,
   PAIRING_CODE_LENGTH,
+  PAIRING_DEEP_LINK_PREFIX,
   PAIRING_SLOT_LENGTH,
   PAIRING_TTL_MS,
   pairingSlotOf,
   PairingGuard,
   pairingWebOrigin,
   relayWebSocketUrl,
+  parsePairingLink,
   parsePairingUrl,
+  type ParsedPairingLink,
   type PairingGuardState,
   type PairingLink,
   type PairingOffer,
+  type PairingTarget,
 } from "./pairing.ts";
 export {
   decodeHello,

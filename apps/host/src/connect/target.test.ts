@@ -1,4 +1,4 @@
-import { buildPairingUrl, generateHostIdentity } from "@doriface/crypto";
+import { buildPairingDeepLink, buildPairingUrl, generateHostIdentity } from "@doriface/crypto";
 import { describe, expect, test } from "bun:test";
 import { parseTarget } from "./target.ts";
 
@@ -21,5 +21,21 @@ describe("parseTarget", () => {
 
   test("anything else is refused with what was expected", () => {
     expect(() => parseTarget("vps")).toThrow("expected a hostId, a pairing link or an 8-character pairing code");
+  });
+
+  test("the desktop app's deep link is a pairing link too, for a device and for a mesh offer", () => {
+    const identity = generateHostIdentity();
+    const target = {
+      hostId: identity.hostId,
+      noiseStaticPub: identity.noise.publicKey,
+      signPub: identity.sign.publicKey,
+      linkSecret: new Uint8Array(32).fill(7),
+      relayUrl: "https://relay.example",
+    };
+    const device = parseTarget(buildPairingDeepLink(target));
+    expect(device.kind === "link" && device.link.hostId).toBe(identity.hostId);
+    expect(device.kind === "link" && device.link.mesh).toBe(false);
+    const mesh = parseTarget(buildPairingDeepLink({ ...target, mesh: true }));
+    expect(mesh.kind === "link" && mesh.link.mesh).toBe(true);
   });
 });

@@ -1,5 +1,4 @@
 import {
-  buildPairingUrl,
   DEFAULT_RELAY_URL,
   fingerprintOf,
   formatPairingCode,
@@ -16,7 +15,7 @@ import { openReadOnlyRelayPasses } from "../relay/relay-passes.ts";
 import { defaultStateDir, isRecord } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { pendingFromWire } from "../state/pairing.ts";
-import { DEFAULT_WEB_ORIGIN } from "./pair.ts";
+import { pairingArtifact } from "./pair-link.ts";
 
 export const MESH_JOIN_USAGE = `usage: doriface-host mesh pair [--auto] [--no-qr] [--web-origin <url>] [--relay <url>]
        doriface-host mesh join <mesh link | code> [--fingerprint <fp>] [--name <mesh name>] [--yes]
@@ -27,6 +26,7 @@ export const MESH_JOIN_USAGE = `usage: doriface-host mesh pair [--auto] [--no-qr
   its first 4 groups); --yes skips only a link's confirmation.
 
   --state-dir <dir>  the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
+  --web-origin <url> print <url>/pair#… instead of doriface://pair#… (both are mesh join arguments)
   --hc <path>        mesh join without a running host: the herdr-core binary (default hc)
   --session <name>   mesh join without a running host: the hc session this host serves`;
 
@@ -43,34 +43,37 @@ async function pair(args: readonly string[], out: (text: string) => void): Promi
     options: {
       auto: { type: "boolean", default: false },
       "no-qr": { type: "boolean", default: false },
-      "web-origin": { type: "string", default: DEFAULT_WEB_ORIGIN },
+      "web-origin": { type: "string" },
       relay: { type: "string", default: DEFAULT_RELAY_URL },
       "state-dir": { type: "string" },
     },
   });
+  const webOrigin = values["web-origin"];
+  if (webOrigin !== undefined) pairingWebOrigin(webOrigin);
   relayWebSocketUrl(values.relay);
-  pairingWebOrigin(values["web-origin"]);
   const stateDir = values["state-dir"] ?? defaultStateDir();
   const identity = loadHostIdentity(stateDir);
   const answer = await requestControl(stateDir, { op: "mesh-pair", auto: values.auto });
   if (answer === undefined) throw new Error("doriface-host is not running on this state dir: it serves the join");
   const offer = pendingFromWire(answer);
-  const url = buildPairingUrl({
-    webOrigin: values["web-origin"],
-    hostId: identity.hostId,
-    noiseStaticPub: identity.noise.publicKey,
-    signPub: identity.sign.publicKey,
-    linkSecret: offer.linkSecret,
-    relayUrl: values.relay,
-    mesh: true,
-  });
+  const artifact = pairingArtifact(
+    {
+      hostId: identity.hostId,
+      noiseStaticPub: identity.noise.publicKey,
+      signPub: identity.sign.publicKey,
+      linkSecret: offer.linkSecret,
+      relayUrl: values.relay,
+      mesh: true,
+    },
+    webOrigin,
+  );
   out(
     [
       "On the machine that joins, run: doriface-host mesh join '<this link>' (or the code with --fingerprint).",
-      "It will reach every machine in the mesh, and so will every device paired to it.",
+      "This link is a mesh join argument, not a page to open; it will reach every machine in the mesh, and so will every device paired to it.",
       "",
-      ...(values["no-qr"] ? [] : [renderUnicodeCompact(url, { ecc: "L", border: 2 }), ""]),
-      url,
+      ...(values["no-qr"] ? [] : [renderUnicodeCompact(artifact.url, { ecc: "L", border: 2 }), ""]),
+      artifact.url,
       "",
       `code        ${formatPairingCode(offer.code)}`,
       `fingerprint ${fingerprintOf(identity.noise.publicKey)}`,
