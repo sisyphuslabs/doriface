@@ -7,6 +7,8 @@ export interface TerminalPort {
   readonly send: (data: TerminalInput) => void;
   /** Pastes as a clipboard paste does: bracketed when the program asked, and through clipboard-paste-protection. */
   readonly paste: (text: string) => void;
+  /** Puts files on the terminal's machine and pastes their paths, as a pasted image does (#701). */
+  readonly pasteFiles: (files: readonly File[]) => void;
   readonly focus: () => void;
 }
 
@@ -21,6 +23,7 @@ export function useTerminalPort(
   handle: RefObject<TerminalHandle | null>,
   send: (data: TerminalInput) => void,
   onPort: ((port: TerminalPort | null) => void) | undefined,
+  pasteFiles: (files: readonly File[]) => void,
 ): void {
   const port = useMemo<TerminalPort>(
     () => ({
@@ -29,9 +32,10 @@ export function useTerminalPort(
         const element = handle.current?.instance?.element;
         if (element !== undefined) pasteInto(element, text);
       },
+      pasteFiles,
       focus: () => handle.current?.focus(),
     }),
-    [handle, send],
+    [handle, send, pasteFiles],
   );
   useEffect(() => {
     onPort?.(port);
