@@ -41,3 +41,23 @@ test("both hostnames serve the build with the SPA fallback, so /pair loads the a
     expect(assets).toEqual({ directory: "./dist", not_found_handling: "single-page-application" });
   }
 });
+
+test("every page runs only this origin's scripts and connects only to the relay or a direct address", () => {
+  const headersFile = readFileSync(join(ROOT, "apps", "web", "public", "_headers"), "utf8");
+  const policy = /^\/\*\n(?:  .*\n)*?  Content-Security-Policy: (.+)$/m.exec(headersFile)?.[1] ?? "";
+  const directives = new Map(
+    policy.split(";").map((part) => {
+      const [name = "", ...sources] = part.trim().split(/\s+/);
+      return [name, sources] as const;
+    }),
+  );
+  expect(directives.get("default-src")).toEqual(["'none'"]);
+  expect(directives.get("script-src")).toEqual(["'self'", "'wasm-unsafe-eval'"]);
+  expect(directives.get("connect-src")).toEqual(["'self'", "https://relay-doriface.omo.dev", "wss:", "ws:"]);
+  expect(directives.get("img-src")).toEqual(["'self'", "blob:"]);
+  expect(directives.get("font-src")).toEqual(["'self'", "data:"]);
+  for (const name of ["frame-ancestors", "base-uri", "form-action", "object-src"]) {
+    expect(directives.get(name)).toEqual(["'none'"]);
+  }
+  expect(policy).not.toContain("'unsafe-eval'");
+});

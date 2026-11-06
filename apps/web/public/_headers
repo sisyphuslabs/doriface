@@ -3,11 +3,19 @@
 # Every page, the app shell for each client route included: revalidated on every load, and no-transform so the edge
 # injects nothing into it (Web Analytics' automatic beacon would put a third-party script on /pair, whose URL fragment
 # carries a pairing link's secret until the app takes it).
+#
+# The CSP runs only this origin's own scripts (and the terminal's wasm) and connects only where the app does: the relay,
+# and a saved direct address the page dials itself, which is any wss:// or a loopback ws:// (#446, direct-address.ts;
+# mixed content already refuses ws:// to any other machine). Inline style is React's hoisted <style> elements; with
+# images, fonts and connections locked to these sources, a style cannot send anything anywhere.
 /*
   Cache-Control: public, max-age=0, must-revalidate, no-transform
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://relay-doriface.omo.dev wss: ws:; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
 
 # Hashed build output: a new build gets new names, so these never change in place.
 /assets/*
