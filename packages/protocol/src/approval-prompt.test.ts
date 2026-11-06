@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { approvalKey, checkApproval, markApproval } from "./approval-prompt.ts";
 import { CLAUDE_AFTER_SCREEN, CLAUDE_PROMPT_SCREEN, CLAUDE_SECOND_PROMPT_SCREEN } from "./testing/approval-screens.ts";
 import { CLAUDE_BLOCKED, terminalAt } from "./testing/approval-terminal.ts";
+import { CLAUDE_QUESTION_SCREEN } from "./testing/prompt-screens.ts";
 
 const waiting = terminalAt("t3", CLAUDE_BLOCKED, { statusMs: 27_091, turn: 1 });
 
@@ -15,11 +16,20 @@ describe("marking the prompt a person is asked about", () => {
 
   test.each([
     ["not blocked", terminalAt("t3", { app: "claude-code", state: "working" })],
-    ["blocked on a question", terminalAt("t3", { ...CLAUDE_BLOCKED, kind: "question" })],
+    ["blocked on a sign-in", terminalAt("t3", { ...CLAUDE_BLOCKED, kind: "auth" })],
     ["finished", terminalAt("t3", CLAUDE_BLOCKED, { state: "finished" })],
     ["never reported", terminalAt("t3", null)],
   ])("nothing to mark when %s", (_, terminal) => {
     expect(markApproval(terminal, CLAUDE_PROMPT_SCREEN)).toBeUndefined();
+  });
+
+  test("a question the agent waits on is marked like a permission, from its own dialog", () => {
+    const asking = terminalAt("t3", { ...CLAUDE_BLOCKED, kind: "question" });
+    expect(markApproval(asking, CLAUDE_QUESTION_SCREEN)?.prompt).toMatchObject({
+      kind: "question",
+      cancel: { key: "esc" },
+    });
+    expect(markApproval(asking, CLAUDE_QUESTION_SCREEN)?.cwd).toBe("/work");
   });
 
   test("nothing to mark when the status says permission but the dialog is not on screen", () => {
