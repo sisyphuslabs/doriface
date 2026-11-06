@@ -75,7 +75,7 @@ class PushSettings {
         return this.#set({ on: false });
       }
       const subscription = await (await manager()).getSubscription();
-      const ready = await pushChannel.request({ t: "hello" }, route);
+      const ready = await pushChannel.requestOnce({ t: "hello" }, route);
       if (ready.t !== "ready") throw new Error("the host did not answer");
       const held = ready.subscriptions.find((entry) => entry.endpoint === subscription?.endpoint);
       const action = reconcile({
@@ -107,7 +107,7 @@ class PushSettings {
     await this.#run("turn notifications off", async () => {
       const subscription = await (await manager()).getSubscription();
       if (subscription !== null) {
-        await pushChannel.request({ t: "unsubscribe", endpoint: subscription.endpoint }).catch(() => undefined);
+        await pushChannel.requestOnce({ t: "unsubscribe", endpoint: subscription.endpoint }).catch(() => undefined);
         await subscription.unsubscribe();
       }
       await savePushRoute(null);
@@ -127,7 +127,9 @@ class PushSettings {
     await this.#run("move notifications to the new host", async () => {
       const subscription = await (await manager()).getSubscription();
       if (subscription !== null) {
-        await pushChannel.request({ t: "unsubscribe", endpoint: subscription.endpoint }, route).catch(() => undefined);
+        await pushChannel
+          .requestOnce({ t: "unsubscribe", endpoint: subscription.endpoint }, route)
+          .catch(() => undefined);
       }
       await savePushRoute(null);
       pushChannel.reset();
@@ -143,7 +145,7 @@ class PushSettings {
     await this.#run("save the notification settings", async () => {
       const subscription = await (await manager()).getSubscription();
       if (subscription === null) return;
-      const reply = await pushChannel.request({ t: "prefs", endpoint: subscription.endpoint, prefs });
+      const reply = await pushChannel.requestOnce({ t: "prefs", endpoint: subscription.endpoint, prefs });
       if (reply.t === "error") this.#set({ prefs: before });
       expect(reply, "save the settings");
       await savePushPrefs(prefs);
@@ -154,7 +156,7 @@ class PushSettings {
     await this.#run("send a test notification", async () => {
       const subscription = await (await manager()).getSubscription();
       if (subscription === null) throw new Error("this device has no subscription");
-      expect(await pushChannel.request({ t: "test", endpoint: subscription.endpoint }), "send a test notification");
+      expect(await pushChannel.requestOnce({ t: "test", endpoint: subscription.endpoint }), "send a test notification");
       this.#set({ tested: true });
     });
   }
@@ -166,7 +168,7 @@ class PushSettings {
   async #register(route: PushRoute, prefs: PushPrefs, knownKey?: string): Promise<void> {
     let vapidKey = knownKey;
     if (vapidKey === undefined) {
-      const ready = await pushChannel.request({ t: "hello" }, route);
+      const ready = await pushChannel.requestOnce({ t: "hello" }, route);
       if (ready.t !== "ready") throw new Error("the host did not answer");
       vapidKey = ready.vapidKey;
     }
@@ -181,7 +183,7 @@ class PushSettings {
       applicationServerKey: new Uint8Array(base64urlDecode(vapidKey)),
     });
     expect(
-      await pushChannel.request({ t: "subscribe", subscription: keysOf(subscription), prefs }, route),
+      await pushChannel.requestOnce({ t: "subscribe", subscription: keysOf(subscription), prefs }, route),
       "subscribe",
     );
     await savePushRoute(route);

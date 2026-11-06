@@ -94,7 +94,7 @@ export function useNoticeOpen(hostId: string | undefined, open: (address: string
 async function openNotice(notice: PendingNotice, open: (address: string) => void): Promise<void> {
   let terminal: string | null = null;
   try {
-    const reply = await pushChannel.request({ t: "notice", id: notice.id });
+    const reply = await pushChannel.requestOnce({ t: "notice", id: notice.id });
     if (reply.t === "notice") terminal = reply.terminal;
   } catch {
     // Without the push stream the app stays where it opened; the notice itself says what happened.
@@ -104,7 +104,7 @@ async function openNotice(notice: PendingNotice, open: (address: string) => void
   if (!notice.allow) return;
   await allowFromPage(
     terminal,
-    () => pushChannel.request({ t: "answer", id: notice.id, answer: "allow" }),
+    () => pushChannel.requestOnce({ t: "answer", id: notice.id, answer: "allow" }),
     () => whenVisible(document),
   );
 }
