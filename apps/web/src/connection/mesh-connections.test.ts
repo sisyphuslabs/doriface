@@ -163,4 +163,14 @@ describe("one connection per member", () => {
     expect(made).toHaveLength(0);
     expect(mesh.state.phase).toBe("unconfigured");
   });
+
+  it("answers the same list until something changes, so a rendering store does not loop", () => {
+    const { mesh, made } = harness(settingsWith([member("a"), member("b")]));
+    const first = mesh.entries();
+    expect(mesh.entries()).toBe(first);
+    made[0]?.fail();
+    const second = mesh.entries();
+    expect(second).not.toBe(first);
+    expect(second.find((entry) => entry.target.hostId === "a")?.state.phase).toBe("failed");
+  });
 });

@@ -6,7 +6,7 @@ import { connect, type ConnectionPath, type OpenConnection } from "./connect.ts"
 import type { DirectReason } from "./direct-attempt.ts";
 import { helloName } from "./hello-name.ts";
 import { isFinal } from "./host-failure.ts";
-import { MeshConnections } from "./mesh-connections.ts";
+import { MeshConnections, type MemberEntry } from "./mesh-connections.ts";
 import {
   type ConnectionSettings,
   isConfigured,
@@ -417,4 +417,9 @@ resumeOnWake(connectionStore);
 
 export function useConnection(store: Pick<MeshConnections, "subscribe" | "state"> = connectionStore): ConnectionState {
   return useSyncExternalStore(store.subscribe, () => store.state);
+}
+
+/** Every member and its own connection state, for a list that marks one machine offline rather than the whole app. */
+export function useMeshMembers(): readonly MemberEntry[] {
+  return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.entries());
 }

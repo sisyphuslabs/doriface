@@ -48,11 +48,17 @@ export class MeshConnections {
   readonly #targets = new Map<string, MemberTarget>();
   readonly #listeners = new Set<() => void>();
   readonly #unsubscribes = new Map<string, () => void>();
+  /**
+   * The list `entries()` answers with. Rebuilt only when something changes, because it is read through
+   * `useSyncExternalStore`, which compares snapshots by identity and would re-render forever on a fresh array per call.
+   */
+  #snapshot: readonly MemberEntry[] = [];
 
   constructor(settings: ConnectionSettings, make: StoreFactory) {
     this.#settings = normalizeSettings(settings);
     this.#make = make;
     this.#sync();
+    this.#refresh();
   }
 
   get settings(): ConnectionSettings {
@@ -75,11 +81,7 @@ export class MeshConnections {
 
   /** Every member and its own connection state, for a list that marks one machine offline instead of the whole app. */
   entries(): readonly MemberEntry[] {
-    const targets = [...this.#targets.values()];
-    return targets.map((target) => ({
-      target,
-      state: this.#stores.get(target.hostId)?.state ?? { phase: "unconfigured" },
-    }));
+    return this.#snapshot;
   }
 
   /** Takes new settings, and dials whatever the new roster adds while leaving connections that are still members alone. */
@@ -204,7 +206,15 @@ export class MeshConnections {
     this.#notify();
   }
 
+  #refresh(): void {
+    this.#snapshot = [...this.#targets.values()].map((target) => ({
+      target,
+      state: this.#stores.get(target.hostId)?.state ?? { phase: "unconfigured" },
+    }));
+  }
+
   #notify(): void {
+    this.#refresh();
     for (const listener of this.#listeners) listener();
   }
 }
