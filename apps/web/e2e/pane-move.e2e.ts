@@ -127,7 +127,10 @@ test.describe("with clipboard access", () => {
     await page.mouse.move(line.left + 1, line.y, { steps: 8 });
     await expect(overlay(page)).toHaveCount(0);
     await page.mouse.up();
-    await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toContain("movesrc-42");
+    // The terminal holds the selection and paints its cells, rather than leaving it as the document's selection,
+    // which would stop IME composition in its input (#592).
+    await expect.poll(() => page.evaluate(() => document.getSelection()?.toString() ?? "")).toBe("");
+    await expect(terminal.locator(".term-selection-cells > div").first()).toBeVisible();
     expect(await drawnOrder(page, t)).toBe(`${t4} ${t5} ${t6}`);
     expect(savedTab("tb-move")).toBe("tb-move(p1,p2,p3)");
   });

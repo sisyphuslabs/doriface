@@ -225,7 +225,7 @@ export function TerminalView(props: TerminalViewProps) {
       wt.setRenderingPaused(false);
     };
   }, [wt, pacer]);
-  useFocusAfterSelect(wt);
+  useFocusAfterSelect(wt, options.trimCopy);
   useSelectionCells(wt);
   const attachedTo = useRef(connection);
   const attachedBefore = useRef(false);

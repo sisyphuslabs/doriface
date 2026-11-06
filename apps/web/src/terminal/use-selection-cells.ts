@@ -1,5 +1,6 @@
 import type { WTerm } from "@wterm/dom";
 import { useEffect } from "react";
+import { heldSelection, onHeldSelection } from "./held-selection.ts";
 import { selectedCells } from "./selection-cells.ts";
 
 /** The layer the selected cells are painted in, inside the grid, above the cell backgrounds and below the text. */
@@ -9,6 +10,9 @@ const LAYER = "term-selection-cells";
  * Paints the document selection over this terminal as whole cells (#410). The browser's own highlight follows each
  * glyph's box, so a wide character drawn by a fallback face, at its own size, paints taller or narrower than its two
  * cells; render-css.ts turns that highlight off inside rows, and this layer paints the cells instead, as Ghostty does.
+ *
+ * A selection a press left is painted from the terminal's held range (held-selection.ts): the document keeps no
+ * selection the browser would read as a non-editable one, which is what stops IME composition (#592).
  */
 export function useSelectionCells(wt: WTerm | null): void {
   useEffect(() => {
@@ -24,7 +28,9 @@ export function useSelectionCells(wt: WTerm | null): void {
       frame = 0;
       const grid = wt.element.querySelector<HTMLElement>(".term-grid");
       const selection = doc.getSelection();
-      const range = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      const native =
+        selection !== null && selection.rangeCount > 0 && !selection.isCollapsed ? selection.getRangeAt(0) : null;
+      const range = native ?? heldSelection(wt.element)?.range ?? null;
       const cell = parseFloat(getComputedStyle(wt.element).getPropertyValue("--term-cell-width")) || 0;
       const rects = grid === null || range === null ? [] : selectedCells(range, grid, cell, wt.cols);
       if (rects.length === 0) {
@@ -45,10 +51,12 @@ export function useSelectionCells(wt: WTerm | null): void {
       if (frame === 0) frame = requestAnimationFrame(paint);
     };
     doc.addEventListener("selectionchange", schedule);
+    const stopHeld = onHeldSelection(wt.element, schedule);
     const resized = new ResizeObserver(schedule);
     resized.observe(wt.element);
     return () => {
       doc.removeEventListener("selectionchange", schedule);
+      stopHeld();
       resized.disconnect();
       if (frame !== 0) cancelAnimationFrame(frame);
       layer.remove();
