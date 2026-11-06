@@ -1,0 +1,22 @@
+// The hosted web app and PWA (#668): the static build in dist/, served by Workers static assets. A phone that scans a
+// host's pairing QR code opens <origin>/pair#..., so every path the app routes answers index.html. Deployed only by
+// .github/workflows/deploy-web.yml: staging first, probed, then production.
+{
+  "name": "doriface-web",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+  },
+  "workers_dev": false,
+  "env": {
+    "staging": {
+      "name": "doriface-web-staging",
+      "routes": [{ "pattern": "doriface-staging.omo.dev", "custom_domain": true }],
+    },
+    "production": {
+      "name": "doriface-web",
+      "routes": [{ "pattern": "doriface.omo.dev", "custom_domain": true }],
+    },
+  },
+}
