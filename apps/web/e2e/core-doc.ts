@@ -57,31 +57,39 @@ export function coreDoc(name: string): unknown {
 }
 
 /**
- * Writes `next` at the version the core reports, retrying a lost compare-and-set on a fresh read: the app writes these
- * documents too, so a write can land between the read and its set and the core answers the set with "is at version N, not M"
- * (#896). Bounded to five attempts, and only for that refusal -- any other failure is thrown as it came.
+ * Compare-and-set against the version the core reports, retrying a lost race on a fresh read: the app writes these documents
+ * too, so a write can land between the read and its set and the core answers "is at version N, not M" (#896). Bounded to five
+ * attempts, and only for that refusal -- any other failure is thrown as it came.
  *
  * `next` is called once per attempt with that attempt's read, so an update derived from the document is recomputed from the
  * document the core reports NOW instead of clobbering a write that landed in between.
  */
-function writeCoreDoc(
-  name: string,
-  next: (current: unknown, version: unknown) => unknown,
-  on: string | undefined,
-  which: Core,
+export function coreCompareAndSet(
+  send: (method: string, params: unknown) => unknown,
+  where: Readonly<Record<string, unknown>>,
+  next: (current: unknown) => unknown,
 ): void {
-  const core = coreEnv(which);
-  const where = on === undefined ? { name } : { name, on };
   for (let attempt = 0; ; attempt += 1) {
-    const current = call(core, "doc.get", where);
-    const version = typeof current === "object" && current !== null && "version" in current ? current.version : 0;
+    const read = send("doc.get", where);
+    const reply = typeof read === "object" && read !== null ? (read as Record<string, unknown>) : {};
     try {
-      call(core, "doc.set", { ...where, value: next(current, version), version });
+      send("doc.set", { ...where, value: next("value" in reply ? reply["value"] : null), version: reply["version"] ?? 0 });
       return;
     } catch (cause) {
       if (attempt >= 4 || !/is at version \d+, not \d+/.test(String(cause))) throw cause;
     }
   }
+}
+
+function writeCoreDoc(
+  name: string,
+  next: (current: unknown) => unknown,
+  on: string | undefined,
+  which: Core,
+): void {
+  const core = coreEnv(which);
+  const where = on === undefined ? { name } : { name, on };
+  coreCompareAndSet((method, params) => call(core, method, params), where, next);
 }
 
 /**
