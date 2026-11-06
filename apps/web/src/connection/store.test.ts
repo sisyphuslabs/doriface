@@ -186,8 +186,9 @@ test("the host's name is saved beside the paired host, so a load without it stil
     close: () => undefined,
     hello: { core: { id: "c0re", name: "studio" } },
   };
+  const connection = announcing as unknown as HcConnection;
   const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" }, () =>
-    Promise.resolve(announcing as unknown as HcConnection),
+    Promise.resolve({ connection, path: "relay" }),
   );
   const open = new Promise<void>((resolve) => {
     const off = store.subscribe(() => {
@@ -250,10 +251,22 @@ test("a host that does not start again shows its cause, and no link is tried", a
   store.stop();
 });
 
+/**
+ * What an open connection always carries: the store reads the host's name off `hello` as it opens one (#496), so a mock
+ * without it is not an open connection.
+ */
+const openConnection = (
+  onClose: (listener: (error?: Error) => void) => () => void = () => () => undefined,
+): HcConnection =>
+  ({
+    onClose,
+    close: () => undefined,
+    hello: { core: { id: "c0re", name: "studio" } },
+  }) as unknown as HcConnection;
+
 test("the open state carries the path its session opened on (#446 §5)", async () => {
   jest.useFakeTimers();
-  const live: Pick<HcConnection, "onClose" | "close"> = { onClose: () => () => undefined, close: () => undefined };
-  const connection = live as HcConnection;
+  const connection = openConnection();
   const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" }, (): Promise<OpenConnection> =>
     Promise.resolve({ connection, path: "direct" }),
   );
@@ -273,11 +286,7 @@ test("the open state carries the path its session opened on (#446 §5)", async (
 test("a direct link that drops sends the next attempt to the relay at once, once (#446 §4)", async () => {
   jest.useFakeTimers();
   const closes: ((error?: Error) => void)[] = [];
-  const live: Pick<HcConnection, "onClose" | "close"> = {
-    onClose: (fn) => (closes.push(fn), () => undefined),
-    close: () => undefined,
-  };
-  const connection = live as HcConnection;
+  const connection = openConnection((listener) => (closes.push(listener), () => undefined));
   const skip: (boolean | undefined)[] = [];
   const store = new ConnectionStore(
     { ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" },
