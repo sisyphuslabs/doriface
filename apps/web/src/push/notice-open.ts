@@ -1,6 +1,6 @@
 import { isNoticeId } from "@doriface/protocol";
 import { useEffect, useSyncExternalStore } from "react";
-import { noticeBridge } from "./desktop-notices.ts";
+import { noticeBridge } from "./notice-bridge.ts";
 import { pushChannel } from "./push-channel.ts";
 import { allowFromPage, whenVisible } from "./prompt-answer.ts";
 
