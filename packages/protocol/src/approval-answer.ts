@@ -103,7 +103,8 @@ async function entryOpen(
  *    monotonic clock may stand still). Otherwise nothing is pressed (`failed`).
  * 4. Press the keys, then record `sent`. A press that throws is `unknown`: it may have landed, so the prompt stays held
  *    until the screen moves. For typed text, the keys open its row; the text is pasted (one line, no control
- *    characters) only once the live screen shows that row open, and is `unknown` otherwise, since keys were pressed.
+ *    characters) only once the live screen shows that row open and the fence of step 3 still holds, and is `unknown`
+ *    otherwise, since keys were pressed.
  *
  * `wallMs` is only shown to people. Two limits stay: a key already on the wire when its claim lapses, and someone
  * typing in the terminal itself; both need a conditional `terminal.keys` in hc (herdrdev/herdr-core#122).
@@ -179,6 +180,11 @@ export async function answerApproval(
     if (reply.kind === "text" && text !== undefined) {
       if (!(await entryOpen(core, mark.terminal, reply.option, options.pause ?? wait)))
         throw new Error("the row for a typed answer did not open; its keys were pressed, the text was not sent");
+      // The row took time to open: the claim is checked again, as before the keys, right before the text goes in.
+      if (!(await fenced(core, mark.terminal, claim, clock, claimedAt, wall, wallClaimedAt)))
+        throw new Error(
+          "the claim lapsed or was taken while the typed row opened; its keys were pressed, the text was not sent",
+        );
       await core.send(mark.terminal, text);
     }
   } catch (error) {

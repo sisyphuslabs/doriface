@@ -104,8 +104,12 @@ export function optionRows(lines: readonly string[]): OptionRow[] {
 }
 
 /** The last row at or above `from` that `test` accepts, scanning up. */
-export function lastIndex(lines: readonly string[], test: (line: string) => boolean, from = lines.length - 1): number {
-  for (let index = from; index >= 0; index--) if (test(lines[index] ?? "")) return index;
+export function lastIndex(
+  lines: readonly string[],
+  test: (line: string, index: number) => boolean,
+  from = lines.length - 1,
+): number {
+  for (let index = from; index >= 0; index--) if (test(lines[index] ?? "", index)) return index;
   return -1;
 }
 

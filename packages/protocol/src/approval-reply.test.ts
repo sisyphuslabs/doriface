@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { answerApproval, readApprovalRecord } from "./approval-answer.ts";
+import { answerApproval, CLAIM_TTL_MS, readApprovalRecord } from "./approval-answer.ts";
 import { markApproval } from "./approval-prompt.ts";
 import { binaryReply, type PromptReply, replyKeys, typedAnswer } from "./approval-reply.ts";
 import type { ScreenPrompt } from "./approval-rows.ts";
@@ -128,6 +128,22 @@ describe("answering every prompt shape", () => {
     expect(await answerApproval(core, mark, reply, phone, 1, { pause: noWait })).toMatchObject({ kind: "unknown" });
     expect(core.sent).toEqual([]);
     expect(await readApprovalRecord(core, mark)).toMatchObject({ outcome: "unknown" });
+  });
+
+  test("a claim that lapses while the typed row opens: the keys were pressed, the text is not sent, unknown", async () => {
+    const terminal = terminalAt("t3", { ...CLAUDE_BLOCKED, kind: "question" });
+    const core = new MemoryApprovalCore(terminal, screens.CLAUDE_QUESTION_SCREEN);
+    core.showAfterKeys(screens.CLAUDE_QUESTION_TYPING_SCREEN);
+    const mark = markApproval(terminal, screens.CLAUDE_QUESTION_SCREEN);
+    if (mark === undefined) throw new Error("no prompt");
+    let wallMs = 0;
+    // The device sleeps while the row opens: its own wall clock moves past the claim's lifetime.
+    const pause = async () => void (wallMs += CLAIM_TTL_MS);
+    const reply: PromptReply = { kind: "text", option: "4", text: "MySQL 8" };
+    const result = await answerApproval(core, mark, reply, phone, 1, { pause, wall: () => wallMs });
+    expect(result).toMatchObject({ kind: "unknown" });
+    expect(core.pressed).toEqual([{ address: "t3", keys: ["4"] }]);
+    expect(core.sent).toEqual([]);
   });
 
   test("Codex notes: ↓ to the typed row from where the cursor is, Tab, then the text", async () => {

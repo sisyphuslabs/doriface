@@ -40,7 +40,13 @@ const NOTES_OPEN = /^\s*›\s+Add notes\b/;
  *
  * Each row prints its own key in parentheses, which answers wherever the cursor sits.
  */
-function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
+/** A dialog a reader found: its prompt and the row it starts on, which says how far down the screen it is. */
+interface Found {
+  readonly prompt: ScreenPrompt;
+  readonly top: number;
+}
+
+function readPermission(lines: readonly string[]): Found | undefined {
   const question = lastIndex(lines, (line) => PERMISSION_QUESTION.test(line));
   if (question === -1) return undefined;
   const below = lines.slice(question + 1, question + 1 + DIALOG_ROWS);
@@ -68,7 +74,7 @@ function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
     below[footerAt]?.trim() ?? "",
   ].join("\n");
   const cursor = rows.find((row) => row.cursor)?.number;
-  return {
+  const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "permission",
     asks: /^run\b/.test(asked) ? "wants to run" : /\bedits?\b/.test(asked) ? "wants to edit" : "asks for permission",
@@ -90,6 +96,7 @@ function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
     ...(cursor === undefined ? {} : { cursor }),
     block,
   };
+  return { prompt, top: question };
 }
 
 /**
@@ -105,7 +112,7 @@ function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
  * A number answers the question and moves to the next. "None of the above" takes typed notes: the cursor is moved to
  * it with ↓, and Tab opens the notes.
  */
-function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
+function readQuestion(lines: readonly string[]): Found | undefined {
   const counterAt = lastIndex(lines, (line) => QUESTION_COUNTER.test(line));
   if (counterAt === -1) return undefined;
   const counter = QUESTION_COUNTER.exec(lines[counterAt] ?? "");
@@ -142,7 +149,7 @@ function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
   const count = Number(counter?.[2] ?? "1");
   const footer = (dialog[footerAt] ?? "").trim();
   const cursor = rows.find((row) => row.cursor)?.number;
-  return {
+  const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "question",
     asks: "asks a question",
@@ -161,9 +168,17 @@ function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
       "\n",
     ),
   };
+  return { prompt, top: counterAt };
 }
 
-/** Whichever of Codex's dialogs is up: a question or an approval. */
+/**
+ * Whichever of Codex's dialogs is up. The live dialog is the one drawn lowest on the screen: a line of the agent's own
+ * text above it that looks like another dialog never outranks it.
+ */
 export function readCodexPrompt(lines: readonly string[]): ScreenPrompt | undefined {
-  return readQuestion(lines) ?? readPermission(lines);
+  const found = [readQuestion(lines), readPermission(lines)].filter((each) => each !== undefined);
+  return found.reduce<Found | undefined>(
+    (low, each) => (low === undefined || each.top > low.top ? each : low),
+    undefined,
+  )?.prompt;
 }

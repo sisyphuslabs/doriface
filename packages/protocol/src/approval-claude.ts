@@ -39,6 +39,15 @@ const PLAN_FILE = /·\s+(\S+\.md)\s*$/;
 const PLAN_TYPED = /^Tell Claude what to change\b/;
 
 const indent = (line: string) => line.length - line.trimStart().length;
+
+/** A dialog a reader found: its prompt and the row its top rule is on, which says how far down the screen it is. */
+interface Found {
+  readonly prompt: ScreenPrompt;
+  readonly top: number;
+}
+
+/** The first row above `at` that is not blank, or -1. */
+const aboveBlank = (lines: readonly string[], at: number) => lastIndex(lines, (line) => line.trim() !== "", at - 1);
 const isNo = (label: string) => label === "No" || label.startsWith("No,");
 
 /**
@@ -104,7 +113,7 @@ const rowText = (entry: PromptOption) =>
  *
  * Each row's number picks it wherever the cursor sits (Enter would confirm the cursor's row); Esc is the dialog's cancel.
  */
-function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
+function readPermission(lines: readonly string[]): Found | undefined {
   const question = lastIndex(lines, (line) => PERMISSION_QUESTION.test(line));
   if (question === -1) return undefined;
   const below = lines.slice(question + 1, question + 1 + DIALOG_ROWS);
@@ -140,7 +149,8 @@ function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
     below[footerAt]?.trim() ?? "",
   ].join("\n");
   const cursor = cursorOf(rows);
-  return {
+  if (top === -1) return undefined;
+  const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "permission",
     asks: /^Bash\b/.test(header)
@@ -161,6 +171,7 @@ function readPermission(lines: readonly string[]): ScreenPrompt | undefined {
     ...(cursor === undefined ? {} : { cursor }),
     block,
   };
+  return { prompt, top };
 }
 
 /** The tab row's questions in order, and which one is up: the first not yet answered, or Submit once all are. */
@@ -193,7 +204,7 @@ function stepOf(tabRow: string, review: boolean): PromptStep | undefined {
  * A number answers its question and moves to the next one; → leaves a multi-select one for the next. Once every
  * question is answered it shows the answers under "Review your answers" and asks "Ready to submit your answers?".
  */
-function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
+function readQuestion(lines: readonly string[]): Found | undefined {
   const tabAt = lastIndex(lines, (line) => TAB_ROW.test(line));
   if (tabAt < 1 || !DIALOG_TOP.test(lines[tabAt - 1] ?? "")) return undefined;
   const top = tabAt - 1;
@@ -236,7 +247,7 @@ function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
   const footer = footerAt === -1 ? "" : (dialog[footerAt]?.trim() ?? "");
   const body = review ? bodyText(dialog.slice(reviewAt + 1, questionAt)) : "";
   const cursor = cursorOf(rows);
-  return {
+  const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "question",
     asks: review ? "asks to submit your answers" : "asks a question",
@@ -253,6 +264,7 @@ function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
     ...(cursor === undefined ? {} : { cursor, typing: options.some((row) => row.id === cursor && row.typed) }),
     block: [(lines[tabAt] ?? "").trim(), question, body, ...options.map(rowText), footer].join("\n"),
   };
+  return { prompt, top };
 }
 
 /**
@@ -274,8 +286,15 @@ function readQuestion(lines: readonly string[]): ScreenPrompt | undefined {
  *
  * With no plan written it asks "Exit plan mode?" with Yes and No rows instead.
  */
-function readPlan(lines: readonly string[]): ScreenPrompt | undefined {
-  const question = lastIndex(lines, (line) => PLAN_QUESTION.test(line) || EXIT_PLAN_QUESTION.test(line));
+function readPlan(lines: readonly string[]): Found | undefined {
+  // The question opens its own dialog, right under the dialog's top rule: the agent's own words saying "Would you like
+  // to proceed?" anywhere else on the screen are not this dialog.
+  const question = lastIndex(
+    lines,
+    (line, index) =>
+      (PLAN_QUESTION.test(line) || EXIT_PLAN_QUESTION.test(line)) &&
+      DIALOG_TOP.test(lines[aboveBlank(lines, index)] ?? ""),
+  );
   if (question === -1) return undefined;
   const below = lines.slice(question + 1, question + 1 + DIALOG_ROWS);
   const rows = detailedRows(below);
@@ -290,7 +309,7 @@ function readPlan(lines: readonly string[]): ScreenPrompt | undefined {
   const asked = (lines[question] ?? "").trim();
   const options = rows.map((row) => option(row, { declines: isNo(row.label), typed: PLAN_TYPED.test(row.label) }));
   const cursor = cursorOf(rows);
-  return {
+  const prompt: ScreenPrompt = {
     agent: AGENT,
     kind: "plan",
     asks: body === "" ? "wants to leave plan mode" : "has a plan ready",
@@ -305,9 +324,18 @@ function readPlan(lines: readonly string[]): ScreenPrompt | undefined {
     ...(cursor === undefined ? {} : { cursor, typing: options.some((row) => row.id === cursor && row.typed) }),
     block: [body, asked, ...options.map(rowText), footer?.trim() ?? ""].join("\n"),
   };
+  // A plan's dialog starts at its heading's rule ("Ready to code?" above the plan), or at the question's own rule.
+  return { prompt, top: Math.max(top, aboveBlank(lines, question)) };
 }
 
-/** Whichever of Claude Code's dialogs is up, read from the bottom of the screen: a question, a plan or a permission. */
+/**
+ * Whichever of Claude Code's dialogs is up. The live dialog is the one drawn lowest on the screen: a line of the
+ * agent's own text above it that looks like another dialog's question never outranks it, whatever kind it reads as.
+ */
 export function readClaudePrompt(lines: readonly string[]): ScreenPrompt | undefined {
-  return readQuestion(lines) ?? readPlan(lines) ?? readPermission(lines);
+  const found = [readQuestion(lines), readPlan(lines), readPermission(lines)].filter((each) => each !== undefined);
+  return found.reduce<Found | undefined>(
+    (low, each) => (low === undefined || each.top > low.top ? each : low),
+    undefined,
+  )?.prompt;
 }

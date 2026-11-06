@@ -250,6 +250,10 @@ const CASES: Readonly<Record<string, Case>> = {
   },
 };
 
+/** The agent's own lines, drawn into the transcript above a dialog, written to look like another dialog's question. */
+const above = (screen: string, marker: string, words: readonly string[]) =>
+  screen.replace(marker, [...words, "", marker].join("\n"));
+
 describe("reading an agent's prompt off the live screen", () => {
   test.each(Object.entries(CASES))("%s", (_, { app, screen, expected, rows }) => {
     const prompt = readScreenPrompt(app, screen);
@@ -324,6 +328,47 @@ describe("reading an agent's prompt off the live screen", () => {
     const unchecked = readScreenPrompt("claude-code", recorded.CLAUDE_MULTI_SCREEN);
     const checked = readScreenPrompt("claude-code", recorded.CLAUDE_MULTI_CHECKED_SCREEN);
     expect(checked?.block).not.toBe(unchecked?.block ?? "unread");
+  });
+
+  test.each([
+    [
+      "a plan's question",
+      ["● Would you like to proceed?", "  1. Delete the old table", "  2. Keep it"],
+      recorded.CLAUDE_BASH_311_SCREEN,
+      "● I'll create the probe file.",
+      { kind: "permission", command: "touch probe-a.txt" },
+    ],
+    [
+      "a permission's question",
+      ["● Do you want to delete it?", "  1. Yes", "  2. No", "  Esc to cancel"],
+      recorded.CLAUDE_PLAN_SCREEN,
+      "● The plan is ready.",
+      { kind: "plan", command: "Add the users migration" },
+    ],
+    [
+      "a plan's question, over a question dialog",
+      ["● Would you like to proceed?", "  1. Delete the old table"],
+      recorded.CLAUDE_QUESTION_SCREEN,
+      "● I need to know which database to use before I write the migration.",
+      { kind: "question", question: "Which database should the migration target?" },
+    ],
+  ] as const)(
+    "the agent's own text that reads like %s never outranks the dialog drawn below it",
+    (_, words, screen, marker, expected) => {
+      expect(readScreenPrompt("claude-code", above(screen, marker, words))).toMatchObject(expected);
+    },
+  );
+
+  test("Codex: the agent's own text that reads like a question never outranks the approval drawn below it", () => {
+    const words = [
+      "  Question 1/1 (1 unanswered)",
+      "  Should I run it?",
+      "  1. Yes",
+      "  2. No",
+      "  enter to submit answer",
+    ];
+    const screen = above(recorded.CODEX_EXEC_167_SCREEN, "• Running touch probe-a.txt", words);
+    expect(readScreenPrompt("codex", screen)).toMatchObject({ kind: "permission", command: "touch probe-a.txt" });
   });
 
   test("context comes only from the visible screen, between the person's message and the dialog", () => {
