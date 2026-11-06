@@ -71,6 +71,13 @@ describe("faceScalesFor", () => {
 });
 
 describe("FaceScales", () => {
+  test("a cell of no width, from a view with no layout, is not the primary cell: wide glyphs keep a size (#645)", () => {
+    const unmeasured = new FaceScales(fakeCanvas().measure, DEFAULT, DEFAULT, 0);
+    const measured = new FaceScales(fakeCanvas().measure, DEFAULT, DEFAULT);
+    expect(unmeasured.scaleOf("\u{D55C}")).toBe(measured.scaleOf("\u{D55C}"));
+    expect(unmeasured.scaleOf("\u{6F22}")).toBeGreaterThan(1);
+  });
+
   test("a fallback face is sized to the primary's ideograph width, the same for every glyph of a block", () => {
     const scales = new FaceScales(fakeCanvas().measure, DEFAULT, DEFAULT);
     const hangul = scales.scaleOf("\u{D55C}");

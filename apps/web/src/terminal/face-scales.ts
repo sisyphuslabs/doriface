@@ -67,7 +67,8 @@ export class FaceScales {
     this.#measure = measure;
     this.#family = family;
     this.#defaultFamily = defaultFamily;
-    this.#cell = cell;
+    // A cell of no width was never measured (a view with no layout): the canvas measures the primary instead (#645).
+    this.#cell = cell !== undefined && cell > 0 ? cell : undefined;
     // The first family is the primary face. A later configured family is still a fallback, just like a system face.
     // Computed CSS quotes family names containing commas; preserve quoted strings and their escapes.
     const first = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^,]+)/.exec(family)?.[0] ?? family;
