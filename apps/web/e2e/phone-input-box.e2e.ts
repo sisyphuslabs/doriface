@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { key, keysBar, openPhoneTerminal, PHONE } from "./phone-key-bar.ts";
 
-test.use({ serviceWorkers: "block", ...PHONE });
+test.use({ serviceWorkers: "block", ...PHONE, permissions: ["clipboard-read", "clipboard-write"] });
 
 const field = (page: Page) => page.getByLabel("Type into the terminal");
 const value = (page: Page) => page.locator("[data-terminal]").evaluate((el) => el.textContent ?? "");
@@ -26,7 +26,7 @@ test("the field takes Korean through the input method, and Send writes the line 
   page,
 }) => {
   const terminal = await openPhoneTerminal(page);
-  await key(page, "Type in a field").click();
+  await field(page).click();
   await expect(field(page)).toBeVisible();
   await expect(field(page)).toBeFocused();
 
@@ -40,7 +40,7 @@ test("the field takes Korean through the input method, and Send writes the line 
 
 test("a composed syllable reaches the program as one word, and nothing is sent before Send", async ({ page }) => {
   const terminal = await openPhoneTerminal(page);
-  await key(page, "Type in a field").click();
+  await field(page).click();
   await page.keyboard.type("echo ");
   await compose(page, "한글");
   await expect(field(page)).toHaveValue("echo 한글");
@@ -52,24 +52,39 @@ test("a composed syllable reaches the program as one word, and nothing is sent b
   await expect(field(page)).toHaveValue("");
 });
 
-test("the field rides above the keys bar, and the keyboard's own key takes both away", async ({ page }) => {
+test("the field stays inside the keys bar, and the keyboard's own key takes both away", async ({ page }) => {
   const terminal = await openPhoneTerminal(page);
-  await key(page, "Type in a field").click();
+  await field(page).click();
   await expect(field(page)).toBeVisible();
   const [box, bar, term] = await Promise.all([
     field(page).boundingBox(),
     keysBar(page).boundingBox(),
     terminal.boundingBox(),
   ]);
-  // The field sits on the bar, and the terminal ends above the field: neither covers the other.
-  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual((bar?.y ?? 0) + 1);
-  expect((term?.y ?? 0) + (term?.height ?? 0)).toBeLessThanOrEqual((box?.y ?? 0) + 1);
+  // The field shares the bar's row, and the terminal ends above the bar.
+  expect(box?.y ?? -1).toBeGreaterThanOrEqual(bar?.y ?? 0);
+  expect((box?.y ?? 0) + (box?.height ?? Infinity)).toBeLessThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
+  expect((term?.y ?? 0) + (term?.height ?? 0)).toBeLessThanOrEqual((bar?.y ?? 0) + 1);
 
   await key(page, "Hide keyboard").click();
   await expect(field(page)).toHaveCount(0);
   await expect(keysBar(page)).toHaveCount(0);
   await key(page, "Show keyboard").click();
   await expect(keysBar(page)).toBeVisible();
-  await expect(field(page)).toHaveCount(0);
-  await expect(key(page, "Type in a field")).toHaveAttribute("aria-pressed", "false");
+  await expect(field(page)).toBeVisible();
+  await expect(page.locator("[data-terminal] textarea")).toBeFocused();
+});
+
+test("pasting into the fixed field sends the pasted line when Enter is pressed", async ({ page }) => {
+  const terminal = await openPhoneTerminal(page);
+  await page.evaluate(() => navigator.clipboard.writeText("echo pasted-$((6*7))"));
+  await field(page).click();
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+  await expect(field(page)).toHaveValue("echo pasted-$((6*7))");
+  expect(await value(page)).not.toContain("pasted-42");
+  await page.keyboard.press("Enter");
+  await expect(terminal).toContainText("pasted-42", { timeout: 15_000 });
+  await expect(field(page)).toHaveValue("");
+  await expect(field(page)).toBeFocused();
+  await expect(keysBar(page)).toBeVisible();
 });

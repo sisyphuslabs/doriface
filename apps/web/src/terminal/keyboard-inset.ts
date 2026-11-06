@@ -73,8 +73,7 @@ export class LayoutKeyboard {
 
 const layoutKeyboard = new LayoutKeyboard();
 
-const typingIn = (scope: HTMLElement | null): boolean => {
-  const active = document.activeElement;
+const typingIn = (scope: HTMLElement | null, active: EventTarget | null = document.activeElement): boolean => {
   return scope !== null && active instanceof HTMLTextAreaElement && scope.contains(active);
 };
 
@@ -91,7 +90,10 @@ export function useSoftKeyboard(scope: HTMLElement | null): { readonly up: boole
   const [keyboard, setKeyboard] = useState({ open: false, inset: 0 });
   useEffect(() => {
     const abort = new AbortController();
-    const follow = (): void => queueMicrotask(() => setTyping(typingIn(scope)));
+    // Native focus moves through body between focusout and focusin. Its destination already names the next field,
+    // so switching from the terminal to the fixed input must not unmount that input during the transfer.
+    const follow = (event: FocusEvent): void =>
+      setTyping(typingIn(scope, event.type === "focusout" ? event.relatedTarget : event.target));
     // A tap in the terminal, or its input taking the focus from one, asks for the keyboard; a focus without a tap does
     // not, as no browser raises a keyboard for it.
     const ask = (): void => layoutKeyboard.ask(performance.now());
@@ -105,7 +107,7 @@ export function useSoftKeyboard(scope: HTMLElement | null): { readonly up: boole
     );
     document.addEventListener("focusin", follow, { signal: abort.signal });
     document.addEventListener("focusout", follow, { signal: abort.signal });
-    follow();
+    setTyping(typingIn(scope));
     const viewport = window.visualViewport;
     let wasOpen = false;
     const measure = (): void => {

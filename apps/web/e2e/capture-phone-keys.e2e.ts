@@ -41,7 +41,7 @@ for (const theme of ["day", "night"] as const) {
         await page.keyboard.type("printf 'keys-%s\\n' 'a line to select from'\r");
         await expect(terminal).toContainText("keys-a line to select from", { timeout: 15_000 });
         if (shot === "input") {
-          await key(page, "Type in a field").click();
+          await page.getByLabel("Type into the terminal").click();
           await expect(page.getByLabel("Type into the terminal")).toBeFocused();
           await page.keyboard.type("echo 안녕하세요");
         }
