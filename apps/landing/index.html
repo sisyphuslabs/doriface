@@ -590,9 +590,9 @@
                 <span class="frame__title">phone</span>
                 <span class="frame__meta">you type</span>
               </div>
+              <figcaption class="visually-hidden">On the phone, you type git status.</figcaption>
               <pre
                 class="term"
-                aria-label="On the phone: git status"
               ><span class="prompt">~/app $</span> <span data-type>git status</span><span class="caret" aria-hidden="true"></span></pre>
             </figure>
 
@@ -616,11 +616,10 @@
                 <span class="frame__title">server</span>
                 <span class="frame__meta">hc runs it</span>
               </div>
-              <pre
-                class="term"
-                data-host
-                aria-label="On the server: git status runs and prints that the branch is up to date"
-              ><span class="prompt">~/app $</span> git status
+              <figcaption class="visually-hidden">
+                On the server, git status runs and prints that the branch is up to date.
+              </figcaption>
+              <pre class="term" data-host><span class="prompt">~/app $</span> git status
 <span class="dim">On branch</span> main
 <span class="dim">Your branch is up to date with</span> 'origin/main'.
 <span class="ok">nothing to commit, working tree clean</span></pre>
@@ -1130,8 +1129,8 @@
               </div>
               <h3>Approved, then admitted</h3>
               <p>
-                A machine joins only after you approve it on a member. For seven days every member shows who joined, who
-                invited it and its fingerprint.
+                A machine joins after you approve it on a member, unless you opened the invite with <code>--auto</code>.
+                For seven days every member shows who joined, who invited it and its fingerprint.
               </p>
             </div>
             <div class="card reveal" style="--delay: 60ms">
