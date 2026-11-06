@@ -84,9 +84,8 @@ test.describe("a machine whose line blips (#904)", () => {
     await expect.poll(machineState, { timeout: 5_000 }).toBe("unreachable");
     await settled;
     await expect.poll(machineState, { timeout: OFFLINE_GRACE_MS }).toBe("connected");
-    await expect(page.getByRole("region", { name: "Working" })).toBeVisible();
-    await expect(agentRow(page.getByRole("region", { name: "Working" }), "crunch", true)).toBeVisible();
     expect(await flips(page)).toEqual([]);
+    await expect(agentRow(page.getByRole("region", { name: "Working" }), "crunch", true)).toBeVisible();
   });
 
   test("a machine that is really gone reads offline, with its tab, once the grace ends and not before", async ({
