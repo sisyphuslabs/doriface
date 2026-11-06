@@ -1,0 +1,138 @@
+# doriterm.com landing: design system
+
+The marketing page for doriterm.com lives in `apps/landing/` as plain HTML, CSS and one ES module, with no build step. It extends the product's [DESIGN.md](../../../DESIGN.md): the colours are the app's Night and Day palettes, and the status grammar and hairline depth carry over. This file covers only what a landing page adds: display type, a looser spacing scale, motion that explains, and the components the page is built from. Captures are in this folder (`<width>-<theme>-<section>.png`).
+
+## 0. Research
+
+| Source                             | What it does                                                                                                                                                                                                                                                          | What we took                                                                                                                                                                                | What we left                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [herdr.dev](https://herdr.dev)     | Geist at 96 px / weight 560 for the hero, the second line of each headline in a muted grey; a numbered `README.md` index of sections with `##` headings; the product's own sidebar drawn in HTML instead of a screenshot; one white pill button as the primary action | two-tone display headlines, weight 560, the numbered section index, product surfaces drawn as live HTML/SVG, the solid ink pill as the only primary button                                  | the wall of user-made window screenshots (we have no gallery) and the sticky left index column |
+| [ghostty.org](https://ghostty.org) | a terminal window frame centred as the hero, with an animated ASCII scene inside; one sentence of description; two buttons; JetBrains Mono for anything technical                                                                                                     | the window frame (traffic-light dots, centred mono title, hairline bar) as the container for every diagram, JetBrains Mono for code and labels, a single animated scene as the hero's proof | the full-viewport ASCII art and the blue accent on the primary button                          |
+
+## 1. Colour
+
+The page uses DESIGN.md's Night (dark) and Day (light) values and adds three landing roles. `:root` follows `prefers-color-scheme`; the System / Light / Dark switch in the nav pins `data-theme` on `<html>` and stores the choice in `localStorage` (`doriterm-theme`). An inline script in `<head>` applies the pinned value before first paint.
+
+| Token                                  | Dark                            | Light                           | Use                                                                                        |
+| -------------------------------------- | ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `--bg`                                 | `#0f0e0d`                       | `#fbfaf7`                       | page                                                                                       |
+| `--bg-raised`                          | `#141311`                       | `#f6f5f1`                       | cards, window bars                                                                         |
+| `--surface` / `--surface-2`            | `#191816` / `#211f1c`           | `#ffffff` / `#f0efea`           | nodes, pressed segment                                                                     |
+| `--term-bg`, `--term-fg`, `--term-dim` | `#121210`, `#d8d4cb`, `#8c877d` | `#fbfaf7`, `#2a2723`, `#6f6a61` | inside window frames                                                                       |
+| `--ink`                                | `#eeeeef`                       | `#1b1b1e`                       | headings, body emphasis                                                                    |
+| `--ink-2`                              | `#a8a49b`                       | `#5c5850`                       | body text, second headline line                                                            |
+| `--ink-3`                              | `#6e6a62`                       | `#9a958b`                       | decoration only, never text                                                                |
+| `--line` / `--line-strong`             | ink at 9 % / 16 %               | ink at 9 % / 16 %               | hairlines, control edges                                                                   |
+| `--accent`                             | `#9fb4e6`                       | `#2f5fc4`                       | section numbers, focus ring, terminal output packets, mesh edges                           |
+| `--cipher`                             | `#e2b86b`                       | `#8a5a00`                       | anything encrypted: ciphertext, keystroke packets, the relay outline, the pairing fragment |
+| `--ok`                                 | `#8fcf9a`                       | `#2f7a3e`                       | keys that stay on a device, a matched fingerprint                                          |
+| `--danger`                             | `#ef7d6b`                       | `#bf3a2b`                       | a revoked mesh member                                                                      |
+| `--primary` / `--primary-ink`          | ink / bg                        | ink / bg                        | the one solid button                                                                       |
+
+Rules:
+
+- One hue, one meaning. Amber is ciphertext and only ciphertext; blue is output and structure; green is a key or a check; red is revocation.
+- `--ink-2` is the lightest text colour. `--ink-3` fails text contrast on purpose and is used only for rules and dots.
+- The primary button is solid ink, not accent (DESIGN.md section 2).
+
+## 2. Type
+
+Geist (variable, OFL) for text and JetBrains Mono (variable, OFL) for code, labels and diagrams, both self-hosted from `apps/landing/fonts/` with `font-display: swap`. The app keeps its system UI stack; the landing self-hosts so that its large type renders the same on every OS.
+
+| Token            | Size                                | Weight  | Tracking          | Use                                  |
+| ---------------- | ----------------------------------- | ------- | ----------------- | ------------------------------------ |
+| `--text-display` | clamp(44 px, 1.4rem + 5.6vw, 96 px) | 560     | -0.04em           | hero headline, line-height 0.98      |
+| `--text-h2`      | clamp(32 px, 1.3rem + 2.8vw, 56 px) | 560     | -0.03em           | section headline, max 18ch, balanced |
+| `--text-h3`      | 20 px                               | 600     | -0.015em          | card title                           |
+| `--text-lede`    | clamp(17 px, 1rem + 0.35vw, 20 px)  | 400     | 0                 | hero and section lede, max 60ch      |
+| `--text-body`    | 16 px                               | 400     | 0                 | body                                 |
+| `--text-sm`      | 14 px                               | 400/500 | 0                 | lists, nav                           |
+| `--text-xs`      | 12 px                               | 400     | 0.04em, uppercase | eyebrows, mono labels                |
+
+Every headline is two-tone: a plain statement in `--ink`, then the consequence in `--ink-2` (herdr's pattern). Numbers that matter are tabular.
+
+## 3. Spacing, layout, radius
+
+4 px base: `--space-1..10` = 4, 8, 12, 16, 24, 32, 48, 64, 96, 144 px. Content width 1200 px plus a fluid gutter (`clamp(20px, 4vw, 40px)`). Sections are separated by 144 px (96 px under 760 px).
+
+Breakpoints: 640 (two-column lists), 700 (the hero scene switches from its wide to its tall drawing), 760 (nav links collapse), 900 (three-column cards, the relay pipe in one row, pairing side by side, mesh log beside the stage), 1080 (hero lede and actions side by side).
+
+| Radius          | Value  | Use                              |
+| --------------- | ------ | -------------------------------- |
+| `--radius-xs`   | 4 px   | inline highlights                |
+| `--radius-sm`   | 6 px   | copy button, ciphertext chips    |
+| `--radius-md`   | 8 px   | QR plate, icon tile              |
+| `--radius-lg`   | 12 px  | cards, code block, diagram nodes |
+| `--radius-xl`   | 16 px  | window frames, the mesh stage    |
+| `--radius-pill` | 999 px | buttons, theme switch, chips     |
+
+Depth: tonal steps and 1 px hairlines as in the app. Window frames are the one place with a shadow (`--shadow-frame`), because they stand for real windows.
+
+## 4. Motion
+
+Motion on this page explains a mechanism; nothing moves for decoration alone.
+
+| Token             | Value                             | Use                                                                      |
+| ----------------- | --------------------------------- | ------------------------------------------------------------------------ |
+| `--dur-press`     | 120 ms                            | button press (scale 0.97)                                                |
+| `--dur-ui`        | 220 ms                            | hover, theme change, highlight                                           |
+| `--dur-enter`     | 900 ms                            | scroll reveal (16 px rise + fade)                                        |
+| `--dur-draw`      | 1200 ms                           | a mesh edge drawing in                                                   |
+| `--dur-loop`      | 3.2 s                             | the relay pulse, packet trips                                            |
+| `--ease-reverb`   | `cubic-bezier(0.1, 1, 0.1, 1)`    | enters and draws: fast launch, long settle                               |
+| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)`      | UI feedback                                                              |
+| `--ease-exit`     | `cubic-bezier(0.3, 0, 0.8, 0.15)` | a revoked edge retracting                                                |
+| packets           | spline `0.45 0 0.55 1`            | ease in and out of each endpoint, so a packet visibly leaves and arrives |
+
+Scenes:
+
+- Hero: keystroke packets (amber) leave three devices, pass through the relay and reach two machines; output packets (blue) come back. The relay's hex lines re-randomise every 140 ms. A wide drawing (1000 x 400) above 700 px, a tall one (360 x 660) below, so labels stay at least 11 px on a phone.
+- Relay pipe: the phone types a command, the wire carries ciphertext chips both ways, the server prints the result.
+- Pairing: the QR is scanned, the fingerprint groups are compared one by one, then turn green.
+- Mesh: four members, a fifth asks to join (dashed amber ring), is admitted (edges draw in, record sparks travel), then one member is revoked (red, its edges retract). The step list beside the stage highlights the current step and reads as a static caption.
+
+Every loop runs only while its scene is on screen and the tab is visible (IntersectionObserver plus `visibilitychange`); SMIL scenes are paused with `pauseAnimations()`. With `prefers-reduced-motion: reduce`, no loop starts, packets and scan lines are hidden, reveals show at once, and each scene shows a complete still frame: the pipe with its command and result, the fingerprint matched, the mesh with five members.
+
+## 5. Components
+
+| Component        | Class                                      | Anatomy                                                                              | States                                                        |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| Nav              | `.nav`                                     | wordmark (mascot mark swaps per theme), section links, theme switch, Download        | sticky, translucent `--bg` with blur; links hide under 760 px |
+| Theme switch     | `.theme-switch`                            | three icon buttons (System, Light, Dark) with visually hidden labels                 | `aria-pressed`; hover ink; 2 px focus ring                    |
+| Button           | `.btn--primary`, `.btn--ghost`, `.btn--sm` | pill, 44 px tall (34 px small)                                                       | hover tone, 0.97 press, arrow nudges 3 px on hover            |
+| Eyebrow          | `.eyebrow`                                 | mono number in accent, 28 px rule, uppercase label                                   | none                                                          |
+| Section headline | `.h2` with `.soft`                         | two-tone, balanced                                                                   | none                                                          |
+| Window frame     | `.frame`                                   | 38 px bar: dots, centred mono title, mono meta; body                                 | none                                                          |
+| Terminal text    | `.term`                                    | mono 13 px; `.prompt` accent, `.dim`, `.ok`, `.hl` (amber)                           | blinking block caret (stopped under reduced motion)           |
+| Feature card     | `.card`                                    | 36 px accent icon tile, h3, body, optional mono `.meta`                              | hover edge                                                    |
+| Code block       | `.code`                                    | bar with label and Copy, mono body with dim comments                                 | Copy -> Copied (1.6 s)                                        |
+| Chip             | `.chip`                                    | pill, mono 12 px, leading dot                                                        | none                                                          |
+| Section index    | `.index`                                   | numbered rows, title, description (from 640 px)                                      | hover ink                                                     |
+| Relay wire       | `.wire`                                    | dashed amber container, two lanes of ciphertext chips (opposite directions), caption | marquee                                                       |
+| Mesh stage       | `.mesh`                                    | stage SVG, step list                                                                 | step highlight, danger step in red wash                       |
+| Footer           | `.footer`                                  | wordmark, four links                                                                 | hover ink                                                     |
+
+## 6. Claims and their sources
+
+Every product statement on the page is backed by this repository. A change to one of these lines changes the page.
+
+| Claim on the page                                                                                                                                    | Source                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Sessions use Noise IK; pairing uses IKpsk2; X25519, ChaCha20-Poly1305, BLAKE2s                                                                       | `packages/crypto/src/noise/handshake.ts:11-13`                                            |
+| Rekey every 2^20 messages                                                                                                                            | `packages/crypto/src/transport.ts:6`                                                      |
+| The relay keeps no accounts and stores no messages; ciphertext only                                                                                  | `docs/architecture.md:28`, README "How it fits together"                                  |
+| What the relay can see: host ids, addresses, timing; nothing it can forge, replay or splice                                                          | `docs/transport.md` "What the relay learns from a mesh", pairing table rows `0x02`/`0x03` |
+| The pairing secret is in the URL fragment, which never reaches a server                                                                              | `docs/transport.md:82`                                                                    |
+| 8-character typed code behind CPace; no offline guessing; at most 10 answers per offer                                                               | `packages/crypto/src/pairing.ts:10-13`, `docs/transport.md:83`                            |
+| Code printed as two groups of four; fingerprint as ten groups of four hex digits                                                                     | `packages/crypto/src/pairing.ts:41-44`, `packages/crypto/src/identity.ts:32`              |
+| A pairing offer lasts 10 minutes                                                                                                                     | `apps/host/src/commands/pair.ts:78` (`PAIRING_TTL_MS`)                                    |
+| A changed host key is refused unless you confirm (`--replace`)                                                                                       | README "Other machines through the relay"                                                 |
+| Mesh: Ed25519-signed records, approval before admit, 7-day new-member notice, `--compromised` revokes transitively, sessions closed and keys refused | `docs/transport.md` "Mesh" (records, `mesh pair`, `mesh revoke`, new-member notice)       |
+| Each member adds every other member as a herdr machine                                                                                               | `docs/transport.md` "Mesh", `machine.add --via` line                                      |
+| No ssh and no open port                                                                                                                              | README "Other machines through the relay"                                                 |
+| libghostty compiled to WebAssembly from Ghostty's source                                                                                             | README status table, `packages/ghostty-wasm`                                              |
+| Desktop app installs herdr-core when missing and offers this computer to a phone                                                                     | README status table (#417, #614)                                                          |
+| Browser versions                                                                                                                                     | README "Browsers", `apps/web/src/baseline.ts`                                             |
+| AGPL-3.0                                                                                                                                             | `LICENSE`                                                                                 |
+
+Illustrations that are not claims: the QR encodes `https://doriterm.com`, the code `7KQ4 M2XD` and the fingerprint digits are samples, and the terminal output in the pipe is example output.
