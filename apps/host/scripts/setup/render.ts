@@ -297,8 +297,7 @@ export function readMeshPair(output: string): MeshInvite {
 
 export interface MeshMemberLine {
   readonly name: string;
-  /** The machine name this host's core gives the member, which differs after a name fallback. */
-  readonly localName: string | undefined;
+  readonly hostId: string;
   readonly line: string;
 }
 
@@ -324,10 +323,9 @@ export function readMeshStatus(json: string): MeshSummary {
       const name = typeof member === "object" && member !== null ? Reflect.get(member, "name") : undefined;
       const hostId = typeof member === "object" && member !== null ? Reflect.get(member, "hostId") : undefined;
       const line = typeof member === "object" && member !== null ? Reflect.get(member, "line") : undefined;
-      const localName = typeof member === "object" && member !== null ? Reflect.get(member, "localName") : undefined;
       return {
         name: typeof name === "string" ? name : typeof hostId === "string" ? hostId : "?",
-        localName: typeof localName === "string" ? localName : undefined,
+        hostId: typeof hostId === "string" ? hostId : "",
         line: typeof line === "string" ? line : "?",
       };
     }),
@@ -335,8 +333,10 @@ export function readMeshStatus(json: string): MeshSummary {
 }
 
 /**
- * Each member's line state as this host's core reports it (`hc machine ls --json`, matched by the member's local
- * name); a member the core does not list keeps the state `mesh status` gave it.
+ * Each member's line state as this host's core reports it (`hc machine ls --json`); a member the core does not list
+ * keeps the state `mesh status` gave it. A mesh line's target ends with the member's hostId
+ * (`<launcher> connect --mesh --state-dir <dir> <hostId>`), which is matched instead of a name: after a name fallback
+ * the core's name for a member differs from both its mesh name and the status's local name.
  */
 export function withCoreLines(summary: MeshSummary, machinesJson: string | undefined): MeshSummary {
   const states = new Map<string, string>();
@@ -344,16 +344,17 @@ export function withCoreLines(summary: MeshSummary, machinesJson: string | undef
     const value: unknown = JSON.parse(machinesJson);
     const machines = typeof value === "object" && value !== null ? Reflect.get(value, "machines") : undefined;
     for (const machine of Array.isArray(machines) ? machines : []) {
-      const name: unknown = typeof machine === "object" && machine !== null ? Reflect.get(machine, "name") : undefined;
-      const state: unknown =
-        typeof machine === "object" && machine !== null ? Reflect.get(machine, "state") : undefined;
-      if (typeof name === "string" && typeof state === "string") states.set(name, state);
+      if (typeof machine !== "object" || machine === null) continue;
+      const target: unknown = Reflect.get(machine, "target");
+      const state: unknown = Reflect.get(machine, "state");
+      const hostId = typeof target === "string" ? /(\S+)\s*$/.exec(target)?.[1]?.replace(/^'|'$/g, "") : undefined;
+      if (hostId !== undefined && typeof state === "string") states.set(hostId, state);
     }
   }
   return {
     ...summary,
     members: summary.members.map((member) => {
-      const state = member.line === "self" || member.localName === undefined ? undefined : states.get(member.localName);
+      const state = member.line === "self" ? undefined : states.get(member.hostId);
       return state === undefined ? member : { ...member, line: state };
     }),
   };

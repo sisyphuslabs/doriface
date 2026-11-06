@@ -157,16 +157,16 @@ describe("the host's own output", () => {
       meshId: "m1",
       sync: "ok",
       members: [
-        { hostId: "a", name: "ny", localName: "ny", line: "self" },
-        { hostId: "b", name: null, localName: null, line: "connected" },
+        { hostId: "a", name: "ny", line: "self" },
+        { hostId: "b", name: null, line: "connected" },
       ],
     });
     expect(readMeshStatus(json)).toEqual({
       meshId: "m1",
       sync: "ok",
       members: [
-        { name: "ny", localName: "ny", line: "self" },
-        { name: "b", localName: undefined, line: "connected" },
+        { name: "ny", hostId: "a", line: "self" },
+        { name: "b", hostId: "b", line: "connected" },
       ],
     });
     expect(() => readMeshStatus("{}")).toThrow(/lacks/);
@@ -177,15 +177,16 @@ describe("the host's own output", () => {
       meshId: "m1",
       sync: "ok",
       members: [
-        { name: "a", localName: "a", line: "self" },
-        { name: "b", localName: "b-4dkk", line: "connecting" },
-        { name: "c", localName: "c", line: "unreachable" },
+        { name: "a", hostId: "aaaa", line: "self" },
+        { name: "b", hostId: "bbbb", line: "connecting" },
+        { name: "c", hostId: "cccc", line: "unreachable" },
       ],
     };
     const machines = JSON.stringify({
       machines: [
-        { name: "b-4dkk", state: "connected" },
-        { name: "a", state: "unreachable" },
+        { name: "b-4dkk", state: "connected", target: "'/s/doriface-host' connect --mesh --state-dir '/s' bbbb" },
+        { name: "a", state: "unreachable", target: "'/s/doriface-host' connect --mesh --state-dir '/s' aaaa" },
+        { name: "ssh-box", state: "connected", target: "ssh box hc connect" },
       ],
     });
     expect(withCoreLines(status, machines).members.map((member) => member.line)).toEqual([
