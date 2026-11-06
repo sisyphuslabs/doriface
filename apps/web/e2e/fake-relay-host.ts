@@ -36,6 +36,18 @@ const CLI = join(import.meta.dir, "..", "..", "host", "src", "cli.ts");
 const stateDir = mkdtempSync(join(tmpdir(), "dw-fake-relay-"));
 const relay = new FakeRelay();
 stage("relay");
+// The code path is an HTTP lookup on the relay, and FakeRelay only speaks the client uplink, so the slot it registered is
+// served here: without it a typed code can only ever reach a relay that answers "no host is pairing with this code".
+const pairServer = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch: (request) => {
+    const [, , kind, slot = ""] = new URL(request.url).pathname.split("/");
+    const record = kind === "pair" ? relay.pairLookup(slot) : undefined;
+    return record === undefined ? new Response("not found", { status: 404 }) : Response.json(record);
+  },
+});
+stage("pair lookup");
 const bridge = new RelayClientBridge(relay);
 const hc = createHcSession("web-e2e-fake-relay");
 stage("session");
@@ -58,6 +70,7 @@ async function stopAll(): Promise<void> {
   // Stop the dialer before its target: otherwise it can restart the second core during this teardown.
   await step("machine", () => stopMachine?.());
   await step("bridge", () => bridge.stop());
+  await step("pair lookup", () => pairServer.stop(true));
   await step("relay", () => relay.stop());
   rmSync(stateDir, { recursive: true, force: true });
   if (failures.length > 0) console.error(`the fake relay host could not stop everything: ${failures.join("; ")}`);
@@ -74,13 +87,14 @@ async function shutdown(code: number): Promise<void> {
 process.once("SIGTERM", () => void shutdown(0));
 process.once("SIGINT", () => void shutdown(0));
 
-async function pairingLink(): Promise<string> {
+async function pairingOffer(): Promise<{ readonly link: string; readonly code: string }> {
   const args = ["pair", "--no-qr", "--web-origin", webOrigin ?? "", "--relay", relayAddress ?? ""];
   const proc = Bun.spawn([process.execPath, CLI, ...args, "--state-dir", stateDir], { stdout: "pipe" });
   const stdout = await new Response(proc.stdout).text();
   const link = stdout.split("\n").find((line) => line.startsWith(`${webOrigin}/pair#`));
-  if ((await proc.exited) !== 0 || link === undefined) throw new Error(`pair failed: ${stdout}`);
-  return link;
+  const typed = /^code\s+(\S{4}) (\S{4})$/m.exec(stdout);
+  if ((await proc.exited) !== 0 || link === undefined || typed === null) throw new Error(`pair failed: ${stdout}`);
+  return { link, code: `${typed[1]}${typed[2]}` };
 }
 
 try {
@@ -109,9 +123,10 @@ try {
   }
   say({
     bridge: bridge.url,
+    pairUrl: `http://127.0.0.1:${pairServer.port}`,
     ...(process.argv.includes("--direct") ? { directUrl: host.e2ee?.lanUrls[0] ?? "" } : {}),
   });
-  for await (const _ of createInterface({ input: process.stdin })) say({ link: await pairingLink() });
+  for await (const _ of createInterface({ input: process.stdin })) say(await pairingOffer());
 } catch (error) {
   // A start that fails, or a pairing that does, stops what it started, so no core outlives it, and exits with the
   // reason on stderr (#502, #503).

@@ -7,6 +7,20 @@ import { E2E_LAYOUT_PORT, E2E_WEB_PORT } from "./e2e/config.ts";
 /** This run's build, apart from any other run's in the same checkout. */
 const WEB_OUT = join(RUN_DIR, `doriface-web-e2e-${E2E_WEB_PORT}-dist`);
 
+/**
+ * Chromium alone by default, because the required CI job installs only that browser. A wider desktop run is opt-in so
+ * `E2E_BROWSERS=all` can prove Firefox and WebKit without making every CI run download three engines.
+ */
+const e2eProjects = (): { name: string; use: Record<string, unknown> }[] => {
+  const chromium = { name: "chromium", use: { ...devices["Desktop Chrome"] } };
+  if ((process.env["E2E_BROWSERS"] ?? "") !== "all") return [chromium];
+  return [
+    chromium,
+    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+  ];
+};
+
 // Playwright stops its web servers and workers (and with them every e2e host and core) on SIGINT, not on SIGTERM, which
 // would leave the layout host, its cores and vite preview running: the runner answers SIGTERM with its own SIGINT.
 if (process.env["TEST_WORKER_INDEX"] === undefined) process.once("SIGTERM", () => process.kill(process.pid, "SIGINT"));
@@ -30,7 +44,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env["CI"]),
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
   use: { baseURL: `http://127.0.0.1:${E2E_WEB_PORT}`, trace: "retain-on-failure" },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: e2eProjects(),
   webServer: [
     {
       // Only layout.e2e.ts reads this host, and a file's tests run in one worker, so the workers can share it.
