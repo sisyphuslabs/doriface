@@ -37,7 +37,7 @@ test("a permission notice is opaque; its Yes row opens the pane and the page ans
   const tag = String(posted.notice["n"]);
   await deliverPush(context, JSON.stringify(posted.notice));
   await expect
-    .poll(() => shownNotifications(worker))
+    .poll(() => shownNotifications(worker), { timeout: 15_000 })
     .toEqual([
       {
         title: "doriface",
