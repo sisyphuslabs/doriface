@@ -89,6 +89,7 @@ export function addFavorite(
   }
   const key: CustomKey = { id: entry.id, label, input: entry.input.trim(), bytes: parsed.key.bytes };
   const packs = settings.packs.includes(FAVORITES_PACK_ID) ? settings.packs : [...settings.packs, FAVORITES_PACK_ID];
+  // The bar shows Favorites after the add, so the new key is where the person can see it.
   return {
     kind: "added",
     key,
@@ -96,7 +97,7 @@ export function addFavorite(
       ...settings,
       favorites: [...settings.favorites, key],
       packs,
-      activePack: settings.activePack ?? FAVORITES_PACK_ID,
+      activePack: FAVORITES_PACK_ID,
     },
   };
 }

@@ -66,9 +66,9 @@ function hideKeyboard(): void {
 }
 
 /**
- * The phone terminal's keys (after t3code's terminal screen): the person's own keys from Settings > Keyboard, then the
- * active pack's, then the controls that never move (the arrow pad, Switch session, Paste, and the fixed slots). With the
- * soft keyboard up the bar rides on it; with it down, only a round keyboard button stays, at the bottom right.
+ * The phone terminal's keys (after t3code's terminal screen): the active pack's keys, then the person's own from Settings
+ * > Keyboard, then the controls that never move (the arrow pad, Switch session, Paste, and the fixed slots). With the soft
+ * keyboard up the bar rides on it; with it down, only a round keyboard button stays, at the bottom right.
  */
 export function PhoneKeys(props: PhoneKeysProps) {
   const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu, pad, onPad, onPacks, onKeys } = props;
