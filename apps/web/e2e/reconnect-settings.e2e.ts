@@ -50,7 +50,9 @@ test("while the link is down, Settings and back keeps the terminal list and pane
   await echoes(page, "after-round-trip");
 });
 
-test("Settings and back keeps the terminal it showed: no reattach, no replay, and the keyboard back in it", async ({ page }) => {
+test("Settings and back keeps the terminal it showed: no reattach, no replay, and the keyboard back in it", async ({
+  page,
+}) => {
   await page.goto("/");
   await openNewTerminal(page);
   await echoes(page, "before-settings");
