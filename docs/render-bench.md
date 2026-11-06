@@ -1,6 +1,6 @@
 # Render bench and the release gate
 
-#670. herdr profiles full rendering at 1, 15 and 50 panes and runs a release smoke bench against the current stable binary before every release; doriface does the same for its web client, which is what the desktop app and the PWA draw terminals with.
+#670. herdr profiles full rendering at 1, 15 and 50 panes and runs a release smoke bench against the current stable binary before every release; Doriterm does the same for its web client, which is what the desktop app and the PWA draw terminals with.
 
 ## Running it
 
