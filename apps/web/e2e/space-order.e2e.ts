@@ -186,7 +186,7 @@ test("a space dragged onto another machine's rows keeps both machines' orders as
     await expect(spaceRow(page, REMOTE_SPACE)).toBeVisible({ timeout: 30_000 });
     expect(remoteSpaceCount()).toBe(1);
 
-    // Alpha first here, so a drop that were taken would land it last: only the refusal keeps the order.
+    // Alpha first here, so a drop that was taken would land it last: only the refusal keeps the order.
     await drag(page, "Alpha", REMOTE_SPACE);
     await page.reload();
     await expect(spaceRow(page, "Alpha")).toBeVisible({ timeout: 20_000 });

@@ -1,7 +1,8 @@
 // Captures of the space reorder (#610), at both widths and in both themes: the row's menu with Move up and Move down,
-// and a drag in progress over another space. Run with CAPTURE=1 bunx playwright test space-order-capture.
+// and the sidebar's list itself. Run with CAPTURE=1 bunx playwright test space-order-capture.
 import { devices } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { endAgent } from "./agents.ts";
@@ -31,23 +32,20 @@ function startShellIn(name: string, folder: string): string {
   return address;
 }
 
-/** A space of this capture's own: its name, its document id, and where its shell runs. */
-function space(name: string, id: string, folder: string) {
-  return {
-    id,
-    name,
-    folder,
-    tabs: [{ id: `tb-${id}`, name: `${name} tab`, terminal: startShellIn(name.toLowerCase(), folder) }],
-  };
-}
-
-/** Three spaces of this machine, each with a shell of its own, so the sidebar shows a list worth reordering. */
+/** Three spaces of this machine, each with its own shell in a folder of its own: a list worth reordering. */
 function threeSpaces(): void {
-  seedSpaces([
-    space("Alpha", "spc-alpha", "/tmp/alpha"),
-    space("Beta", "spc-beta", "/tmp/beta"),
-    space("Gamma", "spc-gamma", "/tmp/gamma"),
-  ]);
+  const root = mkdtempSync(join(tmpdir(), "space-order-capture-"));
+  const space = (name: string) => {
+    const id = `spc-${name.toLowerCase()}`;
+    const folder = mkdtempSync(join(root, `${name}-`));
+    return {
+      id,
+      name,
+      folder,
+      tabs: [{ id: `tb-${id}`, name: `${name} tab`, terminal: startShellIn(name.toLowerCase(), folder) }],
+    };
+  };
+  seedSpaces([space("Alpha"), space("Beta"), space("Gamma")]);
 }
 
 mkdirSync(OUT, { recursive: true });
