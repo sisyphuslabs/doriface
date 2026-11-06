@@ -27,6 +27,12 @@ const LABEL_DETAIL = /^(.*?\S)\s{2,}(\S.*)$/;
 const NOTES = /\(tab\)\s*$/;
 /** The notes row Tab opens under the cursor's option: `› Add notes`. */
 const NOTES_OPEN = /^\s*›\s+Add notes\b/;
+/** The cell Codex draws for the command or edit it asks about, right above its approval (0.166.0, 0.167.0). */
+const ASKED_CELL = /^• (?:Running|Edited) /;
+
+/** The nearest line above `at` that starts left of `column`: the transcript cell a dialog drawn at `column` sits under. */
+const edgeAbove = (lines: readonly string[], at: number, column: number) =>
+  lastIndex(lines, (line) => line.trim() !== "" && indent(line) < column, at - 1);
 
 /**
  * Codex's approval dialog, as 0.166.0 and 0.167.0 draw it under hc:
@@ -43,8 +49,10 @@ const NOTES_OPEN = /^\s*›\s+Add notes\b/;
  *
  * It is read from the bottom up: the footer, the option rows right above it, then the header above them. The header
  * is drawn two columns in, and so is every line of a command inside it, while the transcript above starts each cell
- * at the left edge (`• Running ...`). The dialog's title is the highest title line at the footer's column below that
- * edge: a title-shaped line in the command is below the real one (#776).
+ * at the left edge. The dialog's title is the highest title line at the footer's column below that edge: a
+ * title-shaped line in the command is below the real one (#776). The edge must be the cell Codex draws for what it
+ * asks about (`• Running ...`, `• Edited ...`); under any other cell the agent's own text could sit right above the
+ * dialog at its column and pass for its header, so nothing is read.
  */
 function readPermission(lines: readonly string[]): Found | undefined {
   const footer = lastIndex(lines, (line) => PERMISSION_FOOTER.test(line));
@@ -57,7 +65,8 @@ function readPermission(lines: readonly string[]): Found | undefined {
   if (rows.length === 0) return undefined;
 
   const column = indent(lines[footer] ?? "");
-  const edge = lastIndex(lines, (line) => line.trim() !== "" && indent(line) < column, first - 1);
+  const edge = edgeAbove(lines, first, column);
+  if (!ASKED_CELL.test(lines[edge] ?? "")) return undefined;
   const question = lines.findIndex(
     (line, index) => index > edge && index < first && indent(line) === column && PERMISSION_QUESTION.test(line),
   );
@@ -115,25 +124,36 @@ function readPermission(lines: readonly string[]): Found | undefined {
  *
  * A number answers the question and moves to the next. "None of the above" takes typed notes: the cursor is moved to
  * it with ↓, and Tab opens the notes.
+ *
+ * It is read from the bottom up: the footer, row 1 (the lowest above it), then the counter. The question is the
+ * agent's own text and Codex draws the agent's message right above the dialog at the same column, so a counter in
+ * either reads the same: with more than one counter under the transcript's left edge, nothing is read (#776).
  */
 function readQuestion(lines: readonly string[]): Found | undefined {
-  const counterAt = lastIndex(lines, (line) => QUESTION_COUNTER.test(line));
-  if (counterAt === -1) return undefined;
+  const footerAt = lastIndex(lines, (line) => QUESTION_FOOTER.test(line));
+  const firstRow = lastIndex(lines, (line) => optionRow(line)?.number === "1", footerAt);
+  if (footerAt === -1 || firstRow === -1) return undefined;
+  const edge = edgeAbove(lines, firstRow, indent(lines[footerAt] ?? ""));
+  const counters = lines.flatMap((line, index) =>
+    index > edge && index < firstRow && QUESTION_COUNTER.test(line) ? [index] : [],
+  );
+  const counterAt = counters[0] ?? -1;
+  if (counters.length !== 1) return undefined;
   const counter = QUESTION_COUNTER.exec(lines[counterAt] ?? "");
-  const dialog = lines.slice(counterAt + 1);
-  const footerAt = dialog.findIndex((line) => QUESTION_FOOTER.test(line));
-  const firstRow = dialog.findIndex((line) => optionRow(line) !== undefined);
-  if (footerAt === -1 || firstRow === -1 || firstRow > footerAt) return undefined;
-  const question = dialog
-    .slice(0, firstRow)
+  const question = lines
+    .slice(counterAt + 1, firstRow)
     .map((line) => line.trim())
     .filter((line) => line !== "")
     .join(" ");
-  const rows = dialog.slice(firstRow, footerAt).flatMap((line) => {
+  const below = lines.slice(firstRow, footerAt);
+  const rows = below.flatMap((line) => {
     const row = optionRow(line);
     return row === undefined ? [] : [row];
   });
-  if (question === "" || rows.length === 0) return undefined;
+  // Every line between row 1 and the footer is one of its rows in order, the notes Tab opened, or blank.
+  const drawn = below.every((line) => line.trim() === "" || NOTES_OPEN.test(line) || optionRow(line) !== undefined);
+  const ordered = rows.every((row, index) => row.number === String(index + 1));
+  if (question === "" || rows.length === 0 || !drawn || !ordered) return undefined;
   const options = rows.map((row): PromptOption => {
     const split = LABEL_DETAIL.exec(row.label);
     const label = split?.[1] ?? row.label;
@@ -151,7 +171,7 @@ function readQuestion(lines: readonly string[]): Found | undefined {
   });
   const index = Number(counter?.[1] ?? "1");
   const count = Number(counter?.[2] ?? "1");
-  const footer = (dialog[footerAt] ?? "").trim();
+  const footer = (lines[footerAt] ?? "").trim();
   const cursor = rows.find((row) => row.cursor)?.number;
   const prompt: ScreenPrompt = {
     agent: AGENT,
@@ -167,12 +187,12 @@ function readQuestion(lines: readonly string[]): Found | undefined {
     ...(INTERRUPT.test(footer) ? { cancel: { key: "esc", label: "Interrupt" } } : {}),
     ...(count >= 2 ? { step: { index, count, titles: [] } } : {}),
     ...(cursor === undefined ? {} : { cursor }),
-    typing: dialog.slice(firstRow, footerAt).some((line) => NOTES_OPEN.test(line)),
+    typing: below.some((line) => NOTES_OPEN.test(line)),
     block: [`Question ${index}/${count}`, question, ...options.map((row) => `${row.id}. ${row.label}`), footer].join(
       "\n",
     ),
   };
-  return { prompt, end: counterAt + 1 + footerAt };
+  return { prompt, end: footerAt };
 }
 
 /**

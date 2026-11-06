@@ -24,23 +24,41 @@ export function rowsEnd(lines: readonly string[]): number {
   return blank === -1 ? lines.length - 1 : blank - 1;
 }
 
+/** The column a numbered row's number is drawn at, or -1 for a line that is not one. */
+export const numberColumn = (line: string) => {
+  const row = optionRow(line);
+  return row === undefined ? -1 : line.indexOf(`${row.number}.`);
+};
+
 /**
  * A question or plan dialog's option list: each numbered row, with the lines under it indented to its label as its
  * detail. Rules and lines indented less than the label (Claude's own Submit row) are not rows; a blank line ends it.
+ * A row is drawn at the first row's number column and numbered one past the row above it: a line shaped like a row
+ * anywhere else (inside a row's agent-written description) is that row's detail, never a row of its own (#776).
  */
-export function detailedRows(lines: readonly string[]): (OptionRow & { readonly detail?: string })[] {
+export function detailedRows(
+  lines: readonly string[],
+  /** A blank line ends the list (a plan's rows); a question's rows run to its footer, past a description's blank line. */
+  blankEnds = true,
+): (OptionRow & { readonly detail?: string })[] {
   const rows: (OptionRow & { detail?: string })[] = [];
   /** Where each row's label starts: a line under it indented at least that far is its detail. */
   const columns: number[] = [];
+  const first = lines.find((line) => optionRow(line) !== undefined);
+  const rowColumn = first === undefined ? -1 : numberColumn(first);
   for (const line of lines) {
-    const row = optionRow(line);
     const last = rows.at(-1);
+    const next = last === undefined ? 1 : Number(last.number) + 1;
+    const drawn = optionRow(line);
+    const row =
+      drawn !== undefined && numberColumn(line) === rowColumn && Number(drawn.number) === next ? drawn : undefined;
     if (row !== undefined) {
       const box = CHECKBOX.exec(row.label);
       rows.push(row);
       columns.push(line.length - (box?.[2] ?? row.label).length);
-    } else if (last !== undefined && line.trim() === "") break;
-    else if (last === undefined || DIALOG_TOP.test(line) || indent(line) < (columns.at(-1) ?? 0)) continue;
+    } else if (last !== undefined && line.trim() === "") {
+      if (blankEnds) break;
+    } else if (last === undefined || DIALOG_TOP.test(line) || indent(line) < (columns.at(-1) ?? 0)) continue;
     else last.detail = last.detail === undefined ? line.trim() : `${last.detail} ${line.trim()}`;
   }
   return rows;

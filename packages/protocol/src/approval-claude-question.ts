@@ -5,10 +5,9 @@ import {
   CHECKBOX,
   cursorOf,
   detailedRows,
-  DIALOG_TOP,
+  numberColumn,
   option,
   PERMISSION_FOOTER,
-  rowsEnd,
   rowText,
 } from "./approval-claude-rows.ts";
 import {
@@ -19,6 +18,7 @@ import {
   optionRow,
   type PromptOption,
   type PromptStep,
+  ruleAt,
   type ScreenPrompt,
 } from "./approval-rows.ts";
 
@@ -29,6 +29,8 @@ const TAB = /([☐☒✔])\s+(.+?)(?=\s{2,}|\s*→|$)/g;
 const REVIEW = /^\s*Review your answers\s*$/;
 const SUBMIT_QUESTION = /^\s*Ready to submit your answers\?\s*$/;
 const TYPE_SOMETHING = /^Type something\b/;
+/** The dialog spans the screen: its rule starts at the left edge and its rows' numbers sit after the two-column cursor. */
+const ROW_COLUMN = 2;
 
 /** The tab row's questions in order, and which one is up: the first not yet answered, or Submit once all are. */
 function stepOf(tabRow: string, review: boolean): PromptStep | undefined {
@@ -59,27 +61,38 @@ function stepOf(tabRow: string, review: boolean): PromptStep | undefined {
  *
  * A number answers its question and moves to the next one; → leaves a multi-select one for the next. Once every
  * question is answered it shows the answers under "Review your answers" and asks "Ready to submit your answers?".
+ *
+ * The question, its options' descriptions and the answers under review are the agent's own words, so it is read from
+ * the bottom up: the footer, row 1 (the lowest one at the rows' column), and the tab row under the highest rule that
+ * starts at the left edge. The agent's words never draw there: its lines above the dialog are indented under `●`, and
+ * anything inside the dialog sits between that tab row and row 1, or under a row as its description (#776).
  */
 export function readQuestion(lines: readonly string[]): Found | undefined {
-  const tabAt = lastIndex(lines, (line) => TAB_ROW.test(line));
-  if (tabAt < 1 || !DIALOG_TOP.test(lines[tabAt - 1] ?? "")) return undefined;
+  const end = lastIndex(lines, (line) => line.trim() !== "");
+  const footerAt = QUESTION_FOOTER.test(lines[end] ?? "") ? end : -1;
+  const firstRow = lastIndex(
+    lines,
+    (line) => optionRow(line)?.number === "1" && numberColumn(line) === ROW_COLUMN,
+    end,
+  );
+  const tabAt = lines.findIndex(
+    (line, index) => index > 0 && index < firstRow && TAB_ROW.test(line) && ruleAt(lines[index - 1] ?? "", 0, "─"),
+  );
+  if (firstRow === -1 || tabAt === -1) return undefined;
   const top = tabAt - 1;
-  const dialog = lines.slice(tabAt + 1);
+  const dialog = lines.slice(tabAt + 1, firstRow);
   const reviewAt = dialog.findIndex((line) => REVIEW.test(line));
   const review = reviewAt !== -1;
-  const footerAt = dialog.findIndex((line) => QUESTION_FOOTER.test(line));
   const questionAt = review
     ? dialog.findIndex((line) => SUBMIT_QUESTION.test(line))
     : dialog.findIndex((line) => line.trim() !== "");
   if (questionAt === -1 || (!review && footerAt === -1)) return undefined;
-  const firstRow = dialog.findIndex((line, index) => index > questionAt && optionRow(line) !== undefined);
-  if (firstRow === -1) return undefined;
   const question = dialog
-    .slice(questionAt, firstRow)
+    .slice(questionAt)
     .map((line) => line.trim())
     .filter((line) => line !== "")
     .join(" ");
-  const rows = detailedRows(dialog.slice(firstRow, footerAt === -1 ? undefined : footerAt));
+  const rows = detailedRows(lines.slice(firstRow, footerAt === -1 ? end + 1 : footerAt), false);
   const multi = rows.some((row) => CHECKBOX.test(row.label));
   const options = rows.flatMap((row): PromptOption[] => {
     const box = CHECKBOX.exec(row.label);
@@ -100,7 +113,7 @@ export function readQuestion(lines: readonly string[]): Found | undefined {
   });
   if (options.length === 0) return undefined;
   const step = stepOf(lines[tabAt] ?? "", review);
-  const footer = footerAt === -1 ? "" : (dialog[footerAt]?.trim() ?? "");
+  const footer = footerAt === -1 ? "" : (lines[footerAt]?.trim() ?? "");
   const body = review ? bodyText(dialog.slice(reviewAt + 1, questionAt)) : "";
   const cursor = cursorOf(rows);
   const prompt: ScreenPrompt = {
@@ -120,6 +133,5 @@ export function readQuestion(lines: readonly string[]): Found | undefined {
     ...(cursor === undefined ? {} : { cursor, typing: options.some((row) => row.id === cursor && row.typed) }),
     block: [(lines[tabAt] ?? "").trim(), question, body, ...options.map(rowText), footer].join("\n"),
   };
-  const end = footerAt === -1 ? firstRow + rowsEnd(dialog.slice(firstRow)) : footerAt;
-  return { prompt, end: tabAt + 1 + end };
+  return { prompt, end };
 }
