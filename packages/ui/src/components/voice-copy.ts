@@ -83,9 +83,9 @@ export const VOICE_ERROR_COPY: Readonly<Record<VoiceError, ErrorCopy>> = {
   },
   "device-mac": {
     tone: "warning",
-    title: () => "Not available on this Mac",
+    title: (language) => `${language} isn't on this Mac yet`,
     body: (language) =>
-      `This Mac can't recognize ${language} on the device. Pick another language in Settings > Voice input, or type instead.`,
-    retry: false,
+      `Add ${language} in System Settings > Keyboard > Dictation so macOS downloads it for this Mac, then try again. Or pick another language in Settings > Voice input.`,
+    retry: true,
   },
 };
