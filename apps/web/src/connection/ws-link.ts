@@ -13,6 +13,11 @@ export class LinkCloseError extends Error {
   }
 }
 
+/** The owner of an attempt cancelled it; its socket is closed and nothing it carried may be adopted. */
+export class LinkAbortedError extends Error {
+  override readonly name = "LinkAbortedError";
+}
+
 function listen<T>(set: Set<T>, listener: T): Unsubscribe {
   set.add(listener);
   return () => set.delete(listener);
@@ -20,26 +25,48 @@ function listen<T>(set: Set<T>, listener: T): Unsubscribe {
 
 export interface LinkOptions {
   readonly timeoutMs?: number;
+  /** Cancels the attempt: a socket still connecting is closed, and one that opened is closed too (#446 §2). */
+  readonly signal?: AbortSignal | undefined;
 }
 
-/** Opens a binary WebSocket and resolves once it is open; one message carries one chunk of bytes. */
+/**
+ * Opens a binary WebSocket and resolves once it is open; one message carries one chunk of bytes. A signal closes the
+ * socket at any stage: while connecting (the promise rejects with {@link LinkAbortedError}) and after opening.
+ */
 export function openWebSocketLink(
   url: string,
   protocols: readonly string[],
   options: LinkOptions = {},
 ): Promise<ByteLink> {
-  const { timeoutMs = 10_000 } = options;
+  const { timeoutMs = 10_000, signal } = options;
   return new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(new LinkAbortedError(`the ${url} attempt was cancelled`));
+      return;
+    }
     const socket = new WebSocket(url, [...protocols]);
     socket.binaryType = "arraybuffer";
     const data = new Set<DataListener>();
     const closes = new Set<CloseListener>();
     const held: Uint8Array[] = [];
     let ended = false;
+    let opened = false;
+    const stop = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
     const timer = setTimeout(() => {
+      stop();
       socket.close();
       reject(new Error(`no answer from ${url} within ${timeoutMs} ms`));
     }, timeoutMs);
+    const onAbort = (): void => {
+      stop();
+      ended = true;
+      socket.close();
+      if (!opened) reject(new LinkAbortedError(`the ${url} attempt was cancelled`));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
 
     const link: ByteLink = {
       send: (bytes) => {
@@ -55,7 +82,13 @@ export function openWebSocketLink(
     };
 
     socket.addEventListener("open", () => {
-      clearTimeout(timer);
+      stop();
+      opened = true;
+      if (signal?.aborted === true) {
+        socket.close();
+        reject(new LinkAbortedError(`the ${url} attempt was cancelled`));
+        return;
+      }
       resolve(link);
     });
     socket.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -65,11 +98,11 @@ export function openWebSocketLink(
       for (const listener of data) listener(chunk);
     });
     socket.addEventListener("close", (event) => {
-      clearTimeout(timer);
+      stop();
       if (ended) return;
       ended = true;
       const error = event.code === 1000 ? undefined : new LinkCloseError(event.code, event.reason);
-      reject(error ?? new Error("closed before opening"));
+      if (!opened) reject(error ?? new Error("closed before opening"));
       for (const listener of closes) listener(error);
     });
   });

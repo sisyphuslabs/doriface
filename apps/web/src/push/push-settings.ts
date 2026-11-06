@@ -209,7 +209,15 @@ export const pushSettings = new PushSettings();
 /** Keeps the saved push route with the connection: a change of host or token re-registers notifications there. */
 export function followConnection(): void {
   let settings = connectionStore.settings;
+  let path = connectionStore.state.phase === "open" ? connectionStore.state.path : undefined;
   connectionStore.subscribe(() => {
+    const state = connectionStore.state;
+    const next = state.phase === "open" ? state.path : undefined;
+    // Push follows the main connection's path: a switch closes the open stream and reopens it on the new one (#446 §3).
+    if (next !== path) {
+      path = next;
+      pushChannel.reset();
+    }
     if (connectionStore.settings === settings) return;
     settings = connectionStore.settings;
     void pushSettings.retarget(settings);
