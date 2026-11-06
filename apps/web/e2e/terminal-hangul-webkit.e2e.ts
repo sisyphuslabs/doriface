@@ -82,6 +82,22 @@ for (const keyboard of ["iphone", "ipad"] satisfies Keyboard[]) {
   });
 }
 
+test("a paste the browser delivers only as input, while a syllable is still being typed, sends each part once", async ({
+  page,
+}) => {
+  const { terminal, field } = await openReader(page);
+  await typeHangul(field, "iphone", HANGEUL.slice(0, 4));
+  // A browser that leaves clipboardData empty inserts the paste into the field itself.
+  await field.evaluate((element) => {
+    if (!(element instanceof HTMLTextAreaElement)) throw new Error("not a text field");
+    const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: new DataTransfer() });
+    if (!element.dispatchEvent(paste)) return;
+    element.setRangeText("xyz", element.selectionStart, element.selectionEnd, "end");
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: "xyz" }));
+  });
+  await expectRead(page, terminal, "ed 95 9c e3 84 b1 78 79 7a");
+});
+
 test("Safari on a Mac: replacement edits without composition events reach the program as 한글", async ({ page }) => {
   const { terminal, field } = await openReader(page);
   await safariReplace(field, ["ㅎ", "하", "한"]);
