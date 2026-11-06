@@ -108,6 +108,15 @@ describe("install.sh on Linux", () => {
     expect(run.out).toContain("doriface://pair#h=fake");
   });
 
+  test("--join joins the mesh of the host that made the link once the service answers, instead of printing a pairing", () => {
+    const r = rig("Linux");
+    const run = install(r, ["--join", "doriface://pair#h=a&m=1"]);
+    expect(run.err).toBe("");
+    expect(run.code).toBe(0);
+    expect(run.calls.at(-1)).toBe("doriface-host mesh join --wait-host 60 --yes doriface://pair#h=a&m=1");
+    expect(run.calls.some((call) => call.startsWith("doriface-host pair"))).toBe(false);
+  });
+
   test("keeps an hc already on PATH and runs the service with it", () => {
     const r = rig("Linux", "aarch64");
     const tools = join(r.root, "tools");

@@ -9,7 +9,8 @@ import {
 } from "@doriface/crypto";
 import { parseArgs } from "node:util";
 import { renderUnicodeCompact } from "uqr";
-import { controlIsLive, controlSocketPath, requestControl } from "../control.ts";
+import { requestControl } from "../control.ts";
+import { pause, waitForHost, waitSeconds } from "./wait-host.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { type PendingPairing, PairingStore, pendingFromWire } from "../state/pairing.ts";
@@ -22,35 +23,6 @@ export const PAIR_USAGE = `usage: doriface-host pair [options]
   --state-dir <dir>   the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --no-qr             print no QR code
   --wait-host <secs>  wait up to <secs> for the running host (a service still starting) and fail if none answers`;
-
-const WAIT_POLL_MS = 200;
-
-const pause = (deadline: number): Promise<void> =>
-  Bun.sleep(Math.min(WAIT_POLL_MS, Math.max(0, deadline - Date.now())));
-
-function waitSeconds(value: string): number {
-  const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    throw new Error(`--wait-host wants a positive number of seconds, got ${JSON.stringify(value)}`);
-  }
-  return seconds;
-}
-
-/** Polls the state dir's control socket until a running host answers, so the offer is that host's, never a file. */
-async function waitForHost(stateDir: string, deadline: number, out: (text: string) => void): Promise<void> {
-  if (await controlIsLive(stateDir)) return;
-  const seconds = Math.ceil((deadline - Date.now()) / 1000);
-  out(`Waiting for doriface-host to start (up to ${seconds} s)...\n`);
-  const poll = async (): Promise<boolean> => {
-    if (Date.now() >= deadline) return false;
-    await pause(deadline);
-    return (await controlIsLive(stateDir)) || poll();
-  };
-  if (await poll()) return;
-  throw new Error(
-    `no running doriface-host answered on ${controlSocketPath(stateDir)} in time; check that the service started`,
-  );
-}
 
 /**
  * A host that has just started opens the offer before its relay uplink is up, so the code is not yet dialable. Waits

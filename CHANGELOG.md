@@ -10,6 +10,7 @@
 ### Host install
 
 - One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have (systemd `--user` with `Restart=always` and the top CPU and IO weights on Linux, an `Interactive` LaunchAgent kept alive on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
+- **Add a machine** is one command: the dialog asks this host for a single-use mesh offer and shows `curl -fsSL …/install.sh | sh -s -- --join '<link>'` to run on the machine to add, which installs the host, runs it as a service and joins this host's mesh; the cores then add each other as machines, and the dialog says when it joined. The three hand-run steps stay under **Advanced**. (#668)
 - `doriface-host pair --wait-host <seconds>` waits for a host that is still starting, and for the relay to register the code, so the first code it prints works. (#668)
 
 ## v0.1.2
