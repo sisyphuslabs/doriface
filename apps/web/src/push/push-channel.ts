@@ -25,15 +25,19 @@ export class PushChannel {
     this.#open = open;
   }
 
-  /** One request; `route` defaults to the one saved when notifications were turned on. */
-  async request(line: PushClientLine, route?: PushRoute): Promise<PushHostLine> {
+  /**
+   * One request on a stream of its own, used and closed: a connection change resets the stream that follows its path
+   * (#446 §3), and that reset must never drop a request the page is waiting on, such as the unsubscribe a host this
+   * device is leaving needs (#446 §2).
+   */
+  async requestOnce(line: PushClientLine, route?: PushRoute): Promise<PushHostLine> {
     const reached = route ?? (await loadPushRoute());
     if (reached === undefined) throw new Error("notifications are off on this device");
-    const client = await this.#connect(reached);
+    const client = await this.#open(reached);
     try {
       return await client.request(line);
     } finally {
-      if (this.#focus === null) this.#drop(client);
+      client.close();
     }
   }
 
