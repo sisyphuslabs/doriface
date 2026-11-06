@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Browser, Page } from "@playwright/test";
@@ -21,7 +21,8 @@ test.skip(process.env["CAPTURE"] !== "1", "CAPTURE=1 runs the capture");
 test("the joined workspace at 768, settled and neutral", async ({ browser }) => {
   test.setTimeout(240_000);
   // A plain directory, so the space's row carries no branch name and no ahead/behind counts.
-  const project = join(mkdtempSync(join(tmpdir(), "capture-")), "project");
+  const scratch = mkdtempSync(join(tmpdir(), "capture-"));
+  const project = join(scratch, "project");
   mkdirSync(project);
   const host = await startFakeRelayHost({ machine: true, terminal: true, cwd: project });
   try {
@@ -34,8 +35,14 @@ test("the joined workspace at 768, settled and neutral", async ({ browser }) => 
     await expect(terminal).toContainText("$", { timeout: 90_000 });
     const aside = page.locator("aside").first();
     await expect(aside).toContainText("studio", { timeout: 30_000 });
-    // The row also shows the checkout's branch and its ahead/behind counts; neither belongs in a docs image.
-    await expect(aside).not.toContainText(/[↑↓]/);
+    // The space row names its directory, and shows a branch, a dirty star or ahead/behind arrows only when its
+    // directory is a repository. Git facts arrive on a timer, so poll: asserting absence once would pass before
+    // the facts land and prove nothing.
+    await expect(async () => {
+      const row = await aside.innerText();
+      expect(row).toContain("project");
+      expect(row).not.toMatch(/[↑↓*]/);
+    }).toPass({ timeout: 20_000 });
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toHaveCount(0, { timeout: 15_000 });
     const skip = page.getByRole("button", { name: "Skip" });
@@ -48,5 +55,6 @@ test("the joined workspace at 768, settled and neutral", async ({ browser }) => 
     await page.screenshot({ path: join(OUT, "join-768-workspace-day.png"), animations: "disabled" });
   } finally {
     await host.stop();
+    rmSync(scratch, { recursive: true, force: true });
   }
 });
