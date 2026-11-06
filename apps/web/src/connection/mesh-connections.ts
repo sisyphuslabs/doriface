@@ -32,6 +32,17 @@ export interface MemberEntry {
 /** The one object `state` answers with when there is no connection to show: a fresh one per read would loop any rendering store. */
 const UNSET: ConnectionState = { phase: "unconfigured" };
 
+/** Whether a member's dial settings are unchanged, so an edit elsewhere does not tear down a connection it does not concern. */
+const sameTarget = (held: ConnectionSettings, want: ConnectionSettings): boolean =>
+  held.mode === want.mode &&
+  held.relayUrl === want.relayUrl &&
+  held.hostId === want.hostId &&
+  held.hostName === want.hostName &&
+  held.hostKey === want.hostKey &&
+  held.directUrl === want.directUrl &&
+  held.loopbackUrl === want.loopbackUrl &&
+  held.token === want.token;
+
 /**
  * One connection per member, so a machine going away removes that machine and nothing else.
  *
@@ -165,17 +176,22 @@ export class MeshConnections {
     }
     for (const member of roster) {
       const existing = this.#stores.get(member.hostId);
+      this.#targets.set(member.hostId, member);
       if (existing !== undefined) {
-        this.#targets.set(member.hostId, member);
+        // The shared settings can change under a member that is already dialled: a new relay, another mode, a fresh loopback
+        // token. Only the members whose slice changed are told, so an untouched connection is not torn down for an edit that
+        // does not concern it.
+        const scoped = this.#scoped(member);
+        if (!sameTarget(existing.settings, scoped)) existing.update(scoped);
         continue;
       }
-      this.#targets.set(member.hostId, member);
       this.#stores.set(member.hostId, this.#dial(member));
     }
   }
 
-  #dial(member: MemberTarget): MemberConnection {
-    const scoped: ConnectionSettings = {
+  /** One member's settings: the shared ones, with that member's own address and a roster of just itself. */
+  #scoped(member: MemberTarget): ConnectionSettings {
+    return {
       ...this.#settings,
       hostId: member.hostId,
       hostName: member.hostName,
@@ -183,6 +199,10 @@ export class MeshConnections {
       directUrl: member.directUrl,
       members: [member],
     };
+  }
+
+  #dial(member: MemberTarget): MemberConnection {
+    const scoped = this.#scoped(member);
     // A member's store holds a slice of a roster this object owns, so it must not write: saving its slice would replace the
     // roster with one member.
     const store = this.#make(scoped, () => undefined);

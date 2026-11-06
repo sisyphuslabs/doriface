@@ -158,6 +158,27 @@ describe("one connection per member", () => {
     expect(mesh.entries()).toHaveLength(1);
   });
 
+  it("a new relay reaches the members already dialled, and leaves the untouched ones alone", () => {
+    const initial = settingsWith([member("a"), member("b")]);
+    const { mesh, made } = harness(initial);
+    const before = made.map((connection) => connection.settings.relayUrl);
+    mesh.update({ ...initial, relayUrl: "wss://relay.example" });
+    expect(made.map((connection) => connection.settings.relayUrl)).toEqual([
+      "wss://relay.example",
+      "wss://relay.example",
+    ]);
+    expect(before).not.toEqual(["wss://relay.example", "wss://relay.example"]);
+    expect(made.every((connection) => connection.stopped === 0)).toBe(true);
+  });
+
+  it("an edit that concerns no member does not touch their settings", () => {
+    const initial = settingsWith([member("a"), member("b")]);
+    const { mesh, made } = harness(initial);
+    const held = made[0]?.settings;
+    mesh.update({ ...initial, members: [...initial.members] });
+    expect(made[0]?.settings).toBe(held);
+  });
+
   it("reports unconfigured when there is no roster and nothing paired", () => {
     const { mesh, made } = harness({ ...DEFAULT_SETTINGS, mode: "relay" });
     expect(made).toHaveLength(0);
