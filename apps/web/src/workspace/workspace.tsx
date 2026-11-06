@@ -67,6 +67,7 @@ export function Workspace({ connection }: WorkspaceProps) {
     refresh,
     listError,
     views,
+    heard: heardMachines,
     retry,
     listed: machineReads,
   } = useMachines(connection, fed.terminals);
@@ -146,7 +147,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     },
     [dropPane],
   );
-  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, views, machineReads, dropEnded);
+  // A pane is asked about only on what hc said: a machine held connected through a redial may have no terminals listed.
+  useDeadPanes(connection, layout.tabs, fed.loaded ? terminals : null, heardMachines, machineReads, dropEnded);
   useAdoptLoose(layouts, fed.loaded ? terminals : null, failed);
   const narrow = useNarrow();
   const ids = useMemo(() => machineIds(views), [views]);

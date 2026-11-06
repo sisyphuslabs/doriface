@@ -7,7 +7,7 @@ import { SPACE_RENAME_SHOTS } from "./capture-space-rename-shots.ts";
 import { VOICE_SHOTS } from "./capture-voice-shots.ts";
 import { seedSpaces } from "./layout-doc.ts";
 import { MACHINE_NAME } from "./machine.ts";
-import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
+import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo, OFFLINE_BOUND_MS } from "./machine-switch.ts";
 import { resetMeshDocs } from "./mesh-reset.ts";
 
 export type Width = "1440" | "390";
@@ -349,7 +349,7 @@ export const SHOTS: readonly Shot[] = [
       const terminal = page.locator(`[data-terminal="${MACHINE_NAME}/${ended}"]`);
       await expect(terminal).toContainText("$", { timeout: 15_000 });
       switchTo("drop");
-      await expect(terminal).toHaveCount(0, { timeout: STATE_BOUND_MS });
+      await expect(terminal).toHaveCount(0, { timeout: OFFLINE_BOUND_MS });
       hcOn("machine", ["kill", ended]);
       reconnect();
       // The phone's terminal screen has no machine list to wait on.
