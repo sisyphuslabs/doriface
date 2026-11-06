@@ -276,8 +276,7 @@ export class Reconciler {
     try {
       await this.#options.machines.add(name, via);
     } catch (error) {
-      // An `already_added` keeps the pair held: the migration that follows adds the line again and spends what is left.
-      if (reserved?.ok === true && kindOf(error) !== "already_added") reserved.failed();
+      if (reserved?.ok === true) reserved.failed();
       throw error;
     }
   }

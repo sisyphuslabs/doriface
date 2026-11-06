@@ -58,11 +58,11 @@ function setup(refused?: number) {
 }
 
 describe("replacing an earlier entry for a member's core never leaves the machine out of the list (#710)", () => {
-  test("the pair reserved for the add that met already_added is kept for the migration's add", async () => {
+  test("the migration reserves a whole pair of its own: herdr's probe spent one of the pair that met already_added", async () => {
     const { pairs, reconciler, calls, listed } = setup();
     await reconciler.reconcile(view);
     expect(calls()).toEqual(["add b", `add ${fallback}`, "rm b", "add b"]);
-    expect(pairs.log).toEqual(["reserved", "dropped", "reserved", "reserved"]);
+    expect(pairs.log).toEqual(["reserved", "dropped", "reserved", "dropped", "reserved"]);
     expect((await listed()).map(([name]) => name)).toEqual(["b"]);
     expect(reconciler.status.get(b.hostId)).toEqual({ state: "ok", replaced: { name: "b", kind: "ssh" } });
   });
@@ -70,7 +70,7 @@ describe("replacing an earlier entry for a member's core never leaves the machin
   test("a dial budget with no room for the line removes nothing, and the policy's budget due retries it", async () => {
     const { clock, pairs, reconciler, calls, listed } = setup(3);
     await reconciler.reconcile(view);
-    expect(pairs.log).toEqual(["reserved", "dropped", "reserved", "refused"]);
+    expect(pairs.log).toEqual(["reserved", "dropped", "reserved", "dropped", "refused"]);
     expect(calls()).toEqual(["add b", `add ${fallback}`]);
     expect(await listed()).toEqual([["b", "me@box", false, "work"]]);
     expect(reconciler.status.get(b.hostId)).toEqual({ state: "retrying", reason: BUDGET_REFUSAL });

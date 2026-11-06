@@ -46,6 +46,7 @@ export async function migrate(
   names: readonly string[],
   via: string,
 ): Promise<Migration> {
+  // A fresh pair: the add that met `already_added` spent one upgrade on herdr's probe and dropped the rest.
   const reserved = await parts.reserve?.();
   if (reserved !== undefined && !reserved.ok) return { kind: "refused", reason: reserved.reason };
   await parts.machines.rm(old.name);
