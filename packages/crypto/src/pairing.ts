@@ -108,8 +108,8 @@ export function encodePairSlot(slot: string, noiseStaticPub: Uint8Array): Uint8A
 /** An empty PAIR_SLOT payload clears the host's slot. */
 export const PAIR_SLOT_CLEAR = new Uint8Array(0);
 
-export interface PairingLink {
-  readonly webOrigin: string;
+/** What a pairing link carries besides where it opens: the fragment's five values, and `m=1` for a mesh offer. */
+export interface PairingTarget {
   readonly hostId: string;
   readonly noiseStaticPub: Uint8Array;
   readonly signPub: Uint8Array;
@@ -118,6 +118,19 @@ export interface PairingLink {
   /** A mesh offer (`&m=1`): the link admits a host into the mesh with `doriface-host mesh join`, not a device. */
   readonly mesh?: boolean | undefined;
 }
+
+/** A web pairing link: `<web origin>/pair#…`. */
+export interface PairingLink extends PairingTarget {
+  readonly webOrigin: string;
+}
+
+/** A parsed pairing link: the web app's when `webOrigin` is set, the desktop app's deep link when it is not. */
+export interface ParsedPairingLink extends PairingTarget {
+  readonly webOrigin?: string | undefined;
+}
+
+/** The desktop app's form of a pairing link: the web link's fragment under the app's own scheme. */
+export const PAIRING_DEEP_LINK_PREFIX = "doriface://pair";
 
 const WEBSOCKET_SCHEME: Readonly<Record<string, string>> = {
   "https:": "wss:",
@@ -144,21 +157,43 @@ export function pairingWebOrigin(webOrigin: string): string {
 
 /** `<web origin>/pair#h=…&k=…&s=…&p=…&r=…`; everything sits in the fragment, which never reaches a server. */
 export function buildPairingUrl(link: PairingLink): string {
-  const fragment = new URLSearchParams({
+  return `${pairingWebOrigin(link.webOrigin)}/pair#${pairingFragment(link)}`;
+}
+
+/** `doriface://pair#h=…&k=…&s=…&p=…&r=…`, the desktop app's form of the same link. */
+export function buildPairingDeepLink(link: PairingTarget): string {
+  return `${PAIRING_DEEP_LINK_PREFIX}#${pairingFragment(link)}`;
+}
+
+function pairingFragment(link: PairingTarget): string {
+  return new URLSearchParams({
     h: link.hostId,
     k: base64urlEncode(link.noiseStaticPub),
     s: base64urlEncode(link.signPub),
     p: base64urlEncode(link.linkSecret),
     r: relayWebSocketUrl(link.relayUrl),
     ...(link.mesh === true ? { m: "1" } : {}),
-  });
-  return `${pairingWebOrigin(link.webOrigin)}/pair#${fragment.toString()}`;
+  }).toString();
 }
 
-/** Parses and checks a pairing URL: key and secret lengths, and that `h` is the hostId of `s`. */
-export function parsePairingUrl(url: string): PairingLink {
+function isPairingDeepLink(url: URL): boolean {
+  return (
+    url.protocol === "doriface:" &&
+    url.host.toLowerCase() === "pair" &&
+    (url.pathname === "" || url.pathname === "/") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.port === "" &&
+    url.search === ""
+  );
+}
+
+/** Parses either form of a pairing link: a web page's `<origin>/pair#…` or the desktop app's `doriface://pair#…`. */
+export function parsePairingLink(url: string): ParsedPairingLink {
   const parsed = new URL(url);
-  pairingWebOrigin(url);
+  const deep = parsed.protocol === "doriface:";
+  if (deep && !isPairingDeepLink(parsed)) throw new Error("a pairing deep link is doriface://pair#…");
+  if (!deep) pairingWebOrigin(url);
   const fragment = new URLSearchParams(parsed.hash.slice(1));
   const get = (key: string): string => {
     const value = fragment.get(key);
@@ -180,7 +215,7 @@ export function parsePairingUrl(url: string): PairingLink {
   const linkSecret = key("p");
   const relayUrl = relayWebSocketUrl(get("r"));
   return {
-    webOrigin: parsed.origin,
+    ...(deep ? {} : { webOrigin: parsed.origin }),
     hostId,
     noiseStaticPub,
     signPub,
@@ -188,4 +223,11 @@ export function parsePairingUrl(url: string): PairingLink {
     relayUrl,
     mesh: fragment.get("m") === "1",
   };
+}
+
+/** Parses a web pairing link; the desktop app's deep link is refused, as it has no web origin. */
+export function parsePairingUrl(url: string): PairingLink {
+  const link = parsePairingLink(url);
+  if (link.webOrigin === undefined) throw new Error("the pairing URL is a doriface:// deep link, not a web page");
+  return { ...link, webOrigin: link.webOrigin };
 }

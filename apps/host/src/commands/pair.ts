@@ -1,5 +1,4 @@
 import {
-  buildPairingUrl,
   DEFAULT_RELAY_URL,
   fingerprintOf,
   formatPairingCode,
@@ -13,12 +12,11 @@ import { requestControl } from "../control.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { type PendingPairing, PairingStore, pendingFromWire } from "../state/pairing.ts";
-
-export const DEFAULT_WEB_ORIGIN = "https://doriface.omo.dev";
+import { pairingArtifact, type PairingArtifact } from "./pair-link.ts";
 
 export const PAIR_USAGE = `usage: doriface-host pair [options]
 
-  --web-origin <url>  the web app that opens the link (default ${DEFAULT_WEB_ORIGIN})
+  --web-origin <url>  the web app that opens the link (default: the doriface desktop app's deep link)
   --relay <url>       the relay the device dials (default ${DEFAULT_RELAY_URL})
   --state-dir <dir>   the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --no-qr             print no QR code`;
@@ -35,6 +33,15 @@ const SLOT_NOTES = {
   pending: "  (not registered with the relay yet: start doriface-host, or pair with the link or QR code)",
 } as const;
 
+function opensWith(opens: PairingArtifact["opens"]): string {
+  switch (opens) {
+    case "web":
+      return "Open this link in a browser";
+    case "desktop":
+      return "Open this link in the doriface desktop app";
+  }
+}
+
 /** Opens a single-use pairing (replacing any pending one) and prints its link, QR code, typed code and fingerprint. */
 export async function pairCommand(args: readonly string[], out: (text: string) => void): Promise<void> {
   const { values } = parseArgs({
@@ -42,7 +49,7 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
     strict: true,
     allowPositionals: false,
     options: {
-      "web-origin": { type: "string", default: DEFAULT_WEB_ORIGIN },
+      "web-origin": { type: "string" },
       relay: { type: "string", default: DEFAULT_RELAY_URL },
       "state-dir": { type: "string" },
       "no-qr": { type: "boolean", default: false },
@@ -50,25 +57,28 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
     },
   });
   if (values.help) return out(`${PAIR_USAGE}\n`);
+  const webOrigin = values["web-origin"];
+  if (webOrigin !== undefined) pairingWebOrigin(webOrigin);
   relayWebSocketUrl(values.relay);
-  pairingWebOrigin(values["web-origin"]);
   const stateDir = values["state-dir"] ?? defaultStateDir();
   const identity = loadHostIdentity(stateDir);
   const offer = await openOffer(stateDir);
-  const url = buildPairingUrl({
-    webOrigin: values["web-origin"],
-    hostId: identity.hostId,
-    noiseStaticPub: identity.noise.publicKey,
-    signPub: identity.sign.publicKey,
-    linkSecret: offer.linkSecret,
-    relayUrl: values.relay,
-  });
+  const artifact = pairingArtifact(
+    {
+      hostId: identity.hostId,
+      noiseStaticPub: identity.noise.publicKey,
+      signPub: identity.sign.publicKey,
+      linkSecret: offer.linkSecret,
+      relayUrl: values.relay,
+    },
+    webOrigin,
+  );
   const ways = values["no-qr"] ? "or type the code" : "scan the QR code, or type the code";
   const lines = [
-    `Open this link on the device you want to pair, ${ways}. It works once, for ${PAIRING_TTL_MS / 60_000} minutes.`,
+    `${opensWith(artifact.opens)} on the device you want to pair, ${ways}. It works once, for ${PAIRING_TTL_MS / 60_000} minutes.`,
     "",
-    ...(values["no-qr"] ? [] : [renderUnicodeCompact(url, { ecc: "L", border: 2 }), ""]),
-    url,
+    ...(values["no-qr"] ? [] : [renderUnicodeCompact(artifact.url, { ecc: "L", border: 2 }), ""]),
+    artifact.url,
     "",
     `code        ${formatPairingCode(offer.code)}${SLOT_NOTES[offer.slot]}`,
     `fingerprint ${fingerprintOf(identity.noise.publicKey)}`,
