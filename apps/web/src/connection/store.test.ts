@@ -187,7 +187,7 @@ test("the host's name is saved beside the paired host, so a load without it stil
     hello: { core: { id: "c0re", name: "studio" } },
   };
   const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" }, () =>
-    Promise.resolve(announcing as unknown as OpenConnection),
+    Promise.resolve({ connection: announcing as unknown as HcConnection, path: "direct" }),
   );
   const open = new Promise<void>((resolve) => {
     const off = store.subscribe(() => {
@@ -251,8 +251,12 @@ test("a host that does not start again shows its cause, and no link is tried", a
 });
 
 test("the open state carries the path its session opened on (#446 §5)", async () => {
-  jest.useFakeTimers();
-  const live: Pick<HcConnection, "onClose" | "close"> = { onClose: () => () => undefined, close: () => undefined };
+  // no fake timers: the direct race settles on its budget timer, which fake timers would freeze
+  const live: Pick<HcConnection, "onClose" | "close" | "hello"> = {
+    onClose: () => () => undefined,
+    close: () => undefined,
+    hello: { core: { id: "c0re", name: "h" } },
+  };
   const connection = live as HcConnection;
   const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" }, (): Promise<OpenConnection> =>
     Promise.resolve({ connection, path: "direct" }),
@@ -271,11 +275,12 @@ test("the open state carries the path its session opened on (#446 §5)", async (
 });
 
 test("a direct link that drops sends the next attempt to the relay at once, once (#446 §4)", async () => {
-  jest.useFakeTimers();
+  // no fake timers: the direct race settles on its budget timer, which fake timers would freeze
   const closes: ((error?: Error) => void)[] = [];
-  const live: Pick<HcConnection, "onClose" | "close"> = {
+  const live: Pick<HcConnection, "onClose" | "close" | "hello"> = {
     onClose: (fn) => (closes.push(fn), () => undefined),
     close: () => undefined,
+    hello: { core: { id: "c0re", name: "h" } },
   };
   const connection = live as HcConnection;
   const skip: (boolean | undefined)[] = [];
