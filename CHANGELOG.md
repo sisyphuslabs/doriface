@@ -5,11 +5,16 @@
 ### Workspace
 
 - An agent row shows how far its own todo list has got, as done/total (2/4), read from the list the agent draws: Claude Code's task list when its task tools are on (a long list's folded line counts too), and omp's TODO list with its phases added up. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
+- The sidebar has a filter: the funnel button, Cmd+Alt+F on macOS or Ctrl+Alt+F elsewhere opens a field that narrows machines, spaces and agents to the rows whose shown labels match what is typed (letters in order, any case). The selected space and agent stay as context, a folded machine opens to show its matches, and Escape clears the query, then closes the field and returns to the terminal. (#673)
 
 ### Phone
 
 - On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
 - On a phone, an agent row shows its "..." alone, with Pin to top as its first item, so the summary, machine and age have room. (#950)
+
+### The pairing pages name the app host
+
+- Every page that tells someone where a phone lands after scanning the pairing QR code now names **https://app.doriterm.com**: the getting-started and install guides, the setup skill's instruction, and the landing page's illustrated panel, which still showed the older `doriface.omo.dev` address, one that keeps serving the same build. The desktop app and the web app already hand out the new one. (#977)
 
 ### Web app
 
@@ -21,6 +26,8 @@
 - Typing Hangul right after dragging across a terminal's text composes again on macOS instead of arriving one bare jamo per keystroke: the terminal's input took focus while the drag's selection was still in place, and emptying it afterwards left the input focused with no caret, which is the state the Korean input method refuses to compose in. The selection is emptied first now, and the input's caret comes back with the focus. The selection stays held and painted, and Cmd+C still copies it. (#953)
 
 ### Settings
+
+- The terminal preview in Settings draws its sample text at the size its rows are cut for: it asked for the configured point size while the row height comes from the pixel size the terminal renders at, so every line spilled a pixel past its box at every window size. (#955)
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
 - On a phone, the Settings tab strip's arrows that page to more sections are a full 44 pt tap each. (#900)
@@ -38,6 +45,10 @@
 
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 75 s without it, as a laptop that went to sleep still does. (#909)
 
+### Settings
+
+- Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
+
 ### Notifications
 
 - Notifications say why they are not arriving: the app reports when the OS refuses a notification, with the remedy, retries a subscription that failed, and says how many agents are already waiting. (#783)
@@ -50,6 +61,14 @@
 ### Fonts, Korean text and the terminal
 
 - Nerd Font icons, powerline separators, box drawing, braille spinners and agent marks such as `⏺ ⎿` are drawn from fonts the app ships, so they show on an iPhone instead of empty boxes. The icon font is only downloaded the first time a terminal shows an icon. (#960)
+
+### Website
+
+- The doriterm.com landing page opens on the app itself, its desktop window and phone with OmO first, then shows your machines as one mesh around the relay: a machine is dialed only after its signed admit record reaches every member, and a revoked one keeps working until its revoke record lands. It says who makes it, the people behind Dori and OmO, its buttons stack evenly on phones, and its social card shows the app as captured. (#927, #947)
+
+### The host installer
+
+- The host installer and the command the web app prints to join a mesh fetch from the product's own repository, and the installer's messages, help text and systemd description say the product's name. (#922)
 
 ## v0.1.4 - 2026-11-06
 
