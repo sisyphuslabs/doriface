@@ -31,14 +31,18 @@ function startShellIn(name: string, folder: string): string {
   return address;
 }
 
-/** Three spaces of this machine, each with a shell of its own, so the sidebar shows a list worth reordering. */
-function threeSpaces(): void {
-  const space = (name: string, id: string, folder: string) => ({
+/** A space of this capture's own: its name, its document id, and where its shell runs. */
+function space(name: string, id: string, folder: string) {
+  return {
     id,
     name,
     folder,
     tabs: [{ id: `tb-${id}`, name: `${name} tab`, terminal: startShellIn(name.toLowerCase(), folder) }],
-  });
+  };
+}
+
+/** Three spaces of this machine, each with a shell of its own, so the sidebar shows a list worth reordering. */
+function threeSpaces(): void {
   seedSpaces([
     space("Alpha", "spc-alpha", "/tmp/alpha"),
     space("Beta", "spc-beta", "/tmp/beta"),
