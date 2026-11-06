@@ -67,10 +67,13 @@ export function Sidebar({ terminals, active, onOpen, onPalette }: SidebarProps) 
       >
         {rail ? null : (
           <>
-            {/* herdr-app's titlebar: a 16 px app icon, then the name 11 px after it, 14 px semibold. */}
+            {/* herdr-app's titlebar: a 16 px app icon, then the name 11 px after it, 14 px semibold. The name never
+                ellipsizes: nothing else in this row may take its room (#873). */}
             <div className="flex min-w-0 flex-1 items-center gap-2.75">
               <img src="/icon.svg" alt="" className="size-4 shrink-0" />
-              <span className="truncate text-base font-semibold text-sidebar-foreground">doriface</span>
+              <span className="shrink-0 text-base font-semibold whitespace-nowrap text-sidebar-foreground">
+                doriface
+              </span>
             </div>
             <IconButton
               label="Command palette"
