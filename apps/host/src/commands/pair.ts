@@ -1,4 +1,5 @@
 import {
+  base64urlEncode,
   DEFAULT_RELAY_URL,
   fingerprintOf,
   formatPairingCode,
@@ -8,7 +9,7 @@ import {
 } from "@doriface/crypto";
 import { parseArgs } from "node:util";
 import { renderUnicodeCompact } from "uqr";
-import { requestControl } from "../control.ts";
+import { controlIsLive, controlSocketPath, requestControl } from "../control.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { type PendingPairing, PairingStore, pendingFromWire } from "../state/pairing.ts";
@@ -19,7 +20,63 @@ export const PAIR_USAGE = `usage: doriface-host pair [options]
   --web-origin <url>  the web app that opens the link (default: the doriface desktop app's deep link)
   --relay <url>       the relay the device dials (default ${DEFAULT_RELAY_URL})
   --state-dir <dir>   the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
-  --no-qr             print no QR code`;
+  --no-qr             print no QR code
+  --wait-host <secs>  wait up to <secs> for the running host (a service still starting) and fail if none answers`;
+
+const WAIT_POLL_MS = 200;
+
+const pause = (deadline: number): Promise<void> =>
+  Bun.sleep(Math.min(WAIT_POLL_MS, Math.max(0, deadline - Date.now())));
+
+function waitSeconds(value: string): number {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`--wait-host wants a positive number of seconds, got ${JSON.stringify(value)}`);
+  }
+  return seconds;
+}
+
+/** Polls the state dir's control socket until a running host answers, so the offer is that host's, never a file. */
+async function waitForHost(stateDir: string, deadline: number, out: (text: string) => void): Promise<void> {
+  if (await controlIsLive(stateDir)) return;
+  const seconds = Math.ceil((deadline - Date.now()) / 1000);
+  out(`Waiting for doriface-host to start (up to ${seconds} s)...\n`);
+  const poll = async (): Promise<boolean> => {
+    if (Date.now() >= deadline) return false;
+    await pause(deadline);
+    return (await controlIsLive(stateDir)) || poll();
+  };
+  if (await poll()) return;
+  throw new Error(
+    `no running doriface-host answered on ${controlSocketPath(stateDir)} in time; check that the service started`,
+  );
+}
+
+/**
+ * A host that has just started opens the offer before its relay uplink is up, so the code is not yet dialable. Waits
+ * (up to the deadline) for the host to record the slot, following this offer by its link secret because a slot
+ * collision redraws the code; past the deadline it prints the offer as it stands, with the slot note.
+ */
+async function waitForSlot(
+  stateDir: string,
+  offer: PendingPairing,
+  deadline: number,
+  out: (text: string) => void,
+): Promise<PendingPairing> {
+  if (offer.slot !== "pending") return offer;
+  out("Waiting for the relay to register the pairing code...\n");
+  const store = new PairingStore(stateDir);
+  const secret = base64urlEncode(offer.linkSecret);
+  const poll = async (current: PendingPairing): Promise<PendingPairing> => {
+    if (Date.now() >= deadline) return current;
+    const stored = store.read();
+    if (stored === undefined || base64urlEncode(stored.linkSecret) !== secret) return current;
+    if (stored.slot !== "pending") return stored;
+    await pause(deadline);
+    return poll(stored);
+  };
+  return poll(offer);
+}
 
 /** Asks the running host to open the pairing (it registers the relay slot first); without one, writes it directly. */
 async function openOffer(stateDir: string): Promise<PendingPairing> {
@@ -53,6 +110,7 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
       relay: { type: "string", default: DEFAULT_RELAY_URL },
       "state-dir": { type: "string" },
       "no-qr": { type: "boolean", default: false },
+      "wait-host": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -60,9 +118,13 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
   const webOrigin = values["web-origin"];
   if (webOrigin !== undefined) pairingWebOrigin(webOrigin);
   relayWebSocketUrl(values.relay);
+  const wait = values["wait-host"] === undefined ? undefined : waitSeconds(values["wait-host"]);
   const stateDir = values["state-dir"] ?? defaultStateDir();
+  const deadline = wait === undefined ? undefined : Date.now() + wait * 1000;
+  if (deadline !== undefined) await waitForHost(stateDir, deadline, out);
   const identity = loadHostIdentity(stateDir);
-  const offer = await openOffer(stateDir);
+  const opened = await openOffer(stateDir);
+  const offer = deadline === undefined ? opened : await waitForSlot(stateDir, opened, deadline, out);
   const artifact = pairingArtifact(
     {
       hostId: identity.hostId,

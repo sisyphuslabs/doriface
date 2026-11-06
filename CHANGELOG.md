@@ -7,6 +7,11 @@
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
 - Settings > Connections has **Pair a device**: it asks this computer's host for a fresh offer and shows its QR code, link, 8-character code, fingerprint and expiry, then the device that used it — no terminal and no CLI. (#614)
 
+### Host install
+
+- One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service (systemd `--user` on Linux, a LaunchAgent on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
+- `doriface-host pair --wait-host <seconds>` waits for a host that is still starting, and for the relay to register the code, so the first code it prints works. (#668)
+
 ## v0.1.2
 
 ### Tabs and spaces

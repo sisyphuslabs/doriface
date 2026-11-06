@@ -32,6 +32,20 @@ This table describes `dev`. The latest release is [v0.1.1](https://github.com/si
 
 Browsers: Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older browser gets an "Update your browser" screen naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
 
+## Install a host
+
+On the Linux or macOS computer whose terminals you want to reach:
+
+```sh
+curl -fsSL https://github.com/sisyphuslabs/doriface/releases/latest/download/install.sh | sh
+```
+
+It downloads `doriface-host` into `~/.local/bin` and checks it against the release's `SHA256SUMS.txt`, installs
+herdr-core when `hc` is missing, runs the host as a user service (systemd `--user` on Linux, a LaunchAgent on macOS),
+then prints a QR code, a link and an 8-character code to pair your first device. `sh -s -- --help` lists the options;
+`--uninstall` removes the service and the binary and keeps the host's keys and paired devices. On Windows, the desktop
+app carries the host. The installer ships from the first release after v0.1.2.
+
 ## How it fits together
 
 ```
