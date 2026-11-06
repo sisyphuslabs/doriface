@@ -122,8 +122,9 @@ function chord(modifiers: ReadonlySet<Modifier>, base: string, baseLabel: string
 }
 
 /**
- * Reads one custom key. A word naming a key or a modifier makes a chord; anything else is the literal text the key
- * sends, so a person can put "git status" on the bar as easily as Ctrl+C, and "1+1" sends what it says.
+ * Reads one custom key. Only exact chord grammar (known modifier names, then one key) is a chord; anything else is the
+ * literal text the key sends, so "git status" or "chmod +x" reach the terminal as typed. A bare modifier is the one
+ * mistake refused here, since a key labelled Ctrl that sends the word Ctrl is not what anyone meant.
  */
 export function parseKeyInput(input: string): KeyInput {
   const text = input.trim();
@@ -135,35 +136,24 @@ export function parseKeyInput(input: string): KeyInput {
   if (caret !== null) return typing(new Set<Modifier>(["ctrl"]), caret[1] ?? "", caret[1] ?? "");
   // A plus at the very end is the key itself: "Ctrl++" is Ctrl and the plus sign.
   const parts = text.length > 2 && text.endsWith("++") ? [...text.slice(0, -2).split("+"), "+"] : text.split("+");
-  const trimmed = parts.map((part) => part.trim());
-  const base = trimmed[trimmed.length - 1] ?? "";
-  const heads = trimmed.slice(0, -1);
+  const base = (parts[parts.length - 1] ?? "").trim();
   const modifiers = new Set<Modifier>();
-  let stray: string | null = null;
-  for (const head of heads) {
-    const modifier = modifierOf(head);
-    if (modifier === undefined) stray ??= head;
-    else modifiers.add(modifier);
+  for (const head of parts.slice(0, -1)) {
+    const modifier = modifierOf(head.trim());
+    // A chord is exactly "known modifier names, then one key". Any other input is the literal text this key sends, so
+    // "chmod +x", "date +%s", "echo $((2+3))" and even "Hyper+X" reach the terminal exactly as typed.
+    if (modifier === undefined) return typing(NO_MODIFIERS, text, text);
+    modifiers.add(modifier);
   }
-  if (stray !== null) {
-    // A space or a symbol anywhere means the person typed text ("chmod +x", "date +%s"); a bare word that reads like a
-    // key name ("Hyper+X") is a mistake, and a one-letter head ("1+1") is text.
-    const typedText =
-      parts.some((part) => part !== part.trim() || !/^[A-Za-z0-9]+$/u.test(part)) ||
-      heads.every((head) => [...head].length <= 1);
-    return typedText
-      ? typing(NO_MODIFIERS, text, text)
-      : refuse(`"${stray}" is not a modifier. Use Ctrl, Alt or Shift.`);
-  }
-  if (base === "") return refuse("End the key with what it presses, e.g. Ctrl+X.");
   const named = NAMED[base.toLowerCase()];
+  if (named !== undefined && modifiers.size === 0)
+    return { kind: "ok", key: { bytes: named.bytes, label: named.label } };
+  if (modifiers.size === 0) return typing(NO_MODIFIERS, text, text);
+  if (base === "") return refuse("End the key with what it presses, e.g. Ctrl+X.");
   if (named !== undefined) return chord(modifiers, named.bytes, named.label);
   if ([...base].length === 1) {
     // A chord names a physical key, so Alt+X is option+x whatever case it was typed in; Shift still capitalises it.
-    return typing(modifiers, modifiers.size > 0 ? base.toLowerCase() : base, base);
+    return typing(modifiers, base.toLowerCase(), base);
   }
-  if (modifiers.size > 0) {
-    return refuse(`"${base}" is not a key. Name a letter, F1 to F12, Esc, Tab or an arrow.`);
-  }
-  return typing(NO_MODIFIERS, text, text);
+  return refuse(`"${base}" is not a key. Name a letter, F1 to F12, Esc, Tab or an arrow.`);
 }

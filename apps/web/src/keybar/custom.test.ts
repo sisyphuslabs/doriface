@@ -63,12 +63,11 @@ test("a chord's label is canonical, whatever case or order it was typed in", () 
   expect(key("hello").label).toBe("hello");
 });
 
-test("an empty key, a dangling modifier and a word after a modifier are refused with a reason", () => {
+test("an empty key, a dangling modifier and an unknown word after a modifier are refused with a reason", () => {
   expect(reason("")).toBe("Type the keys this key sends.");
   expect(reason("   ")).toBe("Type the keys this key sends.");
   expect(reason("Ctrl+")).toBe("End the key with what it presses, e.g. Ctrl+X.");
   expect(reason("Ctrl+foobar")).toContain("is not a key");
-  expect(reason("Hyper+X")).toContain("is not a modifier");
 });
 
 test.each(["Ctrl", "Control", "Shift", "Alt", "Option", "Cmd"])(
@@ -78,12 +77,22 @@ test.each(["Ctrl", "Control", "Shift", "Alt", "Option", "Cmd"])(
   },
 );
 
-test.each(["1+1", "a + b", "C++", "x + y", "chmod +x", "date +%s", "echo $((2+3))", "ls | wc -l"])(
-  "text with a plus, a space or a symbol sends that text",
-  (input) => {
-    expect(key(input).bytes).toBe(input);
-  },
-);
+test.each([
+  "1+1",
+  "a + b",
+  "C++",
+  "x + y",
+  "chmod +x",
+  "date +%s",
+  "echo $((2+3))",
+  "ls | wc -l",
+  "Hyper+X",
+  "git status",
+  "awk '{print $1+$2}'",
+  "make -j4 && make install",
+])("%p is not a chord, so it sends that text verbatim", (input) => {
+  expect(key(input).bytes).toBe(input);
+});
 
 test("a modifier that would change nothing is refused instead of dropped", () => {
   expect(reason("Ctrl+Shift+Tab")).toBe("Ctrl does not change Tab.");
