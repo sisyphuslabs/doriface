@@ -49,6 +49,7 @@ function namesIn(status: MeshStatus): (hostId: string) => string {
 function MeshBody({ connection }: { readonly connection: HcConnection }) {
   const { read, answer } = useMesh(connection);
   const now = useNow();
+  const host = connection.hello.core.name;
   switch (read.phase) {
     case "loading":
       return <Skeleton className="h-16 rounded-md" />;
@@ -68,7 +69,7 @@ function MeshBody({ connection }: { readonly connection: HcConnection }) {
       return (
         <SettingRow
           title="Not in a mesh"
-          description="Run doriface-host mesh pair on this host, then doriface-host mesh join with its link on the machine to add."
+          description={`${host} is in no mesh, so it shares nothing with another computer yet. On ${host}, run doriface-host mesh pair to open an invite, then doriface-host mesh join with that link on the computer to add.`}
           control={null}
         />
       );
@@ -87,6 +88,9 @@ function MeshBody({ connection }: { readonly connection: HcConnection }) {
         nameOf={nameOf}
         disagreement={disagreement(status, machines, settings.mode === "relay" ? settings.hostId : undefined)}
       />
+      <p className="text-sm text-muted-foreground">
+        {`${self} opens links to the other machines only through its own relay, and none at all without one; it opens no direct link to them. A machine row says whether a session to it is open now.`}
+      </p>
       <MeshGroup id="pending" title="Waiting for approval" count={groups.pending.length} urgent>
         {groups.pending.map((join) => (
           <PendingRow
@@ -138,7 +142,13 @@ function MeshBody({ connection }: { readonly connection: HcConnection }) {
 export function MeshSection() {
   const state = useConnection();
   if (state.phase !== "open") {
-    return <SettingRow title="Not connected" description="Connect to a host to see its mesh." control={null} />;
+    return (
+      <SettingRow
+        title="Not connected"
+        description="This app is not connected to a host yet, so there is no mesh to show. Set the connection up in Advanced connection."
+        control={null}
+      />
+    );
   }
   return <MeshBody connection={state.connection} />;
 }
