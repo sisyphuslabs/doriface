@@ -101,6 +101,8 @@ test("the path goes in as a bracketed paste when the program asked for one", asy
   await expect(terminal).toContainText("read -r line", { timeout: 15_000 });
   await copyImage(page, await makePng(page, 8, 120));
   await pressPaste(page);
+  // The put is async: Enter waits for the pasted path, echoed by the line `read` is filling, or `read` gets an empty line.
+  await expect(terminal).toContainText("doriface-paste-", { timeout: 30_000 });
   await page.keyboard.press("Enter");
   await expect(terminal).toContainText(/GOT:@\[200~\S*doriface-paste-\d+\.png @\[201~/, { timeout: 30_000 });
 });
