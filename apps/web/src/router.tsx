@@ -27,16 +27,18 @@ function Root() {
   if (path !== "/" && !settings) return <Outlet />;
   return (
     <>
-      <div className={settings ? "invisible contents" : "contents"} inert={settings}>
-        <ActionsPaused.Provider value={settings}>
-          <WorkspaceRoute />
-        </ActionsPaused.Provider>
-      </div>
       {settings ? (
         <div className="fixed inset-0 z-50 bg-background">
           <Outlet />
         </div>
       ) : null}
+      {/* The view on screen is #root's first child: the desktop window waits for `#root > *` to paint, and the
+          workspace kept under Settings is invisible, so it must not come first. */}
+      <div className={settings ? "invisible contents" : "contents"} inert={settings}>
+        <ActionsPaused.Provider value={settings}>
+          <WorkspaceRoute />
+        </ActionsPaused.Provider>
+      </div>
     </>
   );
 }
