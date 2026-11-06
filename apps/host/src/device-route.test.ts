@@ -19,6 +19,8 @@ beforeAll(async () => {
   session = createHcSession("doriface-device-route-test");
   host = await startHost({
     listen: { hostname: "127.0.0.1", port: 0 },
+    // The LAN listener serves /healthz and /v1/e2ee only: the device routes must not appear on it.
+    lanListen: { hostname: "127.0.0.1", port: 0 },
     token,
     hc: session.hc,
     session: session.name,
@@ -66,6 +68,38 @@ describe("this computer's paired devices on the loopback gateway", () => {
     const answer = await request("DELETE", short);
     expect(answer.status).toBe(404);
     expect(await answer.json()).toEqual({ error: `no paired device has the id ${JSON.stringify(short)}` });
+  });
+
+  test("the LAN listener does not serve the device routes, token or not", async () => {
+    const lan = host.e2ee?.lanUrls[0];
+    if (lan === undefined) throw new Error("the host started no LAN listener");
+    const url = `${lan.replace(/^ws/, "http").replace(/\/v1\/e2ee$/, "")}/v1/devices`;
+    expect((await fetch(url, { headers: { authorization: `Bearer ${token}` } })).status).toBe(404);
+  });
+
+  test("a short id two devices share is refused as a conflict, and neither is revoked", async () => {
+    // The short id is the first eight hex characters of SHA-256(key): a birthday collision turns up in about 2^16 keys.
+    const seen = new Map<string, Uint8Array>();
+    let collision: readonly [Uint8Array, Uint8Array] | undefined;
+    for (let attempt = 0; attempt < 400_000 && collision === undefined; attempt += 1) {
+      const key = crypto.getRandomValues(new Uint8Array(32));
+      const id = deviceIdOf({ clientStaticPub: Buffer.from(key).toString("base64url"), name: "", pairedAt: "" });
+      const earlier = seen.get(id);
+      if (earlier === undefined) seen.set(id, key);
+      else collision = [earlier, key];
+    }
+    if (collision === undefined) throw new Error("no short-id collision turned up in 400000 keys");
+    const store = new DeviceStore(stateDir);
+    store.add(collision[0], "first");
+    store.add(collision[1], "second");
+    const id = deviceIdOf(store.list()[0] ?? { clientStaticPub: "", name: "", pairedAt: "" });
+    const answer = await request("DELETE", id);
+    expect(answer.status).toBe(409);
+    const body: unknown = await answer.json();
+    expect(body).toEqual({
+      error: `${id} matches 2 devices; revoke one from this computer's terminal by its full fingerprint`,
+    });
+    expect(store.list()).toHaveLength(2);
   });
 });
 

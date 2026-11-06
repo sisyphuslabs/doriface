@@ -5,7 +5,7 @@ import { type BunWebSocketData, upgradeWebSocket } from "hono/bun";
 import type { WSEvents } from "hono/ws";
 import { checkBearer, checkHandshake } from "./auth.ts";
 import { bridge } from "./bridge.ts";
-import { type DeviceSurface, UnknownDeviceError } from "./device-surface.ts";
+import { AmbiguousDeviceError, type DeviceSurface, UnknownDeviceError } from "./device-surface.ts";
 import { acceptE2ee, type E2eeDeps, type E2eeTransport } from "./e2ee/accept.ts";
 import { meshPeer } from "./e2ee/authorize.ts";
 import { firstLineRefusal, gateHello } from "./e2ee/first-line.ts";
@@ -156,6 +156,7 @@ export function createGateway(options: GatewayOptions): Gateway {
           return c.json({ revoked: await devices.revoke(c.req.param("id") ?? "") });
         } catch (error) {
           if (error instanceof UnknownDeviceError) return c.json({ error: error.message }, 404);
+          if (error instanceof AmbiguousDeviceError) return c.json({ error: error.message }, 409);
           throw error instanceof Error ? error : new Error(String(error));
         }
       });

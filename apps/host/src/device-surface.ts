@@ -27,6 +27,11 @@ export class UnknownDeviceError extends Error {
   override readonly name = "UnknownDeviceError";
 }
 
+/** A short id two devices share; revoking one needs the full fingerprint, which only the terminal takes. */
+export class AmbiguousDeviceError extends Error {
+  override readonly name = "AmbiguousDeviceError";
+}
+
 /**
  * This computer's paired devices, for the app that runs the host: a member revokes a phone or a browser from the
  * computer it was paired to, without a terminal. The routes sit behind the same per-launch token as `/v1/hc` and never
@@ -46,7 +51,16 @@ export class DeviceSurface {
 
   /** Revokes one device by its short id; an id no device has is refused by name rather than revoking nothing quietly. */
   async revoke(id: string): Promise<readonly DeviceView[]> {
-    const revoked = this.#options.devices.revoke(id).map(view);
+    const handle = id.replaceAll(" ", "").toUpperCase();
+    // The routes take a short id only, so a collision is decided here: the store would otherwise throw, and that plain
+    // error would reach the app as a 500 with no way to say what happened.
+    const matches = this.#options.devices.list().filter((device) => deviceIdOf(device) === handle);
+    if (matches.length > 1) {
+      throw new AmbiguousDeviceError(
+        `${handle} matches ${matches.length} devices; revoke one from this computer's terminal by its full fingerprint`,
+      );
+    }
+    const revoked = this.#options.devices.revoke(handle).map(view);
     if (revoked.length === 0) throw new UnknownDeviceError(`no paired device has the id ${JSON.stringify(id)}`);
     await this.#options.changed();
     return revoked;

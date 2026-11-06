@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { devicesEndpointUrl, requestPairedDevices, revokePairedDevice } from "../src/main/devices.ts";
-import type { LocalHostEndpoint } from "../src/shared/bridge.ts";
+import { isRevokeDeviceAnswer, type LocalHostEndpoint } from "../src/shared/bridge.ts";
 
 const token = "t".repeat(43);
 const endpoint = (port: number): LocalHostEndpoint => ({ url: `ws://127.0.0.1:${port}/v1/hc`, token });
@@ -92,5 +92,30 @@ describe("this computer's paired devices over the loopback gateway", () => {
       state: "unavailable",
       reason: "This computer's host sent a device list this app does not understand.",
     });
+  });
+
+  test("a refusal's own words reach the app, so a shared short id says what to do", async () => {
+    const words = "AB12CD34 matches 2 devices; revoke one from this computer's terminal by its full fingerprint";
+    const stub = hostAnswers(() => Response.json({ error: words }, { status: 409 }));
+    expect(await revokePairedDevice(endpoint(stub.server.port ?? 0), "AB12CD34")).toEqual({
+      state: "unavailable",
+      reason: words,
+    });
+  });
+});
+
+describe("the preload's check of a revoke answer", () => {
+  // `unavailable` is what every failure becomes: host down, 401, a timeout. It carries a reason and no list, so a check
+  // that requires the list first throws away the only explanation the person would get.
+  test("an unavailable answer is a reason, not a missing list", () => {
+    expect(isRevokeDeviceAnswer({ state: "unavailable", reason: "Your host isn't answering." })).toBe(true);
+  });
+
+  test("a list answer is checked through its devices and its state", () => {
+    const device = { name: "phone", id: "3FA94C0E", pairedAt: "2026-11-06T07:00:00.000Z" };
+    expect(isRevokeDeviceAnswer({ state: "revoked", device, devices: [] })).toBe(true);
+    expect(isRevokeDeviceAnswer({ state: "not-found", devices: [] })).toBe(true);
+    expect(isRevokeDeviceAnswer({ state: "revoked", device, devices: [{ name: "phone" }] })).toBe(false);
+    expect(isRevokeDeviceAnswer({ state: "revoked", devices: [] })).toBe(false);
   });
 });

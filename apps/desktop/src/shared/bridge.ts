@@ -118,8 +118,7 @@ export type PairOfferAnswer =
   | { readonly state: "unavailable"; readonly reason: string };
 
 /**
- * What `pairedDevices` answers: every device this computer has stored, or why this app cannot ask its host. `self` is
- * this device's own id when it is one of them, so the app can name the row it is running in.
+ * What `pairedDevices` answers: every device this computer has stored, or why this app cannot ask its host.
  */
 export type PairedDevicesAnswer =
   | { readonly state: "listed"; readonly devices: readonly PairedDevice[] }
@@ -154,9 +153,10 @@ export function isPairedDevicesAnswer(value: unknown): value is PairedDevicesAns
 export function isRevokeDeviceAnswer(value: unknown): value is RevokeDeviceAnswer {
   if (typeof value !== "object" || value === null) return false;
   const state: unknown = Reflect.get(value, "state");
+  // `unavailable` is why the revoke did not happen and carries no list, so it is read before the list is required.
+  if (state === "unavailable") return typeof Reflect.get(value, "reason") === "string";
   const list = pairedDevices(Reflect.get(value, "devices"));
   if (list === undefined) return false;
-  if (state === "unavailable") return typeof Reflect.get(value, "reason") === "string";
   if (state === "revoked") return isPairedDevice(Reflect.get(value, "device"));
   return state === "not-found";
 }

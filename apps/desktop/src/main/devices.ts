@@ -30,6 +30,14 @@ function routeRefusal(status: number): string | undefined {
   return status >= 400 ? `This computer's host answered ${status}.` : undefined;
 }
 
+/** A refusal's own words, when the host sent them: a shared short id names the device it could not pick. */
+function refusalOf(status: number, body: unknown): string {
+  const error = typeof body === "object" && body !== null ? Reflect.get(body, "error") : undefined;
+  return typeof error === "string" && error !== ""
+    ? error
+    : (routeRefusal(status) ?? `This computer's host answered ${status}.`);
+}
+
 function devicesOf(value: unknown, key: string): readonly PairedDevice[] | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const devices: unknown = Reflect.get(value, key);
@@ -85,8 +93,10 @@ export async function revokePairedDevice(
     const devices = await requestPairedDevices(endpoint, timeoutMs);
     return devices.state === "listed" ? { state: "not-found", devices: devices.devices } : devices;
   }
-  const refusal = routeRefusal(response.status);
-  if (refusal !== undefined) return unavailable(refusal);
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    return unavailable(refusalOf(response.status, body));
+  }
   const body: unknown = await response.json().catch(() => null);
   const revoked = devicesOf(body, "revoked");
   if (revoked === undefined || revoked.length === 0) {
