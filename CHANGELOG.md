@@ -6,6 +6,10 @@
 
 - [docs/install.md](docs/install.md) and the README show how to run the host as a user service on every Linux and macOS machine you own, join them into one mesh, and pair phones and browsers. The [doriterm-setup skill](skills/doriterm-setup/SKILL.md) lets a coding agent do it with `apps/host/scripts/setup/cli.ts` (`install`, `verify`, `invite`, `join`, `pair`, `uninstall`), which is safe to re-run and never prints a join link or key. (#778)
 
+### Answering agents from the card
+
+- The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
+
 ### Web app and PWA
 
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)

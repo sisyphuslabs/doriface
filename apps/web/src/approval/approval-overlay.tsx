@@ -2,17 +2,19 @@ import type { HcConnection } from "@doriface/client";
 import { ApprovalBanner, approvalAnnouncement } from "@doriface/ui";
 import { useEffect, useState } from "react";
 import type { Session } from "../workspace/model.ts";
+import { canOpenFile, FileView } from "./file-view.tsx";
 import { useApproval } from "./use-approval.ts";
 
 /**
- * The permission banner pinned over a terminal while its agent waits on a prompt; the terminal below stays usable.
- * Its polite live region is mounted, empty, for as long as the terminal is shown, and the text is written into it after
- * each change, so screen readers announce the prompt appearing and every state after it.
+ * The card pinned over a terminal while its agent waits on a person; the terminal below stays usable. Its polite live
+ * region is mounted, empty, for as long as the terminal is shown, and the text is written into it after each change,
+ * so screen readers announce the prompt appearing and every state after it.
  */
 export function ApprovalOverlay({ connection, terminal }: { connection: HcConnection; terminal: Session }) {
   const approval = useApproval(connection, terminal);
   const said = approval === undefined ? "" : approvalAnnouncement(approval.mark.prompt, approval.state);
   const [announced, setAnnounced] = useState("");
+  const [file, setFile] = useState<string | undefined>(undefined);
   useEffect(() => setAnnounced(said), [said]);
   return (
     <>
@@ -22,16 +24,28 @@ export function ApprovalOverlay({ connection, terminal }: { connection: HcConnec
       {approval === undefined ? null : (
         <div
           data-approval={terminal.address}
-          className="pointer-events-none absolute inset-x-2 top-2 z-10 flex justify-center"
+          className="pointer-events-none absolute inset-x-2 top-2 z-10 flex max-h-[calc(100%-1rem)] flex-col items-center"
         >
           <ApprovalBanner
             prompt={approval.mark.prompt}
             state={approval.state}
+            cwd={approval.mark.cwd}
             onAnswer={approval.answer}
             onDismiss={approval.dismiss}
-            className="pointer-events-auto w-full max-w-2xl"
+            onOpenFile={setFile}
+            canOpenFile={canOpenFile}
+            className="pointer-events-auto min-h-0 w-full max-w-2xl"
           />
         </div>
+      )}
+      {approval === undefined || file === undefined ? null : (
+        <FileView
+          connection={connection}
+          terminal={terminal.address}
+          cwd={approval.mark.cwd}
+          path={file}
+          onClose={() => setFile(undefined)}
+        />
       )}
     </>
   );
