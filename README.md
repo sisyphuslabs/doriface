@@ -118,7 +118,7 @@ From v0.1.1 the macOS app is signed with a Developer ID certificate and notarize
 The [release workflow](.github/workflows/release.yml) builds every file on GitHub-hosted runners. The version comes from `apps/desktop/package.json`:
 
 1. Set `version` there and merge it.
-2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the uploaded Linux AppImage and macOS app, then publishes the release. Notes come from the `## X.Y.Z` section of `CHANGELOG.md` when there is one.
+2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the uploaded Linux AppImage and macOS app, then publishes the release. Notes come from the `## vX.Y.Z` section of `CHANGELOG.md`, and a tag whose section is missing or empty fails before any build.
 
 A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with a version such as `X.Y.Z-rc.1`: it builds the same files into a draft release and leaves it a draft.
 
