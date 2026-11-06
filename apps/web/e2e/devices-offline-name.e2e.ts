@@ -5,8 +5,12 @@ import { type FakeRelayHost, startFakeRelayHost } from "./relay-route.ts";
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
 test.use({ serviceWorkers: "block" });
 
-/** Either sentence the app says about a host that is gone: the relay's own code decides which (#477, #486). */
-const NOT_ANSWERING = /Your host isn't (answering|connected right now)/;
+/**
+ * Every sentence the app says about a host that is gone (#477, #486): the relay's own close code picks one, and a link
+ * that closes before the host answers picks another. A fresh load starts a session rather than losing one, so which of
+ * the two answers first decides what the row says — all three are the app's own words from `host-failure.ts`.
+ */
+const NOT_ANSWERING = /Your host isn't (answering|connected right now)|Your host didn't answer in time/;
 
 /** Settings > Paired devices, which names the host this device is paired with. */
 const paired = (page: Page) =>
