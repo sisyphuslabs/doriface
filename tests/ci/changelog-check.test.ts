@@ -111,6 +111,23 @@ test("the no-changelog label exempts an internal change", async () => {
   expect((await check(dir, base, ["review-queued", "no-changelog"])).code).toBe(0);
 });
 
+test("a path git would quote, such as one with Hangul in it, still counts as user-facing", async () => {
+  const { dir, base } = await repo({ "apps/web/src/한글.ts": "export {};\n" });
+  const result = await check(dir, base);
+  expect(result.code).toBe(1);
+  expect(result.out).toContain("apps/web/src/한글.ts");
+});
+
+test("a file moved out of the app into testing/ counts by the path it left", async () => {
+  const { dir, base } = await repo({ "README.md": "z\n" });
+  mkdirSync(join(dir, "apps", "web", "src", "testing"));
+  await git(dir, "mv", "apps/web/src/app.ts", "apps/web/src/testing/app.ts");
+  await git(dir, "commit", "-q", "-m", "move");
+  const result = await check(dir, base);
+  expect(result.code).toBe(1);
+  expect(result.out).toContain("apps/web/src/app.ts");
+});
+
 test("tests, e2e specs, fixtures, docs and CI files need no line", async () => {
   const { dir, base } = await repo({
     "apps/web/src/app.test.ts": "x\n",

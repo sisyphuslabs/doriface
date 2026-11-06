@@ -65,7 +65,10 @@ if (base === undefined || base === "") {
 }
 
 const mergeBase = (await mustGit("merge-base", base, "HEAD")).trim();
-const changed = (await mustGit("diff", "--name-only", mergeBase, "HEAD")).split("\n").filter((path) => path !== "");
+// -z keeps a path with non-ASCII characters unquoted; --no-renames lists a moved file under the path it left as well.
+const changed = (await mustGit("diff", "--name-only", "-z", "--no-renames", mergeBase, "HEAD"))
+  .split("\0")
+  .filter((path) => path !== "");
 const userFacing = changed.filter(isUserFacing);
 
 if (userFacing.length === 0) {
