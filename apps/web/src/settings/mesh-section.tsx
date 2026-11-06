@@ -88,6 +88,9 @@ function MeshBody({ connection }: { readonly connection: HcConnection }) {
         nameOf={nameOf}
         disagreement={disagreement(status, machines, settings.mode === "relay" ? settings.hostId : undefined)}
       />
+      <p className="text-sm text-muted-foreground">
+        {`${self} reaches the other machines through its own relay: every link it opens to them passes that relay, and it opens no direct link to them. A machine row says whether a session to it is open now.`}
+      </p>
       <MeshGroup id="pending" title="Waiting for approval" count={groups.pending.length} urgent>
         {groups.pending.map((join) => (
           <PendingRow
