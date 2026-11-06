@@ -10,6 +10,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./hc-install": "./src/hc-install.ts",
+    "./push/deliver": "./src/push/deliver.ts",
+    "./push/web-push": "./src/push/web-push.ts",
     "./testing": "./src/testing/index.ts",
     "./testing/push-receiver": "./src/testing/push-receiver.ts",
     "./testing/run-cores": "./src/testing/run-cores.ts",

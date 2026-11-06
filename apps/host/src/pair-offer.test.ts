@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { generateHostIdentity, parsePairingUrl, PAIRING_CODE_ATTEMPTS, PAIRING_TTL_MS } from "@doriface/crypto";
+import {
+  generateHostIdentity,
+  parsePairingLink,
+  parsePairingUrl,
+  PAIRING_CODE_ATTEMPTS,
+  PAIRING_TTL_MS,
+} from "@doriface/crypto";
 import { pairingOfferView } from "./pair-offer.ts";
 import type { PendingPairing } from "./state/pairing.ts";
 
@@ -47,6 +53,21 @@ describe("the offer a surface shows for this computer", () => {
     const view = pairingOfferView({ identity, offer: offer(), webOrigin: "https://doriface.example" });
     expect(view.opens).toBe("web");
     expect(view.link.startsWith("https://doriface.example/pair#")).toBe(true);
+  });
+
+  test("a phone's QR link is the hosted web app's /pair page with the desktop link's fragment (#700)", () => {
+    const view = pairingOfferView({ identity, offer: offer() });
+    expect(view.link.startsWith("doriface://pair#")).toBe(true);
+    const phone = new URL(view.phoneLink);
+    expect(`${phone.origin}${phone.pathname}`).toBe("https://doriface.omo.dev/pair");
+    expect(phone.search).toBe("");
+    expect(phone.hash).toBe(new URL(view.link).hash);
+    expect(parsePairingUrl(view.phoneLink)).toEqual({ ...parsePairingLink(view.link), webOrigin: phone.origin });
+  });
+
+  test("an operator's web origin is the phone's page too", () => {
+    const view = pairingOfferView({ identity, offer: offer(), webOrigin: "https://doriface.example" });
+    expect(view.phoneLink).toBe(view.link);
   });
 
   test("a code is usable only once the relay holds its slot and it is not retired", () => {
