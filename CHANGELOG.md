@@ -6,6 +6,7 @@
 
 ### This computer on the relay, and pairing from a phone
 
+- One step installs a host on Linux or macOS: `install.sh` (a release asset) checks the download against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, registers the host as a user service that starts at login and restarts if it stops, and prints the pairing QR code, link and code — running it again upgrades in place, and `--uninstall` removes it and keeps the keys. The code waits for a host that is still starting and for the relay to register it, so the first code it prints works. (#721)
 - The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#597)
 - Settings > Connections has **Pair a device**: it asks this computer's host for a fresh offer and shows its QR code, link, 8-character code, fingerprint and expiry, then the device that used it — no terminal and no CLI. (#638)
 - Settings > Connections lists the devices paired with this computer and revokes one after asking: its session ends at once, its notifications stop and its key is refused, so a lost phone no longer needs a terminal on this computer. (#729)
@@ -98,11 +99,6 @@
 - A launch still opening when the host stops is ended, so its core cannot outlive the host. (#599)
 - The host reads one typed plan document that is open unless it names a limit or a feature, and a document that cannot be read as one stops the host instead of reading as an open plan. (#606)
 - Many test, CI and documentation fixes, so problems are caught before a release instead of after. The phone keys bar's keys, packs and custom keys are now a stored model, and a modifier held in the bar now covers Home, End, Page Up, Page Down, Delete and F1 to F12 as well as the arrows, so a keyboard attached to a phone carries the modifier too. (#605, #608, #613, #617, #624, #681, #683, #685, #687, #695, #711, #725, #741, #762, #763, #765, #784, #785, #788, #815, #826, #847, #872)
-
-### Host install
-
-- One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have (systemd `--user` with `Restart=always` and the top CPU and IO weights on Linux, an `Interactive` LaunchAgent kept alive on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
-- `doriface-host pair --wait-host <seconds>` waits for a host that is still starting, and for the relay to register the code, so the first code it prints works. (#668)
 
 ## v0.1.2 - 2026-11-06
 
