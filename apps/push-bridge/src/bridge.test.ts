@@ -69,7 +69,12 @@ async function config(): Promise<BridgeConfig> {
 async function hostSends(endpoint: string, upstreamFetch: PushFetch, keys?: ReceiverKeys) {
   const receiver = keys ?? (await receiverKeys());
   const bridge = createBridge(await config(), { fetch: upstreamFetch, now: () => NOW });
-  const post: PushFetch = (url, init) => bridge(new Request(url, init));
+  const statuses: number[] = [];
+  const post: PushFetch = async (url, init) => {
+    const reply = await bridge(new Request(url, init));
+    statuses.push(reply.status);
+    return reply;
+  };
   const delivery = await deliverPush(
     { endpoint, p256dh: receiver.p256dh, auth: receiver.auth },
     NOTICE,
@@ -77,7 +82,8 @@ async function hostSends(endpoint: string, upstreamFetch: PushFetch, keys?: Rece
     post,
     { now: () => NOW },
   );
-  return { delivery, receiver };
+  // What the bridge itself answered: the host folds 429 and 5xx into one `failed`, so the status is checked here.
+  return { delivery, receiver, status: statuses.at(-1) };
 }
 
 const forwardedBody = (payload: string): Uint8Array => base64urlDecode(payload);
@@ -152,14 +158,19 @@ describe("APNs (#705)", () => {
     expect(delivery).toBe("gone");
   });
 
-  test("APNs throttling or an outage is a failure the host logs, and the subscription stays", async () => {
-    const deliveries = await Promise.all(
+  test("APNs throttling stays 429 and an outage is 502: a failure the host logs, and the subscription stays", async () => {
+    const answers = await Promise.all(
       [429, 500, 503].map(async (status) => {
         const { fetch } = upstream(() => Response.json({ reason: "TooManyRequests" }, { status }));
-        return (await hostSends(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, fetch)).delivery;
+        const { delivery, status: answered } = await hostSends(`${ORIGIN}/v1/apns/${APNS_TOKEN}`, fetch);
+        return [delivery, answered];
       }),
     );
-    expect(deliveries).toEqual(["failed", "failed", "failed"]);
+    expect(answers).toEqual([
+      ["failed", 429],
+      ["failed", 502],
+      ["failed", 502],
+    ]);
   });
 });
 
@@ -212,9 +223,11 @@ describe("FCM (#705)", () => {
         { status: 404 },
       ),
     );
-    expect((await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, gone.fetch)).delivery).toBe("gone");
+    const unregistered = await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, gone.fetch);
+    expect([unregistered.delivery, unregistered.status]).toEqual(["gone", 410]);
     const busy = upstream(() => Response.json({ error: { code: 429, status: "RESOURCE_EXHAUSTED" } }, { status: 429 }));
-    expect((await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, busy.fetch)).delivery).toBe("failed");
+    const throttled = await hostSends(`${ORIGIN}/v1/fcm/${FCM_TOKEN}`, busy.fetch);
+    expect([throttled.delivery, throttled.status]).toEqual(["failed", 429]);
   });
 });
 
