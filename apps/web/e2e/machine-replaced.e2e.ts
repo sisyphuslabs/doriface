@@ -53,6 +53,7 @@ test.describe("a machine replaced by its mesh line, with its terminal open", () 
     }) => {
       const open = await openRemote(page);
       const id = machineCore(MACHINE_NAME);
+      await expect.poll(() => getCoreDoc("herdr-app", MACHINE_NAME), { timeout: STATE_BOUND_MS }).not.toBeNull();
       const layout = getCoreDoc("herdr-app", MACHINE_NAME);
 
       replaceWithLine(name);
