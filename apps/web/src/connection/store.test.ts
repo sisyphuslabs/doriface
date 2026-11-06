@@ -14,8 +14,8 @@ afterEach(() => jest.useRealTimers());
 
 test("retryNow makes the waiting attempt at once, and its back-off timer makes no second one", async () => {
   jest.useFakeTimers();
-  const live: Pick<HcConnection, "onClose" | "close"> = { onClose: () => () => undefined, close: () => undefined };
-  const connection = live as HcConnection;
+  const live = { hello: { core: { id: "c0re", name: "" } }, onClose: () => () => undefined, close: () => undefined };
+  const connection = live as unknown as HcConnection;
   let attempts = 0;
   const store = new ConnectionStore(SETTINGS, () => {
     attempts += 1;
@@ -119,7 +119,11 @@ test("a loopback link that fails asks this computer's host first, and the retry 
     localStorage: { getItem: () => null, setItem: (_key: string, value: string) => saved.push(value) },
   });
   const closes: ((error?: Error) => void)[] = [];
-  const live = { onClose: (fn: (error?: Error) => void) => (closes.push(fn), () => undefined), close: () => undefined };
+  const live = {
+    hello: { core: { id: "c0re", name: "" } },
+    onClose: (fn: (error?: Error) => void) => (closes.push(fn), () => undefined),
+    close: () => undefined,
+  };
   const connection = live as unknown as HcConnection;
   const dialled: string[] = [];
   const store = new ConnectionStore({ ...SETTINGS, loopbackUrl: "ws://127.0.0.1:1111/v1/hc" }, (settings) => {
@@ -160,6 +164,55 @@ test("a loopback link that fails asks this computer's host first, and the retry 
   expect(saved.at(-1)).toContain("2222");
   store.stop();
   Reflect.deleteProperty(globalThis, "localStorage");
+});
+
+/** A stub storage that records every saved connection, as a browser's localStorage does across a reload. */
+function recordingStorage(): { readonly written: string[]; readonly restore: () => void } {
+  const written: string[] = [];
+  Object.assign(globalThis, {
+    localStorage: {
+      getItem: () => null,
+      setItem: (_key: string, value: string) => void written.push(value),
+    },
+  });
+  return { written, restore: () => Reflect.deleteProperty(globalThis, "localStorage") };
+}
+
+test("the host's name is saved beside the paired host, so a load without it still knows what to call it (#496)", async () => {
+  const storage = recordingStorage();
+  const announcing = {
+    onClose: () => () => undefined,
+    close: () => undefined,
+    hello: { core: { id: "c0re", name: "studio" } },
+  };
+  const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" }, () =>
+    Promise.resolve(announcing as unknown as HcConnection),
+  );
+  const open = new Promise<void>((resolve) => {
+    const off = store.subscribe(() => {
+      if (store.state.phase !== "open") return;
+      off();
+      resolve();
+    });
+  });
+  store.start();
+  await open;
+  expect(store.settings.hostName).toBe("studio");
+  expect(JSON.parse(storage.written.at(-1) ?? "{}")).toMatchObject({ hostId: "h0st", hostName: "studio" });
+  store.stop();
+  storage.restore();
+});
+
+test("a name belongs to the host that said it, so pairing another host does not keep the first one's (#496)", () => {
+  const storage = recordingStorage();
+  const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y", hostName: "studio" }, () =>
+    Promise.reject(new Error("refused")),
+  );
+  store.update({ ...store.settings, hostId: "0ther" });
+  expect(store.settings.hostName).toBe("");
+  expect(JSON.parse(storage.written.at(-1) ?? "{}")).toMatchObject({ hostId: "0ther", hostName: "" });
+  store.stop();
+  storage.restore();
 });
 
 test("a host that does not start again shows its cause, and no link is tried", async () => {

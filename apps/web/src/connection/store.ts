@@ -66,7 +66,9 @@ export class ConnectionStore {
 
   /** Saves and connects with `settings`; a release build keeps the production relay whatever relay they name. */
   update(settings: ConnectionSettings): void {
-    this.#settings = lockRelay(settings);
+    const next = lockRelay(settings);
+    // A name belongs to the host that said it: another paired host starts without one, and its own hello fills it in.
+    this.#settings = next.hostId === this.#settings.hostId ? next : { ...next, hostName: "" };
     saveSettings(this.#settings);
     this.start();
   }
@@ -117,6 +119,7 @@ export class ConnectionStore {
     try {
       const connection = await this.#connect(this.#settings, abort.signal);
       if (abort.signal.aborted) return connection.close();
+      this.#rememberName(connection);
       connection.onClose((error) => {
         if (this.#abort !== abort) return;
         this.#stale = connection;
@@ -128,6 +131,17 @@ export class ConnectionStore {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * A host names itself as it answers, and that name is the only way Settings can name it once it stops answering: keep
+   * it beside the paired host while it is known (#496).
+   */
+  #rememberName(connection: HcConnection): void {
+    const name = connection.hello.core.name;
+    if (name === "" || name === this.#settings.hostName) return;
+    this.#settings = { ...this.#settings, hostName: name };
+    saveSettings(this.#settings);
   }
 
   #retry(error: Error, attempt: number): void {
