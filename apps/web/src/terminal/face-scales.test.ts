@@ -55,11 +55,11 @@ describe("faceScalesFor", () => {
 
   test("a changed native device-pixel cell grid remeasures fallback faces at the same font size", () => {
     forgetMeasuredFaces();
-    const before = faceScalesFor(16, DEFAULT, DEFAULT, measureFor, 10);
-    const after = faceScalesFor(16, DEFAULT, DEFAULT, measureFor, 10.5);
+    const before = faceScalesFor(16, DEFAULT, DEFAULT, measureFor, 8);
+    const after = faceScalesFor(16, DEFAULT, DEFAULT, measureFor, 8.5);
     expect(before).not.toBe(after);
-    expect(15 * (before?.scaleOf("\u{D55C}") ?? 0)).toBeCloseTo(20, 2);
-    expect(15 * (after?.scaleOf("\u{D55C}") ?? 0)).toBeCloseTo(21, 2);
+    expect(15 * (before?.scaleOf("\u{D55C}") ?? 0)).toBeCloseTo(16, 2);
+    expect(15 * (after?.scaleOf("\u{D55C}") ?? 0)).toBeCloseTo(17, 2);
   });
 
   test("forgetting the measurements, as a finished font load does, measures again", () => {
@@ -81,9 +81,10 @@ describe("FaceScales", () => {
   test("a fallback face is sized to the primary's ideograph width, the same for every glyph of a block", () => {
     const scales = new FaceScales(fakeCanvas().measure, DEFAULT, DEFAULT);
     const hangul = scales.scaleOf("\u{D55C}");
-    expect(15 * hangul).toBeCloseTo(20.8, 2);
+    // The fake's ASCII ink is 18.2 px: shorter than the two 10.4 px cells, so Ghostty's ideograph width caps the face.
+    expect(15 * hangul).toBeCloseTo(18.2, 2);
     expect(scales.scaleOf("\u{AE00}")).toBe(hangul);
-    expect(15 * scales.scaleOf("\u{6F22}")).toBeCloseTo(20.8, 2);
+    expect(15 * scales.scaleOf("\u{6F22}")).toBeCloseTo(18.2, 2);
   });
 
   test("canvas measuring does not grow with the number of distinct glyphs drawn", () => {
@@ -92,8 +93,8 @@ describe("FaceScales", () => {
     for (let code = 0xac00; code < 0xac00 + 3000; code++) scales.scaleOf(String.fromCodePoint(code));
     for (let code = 0x4e00; code < 0x4e00 + 1000; code++) scales.scaleOf(String.fromCodePoint(code));
     const afterMany = canvas.calls();
-    // The ASCII metrics once, then a few per block (Hangul, Han).
-    expect(afterMany).toBeLessThan(120);
+    // Printable ASCII once for the ink height, then a few per block (Hangul, Han).
+    expect(afterMany).toBeLessThan(140);
     for (let code = 0xb000; code < 0xb000 + 2000; code++) scales.scaleOf(String.fromCodePoint(code));
     expect(canvas.calls()).toBe(afterMany);
   });
@@ -109,7 +110,7 @@ describe("FaceScales", () => {
     const measure: Measure = (text, family, scale) =>
       canvas.measure(text, family.includes('"Own CJK"') ? '"Own CJK"' : family, scale);
     const scales = new FaceScales(measure, `"ASCII Primary", "Own CJK", ${DEFAULT}`, DEFAULT);
-    expect(16 * scales.scaleOf("\u{D55C}")).toBeCloseTo(20.8, 2);
+    expect(16 * scales.scaleOf("\u{D55C}")).toBeCloseTo(18.2, 2);
   });
 
   test("a narrow CJK bracket takes its face's scale, as Ghostty sizes the whole face", () => {

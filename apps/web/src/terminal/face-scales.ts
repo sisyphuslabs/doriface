@@ -119,15 +119,11 @@ export class FaceScales {
       !sameGlyph(this.#measure(sample, this.#primaryFamily, 1), this.#measure(sample, this.#defaultFamily, 1))
     )
       return undefined;
-    this.#primary ??=
-      this.#cell === undefined
-        ? primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) })
-        : { cell: this.#cell };
-    if (!(drawn.width > this.#primary.cell)) return undefined;
-    return wideGlyphScale(
-      (at) => (at === 1 ? drawn.width : this.#measure(sample, this.#family, at).width),
-      this.#primary,
-    );
+    this.#primary ??= primaryMetrics({ measureText: (text) => this.#measure(text, this.#family, 1) });
+    // The native cell the element measured owns the grid; the font's own advance is only the fallback for it.
+    const primary: PrimaryMetrics = this.#cell === undefined ? this.#primary : { ...this.#primary, cell: this.#cell };
+    if (!(drawn.width > primary.cell)) return undefined;
+    return wideGlyphScale((at) => (at === 1 ? drawn.width : this.#measure(sample, this.#family, at).width), primary);
   }
 }
 

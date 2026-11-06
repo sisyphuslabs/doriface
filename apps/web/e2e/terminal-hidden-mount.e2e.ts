@@ -20,11 +20,23 @@ async function print(page: Page, terminal: Locator, text: string): Promise<void>
 
 /** Each wide glyph of the printed line: the advance it paints against its two cells. */
 const wideOf = (element: HTMLElement) => {
-  const cell = Number.parseFloat(getComputedStyle(element).getPropertyValue("--term-cell-width"));
+  const style = getComputedStyle(element);
+  const cell = Number.parseFloat(style.getPropertyValue("--term-cell-width"));
+  const context = document.createElement("canvas").getContext("2d");
+  if (context === null) throw new Error("no canvas");
+  context.font = `${style.fontSize} ${style.fontFamily}`;
+  let ascent = 0;
+  let descent = 0;
+  for (let code = 0x21; code < 0x7f; code++) {
+    const ink = context.measureText(String.fromCharCode(code));
+    ascent = Math.max(ascent, ink.actualBoundingBoxAscent);
+    descent = Math.max(descent, ink.actualBoundingBoxDescent);
+  }
   const row = [...element.querySelectorAll(".term-row")].find((each) => (each.textContent ?? "").includes("doriface"));
   return {
     cell,
-    nativeCell: getComputedStyle(element).getPropertyValue("--term-native-cell-width").trim(),
+    asciiInk: ascent + descent,
+    nativeCell: style.getPropertyValue("--term-native-cell-width").trim(),
     wide: [...(row?.querySelectorAll(".term-wide") ?? [])].map((span) => {
       const range = document.createRange();
       range.selectNodeContents(span);
@@ -52,7 +64,8 @@ test("a terminal restored into a tab that is not shown draws its wide glyphs onc
   const measured = await hidden.evaluate(wideOf);
   console.log(`hidden-mount wide: ${JSON.stringify(measured)}`);
   expect(measured.wide.length).toBe(7);
+  const ideograph = Math.min(measured.asciiInk, 2 * measured.cell);
   for (const glyph of measured.wide) {
-    expect.soft(glyph.advance, `${glyph.text}: drawn, filling its two cells`).toBeGreaterThan(2 * measured.cell - 1);
+    expect.soft(glyph.advance, `${glyph.text}: drawn, filling its ideograph width`).toBeGreaterThan(ideograph - 1.5);
   }
 });
