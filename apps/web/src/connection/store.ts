@@ -82,8 +82,8 @@ export class ConnectionStore {
   #wakeQueued = false;
   /** The open connection a wake is asking right now, so several page events cost one call. */
   #probing: HcConnection | null = null;
-  /** Why the store closed the open connection itself, for the drop it then reports. */
-  #closedFor: Error | null = null;
+  /** Why the store closed a connection itself, kept with that connection so no other drop can take it. */
+  #closedFor: { readonly connection: HcConnection; readonly reason: Error } | null = null;
   readonly #budget = new AttemptBudget();
   readonly #connect: typeof connect;
 
@@ -146,6 +146,8 @@ export class ConnectionStore {
   }
 
   stop(): void {
+    this.#probing = null;
+    this.#closedFor = null;
     clearTimeout(this.#timer);
     clearTimeout(this.#stableTimer);
     this.#stable = false;
@@ -176,8 +178,9 @@ export class ConnectionStore {
         if (this.#abort !== abort) return;
         if (opened.path === "direct") this.#relayFirst = true;
         this.#stale = connection;
-        const reason = error ?? this.#closedFor ?? new Error("the host closed the connection");
+        const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
         this.#closedFor = null;
+        const reason = error ?? closedFor ?? new Error("the host closed the connection");
         this.#retry(reason, this.#stable ? 0 : attempt + 1);
       });
       this.#stale = null;
@@ -338,9 +341,10 @@ export class ConnectionStore {
       .then(
         () => undefined,
         (error: unknown) => {
-          if (!(error instanceof HcTimeoutError) || this.#state.phase !== "open") return;
-          if (this.#state.connection !== connection) return;
-          this.#closedFor = new HcLinkSilentError(WAKE_PROBE_MS);
+          // A stop, or a newer connection, ended this probe's claim on the link while it waited.
+          if (!(error instanceof HcTimeoutError) || this.#probing !== connection) return;
+          if (this.#state.phase !== "open" || this.#state.connection !== connection) return;
+          this.#closedFor = { connection, reason: new HcLinkSilentError(WAKE_PROBE_MS) };
           connection.close();
         },
       )

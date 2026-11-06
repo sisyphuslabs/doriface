@@ -23,22 +23,30 @@ interface Core {
   readonly connection: HcConnection;
   readonly calls: string[];
   readonly closed: () => boolean;
+  /** Every close() the store made, a repeated one included. */
+  readonly closeCalls: () => number;
+  /** Closes the connection from the host side, with no error, as a host going away does. */
+  readonly hostCloses: () => void;
 }
 
 /**
  * An open connection whose core either answers every call at once or has gone quiet. A quiet core's calls end as the real
  * client ends them: with HcTimeoutError once their deadline passes, never with an answer.
  */
-function core(answers: boolean | "error"): Core {
+function core(answers: boolean | "error", { deafClose = false }: { readonly deafClose?: boolean } = {}): Core {
   const calls: string[] = [];
   const listeners: ((error?: Error) => void)[] = [];
   let closed = false;
+  let closeCalls = 0;
   const connection = {
     hello: { core: { id: "c0re", name: "" } },
     onClose: (listener: (error?: Error) => void) => (listeners.push(listener), () => undefined),
     close: (error?: Error) => {
+      closeCalls += 1;
       if (closed) return;
       closed = true;
+      // A wire that had already closed under the store reports no new close.
+      if (deafClose) return;
       for (const listener of listeners) listener(error);
     },
     call: (method: string, _params: unknown, options: { readonly timeoutMs?: number } = {}) => {
@@ -52,7 +60,18 @@ function core(answers: boolean | "error"): Core {
       });
     },
   };
-  return { connection: connection as unknown as HcConnection, calls, closed: () => closed };
+  const hostCloses = (): void => {
+    if (closed) return;
+    closed = true;
+    for (const listener of listeners) listener(undefined);
+  };
+  return {
+    connection: connection as unknown as HcConnection,
+    calls,
+    closed: () => closed,
+    closeCalls: () => closeCalls,
+    hostCloses,
+  };
 }
 
 function settled(store: { subscribe: (fn: () => void) => () => void; state: ConnectionState }, phase: string) {
@@ -147,5 +166,78 @@ test("a wake whose call the core refuses still leaves the link alone: a refusal 
   expect(refusing.calls).toEqual(["terminal.list"]);
   expect(refusing.closed()).toBe(false);
   expect(attempts).toBe(1);
+  store.stop();
+});
+
+test("several wakes while a probe is out cost one call and at most one close (#653)", async () => {
+  jest.useFakeTimers();
+  const quiet = core(false);
+  const store = new ConnectionStore(RELAY, (): Promise<OpenConnection> =>
+    Promise.resolve({ connection: quiet.connection, path: "relay" as const }),
+  );
+  const open = settled(store, "open");
+  store.start();
+  await open;
+
+  store.retryNow();
+  store.retryNow();
+  await flush();
+  store.retryNow();
+  await flush();
+  expect(quiet.calls).toEqual(["terminal.list"]);
+
+  jest.advanceTimersByTime(10_000);
+  await flush();
+  expect(quiet.closeCalls()).toBe(1);
+  store.stop();
+});
+
+test("a probe whose store stopped before its deadline closes nothing more (#653)", async () => {
+  jest.useFakeTimers();
+  const quiet = core(false);
+  const store = new ConnectionStore(RELAY, (): Promise<OpenConnection> =>
+    Promise.resolve({ connection: quiet.connection, path: "relay" as const }),
+  );
+  const open = settled(store, "open");
+  store.start();
+  await open;
+
+  store.retryNow();
+  await flush();
+  store.stop();
+  const afterStop = quiet.closeCalls();
+  jest.advanceTimersByTime(10_000);
+  await flush();
+  expect(quiet.closeCalls()).toBe(afterStop);
+});
+
+test("a probe's reason stays with its own connection: a later plain close is not reported as silent (#653)", async () => {
+  jest.useFakeTimers();
+  // The first core's wire had already closed under the store, so the probe's close reports nothing.
+  const first = core(false, { deafClose: true });
+  const second = core(true);
+  let attempts = 0;
+  const store = new ConnectionStore(RELAY, (): Promise<OpenConnection> => {
+    attempts += 1;
+    return Promise.resolve({ connection: (attempts === 1 ? first : second).connection, path: "relay" as const });
+  });
+  const open = settled(store, "open");
+  store.start();
+  await open;
+  store.retryNow();
+  await flush();
+  jest.advanceTimersByTime(10_000);
+  await flush();
+  expect(first.closed()).toBe(true);
+
+  store.stop();
+  // stop() leaves the old phase in place, so wait for the second connection itself rather than for "open".
+  store.start();
+  await flush();
+  expect(attempts).toBe(2);
+  const failed = settled(store, "failed");
+  second.hostCloses();
+  await failed;
+  expect(store.state.phase === "failed" && store.state.error.name).not.toBe("HcLinkSilentError");
   store.stop();
 });
