@@ -1,20 +1,24 @@
 import { isJsonObject } from "@doriface/protocol";
 import { browserStorage, guardedLocalStorage } from "../storage/guarded.ts";
 
+/** A terminal's address to the moment of a finish this screen has shown: herdr-app's seen attention (`view.json`). */
+export type Seen = Readonly<Record<string, string>>;
+
 /**
  * What this screen looks at, kept out of the shared document as herdr-app keeps its `view.json` (`src/mirror.rs`
  * `View`): the selected tab, the tab each space last showed (`spaces`, keyed by `spaceKey`) so picking a space brings its
- * tab back, and per tab the focused and zoomed pane. Tabs are keyed by tab key (`tabKey`), per core. The tabs' order is
- * the documents' own, so every device shows it the same.
+ * tab back, per tab the focused and zoomed pane, and the finishes it has already looked at (`seen`, #611). Tabs are keyed
+ * by tab key (`tabKey`), per core. The tabs' order is the documents' own, so every device shows it the same.
  */
 export interface View {
   readonly active: string | null;
   readonly focused: Readonly<Record<string, string>>;
   readonly zoomed: Readonly<Record<string, string>>;
   readonly spaces: Readonly<Record<string, string>>;
+  readonly seen: Seen;
 }
 
-export const NO_VIEW: View = { active: null, focused: {}, zoomed: {}, spaces: {} };
+export const NO_VIEW: View = { active: null, focused: {}, zoomed: {}, spaces: {}, seen: {} };
 
 const storageKey = (core: string): string => `doriface.view.${core}`;
 
@@ -39,6 +43,7 @@ export function loadView(core: string, storage: Pick<Storage, "getItem"> = guard
     focused: strings(parsed["focused"]),
     zoomed: strings(parsed["zoomed"]),
     spaces: strings(parsed["spaces"]),
+    seen: strings(parsed["seen"]),
   };
 }
 
@@ -65,3 +70,12 @@ export const tabKey = (machineId: string | null, tabId: string): string =>
 
 /** A space's key: its id in the document, behind its machine's permanent id when it is not this core's, as tabKey. */
 export const spaceKey = (machineId: string | null, spaceId: string): string => `space:${tabKey(machineId, spaceId)}`;
+
+/**
+ * The view with the finishes this screen has shown noted (#611); a finish already noted is not written again, so a screen
+ * that has already looked at an agent does not change and save its view on every render.
+ */
+export function rememberSeen(view: View, marks: Seen): View {
+  const added = Object.entries(marks).filter(([address, mark]) => view.seen[address] !== mark);
+  return added.length === 0 ? view : { ...view, seen: { ...view.seen, ...Object.fromEntries(added) } };
+}

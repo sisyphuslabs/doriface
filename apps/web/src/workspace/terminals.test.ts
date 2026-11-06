@@ -1,6 +1,6 @@
 import type { HcEvent, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
-import { agentStatus } from "./model.ts";
+import { agentStatus } from "./attention.ts";
 import { applyEvent, fromSnapshot } from "./terminals.ts";
 
 const terminal = (address: string): Terminal => ({

@@ -33,6 +33,7 @@ import { GitFactsContext, useGitFacts } from "./git-facts.ts";
 import { layoutSpaces, tabTitle } from "./model.ts";
 import { SpaceSelectionContext } from "./space-selection.ts";
 import { useAdoptLoose } from "./use-adopt-loose.ts";
+import { useAttention } from "./use-attention.ts";
 import { orderNotSaved } from "./machine-order.ts";
 import { useMachineOrder } from "./use-machine-order.ts";
 import { useTerminals, type DocHeard } from "./use-terminals.ts";
@@ -243,7 +244,9 @@ export function Workspace({ connection }: WorkspaceProps) {
         );
   usePushPresence(inView);
   useNoticeOpen(connectionStore.settings.mode === "relay" ? connectionStore.settings.hostId : undefined, opened);
-  const spaces = useMemo(() => layoutSpaces(layouts, terminals, gitOf), [layouts, terminals, gitOf]);
+  // What this screen reads for attention: a finish it has looked at reads idle here, and only here (#611).
+  const sessions = useAttention(terminals, layout, narrow ? phoneOpen : null);
+  const spaces = useMemo(() => layoutSpaces(layouts, sessions, gitOf), [layouts, sessions, gitOf]);
   const onPalette = (): void => setPalette(true);
   const onSession: SessionVerb = (verb) => {
     const space = spaces.find((each) => inView !== null && each.addresses.includes(inView));
@@ -313,7 +316,7 @@ export function Workspace({ connection }: WorkspaceProps) {
                 {narrow ? (
                   <PhoneShell
                     connection={connection}
-                    terminals={terminals}
+                    terminals={sessions}
                     open={phoneOpen}
                     panes={phonePanes}
                     tabTitle={phoneTitle}
@@ -326,7 +329,7 @@ export function Workspace({ connection }: WorkspaceProps) {
                 ) : (
                   <DesktopShell
                     connection={connection}
-                    terminals={terminals}
+                    terminals={sessions}
                     loaded={fed.loaded}
                     layout={layout}
                     onNew={() => newTerminal()}
@@ -378,7 +381,7 @@ export function Workspace({ connection }: WorkspaceProps) {
           )}
           {palette ? (
             <Palette
-              terminals={terminals}
+              terminals={sessions}
               host={connection.hello.core.name}
               route={connectionStore.settings.mode === "relay" ? "relay" : "loopback"}
               actions={availableActions(

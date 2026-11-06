@@ -2,7 +2,8 @@ import { IconButton, StatusChip, StatusIndicator, cn } from "@doriface/ui";
 import { ChevronLeft } from "lucide-react";
 import { type ReactNode, useRef } from "react";
 import { useFittedLines } from "./fit-lines.ts";
-import { agentCounts, agentStatus, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
+import { agentStatus } from "./attention.ts";
+import { agentCounts, machineOf, type Session, spaceName, terminalTitle } from "./model.ts";
 import { useSpaceSelection } from "./space-selection.ts";
 import { SessionMenu } from "./session-menu.tsx";
 

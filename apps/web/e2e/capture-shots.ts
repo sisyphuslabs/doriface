@@ -1,9 +1,10 @@
 import type { Page } from "@playwright/test";
 import { BAD_LINK, fakeRelay, PAIR_CODE, PAIR_LINK } from "./capture-relay.ts";
 import { expect } from "./fixtures.ts";
-import { agentRow, startShell } from "./agents.ts";
+import { agentRow, endAgent, startAgent, startShell } from "./agents.ts";
 import { SPACE_RENAME_SHOTS } from "./capture-space-rename-shots.ts";
 import { VOICE_SHOTS } from "./capture-voice-shots.ts";
+import { seedSpaces } from "./layout-doc.ts";
 import { MACHINE_NAME } from "./machine.ts";
 import { hcOn, machineRow, reconnect, STATE_BOUND_MS, switchTo } from "./machine-switch.ts";
 import { resetMeshDocs } from "./mesh-reset.ts";
@@ -26,6 +27,20 @@ export interface Shot {
 }
 
 const focusedTerminal = (page: Page) => page.locator('[data-focused="true"] [data-terminal]');
+const strip = (page: Page) => page.getByRole("tablist", { name: "Tabs" });
+
+/** The address of a terminal the e2e host seeded, by its name, so a shot writes the layout it captures. */
+const addressOf = (name: string): string => {
+  const listed: unknown = JSON.parse(hcOn("host", ["ls", "--json"]));
+  const terminals = typeof listed === "object" && listed !== null ? Reflect.get(listed, "terminals") : undefined;
+  if (!Array.isArray(terminals)) throw new Error("hc ls printed no terminal list");
+  const found = terminals.find(
+    (terminal: unknown) => typeof terminal === "object" && terminal !== null && Reflect.get(terminal, "name") === name,
+  );
+  const address = typeof found === "object" && found !== null ? Reflect.get(found, "address") : undefined;
+  if (typeof address !== "string") throw new Error(`no terminal named ${name}`);
+  return address;
+};
 /** Opens the seeded terminal whose sidebar row matches, so the shot never depends on which tab opened first. */
 const openTerminal = async (page: Page, name: RegExp, text: string | RegExp) => {
   await page.getByRole("button", { name }).first().click();
@@ -69,6 +84,8 @@ const meshLoaded = async (page: Page) => {
 
 /** The terminal the session-ended shot started on the added machine, by its address there. */
 let ended = "";
+/** The agent the attention shot starts to finish where that screen is not looking, ended once the shot is taken. */
+let verify = "";
 
 export const SHOTS: readonly Shot[] = [
   {
@@ -258,6 +275,48 @@ export const SHOTS: readonly Shot[] = [
   },
   ...VOICE_SHOTS,
   ...SPACE_RENAME_SHOTS,
+  {
+    // herdr-app's attention on one screen: an agent that finished while its tab was not the one on screen keeps herdr's
+    // dot and its Done row, and the agent this screen opened reads Idle here (#611).
+    name: "agents-attention",
+    start: "connected",
+    run: async (page, width) => {
+      verify = startAgent("host", "verify", "done", "website");
+      seedSpaces([
+        {
+          folder: "",
+          id: "spc-attention",
+          name: "website",
+          tabs: [
+            { id: "tb-att-deploy", name: "deploy", terminal: addressOf("deploy") },
+            { id: "tb-att-tests", name: "tests", terminal: addressOf("tests") },
+            { id: "tb-att-verify", name: "verify", terminal: verify },
+          ],
+        },
+      ]);
+      await page.goto("/");
+      if (width === "390") {
+        await agentRow(page, "tests", false).click();
+        await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible({ timeout: 15_000 });
+        await page.getByRole("button", { name: "Back to agents" }).click();
+        await expect(agentRow(page, "verify", false)).toBeVisible({ timeout: 15_000 });
+        return;
+      }
+      // This screen shows the finished agent, then moves to the blocked one: the dot it looked at is gone, the one it
+      // did not look at stays.
+      await openTerminal(page, /tests/, "128 pass");
+      await strip(page).getByRole("tab").filter({ hasText: "deploy" }).click();
+      await expect(strip(page).getByRole("tab")).toHaveCount(3);
+      await expect(
+        strip(page).getByRole("tab").filter({ hasText: "verify" }).getByRole("img", { name: "Done" }),
+      ).toBeVisible();
+      await expect(strip(page).getByRole("tab").filter({ hasText: "tests" }).getByRole("img")).toHaveCount(0);
+    },
+    cleanup: () => {
+      endAgent("host", verify);
+      verify = "";
+    },
+  },
   {
     // A session whose program ended while its machine was offline, so its view first attaches to a finished terminal.
     name: "session-ended",

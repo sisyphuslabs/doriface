@@ -2,34 +2,13 @@ import type { JsonObject, Terminal } from "@doriface/protocol";
 import { docSpaces, panesOf, tabsOf } from "@doriface/protocol/layout";
 import type { Agent, AgentStatus, Space } from "@doriface/ui";
 import { spaceKey } from "../layout/view.ts";
+import { agentStatus } from "./attention.ts";
+import type { Session } from "./attention.ts";
 import { type GitFactsOf, shownGit } from "./git-facts.ts";
 import { TITLE_LABEL } from "./session-actions.ts";
 
-const OSC_STATES: Readonly<Record<string, AgentStatus>> = {
-  working: "working",
-  blocked: "blocked",
-  error: "blocked",
-  done: "done",
-  idle: "idle",
-};
-
-/**
- * A terminal as the workspace shows it: hc's terminal, plus `offline` when its machine cannot be reached now. hc keeps
- * the last picture it had of such a terminal as live, so the client marks it (`withReach`); hc's own state is untouched.
- */
-export type Session = Terminal & { readonly offline?: true };
-
-/**
- * The one status selector every surface uses (sidebar section, pane chip, tab glyph, space attention).
- * A program that never reported OSC 7501, or reported a word outside the protocol's, reads as idle; one on a machine
- * that cannot be reached reads as unknown.
- */
-export function agentStatus(terminal: Session): AgentStatus {
-  if (terminal.state === "finished") return "done";
-  if (terminal.offline === true) return "unknown";
-  const word = terminal.status?.state;
-  return word !== undefined && Object.hasOwn(OSC_STATES, word) ? (OSC_STATES[word] ?? "idle") : "idle";
-}
+/** The workspace's session is the one `attention.ts` reads, with this client's `offline` and `seen` marks on it. */
+export type { Session };
 
 /** The shells herdr-app reads as a prompt rather than a program (its `defaults/programs.json` `shells`). */
 const SHELLS: ReadonlySet<string> = new Set([

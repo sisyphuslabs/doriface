@@ -146,7 +146,7 @@ describe("keepMounts: a document tab that takes over a terminal shown alone keep
     const mounts = newMounts();
     keepMounts([docTab("core/tb0", "p0", "t1"), { ...shownAlone("box/t2"), key, id: key }], mounts);
     const tabs = keepMounts([docTab("core/tb0", "p0", "t1"), docTab("box/tb1", "p1", "box/t2")], mounts);
-    const view = { active: key, focused: { [key]: TRANSIENT }, zoomed: {}, spaces: {} };
+    const view = { active: key, focused: { [key]: TRANSIENT }, zoomed: {}, spaces: {}, seen: {} };
     expect(pick(tabs, view).active?.key).toBe("box/tb1");
     expect(pick(tabs, view).focused?.address).toBe("box/t2");
     expect(pick(tabs, { ...view, active: "gone" }).active?.key).toBe("core/tb0");

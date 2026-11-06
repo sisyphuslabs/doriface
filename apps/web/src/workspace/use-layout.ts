@@ -11,7 +11,7 @@ import {
   splitPane,
   terminalBlock,
 } from "@doriface/protocol/layout";
-import { loadView, saveView, tabKey, type View } from "../layout/view.ts";
+import { loadView, rememberSeen, saveView, tabKey, type Seen, type View } from "../layout/view.ts";
 import {
   buildTabs,
   findTerminal,
@@ -61,6 +61,13 @@ export interface Layout extends PaneMoves {
   readonly closeTab: (key: string) => void;
   /** The pane this screen split off last, which grows in from the pane it came from. */
   readonly fresh: string | null;
+  /**
+   * The finishes this screen has already looked at, by terminal address (herdr-app's seen attention in its `view.json`):
+   * an agent listed here whose finish that was reads idle instead of done (#611).
+   */
+  readonly seen: Seen;
+  /** Records finishes this screen has shown; a finish already recorded is not written again. */
+  readonly remember: (marks: Seen) => void;
   /**
    * The pane this screen last asked for (opened, split, focused, picked its tab): its terminal takes the keyboard as it
    * starts. A pane only another device's layout edit brought or moved here is not one (#332).
@@ -137,6 +144,9 @@ export function useLayout(
   const [view, setView] = useState<View>(() => loadView(core));
   const [fresh, setFresh] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<string | null>(null);
+  // A finish this screen has shown is noted with what it asked from (its turn, or when it finished), so the agent stops
+  // asking here and the next finish asks again; one already noted is not written, so looking at an agent stops there.
+  const remember = useCallback((marks: Seen): void => setView((prev) => rememberSeen(prev, marks)), []);
   // Read through a ref: the toast it raises re-renders the workspace, which must not count as another write.
   const tellUnsaved = useRef(unsaved);
   tellUnsaved.current = unsaved;
@@ -400,6 +410,8 @@ export function useLayout(
     closeTab,
     fresh,
     claimed,
+    seen: view.seen,
+    remember,
     ...moves,
     moveTab,
     renameTab,

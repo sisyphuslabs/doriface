@@ -5,7 +5,8 @@ import type { Keymap } from "../keys/defaults.ts";
 import { triggersFor } from "../keys/keymap.ts";
 import { triggerKeys, type Platform } from "../keys/trigger.ts";
 import type { AgentStatus } from "@doriface/ui";
-import { agentStatus, machineOf, terminalTitle } from "./model.ts";
+import { agentStatus } from "./attention.ts";
+import { machineOf, terminalTitle } from "./model.ts";
 import type { ShellAction } from "./shell-actions.ts";
 
 const AGENT = "agent:";

@@ -47,6 +47,8 @@ const layout: Layout = {
   bumped: null,
   fresh: null,
   claimed: null,
+  seen: {},
+  remember: noop,
   resize: () => Promise.resolve(true),
   resizeFocused: () => false,
   equalize: () => true,
