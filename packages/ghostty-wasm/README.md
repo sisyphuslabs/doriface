@@ -47,8 +47,16 @@ bounded until a program deletes images or byte-budget eviction frees room.
 ## Differences from the stock 0.5.9 binary
 
 wterm's own `@wterm/ghostty` suite (187 tests at 0.5.8) passed on the 0.5.8 build of this binary except two cases
-that pin v1.3.1 behavior:
+that pin v1.3.1 behavior; the 0.5.9 suite has not been run against this build:
 
 - An ANSI-mode DECRQM (`CSI 4 $ p`) now gets a DECRPM reply; Ghostty v1.3.1 never dispatched it.
 - 4096 repeated Kitty placements settle at about 2.4 MiB of WebAssembly memory instead of about 1.3 MiB; the
   plateau is the same, but the per-placement metadata of v1.4.0 is larger.
+
+`set_scrollback_lines` is also implemented differently, because its upstream shape needs Ghostty v1.3.1 internals:
+here it calls Ghostty v1.4.0's `PageList.setMaxLines`, which prunes whole historical pages and always keeps at least
+one standard page, so a limit of `0` does not clear the history and the retained count can sit slightly above the
+limit. Stock 0.5.9 converts lines to a page byte budget and erases rows hidden past the limit through Ghostty's
+private `eraseRows`; those rows do not exist on this build, so `get_scrollback_discarded_count` counts only the rows
+pruning discarded. The web app is unaffected today: `terminal-view.tsx` always passes `scrollbackLimit` in bytes, so
+`GhosttyCore` never calls the line limit at all.
