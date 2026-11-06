@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- An agent row shows how far its own todo list has got, as done/total (2/4), read from the list the agent draws: Claude Code's task list when its task tools are on (a long list's folded line counts too), and omp's TODO list with its phases added up. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
+
 ### Phone
 
 - On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
