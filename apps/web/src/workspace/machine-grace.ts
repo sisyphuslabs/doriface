@@ -24,8 +24,9 @@ export interface Before {
 
 /**
  * The hold after one machine.list answer read at `now`. A machine held already keeps its start. A machine that reads
- * down is held from its drop when it read connected at the read before (dropped since then), or when this is the first
- * read that lists it (a page opened mid-blip). The drop is hc's `since_ms`, which is the host's clock, so it is kept
+ * down is held from its drop when it read connected at the read before (dropped since then), or when this is the page's
+ * first read and hc says when it dropped (a page opened mid-blip); a machine listed later for the first time (just added,
+ * still dialing) was never connected, so it shows as hc says. The drop is hc's `since_ms`, which is the host's clock, so it is kept
  * between the read before (or one grace back, on a first read) and `now`: no host clock can lengthen a hold, and a
  * machine that went down while the page was hidden is not held for a drop that is older than its grace. A machine that
  * already read down at the read before is never held anew, so a grace that ended does not start again. Anything else
@@ -38,7 +39,7 @@ export function stepHeld(held: Held, before: Before, list: readonly MachineView[
     if (!DOWN.has(view.state)) continue;
     const kept = held.get(view.id);
     const was = seen.get(view.id);
-    const fresh = was === "connected" || was === undefined;
+    const fresh = was === "connected" || (before.at === undefined && view.since_ms != null);
     const earliest = was === "connected" && before.at !== undefined ? before.at : now - OFFLINE_GRACE_MS;
     const since = kept ?? (fresh ? Math.min(now, Math.max(earliest, view.since_ms ?? now)) : undefined);
     if (since !== undefined && now - since < OFFLINE_GRACE_MS) next.set(view.id, since);
