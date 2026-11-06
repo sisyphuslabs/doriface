@@ -13,8 +13,14 @@ async function client(session: Session) {
   const core = await HcConnection.open(link);
   const feed = await core.subscribe();
   const waiters = new Set<() => Promise<void>>();
+  // Each check a doc event starts; close waits these out, so a read still in flight is not cut off by the close.
+  const inFlight = new Set<Promise<void>>();
   feed.onEvent((event) => {
-    if (event.type === "doc" && event.data.name === MESH_OFFER_DOC) for (const waiter of waiters) void waiter();
+    if (event.type !== "doc" || event.data.name !== MESH_OFFER_DOC) return;
+    for (const waiter of waiters) {
+      const run = waiter().finally(() => inFlight.delete(run));
+      inFlight.add(run);
+    }
   });
   const read = async (): Promise<JsonValue> => (await core.call("doc.get", { name: MESH_OFFER_DOC })).value;
   return {
@@ -36,7 +42,8 @@ async function client(session: Session) {
       await check();
       return promise;
     },
-    close(): void {
+    async close(): Promise<void> {
+      await Promise.allSettled(inFlight);
       core.close();
       link.close();
     },
@@ -75,7 +82,7 @@ test("a join on the offer is written back in place of the link, with the machine
       joined: { name: "laptop", hostId: "h2" },
     });
   } finally {
-    app.close();
+    await app.close();
     await service.stop();
     await session.dispose();
   }
@@ -111,7 +118,7 @@ test("a request is answered with one single-use offer, and the link is dropped o
     );
     expect(field(second, "link")).toBe("doriface://pair#h=x&m=1&n=2");
   } finally {
-    app.close();
+    await app.close();
     await service.stop();
     await session.dispose();
   }
@@ -135,7 +142,7 @@ test("an offer the host cannot open is answered with why", async () => {
       error: "the mesh is full",
     });
   } finally {
-    app.close();
+    await app.close();
     await service.stop();
     await session.dispose();
   }
@@ -174,7 +181,7 @@ test("a link that expired while no service ran is dropped when the service start
     await service.ready;
     expect(await app.until((value) => field(value, "expired") === true)).toEqual({ request: "old", expired: true });
   } finally {
-    app.close();
+    await app.close();
     await service.stop();
     await session.dispose();
   }
