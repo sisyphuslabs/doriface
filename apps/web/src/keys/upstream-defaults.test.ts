@@ -3,7 +3,7 @@ import { defaultKeymap } from "./defaults.ts";
 import { triggersFor } from "./keymap.ts";
 import { GHOSTTY_DEFAULTS } from "./ghostty-defaults.ts";
 import { HERDR_APP_MAC, HERDR_APP_OTHER } from "./herdr-app-defaults.ts";
-import { PLATFORM_RESERVED } from "./platform-reserved.ts";
+import { PLATFORM_RESERVED, TAKEN_ON_PURPOSE } from "./platform-reserved.ts";
 
 /**
  * Actions whose keys doriface picks itself on that platform; their triggers must be free in both upstream keymaps, and
@@ -41,6 +41,19 @@ describe("doriface-only bindings", () => {
   test.each(["mac", "other"] as const)("on %s they take no chord the OS or a browser reserves", (platform) => {
     const triggers = DORIFACE_ONLY[platform].flatMap((action) => triggersFor(defaultKeymap(platform), action));
     expect(triggers.filter((trigger) => trigger in PLATFORM_RESERVED)).toEqual([]);
+  });
+
+  test.each(["mac", "other"] as const)(
+    "on %s a default takes a reserved chord only where TAKEN_ON_PURPOSE says why",
+    (platform) => {
+      const taken = [...defaultKeymap(platform).keys()].filter((trigger) => trigger in PLATFORM_RESERVED);
+      expect(taken.filter((trigger) => !(trigger in TAKEN_ON_PURPOSE))).toEqual([]);
+      expect(taken.length).toBeGreaterThan(0);
+    },
+  );
+
+  test("every chord taken on purpose is a reserved one", () => {
+    expect(Object.keys(TAKEN_ON_PURPOSE).filter((trigger) => !(trigger in PLATFORM_RESERVED))).toEqual([]);
   });
 
   test("on Linux and Windows moving a tab takes Ctrl+Alt+Shift+PgUp / PgDn, since herdr-app's spaces take Ctrl+Shift", () => {
