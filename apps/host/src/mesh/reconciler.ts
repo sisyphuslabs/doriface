@@ -1,18 +1,21 @@
-import { HcRpcError, type MachineView } from "@doriface/protocol";
+import { HcRpcError, type MachineView, type MeshReplacedMachine, replacedMachineText } from "@doriface/protocol";
 import type { Clock } from "./clock.ts";
-import { DIAL_LIMITS } from "./dial-policy.ts";
 import type { HcMachines } from "./hc-machines.ts";
 import { fallbacks } from "@doriface/mesh";
 import type { MemberEntry } from "./authorize-index.ts";
 import type { MeshView } from "./mesh-view.ts";
 import { type AddReservation, BUDGET_REFUSAL } from "./line-grants.ts";
 import { meshHostOf, meshVia } from "./via.ts";
+import { renameToMeshName } from "./line-names.ts";
+import { replacedOf } from "./replaced.ts";
+import { ProbeBackoff } from "./probe-backoff.ts";
+import { migrate } from "./migration.ts";
 
 /** Section 8.1: a named STUCK state is retried when the view or `machine.list` changes, or every 10 minutes. */
 export const STUCK_RETRY_MS = 600_000;
 
 export type LineStatus =
-  | { readonly state: "ok"; readonly note?: string }
+  | { readonly state: "ok"; readonly replaced?: MeshReplacedMachine }
   | { readonly state: "retrying"; readonly reason: string }
   | { readonly state: "stuck"; readonly reason: string };
 
@@ -47,11 +50,6 @@ interface Stuck {
   readonly until: number;
 }
 
-interface Retry {
-  readonly attempts: number;
-  readonly cancel: () => void;
-}
-
 const DIFFERENT_CORE = "a different core answers there";
 const kindOf = (error: unknown): string => (error instanceof HcRpcError ? error.kind : "unreachable");
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -64,8 +62,8 @@ export class Reconciler {
   readonly status = new Map<string, LineStatus>();
   readonly #options: ReconcilerOptions;
   readonly #stuck = new Map<string, Stuck>();
-  /** Members whose add failed with herdr's retryable kinds, on section 8.2's probe backoff. */
-  readonly #retries = new Map<string, Retry>();
+  /** Unreachable, hc_missing, incompatible; a line refused for the dial budget is re-added by the policy's due. */
+  readonly #retries: ProbeBackoff;
   /** Newly admitted members whose add waits for the 0-5 s jitter (section 8.2). */
   readonly #held = new Set<string>();
   #latest: MeshView | undefined;
@@ -77,6 +75,9 @@ export class Reconciler {
 
   constructor(options: ReconcilerOptions) {
     this.#options = options;
+    this.#retries = new ProbeBackoff(options.clock, () => {
+      if (this.#latest !== undefined) void this.reconcile(this.#latest);
+    });
   }
 
   /** Coalesces: while one run is busy, the next runs once with the newest view. */
@@ -100,7 +101,7 @@ export class Reconciler {
   /** The host is stopping: no retry fires after this. */
   stop(): void {
     this.#cancelRetry();
-    for (const hostId of this.#retries.keys()) this.#retried(hostId);
+    this.#retries.clearExcept();
     this.#latest = undefined;
   }
 
@@ -171,7 +172,7 @@ export class Reconciler {
     const inView = view.members.some((m) => m.hostId === selfHostId);
     const others = inView ? view.members.filter((m) => m.hostId !== selfHostId) : [];
     const desired = new Map(others.map((m) => [m.hostId, m]));
-    for (const hostId of this.#retries.keys()) if (!desired.has(hostId)) this.#retried(hostId);
+    this.#retries.clearExcept((hostId) => desired.has(hostId));
     const entries = await this.#entries();
     const stale = entries.filter(
       (entry) => !desired.has(entry.hostId) || (entry.machine.why ?? "").includes(DIFFERENT_CORE),
@@ -183,7 +184,9 @@ export class Reconciler {
       }),
     );
     const kept = entries.filter((entry) => !stale.includes(entry));
-    await Promise.all(kept.map((entry) => this.#rename(entry, desired.get(entry.hostId))));
+    await Promise.all(
+      kept.map((entry) => renameToMeshName(machines, this.#options.log, entry, desired.get(entry.hostId))),
+    );
     const list = await machines.list();
     const missing = [...desired.values()].filter(
       (member) => !this.#held.has(member.hostId) && !kept.some((entry) => entry.hostId === member.hostId),
@@ -192,25 +195,6 @@ export class Reconciler {
     await Promise.all(missing.map((member) => this.#add(member, list, key)));
     this.#listed = await this.#entries();
     this.#armRetry(view);
-  }
-
-  async #rename(entry: MeshEntry, member: MemberEntry | undefined): Promise<void> {
-    if (member === undefined) return;
-    const allowed = [member.name, ...fallbacks(member.name, member.hostId)];
-    if (allowed.includes(entry.machine.name)) return;
-    await this.#renameTo(entry.machine.name, allowed);
-  }
-
-  async #renameTo(current: string, names: readonly string[]): Promise<void> {
-    const [name, ...rest] = names;
-    if (name === undefined) return;
-    try {
-      await this.#options.machines.rename(current, name);
-      this.#options.log(`mesh: renamed machine ${current} to ${name}`);
-    } catch (error) {
-      if (kindOf(error) !== "name_taken") throw error;
-      await this.#renameTo(current, rest);
-    }
   }
 
   async #add(member: MemberEntry, list: readonly MachineView[], key: string): Promise<void> {
@@ -234,7 +218,7 @@ export class Reconciler {
     }
     try {
       await this.#reservedAdd(member, name, attempt.via);
-      this.#retried(member.hostId);
+      this.#retries.clear(member.hostId);
       this.status.set(member.hostId, { state: "ok" });
       this.#options.log(`mesh: added machine ${name}`);
     } catch (error) {
@@ -246,42 +230,37 @@ export class Reconciler {
       if (kind === "already_added") return this.#migrate(member, attempt, name);
       this.status.set(member.hostId, { state: "retrying", reason: `${kind}: ${messageOf(error)}` });
       this.#options.log(`mesh: adding machine ${name} failed (${kind}): ${messageOf(error)}; retrying`);
-      if (!messageOf(error).includes(BUDGET_REFUSAL)) this.#retryLater(member.hostId);
+      if (!messageOf(error).includes(BUDGET_REFUSAL)) this.#retries.later(member.hostId);
     }
   }
 
   /**
-   * Unreachable, hc_missing, incompatible: retried 30 s later, doubling to 5 minutes, and at once on presence. A line
-   * refused for the dial budget arms no clock here: the policy's "budget" due re-adds it once a token is free for it.
+   * herdr answered `already_added`: it dialed the mesh line and found the member's core already here, under an entry
+   * added over ssh or with a via. That entry is removed and the line added in its place, under the member's name first:
+   * herdr checks a name before it dials, so the line could only reach `already_added` under a name the old entry did not
+   * hold, and that entry may hold the member's own name. The machine keeps its core id, so its documents, terminals and
+   * the tabs keyed by that id carry over. A second `already_added` means another entry still holds the core.
    */
-  #retryLater(hostId: string): void {
-    const attempts = (this.#retries.get(hostId)?.attempts ?? 0) + 1;
-    this.#retries.get(hostId)?.cancel();
-    const wait = Math.min(DIAL_LIMITS.probeFirstMs * 2 ** (attempts - 1), DIAL_LIMITS.probeMaxMs);
-    const cancel = this.#options.clock.after(wait, () => {
-      if (this.#latest !== undefined) void this.reconcile(this.#latest);
-    });
-    this.#retries.set(hostId, { attempts, cancel });
-  }
-
-  #retried(hostId: string): void {
-    this.#retries.get(hostId)?.cancel();
-    this.#retries.delete(hostId);
-  }
-
-  /** The member's core is already here under a #30 `doriface-host connect` entry: replace it with the mesh line. */
-  async #migrate(member: MemberEntry, attempt: Attempt, name: string): Promise<void> {
-    const { program, stateDir, machines } = this.#options;
+  async #migrate(member: MemberEntry, attempt: Attempt, tried: string): Promise<void> {
+    const { program, stateDir, machines, reserve, log } = this.#options;
     const old = attempt.list.find((machine) => machine.id === member.hcId);
+    const copied = `copied core: ${member.name}'s core is another member's`;
     if (old === undefined || meshHostOf(old.target, program, stateDir) !== undefined) {
-      return this.#stick(member, attempt.key, `copied core: ${member.name}'s core is another member's`);
+      return this.#stick(member, attempt.key, copied);
     }
-    await machines.rm(old.name);
-    await this.#reservedAdd(member, name, attempt.via);
-    this.#retried(member.hostId);
-    const note = `replaced machine "${old.name}" (doriface-host connect) with the mesh line`;
-    this.status.set(member.hostId, { state: "ok", note });
-    this.#options.log(`mesh: ${note}`);
+    const names = [member.name, ...fallbacks(member.name, member.hostId)];
+    const parts = { machines, log, reserve: reserve === undefined ? undefined : () => reserve(member.hostId) };
+    const done = await migrate(parts, old, names, attempt.via);
+    if (done.kind === "copied") return this.#stick(member, attempt.key, copied);
+    if (done.kind === "added") {
+      this.#retries.clear(member.hostId);
+      const replaced = replacedOf(old);
+      this.status.set(member.hostId, { state: "ok", replaced });
+      return log(`mesh: added machine ${done.name}, ${replacedMachineText(replaced)}`);
+    }
+    this.status.set(member.hostId, { state: "retrying", reason: done.reason });
+    log(`mesh: replacing machine ${old.name} with ${tried}'s mesh line is retried: ${done.reason}`);
+    if (!done.reason.includes(BUDGET_REFUSAL)) this.#retries.later(member.hostId);
   }
 
   /** `machine.add` once both of its upgrades are reserved; a refused reservation throws as herdr's refusal would. */
