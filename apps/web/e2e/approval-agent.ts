@@ -9,7 +9,7 @@ const AGENT = join(import.meta.dirname, "fake-permission-agent.ts");
 
 export interface AskingAgent {
   readonly address: string;
-  /** Every key the agent received, in order (`"1"`, `"\u001B"`, `"x"`). */
+  /** Every key the agent received, in order (`"1"`, `"\u001B"`, `"x"`, each character of pasted text). */
   readonly keys: () => readonly string[];
   /** The records of the terminal's approval document on the core. */
   readonly records: () => readonly Record<string, unknown>[];
@@ -19,11 +19,26 @@ export interface AskingAgent {
   readonly end: () => void;
 }
 
-/** Starts the fake Claude Code permission prompt on the e2e host's core, in its own space. */
-export function startAskingAgent(name: string): AskingAgent {
+/** Starts the fake Claude Code prompt (its permission dialog by default) on the e2e host's core, in its own space. */
+export function startAskingAgent(
+  name: string,
+  scenario: "permission" | "question" | "steps" | "multi" = "permission",
+): AskingAgent {
   const dir = mkdtempSync(join(tmpdir(), "df-approval-"));
   const log = join(dir, "keys.log");
-  const out = hcOn("host", ["run", "--bg", "--name", name, "--label", "space=approval", "--", "bun", AGENT, log]);
+  const out = hcOn("host", [
+    "run",
+    "--bg",
+    "--name",
+    name,
+    "--label",
+    "space=approval",
+    "--",
+    "bun",
+    AGENT,
+    log,
+    scenario,
+  ]);
   const started: unknown = JSON.parse(out);
   if (typeof started !== "object" || started === null || !("address" in started)) throw new Error(out);
   const address = String(started.address);
