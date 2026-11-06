@@ -127,6 +127,24 @@ describe("the layout document sync", () => {
     await expect(doc.edit((current) => named(current, "mine"))).rejects.toThrow("kept changing");
   });
 
+  test("a write the link drops under rejects with its own cause, not the re-read the closed link refuses (#698)", async () => {
+    let up = true;
+    const calls: DocCalls = {
+      get: async () => {
+        if (!up) throw new Error("connection is closed");
+        return { value: { spaces: [] }, version: 1 };
+      },
+      set: async () => {
+        up = false;
+        throw new Error("link closed");
+      },
+    };
+    const { doc } = await ready(calls);
+    await expect(doc.edit((current) => named(current, "mine"))).rejects.toThrow("link closed");
+    // The unsaved edit is not left on screen as if it were the document.
+    expect(doc.state).toEqual({ phase: "unavailable", reason: "connection is closed" });
+  });
+
   test("a doc event for a version it did not write reads the document again", async () => {
     const core = store({ spaces: [] });
     const { doc, states } = await ready(core.calls);
