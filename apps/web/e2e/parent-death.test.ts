@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 const childSource = `
 import { watchParentDeath } from ${JSON.stringify(new URL("./parent-death.ts", import.meta.url).pathname)};
 const stop = watchParentDeath(() => {
-  clearInterval(stop);
+  stop();
   process.kill(Number(process.env["HANDSHAKE_PID"]), "SIGUSR1");
   process.exit(0);
 }, { intervalMs: 20 });

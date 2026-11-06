@@ -1,4 +1,10 @@
 import { spawnSync } from "node:child_process";
+import { HOST_BLOCK, PORT_TRY_LIMIT } from "./port-block.ts";
+
+export interface TriedBlock {
+  readonly base: number;
+  readonly blocked: number;
+}
 
 export interface PortHolder {
   readonly port: number;
@@ -69,13 +75,18 @@ export function listPortHolders(ports: readonly number[]): readonly PortHolder[]
   return holders;
 }
 
-export function describePortFailure(tried: readonly number[], holders: readonly PortHolder[]): string {
-  const bases = tried.length === 0 ? "none recorded" : tried.join(", ");
+export function describePortFailure(tried: readonly TriedBlock[], holders: readonly PortHolder[]): string {
+  const attempts =
+    tried.length === 0
+      ? "none recorded"
+      : tried
+          .map(({ base, blocked }) => (blocked > 0 ? `${String(base)} blocked at ${String(blocked)}` : String(base)))
+          .join(", ");
   const named =
     holders.length === 0
-      ? "no listener could be named on those ports"
+      ? "no listener could be named on the blocked ports"
       : holders
           .map(({ port, pid, command }) => `port ${String(port)} held by pid ${String(pid)} (${command})`)
           .join("; ");
-  return `no ${String(32)}-port block in ${String(100)} tries; last bases tried: ${bases}; ${named}`;
+  return `no ${String(HOST_BLOCK)}-port block in ${String(PORT_TRY_LIMIT)} tries; last bases tried: ${attempts}; ${named}`;
 }
