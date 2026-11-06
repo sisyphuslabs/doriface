@@ -24,6 +24,7 @@ export {
   type ExtraKeysBarProps,
   type KeyboardButtonProps,
 } from "./components/extra-keys-bar.tsx";
+export { DEFAULT_EXTRA_KEYS } from "./components/extra-keys-defaults.tsx";
 export { Fingerprint, type FingerprintProps } from "./components/fingerprint.tsx";
 export { FontFamilyList, type FontFamilyListProps } from "./components/font-family-list.tsx";
 export { IconButton, type IconButtonProps } from "./components/icon-button.tsx";

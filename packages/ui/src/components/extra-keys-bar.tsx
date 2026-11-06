@@ -1,15 +1,10 @@
 import { ClipboardPaste, GamepadDirectional, Keyboard, KeyboardOff, List, TextCursorInput } from "lucide-react";
-import {
-  type CSSProperties,
-  type MouseEvent,
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn.ts";
+import { DEFAULT_EXTRA_KEYS } from "./extra-keys-defaults.tsx";
+import { idleKey, keepFocus, KeyButton, keyTarget as key, latchedKey } from "./extra-key-button.tsx";
+
+export { keepFocus };
 
 export interface ExtraKey {
   readonly id: string;
@@ -19,22 +14,6 @@ export interface ExtraKey {
   /** Sticky one-shot modifiers stay pressed for the next key, then let go. */
   readonly modifier?: boolean;
 }
-
-/** A mousedown that would move focus off the terminal would also drop the soft keyboard. */
-export function keepFocus(event: MouseEvent): void {
-  event.preventDefault();
-}
-
-const key =
-  "relative flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-1.5 outline-none [&_svg]:size-5 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring";
-const latchedKey =
-  "bg-primary font-semibold text-primary-foreground after:absolute after:bottom-1.5 after:h-0.5 after:w-3 after:rounded-full after:bg-current active:opacity-80";
-const idleKey = "text-foreground active:bg-selected";
-
-/** How long a key is held before the hold counts; a shorter press is the tap it always was. */
-const HOLD_MS = 400;
-
-const symbol = (entry: ExtraKey): boolean => typeof entry.label === "string" && entry.label.length === 1;
 
 const divider = (height: string): ReactElement => (
   <span aria-hidden className={cn("mx-1 w-px shrink-0 bg-border", height)} />
@@ -70,68 +49,8 @@ function useEdgeFade(): [Fade, (el: HTMLDivElement | null) => void] {
   return [fade, ref];
 }
 
-interface KeyButtonProps {
-  readonly entry: ExtraKey;
-  readonly latched: boolean;
-  readonly onKey: ((id: string) => void) | undefined;
-  readonly onHold: ((id: string) => void) | undefined;
-}
-
-/**
- * One bar key. A held press is its own gesture where the caller names one (Ctrl opens the packs panel); the tap that
- * follows a hold sends nothing, so opening a panel never latches a modifier by accident.
- */
-function KeyButton({ entry, latched, onKey, onHold }: KeyButtonProps) {
-  const timer = useRef<number | null>(null);
-  const held = useRef(false);
-  const stop = useCallback((): void => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-    timer.current = null;
-  }, []);
-  useEffect(() => stop, [stop]);
-  const start = (): void => {
-    held.current = false;
-    if (onHold === undefined) return;
-    timer.current = window.setTimeout(() => {
-      timer.current = null;
-      held.current = true;
-      onHold(entry.id);
-    }, HOLD_MS);
-  };
-  return (
-    <button
-      type="button"
-      aria-label={entry.name}
-      aria-pressed={entry.modifier === true ? latched : undefined}
-      onMouseDown={keepFocus}
-      onPointerDown={start}
-      onPointerUp={stop}
-      onPointerLeave={stop}
-      onPointerCancel={stop}
-      onContextMenu={onHold === undefined ? undefined : (event) => event.preventDefault()}
-      onClick={() => {
-        if (held.current) {
-          held.current = false;
-          return;
-        }
-        onKey?.(entry.id);
-      }}
-      className={cn(
-        key,
-        symbol(entry) ? "font-mono text-base" : "text-[0.8125rem] font-medium",
-        latched ? latchedKey : idleKey,
-      )}
-    >
-      {entry.label}
-    </button>
-  );
-}
-
 export interface ExtraKeysBarProps {
-  /**
-   * The person's keys, in their order. Unset where a caller draws only a pack's keys or none — a design mock, or the
-   * desktop's keys — so adding the person's own row never breaks a caller that had nothing to put there.
-   */
+  /** The person's keys, in their order. Unset falls back to the row a fresh phone starts from. */
   readonly keys?: readonly ExtraKey[];
   /** The active pack's keys, drawn before the person's own so picking a pack shows its keys at once. */
   readonly packKeys?: readonly ExtraKey[];
@@ -168,7 +87,15 @@ export interface ExtraKeysBarProps {
  * to solid ink with a bar under its label, so it reads as on in both themes.
  */
 export function ExtraKeysBar(props: ExtraKeysBarProps) {
-  const { keys = [], packKeys = [], latched = [], onKey, onKeyHold, padOpen = false, inputBox = false } = props;
+  const {
+    keys = DEFAULT_EXTRA_KEYS,
+    packKeys = [],
+    latched = [],
+    onKey,
+    onKeyHold,
+    padOpen = false,
+    inputBox = false,
+  } = props;
   const [fade, scroller] = useEdgeFade();
   const textKey = (entry: ExtraKey) => (
     <KeyButton
