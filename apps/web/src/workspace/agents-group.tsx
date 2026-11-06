@@ -127,6 +127,7 @@ export function AgentsGroup({ terminals, active, onOpen, rail = false, heading =
                 row={row}
                 actions={<AgentActions agent={agent} />}
                 menu={<AgentMenuItems agent={agent} />}
+                coarseActions
               />
             );
           })}
