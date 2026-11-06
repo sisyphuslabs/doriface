@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Reconnecting
+
+- A page that comes back (a tab shown again, a page restored from the back/forward cache, the network returning) while its link still looks open asks the host once; a link that does not answer within 10 seconds is dropped and reconnects at once, instead of leaving the terminal frozen until the 45-second heartbeat gives up. A link that answers, even with a refusal, is left alone. (#775)
+
 ### Paired devices
 
 - Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
