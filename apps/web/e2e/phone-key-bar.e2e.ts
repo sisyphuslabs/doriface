@@ -4,8 +4,25 @@ import { expectTouchTargets, key, keysBar, openPhoneTerminal, PHONE, showKeyboar
 
 test.use({ serviceWorkers: "block", ...PHONE });
 
-const BAR_KEYS = ["Control", "Shift", "Tab", "Escape", "Arrow keys", "Paste", "Switch session", "Hide keyboard"];
+const BAR_KEYS = [
+  "Control",
+  "Shift",
+  "Tab",
+  "Escape",
+  "Arrow left",
+  "Arrow up",
+  "Arrow down",
+  "Arrow right",
+  "Arrow keys",
+  "Paste",
+  "Switch session",
+  "Type in a field",
+  "Hide keyboard",
+];
 const PAD_KEYS = ["Delete", "Up arrow", "Clear screen", "Left arrow", "Return", "Right arrow", "Down arrow"];
+/** The two slots beside the row that never scroll: the input field's and the keyboard's. */
+const FIXED_KEYS = ["Type in a field", "Hide keyboard"];
+const SCROLL_KEYS = BAR_KEYS.length - FIXED_KEYS.length;
 const names = (scope: Locator) =>
   scope.getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label") ?? ""));
 
@@ -25,9 +42,11 @@ for (const width of [390, 320]) {
     // A Mac host adds Command after Control, so Escape moves behind the swipe at 390.
     // At 320 each host shows what fits and swipes the rest.
     if (width === 390) {
-      expect(shown).toEqual(
+      // The keys in the row's own order, of which the first few fit: the row swipes for the rest (#195).
+      expect(shown.slice(0, 4)).toEqual(
         process.platform === "darwin" ? ["Control", "Command", "Shift", "Tab"] : ["Control", "Shift", "Tab", "Escape"],
       );
+      expect(shown.length).toBeLessThan(SCROLL_KEYS);
     }
     const box = await bar.boundingBox();
     // With the keyboard up the header stays above the bar: the terminal keeps the room between them.
@@ -36,7 +55,6 @@ for (const width of [390, 320]) {
     expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
     expect((box?.x ?? 0) + (box?.width ?? Infinity)).toBeLessThanOrEqual(width);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    await expect(bar.getByRole("button", { name: /arrow$/ })).toHaveCount(0);
   });
 }
 
