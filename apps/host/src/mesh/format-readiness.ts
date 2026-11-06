@@ -20,6 +20,9 @@ export type Readiness = { readonly kind: "ready" } | { readonly kind: "blocked";
  * receiving side is not enough — an older reader rejects the admission and then holds a revoke that references it as
  * dangling, so the revoke is silently not applied.
  */
+/** The mesh-file format a client's admission needs: the kind it carries is what a version-2 reader drops. */
+export const CLIENT_ADMISSION_FORMAT = 3;
+
 export function formatReadiness(
   members: readonly string[],
   answers: readonly FormatSupport[],

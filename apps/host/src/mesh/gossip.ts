@@ -12,6 +12,8 @@ import { MemberBook, StoredMesh } from "./stored-mesh.ts";
 import { RevokedLast } from "./revoked-last.ts";
 import { Claims } from "./claims.ts";
 import { Confirmed } from "./confirmed.ts";
+import { FormatAnswers } from "./format-answers.ts";
+import type { FormatSupport } from "./format-readiness.ts";
 import { retireIfGone, revokedBy } from "./revocation.ts";
 import { Sweeps } from "./sweeps.ts";
 import {
@@ -65,6 +67,7 @@ export class Gossip implements SyncHost {
   readonly #dialer: MemberDialer;
   readonly #sessions = new Map<string, SyncSession>();
   readonly #confirmed = new Confirmed(() => this.records());
+  readonly #formats = new FormatAnswers();
   readonly #lastSync = new Map<string, number>();
   readonly #sweeps: Sweeps;
   readonly #known = new MemberBook();
@@ -235,6 +238,11 @@ export class Gossip implements SyncHost {
     this.#changed({ ...result, view }, true);
   }
 
+  /** What every member has said it reads, for the writer-side gate before a client admission is signed. */
+  formatAnswers(): readonly FormatSupport[] {
+    return this.#formats.all();
+  }
+
   /** The highest claim a peer's `hello` holds on this host's counter (section 10.1); the operator commands check it. */
   floor(): ReturnType<Claims["floor"]> {
     return this.#claims.floor();
@@ -252,8 +260,14 @@ export class Gossip implements SyncHost {
    * own, it signs no own record below that counter (section 10.1) until those records arrive (see Claims); true when
    * that holds them back, so the peer owes a `done` like an answer.
    */
-  heard(peer: string, heads: readonly string[], n: Readonly<Record<string, number>>): boolean {
+  heard(
+    peer: string,
+    heads: readonly string[],
+    n: Readonly<Record<string, number>>,
+    reads: readonly number[] | undefined,
+  ): boolean {
     this.#confirmed.heard(peer, heads);
+    this.#formats.record(peer, reads);
     if (this.#confirmed.owedCount(peer) === 0) this.#revokeOwed.delete(peer);
     const claim = n[this.self] ?? 0;
     const holds = this.#claims.claim(peer, claim);

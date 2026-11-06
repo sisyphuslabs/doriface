@@ -8,6 +8,8 @@ export const MESH_FILE = "mesh.json";
  * authorization runs, which is what makes an old reader refuse new semantics instead of silently dropping them.
  */
 const READ_VERSIONS: ReadonlySet<number> = new Set([2, 3]);
+/** The formats this build reads, said on every `hello` so a writer can gate a record an older member could not read. */
+export const MESH_READS: readonly number[] = [...READ_VERSIONS];
 /** The format this build writes while it carries nothing a v2 reader cannot hold: a reader on 2 keeps working. */
 const WRITE_VERSION = 2;
 
