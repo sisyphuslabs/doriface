@@ -1,14 +1,7 @@
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { Check } from "lucide-react";
-import {
-  type ComponentProps,
-  type ReactElement,
-  type ReactNode,
-  type RefObject,
-  type SyntheticEvent,
-  useRef,
-} from "react";
+import { type ComponentProps, type ReactElement, type ReactNode, type SyntheticEvent, useRef } from "react";
 import { cn } from "../lib/cn.ts";
 import { Kbd } from "./kbd.tsx";
 import { fitsViewportWidth, overlaySurface } from "./overlay.ts";
@@ -87,8 +80,8 @@ export interface ContextMenuProps {
   /** Controls the menu; uncontrolled when left out. */
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
-  /** Where focus goes when the menu closes; Base UI's default otherwise. */
-  readonly finalFocus?: RefObject<HTMLElement | null>;
+  /** Where focus goes when the menu closes (Base UI's finalFocus); its default otherwise. */
+  readonly finalFocus?: ComponentProps<typeof BaseContextMenu.Popup>["finalFocus"];
 }
 
 /**
