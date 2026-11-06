@@ -32,6 +32,8 @@ export const USES: readonly string[] = [
   "doc.get",
   "doc.set",
   "events.subscribe",
+  // The workspace lists the machines as it starts (apps/web/src/workspace/use-machines.ts).
+  "machine.list",
 ];
 
 const HELLO_ID = 0;

@@ -3,9 +3,16 @@ import { encryptPushPayload, type VapidKey, vapidAuthorization } from "./web-pus
 
 /**
  * The push services browsers subscribe with: Chrome and Edge (FCM), Firefox (autopush), Safari (Apple), Edge on Windows
- * (WNS). The host posts only to these over https, so a paired device cannot point it at another server.
+ * (WNS), plus doriface's push bridge, which forwards the same ciphertext to the iOS and Android apps through APNs and
+ * FCM (#705). The host posts only to these over https, so a paired device cannot point it at another server.
  */
-const PUSH_SERVICES = ["fcm.googleapis.com", "push.services.mozilla.com", "push.apple.com", "notify.windows.com"];
+const PUSH_SERVICES = [
+  "fcm.googleapis.com",
+  "push.services.mozilla.com",
+  "push.apple.com",
+  "notify.windows.com",
+  "push-doriface.omo.dev",
+];
 
 /**
  * `extraOrigins` is for tests: a private push service the host may also post to (`--push-test-origin`). Port 0
