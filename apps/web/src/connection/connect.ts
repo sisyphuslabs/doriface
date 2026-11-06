@@ -60,7 +60,8 @@ export async function connect(
   }
   const direct = await openDirect(settings, signal, deps, options);
   if ("connection" in direct) return { connection: direct.connection, path: "direct" };
-  const relayed = await openRelaySession(settings, deps);
+  signal?.throwIfAborted();
+  const relayed = await openRelaySession(settings, deps, signal);
   const connection = await HcConnection.open(relayed, signal === undefined ? {} : { signal });
   return {
     connection,
@@ -105,8 +106,16 @@ function directFailureReason(error: unknown): DirectReason {
   return error instanceof DirectFailure ? error.reason : "could-not-connect";
 }
 
-async function openRelaySession(settings: ConnectionSettings, deps: RelayDeps): Promise<SecureLink> {
-  const link = await connectRelayClient({ relayUrl: settings.relayUrl, hostId: settings.hostId });
+async function openRelaySession(
+  settings: ConnectionSettings,
+  deps: RelayDeps,
+  signal: AbortSignal | undefined,
+): Promise<SecureLink> {
+  const link = await connectRelayClient({
+    relayUrl: settings.relayUrl,
+    hostId: settings.hostId,
+    ...(signal === undefined ? {} : { signal }),
+  });
   return openSessionOn(link, settings, deps);
 }
 
