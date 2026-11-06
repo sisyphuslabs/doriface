@@ -62,7 +62,7 @@ Every headline is two-tone: a plain statement in `--ink`, then the consequence i
 
 4 px base: `--space-1..10` = 4, 8, 12, 16, 24, 32, 48, 64, 96, 144 px. Content width 1200 px plus a fluid gutter (`clamp(20px, 4vw, 40px)`). Sections are separated by 144 px (96 px under 760 px).
 
-Breakpoints: 640 (two-column lists; the mesh stage and the app section switch to their phone layouts), 760 (nav links collapse), 900 (the hero scene draws its wide version from here and its tall one below; three-column cards, the relay pipe in one row, pairing side by side, the mesh log beside the stage), 1080 (hero lede and actions side by side).
+Breakpoints: 640 (two-column lists; the mesh stage and the app section switch to their phone layouts), 760 (the stats tighten, the section index and the pairing output go to one column, and the nav hides Open the app), 860 (the nav hides its section links below this width), 900 (the hero scene draws its wide version from here and its tall one below; three-column cards, the relay pipe in one row, pairing side by side, the mesh log beside the stage), 1080 (hero lede and actions side by side).
 
 | Radius          | Value  | Use                              |
 | --------------- | ------ | -------------------------------- |
@@ -102,22 +102,22 @@ Every loop runs only while its scene is on screen and the tab is visible (Inters
 
 ## 5. Components
 
-| Component        | Class                                      | Anatomy                                                                              | States                                                        |
-| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| Nav              | `.nav`                                     | wordmark (mascot mark swaps per theme), section links, theme switch, Open the app    | sticky, translucent `--bg` with blur; links hide under 760 px |
-| Theme switch     | `.theme-switch`                            | three icon buttons (System, Light, Dark) with visually hidden labels                 | `aria-pressed`; hover ink; 2 px focus ring                    |
-| Button           | `.btn--primary`, `.btn--ghost`, `.btn--sm` | pill, 44 px tall (34 px small)                                                       | hover tone, 0.97 press, arrow nudges 3 px on hover            |
-| Eyebrow          | `.eyebrow`                                 | mono number in accent, 28 px rule, uppercase label                                   | none                                                          |
-| Section headline | `.h2` with `.soft`                         | two-tone, balanced                                                                   | none                                                          |
-| Window frame     | `.frame`                                   | 38 px bar: dots, centred mono title, mono meta; body                                 | none                                                          |
-| Terminal text    | `.term`                                    | mono 13 px; `.prompt` accent, `.dim`, `.ok`, `.hl` (amber)                           | blinking block caret (stopped under reduced motion)           |
-| Feature card     | `.card`                                    | 36 px accent icon tile, h3, body, optional mono `.meta`                              | hover edge                                                    |
-| Code block       | `.code`                                    | bar with label and Copy, mono body with dim comments                                 | Copy -> Copied (1.6 s)                                        |
-| Chip             | `.chip`                                    | pill, mono 12 px, leading dot                                                        | none                                                          |
-| Section index    | `.index`                                   | numbered rows, title, description (from 640 px)                                      | hover ink                                                     |
-| Relay wire       | `.wire`                                    | dashed amber container, two lanes of ciphertext chips (opposite directions), caption | marquee                                                       |
-| Mesh stage       | `.mesh`                                    | stage SVG, step list                                                                 | step highlight, danger step in red wash                       |
-| Footer           | `.footer`                                  | wordmark, four links                                                                 | hover ink                                                     |
+| Component        | Class                                      | Anatomy                                                                              | States                                                                                         |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Nav              | `.nav`                                     | wordmark (mascot mark swaps per theme), section links, theme switch, Open the app    | sticky, translucent `--bg` with blur; section links hide under 860 px, the button under 760 px |
+| Theme switch     | `.theme-switch`                            | three icon buttons (System, Light, Dark) with visually hidden labels                 | `aria-pressed`; hover ink; 2 px focus ring                                                     |
+| Button           | `.btn--primary`, `.btn--ghost`, `.btn--sm` | pill, 44 px tall (34 px small)                                                       | hover tone, 0.97 press, arrow nudges 3 px on hover                                             |
+| Eyebrow          | `.eyebrow`                                 | mono number in accent, 28 px rule, uppercase label                                   | none                                                                                           |
+| Section headline | `.h2` with `.soft`                         | two-tone, balanced                                                                   | none                                                                                           |
+| Window frame     | `.frame`                                   | 38 px bar: dots, centred mono title, mono meta; body                                 | none                                                                                           |
+| Terminal text    | `.term`                                    | mono 13 px; `.prompt` accent, `.dim`, `.ok`, `.hl` (amber)                           | blinking block caret (stopped under reduced motion)                                            |
+| Feature card     | `.card`                                    | 36 px accent icon tile, h3, body, optional mono `.meta`                              | hover edge                                                                                     |
+| Code block       | `.code`                                    | bar with label and Copy, mono body with dim comments                                 | Copy -> Copied (1.6 s)                                                                         |
+| Chip             | `.chip`                                    | pill, mono 12 px, leading dot                                                        | none                                                                                           |
+| Section index    | `.index`                                   | numbered rows, title, description (from 640 px)                                      | hover ink                                                                                      |
+| Relay wire       | `.wire`                                    | dashed amber container, two lanes of ciphertext chips (opposite directions), caption | marquee                                                                                        |
+| Mesh stage       | `.mesh`                                    | stage SVG, step list                                                                 | step highlight, danger step in red wash                                                        |
+| Footer           | `.footer`                                  | wordmark, four links                                                                 | hover ink                                                                                      |
 
 ### Live mockups
 
