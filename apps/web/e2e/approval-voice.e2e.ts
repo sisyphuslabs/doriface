@@ -53,11 +53,8 @@ test("at 390, the approval banner keeps the top and the voice strip the bottom, 
   expect(bottom.y + bottom.height).toBeGreaterThan(viewport.height - 80);
   expect(bottom.y + bottom.height).toBeLessThanOrEqual(viewport.height + 1);
 
-  // Both still work: Allow on the banner answers the agent with one key while dictation stays open.
-  await banner
-    .getByRole("button", { name: /^Allow/ })
-    .first()
-    .click();
+  // Both still work: Yes on the card answers the agent with one key while dictation stays open.
+  await banner.locator('[data-option="1"]').click();
   await expect(banner).toContainText("from this device", { timeout: 10_000 });
   await expect.poll(asking.keys, { timeout: 10_000 }).toEqual(["1"]);
   await expect(strip).toHaveAttribute("data-voice-strip", "listening");

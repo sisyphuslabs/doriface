@@ -27,3 +27,31 @@ test("a host that cannot be reached leaves the sidebar without a raw error besid
   await expect(page.getByRole("contentinfo").getByText(/Reconnecting/)).toHaveCount(0, { timeout: 30_000 });
   await expect(page.getByText("Could not list the machines")).toHaveCount(0);
 });
+
+// #698: a layout write still in flight when the link drops (a new tab's, slow under load) is not saved, and the page says
+// so in plain words: neither the write's cause nor the re-read that meets the closed link reaches the screen raw.
+test("a layout write the drop cuts off says it was not saved, without the raw cause", async ({ page }) => {
+  const link = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  const before = link.sent().length;
+  link.hold("doc.set");
+  await openNewTerminal(page);
+  await expect
+    .poll(() =>
+      link
+        .sent()
+        .slice(before)
+        .some((frame) => frame.includes('"method":"doc.set"')),
+    )
+    .toBe(true);
+
+  await link.drop(true);
+  await expect(page.getByRole("contentinfo").getByText(/Reconnecting/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("The layout was not saved")).toBeVisible();
+  await expect(page.getByText(/Reconnecting to .+; make the change again once it is back\./)).toBeVisible();
+  await expect(page.getByText("connection is closed")).toHaveCount(0);
+
+  link.restore();
+  await expect(page.getByRole("contentinfo").getByText(/Reconnecting/)).toHaveCount(0, { timeout: 30_000 });
+});

@@ -8,6 +8,7 @@
     { "path": "packages/client" },
     { "path": "packages/relay-client" },
     { "path": "apps/host" },
+    { "path": "apps/push-bridge" },
     { "path": "packages/ui" },
     { "path": "apps/web" },
     { "path": "apps/desktop" },
