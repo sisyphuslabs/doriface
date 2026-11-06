@@ -45,7 +45,7 @@ Rules:
 
 ## 2. Type
 
-Every font on the landing is Timeless (timeless.co/type, Timeless Ventures, free for personal and commercial use under the Timeless Free Font License 1.3, shipped unmodified as WOFF2 with a copy of the license at `public/fonts/LICENSE-timeless.txt`): Timeless Serif (variable) for the display headline and section headings, Timeless Sans (variable) for everything else, including labels, buttons, captions and the app mockups. Timeless has no monospace, so JetBrains Mono (variable, OFL) sets the inside of terminal panes and nothing else (`--font-term`). Both Timeless files are self-hosted from `apps/landing/fonts/`, preloaded, with `font-display: swap`.
+Every font on the landing is Timeless (timeless.co/type, Timeless Ventures, free for personal and commercial use under the Timeless Free Font License 1.3, shipped as WOFF2 subset to Latin-1, General Punctuation, arrows and the few symbols the page uses (an embedding conversion under §3 and §5.3; all variation axes kept), with a copy of the license at `public/fonts/LICENSE-timeless.txt`): Timeless Serif (variable) for the display headline and section headings, Timeless Sans (variable) for everything else, including labels, buttons, captions and the app mockups. Timeless has no monospace, so JetBrains Mono (variable, OFL) sets the inside of terminal panes and nothing else (`--font-term`). Both Timeless files are self-hosted from `apps/landing/fonts/`, preloaded, with `font-display: swap`.
 
 | Token            | Size                                | Weight  | Tracking          | Use                                  |
 | ---------------- | ----------------------------------- | ------- | ----------------- | ------------------------------------ |
