@@ -18,7 +18,7 @@
 <p align="center">
   <a href="https://doriterm.com">doriterm.com</a> ·
   <a href="#install">install</a> ·
-  <a href="#pairing-and-the-relay">how the relay fits</a> ·
+  <a href="#pairing-and-how-the-relay-fits">how the relay fits</a> ·
   <a href="#security">security</a> ·
   <a href="CONTRIBUTING.md">contributing</a> ·
   <a href="docs/architecture.md">architecture</a>
