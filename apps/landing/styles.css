@@ -538,7 +538,7 @@ pre {
 
 .frame__meta {
   justify-self: end;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 /* 3.6 Terminal text */
@@ -1547,7 +1547,7 @@ pre {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.8;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .mesh__log li code {
@@ -1643,6 +1643,21 @@ pre {
   color: var(--ink);
 }
 
+/* Loops run only while their scene is on screen and the tab is visible: main.js sets .is-running. */
+.caret,
+.scene .pulse,
+.wire__stream,
+.qr .scan {
+  animation-play-state: paused;
+}
+
+.is-running .caret,
+.is-running .pulse,
+.is-running .wire__stream,
+.is-running .scan {
+  animation-play-state: running;
+}
+
 /* ---------- 5. Reveal on scroll ---------- */
 
 .reveal {
@@ -1728,7 +1743,7 @@ pre {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 899px) {
   .scene__wide {
     display: none;
   }

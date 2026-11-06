@@ -11,6 +11,7 @@ function whileVisible(element, start, stop) {
   let running = false;
   const sync = () => {
     const should = visible && !reducedMotion.matches && document.visibilityState === "visible";
+    element.classList.toggle("is-running", should);
     if (should && !running) start();
     if (!should && running) stop();
     running = should;
@@ -99,13 +100,13 @@ function setupTheme() {
   const buttons = [...document.querySelectorAll("[data-theme-choice]")];
   const apply = (choice) => {
     for (const frame of document.querySelectorAll(".live iframe")) postTheme(frame, choice);
-    if (choice === "system") {
-      delete document.documentElement.dataset.theme;
-      localStorage.removeItem(STORAGE_KEY);
-    } else {
-      document.documentElement.dataset.theme = choice;
-      localStorage.setItem(STORAGE_KEY, choice);
-    }
+    if (choice === "system") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = choice;
+    // Blocked site storage throws: the choice then lasts for this page only.
+    try {
+      if (choice === "system") localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, choice);
+    } catch {}
     for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
   };
   apply(document.documentElement.dataset.theme ?? "system");
@@ -146,7 +147,7 @@ function setupHeroScene() {
       clearInterval(timer);
     },
   );
-  if (reducedMotion.matches) for (const svg of svgs) svg.pauseAnimations();
+  for (const svg of svgs) svg.pauseAnimations();
 }
 
 function setupWire() {
@@ -416,9 +417,9 @@ function setupCopy() {
   });
 }
 
+setupReveal();
 setupTheme();
 setupLive();
-setupReveal();
 setupHeroScene();
 setupWire();
 setupPipe();
