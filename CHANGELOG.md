@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Pairing
+
+- The default pairing link for a phone opens `https://app.doriterm.com`, the app's own host, instead of the retired `doriface.omo.dev` address. The desktop's `doriface://pair#` link and a `--web-origin` override are unchanged. (#747)
+
 ### Web app and PWA
 
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
