@@ -1,4 +1,4 @@
-import { indent, lastIndex, type OptionRow, optionRow, type PromptOption } from "./approval-rows.ts";
+import { indent, lastIndex, numberColumn, type OptionRow, optionRow, type PromptOption } from "./approval-rows.ts";
 
 export const AGENT = "Claude Code";
 export const CANCEL = { key: "esc", label: "Cancel" } as const;
@@ -23,12 +23,6 @@ export function rowsEnd(lines: readonly string[]): number {
   const blank = lines.findIndex((line, index) => index > first && line.trim() === "");
   return blank === -1 ? lines.length - 1 : blank - 1;
 }
-
-/** The column a numbered row's number is drawn at, or -1 for a line that is not one. */
-export const numberColumn = (line: string) => {
-  const row = optionRow(line);
-  return row === undefined ? -1 : line.indexOf(`${row.number}.`);
-};
 
 /**
  * A question or plan dialog's option list: each numbered row, with the lines under it indented to its label as its

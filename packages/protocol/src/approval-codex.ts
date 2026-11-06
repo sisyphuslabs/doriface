@@ -5,6 +5,8 @@ import {
   indent,
   lastIndex,
   liveDialog,
+  numberColumn,
+  type OptionRow,
   optionRow,
   optionRows,
   type PromptOption,
@@ -27,8 +29,31 @@ const LABEL_DETAIL = /^(.*?\S)\s{2,}(\S.*)$/;
 const NOTES = /\(tab\)\s*$/;
 /** The notes row Tab opens under the cursor's option: `› Add notes`. */
 const NOTES_OPEN = /^\s*›\s+Add notes\b/;
-/** The cell Codex draws for the command or edit it asks about, right above its approval (0.166.0, 0.167.0). */
-const ASKED_CELL = /^• (?:Running|Edited) /;
+/**
+ * The cell Codex draws for the command or file change it asks about, right above its approval (0.166.0, 0.167.0):
+ * `• Running` for a command, `• Added`, `• Deleted` or `• Edited` for a patch (codex-rs tui `diff_render.rs`).
+ */
+const ASKED_CELL = /^• (?:Running|Added|Deleted|Edited) /;
+
+/**
+ * A question's rows from row 1 to its footer: each row at row 1's number column, numbered one past the last; a line
+ * indented to a row's label or past it is that row wrapped (Codex wraps a long row under its `› N. `); the notes row and
+ * blank lines. Anything else is not this dialog's, so nothing is read.
+ */
+function questionRows(below: readonly string[]): OptionRow[] | undefined {
+  const column = numberColumn(below[0] ?? "");
+  const rows: OptionRow[] = [];
+  for (const line of below) {
+    const row = optionRow(line);
+    const last = rows.at(-1);
+    if (row !== undefined && numberColumn(line) === column && row.number === String(rows.length + 1)) rows.push(row);
+    else if (line.trim() === "" || NOTES_OPEN.test(line)) continue;
+    else if (last !== undefined && indent(line) >= column + `${last.number}. `.length)
+      rows[rows.length - 1] = { ...last, label: `${last.label} ${line.trim()}` };
+    else return undefined;
+  }
+  return rows;
+}
 
 /** The nearest line above `at` that starts left of `column`: the transcript cell a dialog drawn at `column` sits under. */
 const edgeAbove = (lines: readonly string[], at: number, column: number) =>
@@ -146,14 +171,8 @@ function readQuestion(lines: readonly string[]): Found | undefined {
     .filter((line) => line !== "")
     .join(" ");
   const below = lines.slice(firstRow, footerAt);
-  const rows = below.flatMap((line) => {
-    const row = optionRow(line);
-    return row === undefined ? [] : [row];
-  });
-  // Every line between row 1 and the footer is one of its rows in order, the notes Tab opened, or blank.
-  const drawn = below.every((line) => line.trim() === "" || NOTES_OPEN.test(line) || optionRow(line) !== undefined);
-  const ordered = rows.every((row, index) => row.number === String(index + 1));
-  if (question === "" || rows.length === 0 || !drawn || !ordered) return undefined;
+  const rows = questionRows(below);
+  if (question === "" || rows === undefined || rows.length === 0) return undefined;
   const options = rows.map((row): PromptOption => {
     const split = LABEL_DETAIL.exec(row.label);
     const label = split?.[1] ?? row.label;

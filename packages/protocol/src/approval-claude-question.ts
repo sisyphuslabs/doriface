@@ -5,7 +5,6 @@ import {
   CHECKBOX,
   cursorOf,
   detailedRows,
-  numberColumn,
   option,
   PERMISSION_FOOTER,
   rowText,
@@ -15,6 +14,7 @@ import {
   contextAbove,
   type Found,
   lastIndex,
+  numberColumn,
   optionRow,
   type PromptOption,
   type PromptStep,
@@ -81,7 +81,9 @@ export function readQuestion(lines: readonly string[]): Found | undefined {
   if (firstRow === -1 || tabAt === -1) return undefined;
   const top = tabAt - 1;
   const dialog = lines.slice(tabAt + 1, firstRow);
-  const reviewAt = dialog.findIndex((line) => REVIEW.test(line));
+  // A question ends on its footer; only the review, which has none, lists the answers. Question text that reads like a
+  // review never makes the question one.
+  const reviewAt = footerAt === -1 ? dialog.findIndex((line) => REVIEW.test(line)) : -1;
   const review = reviewAt !== -1;
   const questionAt = review
     ? dialog.findIndex((line) => SUBMIT_QUESTION.test(line))

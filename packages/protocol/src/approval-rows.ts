@@ -109,6 +109,12 @@ export function optionRow(line: string): OptionRow | undefined {
     : { number: match[2], label: match[3].trim(), cursor: match[1] !== undefined };
 }
 
+/** The column a numbered row's number is drawn at, or -1 for a line that is not one. */
+export const numberColumn = (line: string) => {
+  const row = optionRow(line);
+  return row === undefined ? -1 : line.indexOf(`${row.number}.`);
+};
+
 /**
  * The option list that starts at the first option row in `lines` and ends at the first blank row. A row the agent
  * wrapped onto the next line (a narrow terminal) joins the option above it.
