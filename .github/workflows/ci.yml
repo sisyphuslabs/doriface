@@ -59,6 +59,8 @@ jobs:
       - run: bun run test
       - name: Build apps/web
         run: bun run --cwd apps/web build
+      - name: Build apps/landing
+        run: bun run --cwd apps/landing build
 
   install-linux:
     # The one-step host install (#668) on a runner with no herdr-core: it must end with a running user service and a
