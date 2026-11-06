@@ -48,6 +48,7 @@
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#717)
 - An Android app around the same web build, with its notifications through the bridge and Allow and Deny on the notification itself. (#810)
+- An iOS app around the same web client: a Notification Service Extension opens each notice with the app's own keys, so the text is shown without the bridge or Apple reading it. (#846)
 
 ### Spaces, tabs and the sidebar
 
