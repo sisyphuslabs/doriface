@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Settings
+
+- With Settings open as a dialog, the band over the window's buttons still moves the desktop window, even when Settings is the first screen and the workspace behind has drawn nothing yet. (#673)
+
 ## v0.1.4 - 2026-11-06
 
 ### The product is Doriterm
