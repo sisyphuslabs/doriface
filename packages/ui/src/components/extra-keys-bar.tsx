@@ -50,7 +50,11 @@ function useEdgeFade(): [Fade, (el: HTMLDivElement | null) => void] {
 }
 
 export interface ExtraKeysBarProps {
-  /** The person's keys, in their order. Unset falls back to the row a fresh phone starts from. */
+  /**
+   * The person's keys, in their order. Unset falls back to `DEFAULT_EXTRA_KEYS`, the row this bar drew before keys
+   * became configurable; a fresh phone passes its catalogue's own row, which differs (Alt sits fifth there, and the
+   * swipe characters follow the fixed slots here as ordinary keys).
+   */
   readonly keys?: readonly ExtraKey[];
   /** The active pack's keys, drawn before the person's own so picking a pack shows its keys at once. */
   readonly packKeys?: readonly ExtraKey[];

@@ -2,8 +2,9 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import type { ExtraKey } from "./extra-keys-bar.tsx";
 
 /**
- * The row a caller that names no keys draws: modifiers and editing keys, arrows, then the characters a phone keyboard
- * makes awkward. `cmd` is left out on purpose - only a Mac host draws Command, and a Mac caller passes its own row.
+ * The row a caller that names no keys draws: the modifiers and editing keys, the arrows, then the characters a phone
+ * keyboard makes awkward. `cmd` is left out on purpose - only a Mac host draws Command, and a Mac caller passes its
+ * own row. A fresh phone passes its catalogue's `DEFAULT_KEY_IDS` instead, which orders Alt fifth.
  */
 export const DEFAULT_EXTRA_KEYS: readonly ExtraKey[] = [
   { id: "ctrl", label: "ctrl", name: "Control", modifier: true },
