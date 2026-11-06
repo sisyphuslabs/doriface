@@ -10,6 +10,7 @@
 ### Answering agents from the card
 
 - The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
+- A command, diff, new file or plan that itself draws something shaped like a dialog no longer reads as the dialog: the card answers the dialog drawn at the bottom of the screen, with that dialog's own rows, and presses nothing when a row on the live screen does not say what the card showed for it. (#776)
 
 ### Web app and PWA
 

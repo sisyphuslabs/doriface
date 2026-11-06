@@ -1,7 +1,10 @@
 import {
   bodyText,
   contextAbove,
+  type Found,
+  indent,
   lastIndex,
+  liveDialog,
   optionRow,
   optionRows,
   type PromptOption,
@@ -16,8 +19,6 @@ const PERMISSION_QUESTION = /^\s*Would you like to (.+)\?\s*$/;
 const PERMISSION_FOOTER = /\besc to cancel\b/;
 const KEYED = /^(.*\S)\s+\((\S+)\)$/;
 const DESTINATION = /^Destination:\s+(.+)$/;
-/** How far below the question the dialog's footer can be: its details and option rows, wrapped or not. */
-const DIALOG_ROWS = 24;
 
 const QUESTION_COUNTER = /^\s*Question (\d+)\/(\d+)\b/;
 const QUESTION_FOOTER = /\benter to submit (?:answer|all)\b/;
@@ -39,39 +40,42 @@ const NOTES_OPEN = /^\s*›\s+Add notes\b/;
  *       Press enter to confirm or esc to cancel
  *
  * Each row prints its own key in parentheses, which answers wherever the cursor sits.
+ *
+ * It is read from the bottom up: the footer, the option rows right above it, then the header above them. The header
+ * is drawn two columns in, and so is every line of a command inside it, while the transcript above starts each cell
+ * at the left edge (`• Running ...`). The dialog's title is the highest title line at the footer's column below that
+ * edge: a title-shaped line in the command is below the real one (#776).
  */
-/** A dialog a reader found: its prompt and the row it starts on, which says how far down the screen it is. */
-interface Found {
-  readonly prompt: ScreenPrompt;
-  readonly top: number;
-}
-
 function readPermission(lines: readonly string[]): Found | undefined {
-  const question = lastIndex(lines, (line) => PERMISSION_QUESTION.test(line));
-  if (question === -1) return undefined;
-  const below = lines.slice(question + 1, question + 1 + DIALOG_ROWS);
-  const footerAt = below.findIndex((line) => PERMISSION_FOOTER.test(line));
-  if (footerAt === -1) return undefined;
-  const rows = optionRows(below.slice(0, footerAt)).flatMap((row) => {
+  const footer = lastIndex(lines, (line) => PERMISSION_FOOTER.test(line));
+  const first = lastIndex(lines, (line) => optionRow(line)?.number === "1", footer);
+  if (footer === -1 || first === -1) return undefined;
+  const rows = optionRows(lines.slice(first, footer)).flatMap((row) => {
     const keyed = KEYED.exec(row.label);
     return keyed?.[1] === undefined || keyed[2] === undefined ? [] : [{ ...row, label: keyed[1], key: keyed[2] }];
   });
   if (rows.length === 0) return undefined;
 
-  const firstOption = below.findIndex((line) => optionRow(line) !== undefined);
-  const details = below
-    .slice(0, firstOption)
+  const column = indent(lines[footer] ?? "");
+  const edge = lastIndex(lines, (line) => line.trim() !== "" && indent(line) < column, first - 1);
+  const question = lines.findIndex(
+    (line, index) => index > edge && index < first && indent(line) === column && PERMISSION_QUESTION.test(line),
+  );
+  if (question === -1) return undefined;
+  const details = lines
+    .slice(question + 1, first)
     .map((line) => line.trim())
     .filter((line) => line !== "");
   const commandAt = details.findIndex((line) => line.startsWith("$ "));
   const asked = PERMISSION_QUESTION.exec(lines[question] ?? "")?.[1] ?? "";
-  const destination = details.map((line) => DESTINATION.exec(line)?.[1]).find((path) => path !== undefined);
+  const header = commandAt === -1 ? details : details.slice(0, commandAt);
+  const destination = header.map((line) => DESTINATION.exec(line)?.[1]).find((path) => path !== undefined);
   const command = commandAt !== -1 ? details.slice(commandAt).join("\n").replace(/^\$ /, "") : (destination ?? asked);
   const block = [
     lines[question]?.trim() ?? "",
     ...details,
     ...rows.map((row) => `${row.number}. ${row.label} (${row.key})`),
-    below[footerAt]?.trim() ?? "",
+    lines[footer]?.trim() ?? "",
   ].join("\n");
   const cursor = rows.find((row) => row.cursor)?.number;
   const prompt: ScreenPrompt = {
@@ -80,7 +84,7 @@ function readPermission(lines: readonly string[]): Found | undefined {
     asks: /^run\b/.test(asked) ? "wants to run" : /\bedits?\b/.test(asked) ? "wants to edit" : "asks for permission",
     question: (lines[question] ?? "").trim(),
     command,
-    body: bodyText(details.filter((line, index) => (commandAt === -1 || index < commandAt) && !DESTINATION.test(line))),
+    body: bodyText(header.filter((line) => !DESTINATION.test(line))),
     context: contextAbove(lines, question, ASKED),
     files: destination === undefined ? [] : [destination],
     multi: false,
@@ -96,7 +100,7 @@ function readPermission(lines: readonly string[]): Found | undefined {
     ...(cursor === undefined ? {} : { cursor }),
     block,
   };
-  return { prompt, top: question };
+  return { prompt, end: footer };
 }
 
 /**
@@ -168,17 +172,13 @@ function readQuestion(lines: readonly string[]): Found | undefined {
       "\n",
     ),
   };
-  return { prompt, top: counterAt };
+  return { prompt, end: counterAt + 1 + footerAt };
 }
 
 /**
- * Whichever of Codex's dialogs is up. The live dialog is the one drawn lowest on the screen: a line of the agent's own
- * text above it that looks like another dialog never outranks it.
+ * Whichever of Codex's dialogs is up: the one drawn at the bottom of the screen. The agent's own text above it, or a
+ * command inside it, that looks like another dialog never stands for it.
  */
 export function readCodexPrompt(lines: readonly string[]): ScreenPrompt | undefined {
-  const found = [readQuestion(lines), readPermission(lines)].filter((each) => each !== undefined);
-  return found.reduce<Found | undefined>(
-    (low, each) => (low === undefined || each.top > low.top ? each : low),
-    undefined,
-  )?.prompt;
+  return liveDialog(lines, [readQuestion(lines), readPermission(lines)]);
 }
