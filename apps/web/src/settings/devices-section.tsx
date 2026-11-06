@@ -47,12 +47,10 @@ function label(icon: ReactNode, text: string) {
 export function DevicesSection() {
   const state = useConnection();
   const settings = useConnectionSettings();
-  const host =
-    state.phase === "open"
-      ? state.connection.hello.core.name
-      : settings.mode === "relay"
-        ? settings.hostId || "No host"
-        : settings.loopbackUrl;
+  // The host names itself as it answers; that name is kept beside the paired host, so the row still names it once the
+  // link drops or the page is loaded again while it is down (#496). The id is only left when no name was ever learned.
+  const name = state.phase === "open" ? state.connection.hello.core.name : settings.hostName;
+  const host = name !== "" ? name : settings.mode === "relay" ? settings.hostId || "No host" : settings.loopbackUrl;
   return (
     <>
       <SettingRow title={label(<Monitor aria-hidden />, "This browser")} description="This device" control={null} />
