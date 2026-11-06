@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ConnectionSettings } from "../connection/settings.ts";
 import { hostFailure } from "../connection/host-failure.ts";
 import { connectionStore, useConnection, type ConnectionState } from "../connection/store.ts";
+import { hostRouteOf } from "./host-route.ts";
 import { desktopPairOffer } from "../desktop/pair-bridge.ts";
 import { PairDeviceDialog } from "./pair-device-dialog.tsx";
 
@@ -65,7 +66,16 @@ export function DevicesSection() {
   return (
     <>
       <SettingRow title={label(<Monitor aria-hidden />, "This browser")} description="This device" control={null} />
-      <SettingRow title={label(<Server aria-hidden />, host)} description={describe(state)} control={null} />
+      <SettingRow
+        title={label(<Server aria-hidden />, host)}
+        description={
+          <>
+            {describe(state)}
+            <span className="block text-muted-foreground">{hostRouteOf(settings).label}</span>
+          </>
+        }
+        control={null}
+      />
       {offersItself ? (
         <SettingRow
           title={label(<Smartphone aria-hidden />, "Pair a device")}
