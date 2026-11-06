@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Paired devices
+
+- Settings > Connections lists the devices paired with this computer and revokes one; revoking closes its session at once and refuses that key from then on, so a lost phone no longer needs a terminal on this computer. (#709)
+
 ### Joining a mesh from a browser
 
 - A browser with no account and no pairing opens the web app, follows an invite link a member sent, checks the host's fingerprint and lands on the mesh's terminals; a revisit needs no new invite. (#709)
