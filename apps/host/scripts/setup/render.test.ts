@@ -58,6 +58,9 @@ describe("service files", () => {
     expect(unit).toContain(`StandardOutput=append:${linux.logFile}\n`);
     expect(unit).toContain("WantedBy=default.target\n");
     expect(renderUnit({ ...linux, listen: "127.0.0.1:0" })).toContain("--listen 127.0.0.1:0\n");
+    expect(renderUnit({ ...linux, session: "work" })).toContain(
+      "--state-dir /home/u/.local/state/doriface-host-mesh --session work\n",
+    );
   });
 
   test("the plist carries no comment and no entity reference", () => {

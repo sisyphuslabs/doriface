@@ -98,4 +98,4 @@ Pair each device once with one machine; through the mesh it reaches all of them.
 | `has local changes`                                                                   | Commit or drop your edits in the checkout, then run again.                                                                                                                   |
 | A member stays `connecting` in `mesh status` while `hc machine ls` shows it connected | The status keeps the line state of its last roster check; it catches up at the next change.                                                                                  |
 
-Every command takes `--state-dir`, `--src`, `--label` and `--listen` to override the defaults; `--help` lists them.
+Every command takes `--state-dir`, `--src`, `--label`, `--listen` and `--session` (an hc session, which is a separate core) to override the defaults; `--help` lists them. To run a second host on one machine, for a second hc session, give it its own `--label`, `--state-dir` and `--listen 127.0.0.1:0` as well.

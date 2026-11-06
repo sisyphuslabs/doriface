@@ -44,6 +44,8 @@ export interface SetupPaths {
   readonly bun: string;
   readonly hc: string;
   readonly listen: string | undefined;
+  /** The hc session (a separate core) the host serves; the default core when undefined. */
+  readonly session: string | undefined;
   readonly shell: string;
 }
 
@@ -52,6 +54,7 @@ export interface PathOptions {
   readonly stateDir?: string | undefined;
   readonly label?: string | undefined;
   readonly listen?: string | undefined;
+  readonly session?: string | undefined;
   readonly logFile?: string | undefined;
 }
 
@@ -95,6 +98,7 @@ export function setupPaths(
     bun: tools.bun,
     hc: tools.hc,
     listen: options.listen,
+    session: options.session,
     shell: tools.shell,
   };
   for (const [name, value] of Object.entries(paths)) {
@@ -137,6 +141,7 @@ export function hostArgs(paths: SetupPaths): readonly string[] {
     "--state-dir",
     paths.stateDir,
     ...(paths.listen === undefined ? [] : ["--listen", paths.listen]),
+    ...(paths.session === undefined ? [] : ["--session", paths.session]),
   ];
 }
 

@@ -32,6 +32,7 @@ const USAGE = `usage: bun apps/host/scripts/setup/cli.ts <command> [options]
   --state-dir <dir>  the host's state (default: the installed service's, else ~/.local/state/doriface-host-mesh)
   --label <name>     the LaunchAgent label or systemd unit name (default com.sisyphuslabs.doriface-host / doriface-host)
   --listen <h:p>     the host's loopback listener (default 127.0.0.1:7766)
+  --session <name>   the hc session (a separate core) the host serves (default: hc's default core)
   --timeout <s>      how long install waits for the relay (default 90)`;
 
 const report: Report = (step, status, detail) => {
@@ -49,6 +50,7 @@ async function main(argv: readonly string[]): Promise<number> {
       "state-dir": { type: "string" },
       label: { type: "string" },
       listen: { type: "string" },
+      session: { type: "string" },
       timeout: { type: "string", default: "90" },
       out: { type: "string" },
       from: { type: "string" },
@@ -66,6 +68,7 @@ async function main(argv: readonly string[]): Promise<number> {
     stateDir: values["state-dir"],
     label: values.label,
     listen: values.listen,
+    session: values.session,
   });
   switch (command) {
     case "install": {
