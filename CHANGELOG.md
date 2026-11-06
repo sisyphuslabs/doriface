@@ -53,6 +53,10 @@
 
 - An image pasted into a terminal, or a file dropped on one, goes to that terminal's machine, this one or an added one, and its path is pasted there, as in herdr-app, so an agent there can read it. Text pastes as before, Ctrl+V works as before, and **Paste image** can be bound to a key in Settings > Keybindings. (#701)
 
+### First run
+
+- A newly paired device walks through its first run: pair, start or open an agent, then see it in the agents list. Each step completes on its own, the guide can be skipped, and Settings > Device > **Getting started** shows it again. (#668)
+
 ### Host install
 
 - One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have (systemd `--user` with `Restart=always` and the top CPU and IO weights on Linux, an `Interactive` LaunchAgent kept alive on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
