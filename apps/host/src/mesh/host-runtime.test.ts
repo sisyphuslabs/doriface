@@ -6,15 +6,16 @@ const target: HcTarget = { hc: "hc", session: "s" };
 
 /** Counts every control connection opened, as each one is an `hc connect` that starts the core when none runs. */
 function counting() {
-  const opened: { closed: boolean }[] = [];
+  const opened: { stopped: boolean }[] = [];
   const open = (): Promise<HcControl> => {
-    const state = { closed: false };
+    const state = { stopped: false };
     opened.push(state);
     return Promise.resolve({
       coreId: "core",
-      close: () => {
-        state.closed = true;
+      stop: async () => {
+        state.stopped = true;
       },
+      kill: () => [],
       machines: {
         list: () => Promise.resolve([]),
         add: () => Promise.reject(new Error("unused")),
@@ -33,7 +34,7 @@ describe("the host's core calls stop with the host", () => {
     const core = lazyMachines(target, open);
     await core.machines.list();
     await core.close();
-    expect(opened).toEqual([{ closed: true }]);
+    expect(opened).toEqual([{ stopped: true }]);
     await expect(core.machines.rm("auto-c")).rejects.toThrow(HostStoppedError);
     await expect(core.machines.list()).rejects.toThrow(HostStoppedError);
     expect(opened).toHaveLength(1);
@@ -53,7 +54,22 @@ describe("the host's core calls stop with the host", () => {
     await closing;
     await call;
     expect(opens).toBe(1);
-    expect(opened).toEqual([{ closed: true }]);
+    expect(opened).toEqual([{ stopped: true }]);
+    await expect(core.machines.list()).rejects.toThrow(HostStoppedError);
+    expect(opens).toBe(1);
+  });
+
+  test("a launch that never answers the hello does not hold the host's stop", async () => {
+    let opens = 0;
+    const core = lazyMachines(target, (_target, signal) => {
+      opens += 1;
+      return new Promise<HcControl>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("the host is stopping")), { once: true });
+      });
+    });
+    const call = core.machines.list();
+    await core.close();
+    await expect(call).rejects.toThrow("the host is stopping");
     await expect(core.machines.list()).rejects.toThrow(HostStoppedError);
     expect(opens).toBe(1);
   });
