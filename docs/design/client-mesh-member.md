@@ -88,19 +88,33 @@ member's card carries its own Ed25519 signing identity and attests the X25519 se
 a nonce and the kind. Clients are not record authors and not voters (`packages/mesh/src/view/structure.ts`,
 `testimony.ts`); they count against the 12-member cap and never dial.
 
-## 7. Wire: new card and record versions, legacy means machine
+## 7. Wire: the outer file format advances, and no admission is emitted before the cohort can hold it
 
-The current card parser accepts `v: 1` and **drops unrecognised fields** (`packages/mesh/src/records/codec.ts:134-154`), and
-the persisted member parser drops anything it does not name (`apps/host/src/state/mesh-file.ts:36-42`). A card carrying
-`kind: client` would therefore lose that distinction on an old reader and be read as a machine — the one outcome that must
-never happen silently.
+The current card parser accepts `v: 1` and **drops unrecognised fields** (`packages/mesh/src/records/codec.ts:134-154`),
+and the persisted index parser never looks at a version at all: `indexData` reads only generation, members, overCap,
+revoked, superseded and named (`apps/host/src/state/mesh-file.ts:66-76`), while `memberEntry` destructures six known fields
+and discards anything else (`:36-42`). A `kind: client` therefore survives nothing: an inner index version cannot make an
+old reader refuse, because that reader does not read it, and the member comes back as a machine.
 
-- A client admission is a new **card version** carrying the kind, and a new **record type** for the admission itself.
-- The persisted index gains a version; a reader that does not know it refuses the index instead of reading it partially.
-- A v1 card means **machine only**. There is no reinterpretation in either direction.
-- Upgrade gate: a host that cannot parse the new card version refuses a client admission with a stated reason and says it
-  needs an update; it never admits the client as a machine.
-- The advisory status document is untouched, so every existing reader keeps working.
+Measured by the gate with the real parser: a file carrying outer `version: 2`, inner `index.version: 999` and a member with
+`kind: "client"` is **accepted**, with the kind discarded. The same file with outer `version: 3` is refused with
+`mesh.json: unsupported format`.
+
+Two decisions follow.
+
+1. **The enclosing `mesh.json` format advances.** New record and index semantics are written only under a new outer
+   version, so legacy rejection happens at the guard that already exists (`MESH_FILE`'s version check, `VERSION = 2` today),
+   before any index rebuild or authorization runs. The inner index version stays as information for newer readers, never as
+   the safety mechanism.
+2. **The writer gates emission, not the reader.** Refusing an admission on the receiving side is not enough: a new
+   client-admission record `C` followed by a revoke `R` that references `C` makes an old parser reject `C` and hold `R` as
+   dangling (`packages/mesh/src/records/codec.ts:99-101`, `packages/mesh/src/door.ts:149-161`), so the revoke never applies.
+   Therefore the first new-format admission is withheld until **every machine that remains in the mesh's authorization and
+   sync cohort has demonstrated support for the new formats** — a membership-bound capability check, not a version string
+   in a message. A machine that cannot show support is not "ready"; it is out of the readiness set and is told to upgrade,
+   and a machine that disappears and returns old is treated the same way until it proves otherwise.
+
+The advisory status document is untouched, so every existing reader keeps working.
 
 ## 8. Delivery, and the tests this must pass
 
@@ -116,6 +130,9 @@ Tests, from the gate verbatim, adopted as acceptance:
 - Revocation: open links, handshake races, stale indexes, partitions, undecidable revokes.
 - Codec and view: proof of possession, replay rejection, denied record and vote authority, mixed-kind admission at 12 and
   13, no client dialing or witness participation.
-- Compatibility, against the **actual old parsers**: a v1 reader given a v2 client card must fail closed rather than read
-  it as a machine; a persisted index of an unknown version is refused; downgrade never erases a revocation; the unchanged
-  v1 status projection still parses.
+- Compatibility, against the **actual old parsers** and on a complete persisted file, not a card in isolation: a reader on
+the current outer version given a new-format `mesh.json` must fail at the version guard, never silently drop an index
+version or a member kind; downgrade never erases a revocation; the unchanged v1 status projection still parses.
+- Cohort gating: a new client admission followed by a revoke of an **existing machine**, offered to a cohort that contains
+one host that has not demonstrated support — the admission must not be emitted, and the revoke must still be applicable
+once that host upgrades or leaves.
