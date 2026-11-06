@@ -4,8 +4,6 @@
 
 ## v0.1.4 - 2026-11-06
 
-v0.1.3 was never published, so this release also carries every change in the v0.1.3 section of CHANGELOG.md; an install of 0.1.2 or earlier gets both.
-
 ### The product is Doriterm
 
 - The app is **Doriterm** everywhere a name shows: the bundle and its executable, the window title, the About and Help menus, notification titles, the PWA manifest and the tab title, the sidebar, the first-run and pairing copy, the exported terminal and keybinding files, the docs, and every GitHub link. The app id, the storage directory, the local keys, the `doriface://` link scheme and the wire contract stay as they are, so an installed app keeps the computer it paired and its settings. (#739)
