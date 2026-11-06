@@ -62,6 +62,58 @@ jobs:
       - name: Build apps/landing
         run: bun run --cwd apps/landing build
 
+  install-linux:
+    # The one-step host install (#668) on a runner with no herdr-core: it must end with a running user service and a
+    # printed QR code. Not a required check; it runs on pull requests because it costs a Linux minute or two.
+    name: Install (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      # A runner job has no login session, so no systemd user manager answers until the runner user lingers.
+      - name: Start the runner user's systemd manager
+        run: |
+          sudo loginctl enable-linger "$USER"
+          runtime="/run/user/$(id -u)"
+          echo "XDG_RUNTIME_DIR=$runtime" >> "$GITHUB_ENV"
+          for _ in $(seq 1 50); do
+            XDG_RUNTIME_DIR="$runtime" systemctl --user show-environment >/dev/null 2>&1 && exit 0
+            sleep 0.2
+          done
+          echo "::error::no systemd user manager for $USER" && exit 1
+      - name: The installer installs, starts and pairs
+        run: bash .github/scripts/install-smoke.sh linux-x64
+      - name: Host log
+        if: failure()
+        run: journalctl --user -u doriface-host --no-pager | tail -100
+
+  install-macos:
+    # The same on a Mac, with a LaunchAgent. Like the other macOS job it runs after the merge, on the push to dev.
+    name: Install (macOS)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: The installer installs, starts and pairs
+        run: bash .github/scripts/install-smoke.sh mac-arm64
+      - name: Host log
+        if: failure()
+        run: tail -100 ~/Library/Logs/doriface-host.log || true
+
   relay-e2e:
     # This job is the only reporter of the required "Relay e2e" context, so it carries that name only on the paths that
     # can run the suites. A pull request from a fork gets no secrets: it reports under another name, so the required
