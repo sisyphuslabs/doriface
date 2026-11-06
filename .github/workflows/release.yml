@@ -222,6 +222,20 @@ jobs:
       - name: Collect the standalone host
         if: matrix.os != 'win'
         run: cp "apps/desktop/dist/host/${{ matrix.os }}-${{ matrix.arch }}/doriface-host" "$RUNNER_TEMP/out/doriface-host-${{ matrix.os }}-${{ matrix.arch }}"
+      # electron-updater's feed: an installed app reads latest-mac.yml, latest.yml or latest-linux*.yml from the release to
+      # find an update. This runner's copy goes up in its own folder; the release job merges the runners' copies into one.
+      - name: Collect the update feed
+        working-directory: apps/desktop/dist/release
+        run: |
+          shopt -s nullglob
+          feed=(latest*.yml)
+          if [ "${#feed[@]}" -eq 0 ]; then
+            echo "::error title=Missing update feed::electron-builder wrote no latest*.yml"
+            ls -la
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/out/feed-${{ matrix.os }}-${{ matrix.arch }}"
+          cp "${feed[@]}" "$RUNNER_TEMP/out/feed-${{ matrix.os }}-${{ matrix.arch }}/"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-${{ matrix.os }}-${{ matrix.arch }}
@@ -329,6 +343,8 @@ jobs:
       # Stamped with this tag, so the installer from a release installs that release rather than whatever is latest.
       - name: The host installer
         run: sed "s/__DORIFACE_RELEASE__/$TAG/" apps/host/install/install.sh > assets/install.sh
+      - name: The update feed, one file per name for every architecture
+        run: bun .github/scripts/merge-update-feed.ts assets
       - name: SHA256SUMS.txt
         working-directory: assets
         run: |
