@@ -32,3 +32,13 @@ export function formatReadiness(
   const missing = members.filter((hostId) => !supported.has(hostId));
   return missing.length === 0 ? { kind: "ready" } : { kind: "blocked", missing };
 }
+
+/**
+ * Why an admission may not be written, or undefined when it may. A machine is never held back: only a client needs the
+ * whole cohort to read the new format, because an older member would reject the admission and then hold any later revoke
+ * that references it as dangling, so the revoke would silently not apply (design of #942).
+ */
+export function admissionRefusal(kind: string | undefined, ready: boolean): string | undefined {
+  if (kind !== "client" || ready) return undefined;
+  return "a client can join once every machine in this mesh reads the new format";
+}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatReadiness, type FormatSupport } from "./format-readiness.ts";
+import { admissionRefusal, formatReadiness, type FormatSupport } from "./format-readiness.ts";
 
 const NEXT = 3;
 const answers = (...support: readonly FormatSupport[]): readonly FormatSupport[] => support;
@@ -40,5 +40,19 @@ describe("formatReadiness", () => {
 
   test("a roster with no members is ready, since nothing can be blocked", () => {
     expect(formatReadiness([], [], NEXT)).toEqual({ kind: "ready" });
+  });
+});
+
+describe("admissionRefusal", () => {
+  test("never holds back a machine", () => {
+    expect(admissionRefusal("machine", false)).toBeUndefined();
+    expect(admissionRefusal(undefined, false)).toBeUndefined();
+  });
+
+  test("holds back a client until the cohort is ready", () => {
+    expect(admissionRefusal("client", false)).toBe(
+      "a client can join once every machine in this mesh reads the new format",
+    );
+    expect(admissionRefusal("client", true)).toBeUndefined();
   });
 });
