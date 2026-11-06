@@ -236,8 +236,19 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install Chromium
         if: env.RELAY_TOKEN_SET == 'true'
-        run: bunx playwright install --with-deps chromium
         working-directory: apps/web
+        timeout-minutes: 12
+        run: |
+          # apt retries an unreachable mirror for as long as it is allowed: on doriterm#914 that spent a whole
+          # 30-minute job inside this step and the suite never started. A warm browser cache skips apt; a cold one
+          # bounds the update and the install, so a mirror blip fails here in minutes instead of eating the job.
+          if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
+            echo "browser cache hit: installing engines without system packages"
+            timeout 300 bunx playwright install chromium
+          else
+            sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
+            timeout 600 bunx playwright install --with-deps chromium
+          fi
       - name: Browser spec through the mesh
         if: env.RELAY_TOKEN_SET == 'true'
         run: bun run test:e2e e2e/mesh-attach.e2e.ts
@@ -283,9 +294,24 @@ jobs:
           echo "HC_BIN=$RUNNER_TEMP/hc/hc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/hc/hc" --version
       - run: bun install --frozen-lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - name: Install Chromium
-        run: bunx playwright install --with-deps chromium
         working-directory: apps/web
+        timeout-minutes: 12
+        run: |
+          # apt retries an unreachable mirror for as long as it is allowed: on doriterm#914 that spent a whole
+          # 30-minute job inside this step and the suite never started. A warm browser cache skips apt; a cold one
+          # bounds the update and the install, so a mirror blip fails here in minutes instead of eating the job.
+          if compgen -G "$HOME/.cache/ms-playwright/chromium-*" >/dev/null; then
+            echo "browser cache hit: installing engines without system packages"
+            timeout 300 bunx playwright install chromium
+          else
+            sudo apt-get -o Acquire::http::Timeout=15 -o Acquire::Retries=1 update >/dev/null 2>&1 || true
+            timeout 600 bunx playwright install --with-deps chromium
+          fi
       # The e2e workers follow the runner's cores (playwright.config.ts, #342): record what this runner has.
       - name: Runner resources
         run: |
