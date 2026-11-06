@@ -31,7 +31,10 @@ async function openPairedDevices(page: Page): Promise<void> {
   await expect(paired).toContainText(/Your host isn't (answering|connected right now)/, { timeout: 30_000 });
 }
 
-async function openPage(browser: Browser, shot: Shot): Promise<{ readonly page: Page; readonly close: () => Promise<void> }> {
+async function openPage(
+  browser: Browser,
+  shot: Shot,
+): Promise<{ readonly page: Page; readonly close: () => Promise<void> }> {
   const size = shot.width === "1440" ? { viewport: { width: 1440, height: 900 } } : devices["iPhone 14"];
   const { defaultBrowserType: _browser, ...use } = { defaultBrowserType: "chromium", ...size };
   const context = await browser.newContext({ ...use, colorScheme: shot.theme === "day" ? "light" : "dark" });
