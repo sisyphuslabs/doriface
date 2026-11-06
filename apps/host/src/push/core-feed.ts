@@ -100,6 +100,9 @@ const coreOf = (connection: HcConnection): PushCore => ({
   keys: async (terminal, keys) => {
     await connection.call("terminal.keys", { terminal, keys });
   },
+  send: async (terminal, text) => {
+    await connection.call("terminal.send", { terminal, text, force: true });
+  },
   doc: (name, on) => connection.call("doc.get", { name, ...where(on) }),
   setDoc: async (name, on, value, version) => {
     try {

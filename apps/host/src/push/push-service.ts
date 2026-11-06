@@ -1,5 +1,6 @@
 import {
   answerApproval,
+  binaryReply,
   type ApprovalCore,
   type ApprovalMark,
   type HcEvent,
@@ -127,7 +128,8 @@ export class PushService {
   }
 
   /**
-   * Answers a permission notice with the agent's own key through the rule #192's banner uses (`answerApproval`): one
+   * Answers a permission notice's Allow (the plain "Yes" row) or Deny (the dialog's cancel) through the rule #192's
+   * banner uses (`answerApproval`); a prompt with no such row is `stale` and nothing is pressed. One
    * claim per prompt across every client, then the live screen re-read, and the key only if the marked prompt is
    * still up. `failed`: it did not go through and nothing was pressed; `unknown`: the key press failed after it was
    * sent, so it may have landed; anything else is `stale` and sends nothing.
@@ -137,14 +139,22 @@ export class PushService {
     const stale: PushHostLine = { t: "stale", terminal: entry?.terminal ?? null };
     const { terminal, mark } = entry ?? {};
     const core = this.#core;
-    if (entry?.kind !== "permission" || terminal == null || mark === undefined || core === undefined) return stale;
+    const reply = mark === undefined ? undefined : binaryReply(mark.prompt, answer);
+    if (
+      entry?.kind !== "permission" ||
+      terminal == null ||
+      mark === undefined ||
+      reply === undefined ||
+      core === undefined
+    )
+      return stale;
     // One id per answer: a device's worker and its page each answer for themselves, never as one client.
     const who = {
       by: this.#options.deviceName?.(owner) ?? "a notification",
       client: `push:${owner}:${crypto.randomUUID()}`,
     };
     try {
-      const result = await answerApproval(core, mark, answer, who, this.#now());
+      const result = await answerApproval(core, mark, reply, who, this.#now());
       switch (result.kind) {
         case "sent":
           return { t: "answered", terminal };
