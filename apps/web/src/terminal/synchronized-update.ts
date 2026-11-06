@@ -9,8 +9,11 @@ const ZERO = 0x30;
 const NINE = 0x39;
 /** Synchronized output (DECSET 2026): a program brackets a frame with it so the terminal draws the frame whole. */
 const SYNCHRONIZED_OUTPUT = 2026;
-/** The longest sequence read here, `ESC [ ? Ps ; ... h`, kept whole across chunks; longer ones are not modes we read. */
-const MAX_CARRY = 32;
+/**
+ * How much of an unfinished `ESC [ ? Ps ; ... h` is kept across chunks: only digits and semicolons grow it, so this
+ * holds a list of some sixty modes, past any a program sends; a longer run of them is not a mode set we read.
+ */
+const MAX_CARRY = 256;
 
 /**
  * Follows a terminal's output and tells whether it is inside a synchronized update: after `ESC [ ? 2026 h` and before

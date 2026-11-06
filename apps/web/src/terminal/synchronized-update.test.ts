@@ -39,6 +39,18 @@ describe("SynchronizedUpdate (#757)", () => {
     }
   });
 
+  test("a long list of modes that ends in 2026, split across chunks at every byte, still opens it", () => {
+    const modes = Array.from({ length: 30 }, (_, index) => index + 1).join(";");
+    const whole = `\u001b[?${modes};2026h`;
+    expect(whole.length).toBeGreaterThan(32);
+    for (let cut = 1; cut < whole.length; cut++) {
+      const update = new SynchronizedUpdate();
+      update.advance(text(whole.slice(0, cut)));
+      update.advance(text(whole.slice(cut)));
+      expect(update.open).toBe(true);
+    }
+  });
+
   test("an update that ends inside a chunk is read up to the end of its closing sequence", () => {
     const update = new SynchronizedUpdate();
     update.advance(text("\u001b[?2026h"));
