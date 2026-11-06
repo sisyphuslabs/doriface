@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Reconnecting
+
+- A page that comes back (a tab shown again, a page restored from the back/forward cache, the network returning) while its link still looks open asks the host once; a link that does not answer within 10 seconds is dropped and reconnects at once, instead of leaving the terminal frozen until the 45-second heartbeat gives up. A link that answers, even with a refusal, is left alone. (#775)
+
 ### Setting up your machines
 
 - [docs/install.md](docs/install.md) and the README show how to run the host as a user service on every Linux and macOS machine you own, join them into one mesh, and pair phones and browsers. The [doriterm-setup skill](skills/doriterm-setup/SKILL.md) lets a coding agent do it with `apps/host/scripts/setup/cli.ts` (`install`, `verify`, `invite`, `join`, `pair`, `uninstall`), which is safe to re-run and never prints a join link or key. (#778)
