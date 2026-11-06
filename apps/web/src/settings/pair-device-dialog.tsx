@@ -117,10 +117,7 @@ export function PairDeviceDialog({ open, onClose, pair }: PairDeviceDialogProps)
             </div>
           </Field>
           <div className="rounded-lg bg-raised p-4">
-            <Fingerprint
-              label="This computer's key (SHA-256)"
-              value={view.offer.fingerprint.replaceAll(" ", "")}
-            />
+            <Fingerprint label="This computer's key (SHA-256)" value={view.offer.fingerprint.replaceAll(" ", "")} />
             <p className="mt-2 text-sm text-pretty text-muted-foreground">
               The other device shows the same groups before it pairs.
             </p>

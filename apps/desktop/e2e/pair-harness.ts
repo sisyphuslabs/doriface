@@ -81,8 +81,7 @@ export async function routeRelay(page: Page, bridgeUrl: string): Promise<void> {
       for (const frame of early.splice(0)) relay.send(frame);
     });
     socket.onMessage((message) => {
-      const frame: string | Uint8Array<ArrayBuffer> =
-        typeof message === "string" ? message : Uint8Array.from(message);
+      const frame: string | Uint8Array<ArrayBuffer> = typeof message === "string" ? message : Uint8Array.from(message);
       if (relay.readyState === WebSocket.OPEN) relay.send(frame);
       else early.push(frame);
     });
@@ -104,7 +103,10 @@ export async function freshBrowser(
   const page = await app.firstWindow();
   await routeRelay(page, rig.bridge);
   await page.route("https://relay-doriface.omo.dev/v1/pair/*", async (route) => {
-    const slot = route.request().url().slice(route.request().url().lastIndexOf("/") + 1);
+    const slot = route
+      .request()
+      .url()
+      .slice(route.request().url().lastIndexOf("/") + 1);
     const answer = await fetch(`${rig.lookup}/v1/pair/${slot}`);
     await route.fulfill({
       status: answer.status,

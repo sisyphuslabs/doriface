@@ -74,7 +74,8 @@ function pairOffer(value: unknown): Extract<PairOfferAnswer, { state: "pending" 
   const slot: unknown = Reflect.get(value, "slot");
   const codeUsable: unknown = Reflect.get(value, "codeUsable");
   if (typeof code !== "string" || typeof link !== "string" || typeof hostId !== "string") return undefined;
-  if (typeof fingerprint !== "string" || typeof expiresAt !== "number" || typeof codeUsable !== "boolean") return undefined;
+  if (typeof fingerprint !== "string" || typeof expiresAt !== "number" || typeof codeUsable !== "boolean")
+    return undefined;
   if (opens !== "web" && opens !== "desktop") return undefined;
   if (slot !== "pending" && slot !== "registered" && slot !== "unavailable") return undefined;
   return { code, link, opens, hostId, fingerprint, expiresAt, slot, codeUsable };

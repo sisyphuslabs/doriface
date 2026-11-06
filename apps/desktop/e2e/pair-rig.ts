@@ -76,7 +76,11 @@ console.log(
 const done = Promise.withResolvers<void>();
 process.once("SIGTERM", () => done.resolve());
 process.once("SIGINT", () => done.resolve());
-void Bun.stdin.stream().getReader().read().then(() => done.resolve());
+void Bun.stdin
+  .stream()
+  .getReader()
+  .read()
+  .then(() => done.resolve());
 try {
   await done.promise;
 } finally {

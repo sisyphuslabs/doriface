@@ -53,6 +53,8 @@ describe("the offer a surface shows for this computer", () => {
     expect(pairingOfferView({ identity, offer: offer() }).codeUsable).toBe(true);
     expect(pairingOfferView({ identity, offer: offer({ slot: "pending" }) }).codeUsable).toBe(false);
     expect(pairingOfferView({ identity, offer: offer({ slot: "unavailable" }) }).codeUsable).toBe(false);
-    expect(pairingOfferView({ identity, offer: offer({ codeAttempts: PAIRING_CODE_ATTEMPTS }) }).codeUsable).toBe(false);
+    expect(pairingOfferView({ identity, offer: offer({ codeAttempts: PAIRING_CODE_ATTEMPTS }) }).codeUsable).toBe(
+      false,
+    );
   });
 });
