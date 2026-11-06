@@ -1,8 +1,49 @@
+diff --git a/dist/input.d.ts b/dist/input.d.ts
+index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02f1804d30 100644
+--- a/dist/input.d.ts
++++ b/dist/input.d.ts
+@@ -20,6 +20,7 @@ export declare class InputHandler {
+     private composing;
+     private compositionWidth;
+     private recentCompositionCommit;
++    private takenComposition;
+     private suppressNextTouchDeleteInput;
+     private mouseButtons;
+     private lastMouseMotion;
+@@ -61,6 +62,11 @@ export declare class InputHandler {
+     encodeKey(key: SyntheticKey): string | null;
+     /** Send text the way a clipboard paste would. */
+     sendPaste(text: string): void;
++    /**
++     * Ends a composition still in progress and returns its preedit, for the host to send ahead of its own input; ""
++     * when nothing is composing. That composition's end then sends nothing.
++     */
++    takeComposition(): string;
+     private handleCompositionStart;
+     private handleCompositionEnd;
+     private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..86a22e9e75ad6795a9276dc9f033346cd4a9a6f8 100644
+index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..8963de57e37a787a3fbedd570592ba28f8e913e2 100644
 --- a/dist/input.js
 +++ b/dist/input.js
-@@ -472,9 +472,11 @@ export class InputHandler {
+@@ -86,6 +86,8 @@ export class InputHandler {
+         this.composing = false;
+         this.compositionWidth = 0;
+         this.recentCompositionCommit = null;
++        // The preedit the host took mid-composition, until the browser reports that composition's end.
++        this.takenComposition = null;
+         // The first native deletion mirrors the Backspace already sent on keydown.
+         this.suppressNextTouchDeleteInput = false;
+         this.mouseButtons = 0;
+@@ -462,6 +464,7 @@ export class InputHandler {
+     }
+     handleCompositionStart() {
+         this.tabExitArmed = false;
++        this.takenComposition = null;
+         this.prepareComposition();
+         this.composing = true;
+         this.recentCompositionCommit = null;
+@@ -472,11 +475,18 @@ export class InputHandler {
          this.positionTextarea();
          const s = this.textarea.style;
          s.opacity = "1";
@@ -16,7 +57,41 @@ index 08a9e4df1211ebe8eeefaa1e2dcdbeeee312677e..86a22e9e75ad6795a9276dc9f033346c
 +        s.caretColor = "var(--term-preedit-fg, var(--term-fg, currentColor))";
      }
      handleCompositionEnd(e) {
++        const taken = this.takenComposition;
++        this.takenComposition = null;
++        // A composition the host already took ends with the text it took (WebKit) or none (Blink); either was sent.
++        if (taken !== null && !this.composing && (!e.data || e.data === taken))
++            return;
          this.composing = false;
+         this.hideComposition();
+         this.resetInputValue();
+@@ -485,6 +495,26 @@ export class InputHandler {
+             this.onData(e.data);
+         }
+     }
++    /**
++     * Ends a composition still in progress and returns its preedit, for the host to send ahead of its own input: a
++     * key it sends must not overtake the syllable being typed. The field is emptied, which makes the browser drop the
++     * input method's composition, and that composition's end sends nothing.
++     */
++    takeComposition() {
++        if (!this.composing)
++            return "";
++        const raw = this.textarea.value;
++        const text = this.touchPrimary && raw.startsWith(TOUCH_INPUT_PLACEHOLDER)
++            ? raw.slice(TOUCH_INPUT_PLACEHOLDER.length)
++            : raw;
++        this.composing = false;
++        this.takenComposition = text;
++        // A browser that commits the dropped composition as ordinary input repeats the text: that repeat is dropped.
++        this.recentCompositionCommit = text ? { text, at: performance.now() } : null;
++        this.hideComposition();
++        this.resetInputValue();
++        return text;
++    }
+     hideComposition() {
+         this.compositionWidth = 0;
+         const s = this.textarea.style;
 diff --git a/dist/renderer.d.ts b/dist/renderer.d.ts
 index 208021ab4fefce3dda7da7f337850a59113cc514..b6c3f70309d5e78e15d656d09f406f268b869f8b 100644
 --- a/dist/renderer.d.ts
@@ -172,10 +247,10 @@ index a071bc6340f6aef3fdbf62a4fd64aa04795e2c51..d17f03383e0d1e7f14da674e488c1498
      invalidateColors() {
          this.colorsChanged = true;
 diff --git a/dist/wterm.d.ts b/dist/wterm.d.ts
-index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..f982b8bd9a948bf815b53937ea8d9e3c50ab2ffd 100644
+index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..04cbfc73f380b80233da981248ce19056a1dc3fa 100644
 --- a/dist/wterm.d.ts
 +++ b/dist/wterm.d.ts
-@@ -115,6 +115,11 @@ export declare class WTerm {
+@@ -115,6 +115,17 @@ export declare class WTerm {
       * Pass `null` to drop them and answer color queries from the page's CSS again.
       */
      setThemeColors(colors: TerminalThemeColors | null): void;
@@ -184,11 +259,17 @@ index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..f982b8bd9a948bf815b53937ea8d9e3c
 +     * fits the two cells; null draws every wide glyph at the terminal's size.
 +     */
 +    setWideGlyphScale(scale: ((text: string) => number) | null): void;
++    /**
++     * Ends an input-method composition still in progress in the terminal's field and returns its preedit, which the
++     * caller sends before its own input (a key, a paste) so the key never overtakes the syllable being typed; "" when
++     * nothing is composing. The composition's end then sends nothing.
++     */
++    takeComposition(): string;
      write(data: string | Uint8Array): void;
      /**
       * Hands the core the theme colors the page's CSS resolves to, unless the
 diff --git a/dist/wterm.js b/dist/wterm.js
-index 848e1c3f7880842c4439541fc4565ff4a42c0201..43c7ce919fed9fc315992efe4a55e42128921593 100644
+index 848e1c3f7880842c4439541fc4565ff4a42c0201..3a69b5ccab58680500721e787d159dfaea8804a1 100644
 --- a/dist/wterm.js
 +++ b/dist/wterm.js
 @@ -372,6 +372,7 @@ export class WTerm {
@@ -207,10 +288,20 @@ index 848e1c3f7880842c4439541fc4565ff4a42c0201..43c7ce919fed9fc315992efe4a55e421
              this._initialRender();
              this._registerWebMCP();
              if (this.cols !== initialCols || this.rows !== initialRows)
-@@ -445,6 +445,19 @@ export class WTerm {
+@@ -445,6 +445,29 @@ export class WTerm {
          }
          this.element.scrollTop = target;
      }
++    /**
++     * Ends an input-method composition still in progress in the terminal's field and returns its preedit, which the
++     * caller sends before its own input (a key, a paste) so the key never overtakes the syllable being typed; "" when
++     * nothing is composing. The composition's end then sends nothing.
++     */
++    takeComposition() {
++        if (this._destroyed)
++            return "";
++        return this.input?.takeComposition() ?? "";
++    }
 +    /**
 +     * Size each wide (two-cell) glyph's font by `scale(text)`, so its advance
 +     * fits the two cells; null draws every wide glyph at the terminal's size.
