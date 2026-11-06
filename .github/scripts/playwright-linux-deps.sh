@@ -18,7 +18,12 @@ save=false
 
 if compgen -G "$debs/*.deb" >/dev/null; then
   echo "apt cache hit: installing $(find "$debs" -name '*.deb' | wc -l) cached packages without the mirror"
-  if sudo apt-get install -y --no-install-recommends "$debs"/*.deb \
+  # Not `apt-get install <files>`: with the runner's package lists present, apt fetches the repository's copy of a
+  # version a local file also carries (#1013's first run). Files in apt's own archive directory count as downloaded,
+  # and --no-download makes a cache that falls short fail here instead of quietly using the mirror.
+  sudo cp "$debs"/*.deb /var/cache/apt/archives/
+  mapfile -t names < <(for f in "$debs"/*.deb; do dpkg-deb -f "$f" Package; done)
+  if sudo apt-get install -y --no-install-recommends --no-download "${names[@]}" \
     && bunx playwright install-deps --dry-run chromium; then
     echo "save-debs=$save" >> "$GITHUB_OUTPUT"
     exit 0
