@@ -39,12 +39,12 @@
 
 ### Spaces, tabs and the sidebar
 
-- Ctrl+1-9 show the space at that place in the sidebar, and Cmd+Alt+] and Cmd+Alt+[ step through the spaces and wrap (Ctrl+Alt on Windows and Linux). (#626)
+- Ctrl+1-9 show the space at that place in the sidebar, and Cmd+Alt+] and Cmd+Alt+[ step through the spaces and wrap (Ctrl+Alt on Windows and Linux). There the tab number chords move from Ctrl+1-9 to Alt+1-9. (#626)
 - A space moves up or down within its machine, by drag or from its menu, and the order is written to the shared layout document, so every device of the host reads it without a reload. (#622)
 - A space's menu can close the whole space: it says how many tabs and terminals go, ends every program they run, and takes the space out on every device. (#620)
 - A tab's menu hands the keyboard to the question its item opened, so a rename typed at once is kept. (#591, #632)
 - Right-clicking a sidebar row opens its menu, so Rename is there without the "..." button. (#720)
-- The sidebar toggle takes a click on macOS with the sidebar hidden or in a rail, a click on it is not a window drag, and the tab strip still moves the window beside it. (#646, #648, #659, #690)
+- The sidebar toggle takes a click on macOS with the sidebar hidden or in a rail, a click on it is not a window drag, and the tab strip still moves the window beside it. (#646, #659, #690)
 
 ### Fonts, Korean text and the terminal
 
@@ -55,16 +55,17 @@
 
 ### Connection and offline wording
 
-- An attempt has a deadline that bounds the whole attempt and grows after each timeout, so a link that never settles cannot leave the page on "Connecting"; a direct race whose host stalls falls back to the relay. (#655, #677, #719, #740)
+- An attempt has a deadline that bounds the whole attempt and grows after each timeout, so a link that never settles cannot leave the page on "Connecting"; a direct race whose host stalls falls back to the relay. (#719, #740)
 - A relay that never answers the upgrade fails at its bound instead of holding the connect open. (#631)
 - The page waking runs a reconnect at once, and a link that keeps dropping keeps backing off. (#654)
 - A connection that answered no hello still opens, so a name never fails a session. (#633)
 - A layout write whose link drops under it says so plainly, never the closed link's raw cause. (#724)
 - Coming back from Settings keeps your terminals running instead of replaying their history. (#607)
+- Moving this device to another host in Settings moves its notifications with it: the host it leaves drops the subscription and the new host gets it. (#627)
 
 ### A core this client cannot use
 
-- A core the client cannot use fails for good instead of being retried forever, and says which side to update from one shared version floor; a core build missing a method the workspace calls says so at the handshake. (#662, #663, #686, #689, #697)
+- A core the client cannot use fails for good instead of being retried forever, and says which side to update from one shared version floor; a core build missing a method the workspace calls says so at the handshake. (#662, #686, #689, #697)
 
 ### Done, idle and errors
 
@@ -79,7 +80,7 @@
 
 - A launch still opening when the host stops is ended, so its core cannot outlive the host. (#599)
 - The host reads one typed plan document that is open unless it names a limit or a feature, and a document that cannot be read as one stops the host instead of reading as an open plan. (#606)
-- Many test and CI fixes, so problems are caught before a release instead of after. (#605, #608, #613, #617, #624, #627, #681, #683, #685, #687, #695, #711, #725, #763)
+- Many test, CI and documentation fixes, so problems are caught before a release instead of after. (#605, #608, #613, #617, #624, #681, #683, #685, #687, #695, #711, #725, #763)
 
 ## v0.1.2
 
