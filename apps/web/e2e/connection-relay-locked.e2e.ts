@@ -26,7 +26,7 @@ test("Settings > Connections offers no relay address to edit and no Loopback dev
   // Nothing in this spec leaves the browser: the production relay is answered here and closes at once.
   await page.routeWebSocket(PRODUCTION, (ws) => ws.close());
   await page.goto("/settings");
-  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Connections" }).click();
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Advanced connection" }).click();
   await expect(page.getByText("relay-doriface.omo.dev", { exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Relay address" })).toHaveCount(0);
   await expect(page.getByText("Loopback dev")).toHaveCount(0);
@@ -35,7 +35,7 @@ test("Settings > Connections offers no relay address to edit and no Loopback dev
 
 test("a link to this computer offers its gateway but no Connect through switch either", async ({ page }) => {
   await page.goto("/settings");
-  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Connections" }).click();
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Advanced connection" }).click();
   await expect(page.getByRole("textbox", { name: "Gateway", exact: true })).toBeVisible();
   await expect(page.getByLabel("Connect through")).toHaveCount(0);
   await expect(page.getByText("Loopback dev")).toHaveCount(0);
@@ -78,8 +78,8 @@ test.describe("capture", () => {
         await page.goto("/settings");
         await (
           width === "1440"
-            ? page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Connections" })
-            : page.getByRole("tab", { name: "Connections" })
+            ? page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Advanced connection" })
+            : page.getByRole("tab", { name: "Advanced connection" })
         ).click();
         await expect(page.getByText("relay-doriface.omo.dev", { exact: true })).toBeVisible();
         await page.evaluate(() => document.fonts.ready);

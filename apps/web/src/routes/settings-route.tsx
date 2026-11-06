@@ -11,6 +11,7 @@ import { KeybindingsSection } from "../settings/keybindings-section.tsx";
 import { MeshSection } from "../settings/mesh-section.tsx";
 import { MachinesSection } from "../settings/machines-section.tsx";
 import { NotificationsSection } from "../settings/notifications-section.tsx";
+import { PairSection } from "../settings/pair-section.tsx";
 import { TerminalSection } from "../settings/terminal-section.tsx";
 import { UpdateRow } from "../settings/update-row.tsx";
 import { CrashProbe } from "../crash/crash-probe.ts";
@@ -20,13 +21,13 @@ import { useCloseSettings } from "../settings/use-close-settings.ts";
 import { VoiceSection } from "../settings/voice-section.tsx";
 
 const SECTIONS = [
-  { id: "connections", label: "Connections", icon: <Link2 /> },
-  { id: "mesh", label: "Mesh", icon: <Network /> },
-  { id: "machines", label: "Machines", icon: <Server /> },
-  { id: "appearance", label: "Appearance", icon: <Palette /> },
-  { id: "device", label: "Device", icon: <MonitorSmartphone /> },
+  { id: "device", label: "This device", icon: <MonitorSmartphone /> },
+  { id: "machines", label: "Your machines", icon: <Network /> },
+  { id: "pair", label: "Pair a phone or computer", icon: <Server /> },
+  { id: "connection", label: "Advanced connection", icon: <Link2 /> },
   { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
   { id: "notifications", label: "Notifications", icon: <Bell /> },
+  { id: "appearance", label: "Appearance", icon: <Palette /> },
   { id: "keybindings", label: "Keybindings", icon: <Keyboard /> },
   { id: "voice", label: "Voice input", icon: <Mic /> },
 ] as const;
@@ -41,9 +42,14 @@ function Group({ title, children }: { readonly title: string; readonly children:
   );
 }
 
+/** One sentence under the title, in the words the navigation uses: what this screen is about and nothing else. */
+function Lead({ children }: { readonly children: ReactNode }) {
+  return <p className="text-sm text-pretty text-muted-foreground">{children}</p>;
+}
+
 /** Section navigation beside the form; changes apply as they are made. */
 export function SettingsRoute() {
-  const [section, setSection] = useState<SectionId>("connections");
+  const [section, setSection] = useState<SectionId>("device");
   const close = useCloseSettings();
   const update = usePendingUpdate();
   const back = (
@@ -117,31 +123,53 @@ export function SettingsRoute() {
             title="This section could not be drawn"
             detail="The other sections still open from the list."
           >
-            {section === "connections" ? (
+            {section === "device" ? (
               <>
+                <Lead>
+                  This app talks to one host: the computer that runs your terminals. Here is which host it reaches,
+                  whether it is there now, and this device's own settings.
+                </Lead>
+                <Group title="Host">
+                  <DevicesSection />
+                </Group>
+                <Group title="This device">
+                  <DeviceSection />
+                </Group>
+              </>
+            ) : section === "machines" ? (
+              <>
+                <Lead>
+                  A mesh is a group of computers that trust each other, so this app uses all of them without pairing
+                  each one. A machine added by hand is reachable on its own. Every machine is here, with how this host
+                  reaches it.
+                </Lead>
+                <Group title="In your mesh">
+                  <MeshSection />
+                </Group>
+                <Group title="Added to this host">
+                  <MachinesSection />
+                </Group>
+              </>
+            ) : section === "pair" ? (
+              <>
+                <Lead>
+                  One command on your host opens an invite, and the other computer or phone joins with it. A join waits
+                  for your approval under Your machines before it is part of the mesh.
+                </Lead>
+                <Group title="Pair">
+                  <PairSection />
+                </Group>
+              </>
+            ) : section === "connection" ? (
+              <>
+                <Lead>
+                  How this app reaches its host. The defaults work for everyone; change them only for a self-hosted
+                  relay or a development host.
+                </Lead>
                 <Group title="Connection">
                   <ConnectionSection />
                 </Group>
-                <Group title="Paired devices">
-                  <DevicesSection />
-                </Group>
               </>
-            ) : section === "mesh" ? (
-              <Group title="Mesh">
-                <MeshSection />
-              </Group>
-            ) : section === "machines" ? (
-              <Group title="Machines">
-                <MachinesSection />
-              </Group>
-            ) : section === "appearance" ? (
-              <Group title="Appearance">
-                <AppearanceSection />
-              </Group>
-            ) : section === "device" ? (
-              <Group title="This device">
-                <DeviceSection />
-              </Group>
             ) : section === "terminal" ? (
               <Group title="Terminal">
                 <TerminalSection />
@@ -149,6 +177,10 @@ export function SettingsRoute() {
             ) : section === "notifications" ? (
               <Group title="Notifications">
                 <NotificationsSection />
+              </Group>
+            ) : section === "appearance" ? (
+              <Group title="Appearance">
+                <AppearanceSection />
               </Group>
             ) : section === "keybindings" ? (
               <Group title="Keybindings">

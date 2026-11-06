@@ -30,7 +30,7 @@ async function saveRelayLink(page: Page): Promise<void> {
 test("Settings > Connections has no Direct address and shows the relay with no field to edit", async ({ page }) => {
   await saveRelayLink(page);
   await page.goto("/settings");
-  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Connections" }).click();
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Advanced connection" }).click();
   await expect(
     page.getByText(DEV_BUILD ? "relay.custom.invalid" : "relay-doriface.omo.dev", { exact: true }),
   ).toBeVisible();

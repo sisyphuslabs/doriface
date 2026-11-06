@@ -63,7 +63,7 @@ test("a long Korean host name wraps between words, and its icon sits on the firs
   );
   const page = await context.newPage();
   await page.goto("/settings");
-  await page.getByRole("tab", { name: "Connections" }).click();
+  await page.getByRole("tab", { name: "This device" }).click();
   await expect(page.getByText(LAYOUT_CORE)).toBeVisible({ timeout: 20_000 });
   await page.evaluate(() => document.fonts.ready);
   const wrap = await page.evaluate(measure, LAYOUT_CORE);

@@ -7,8 +7,8 @@ test.describe("Settings, Machines", () => {
     page,
   }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: "Machines" }).click();
-    await expect(page.getByRole("heading", { name: "Machines", level: 2 })).toBeVisible();
+    await page.getByRole("button", { name: "Your machines" }).click();
+    await expect(page.getByRole("heading", { name: "Added to this host", level: 2 })).toBeVisible();
     const list = page.getByRole("list", { name: "Machines" });
     await expect(list.getByRole("listitem").filter({ hasText: "studio" })).toContainText("This machine", {
       timeout: 15_000,

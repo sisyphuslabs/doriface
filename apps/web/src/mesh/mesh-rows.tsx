@@ -8,6 +8,7 @@ import { IconButton, SettingRow, cn } from "@doriface/ui";
 import { Check, Copy, Monitor, Server } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { formatAge } from "../workspace/model.ts";
+import { REACH_LABEL, reachOf } from "./reach.ts";
 
 export type NameOf = (hostId: string) => string;
 
@@ -73,8 +74,11 @@ export function Command({ command, label }: { readonly command: string; readonly
   );
 }
 
-const Key = ({ fingerprint }: { readonly fingerprint: string }) => (
-  <span className="mt-1 block font-mono text-xs tracking-wide text-muted-foreground tabular-nums">{fingerprint}</span>
+const Key = ({ fingerprint, hostId }: { readonly fingerprint: string; readonly hostId?: string }) => (
+  <span className="mt-1 flex flex-wrap items-baseline gap-x-3 font-mono text-xs tracking-wide text-muted-foreground tabular-nums">
+    <span>{fingerprint}</span>
+    {hostId === undefined ? null : <span>{`id ${hostId}`}</span>}
+  </span>
 );
 
 function memberFacts(member: MeshMemberStatus, nameOf: NameOf, now: number): string[] {
@@ -120,12 +124,13 @@ export function MemberRow({ member, nameOf, now }: MemberRowProps) {
               {LINE_LABEL[member.line]}
               {member.unreachableSince === null ? null : ` for ${formatAge(Date.parse(member.unreachableSince), now)}`}
               {member.lineReason === null ? null : `: ${member.lineReason}`}
+              {member.line === "self" ? null : ` · ${REACH_LABEL[reachOf(member)]}`}
             </span>
             {memberFacts(member, nameOf, now)
               .map((part) => ` · ${part}`)
               .join("")}
           </span>
-          {member.fingerprint === null ? null : <Key fingerprint={member.fingerprint} />}
+          {member.fingerprint === null ? null : <Key fingerprint={member.fingerprint} hostId={member.hostId} />}
           {undecidable ? (
             <span className="mt-1 block">
               {`A revoke of ${name} written here could not be decided`}

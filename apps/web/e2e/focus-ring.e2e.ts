@@ -84,7 +84,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     });
 
     test("the Connections controls Tab reaches draw a focus ring", async ({ page }) => {
-      await settings(page, "Connections");
+      await settings(page, "This device");
       // A release build has no Connect through switch (#389): the gateway of this loopback link is the section's control.
       await ringOnTab(page, page.getByRole("textbox", { name: "Gateway", exact: true }));
     });
