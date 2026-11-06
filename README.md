@@ -1,13 +1,11 @@
-<h1>
-  <p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriface-mark-dark.svg" />
-      <img src="apps/web/brand/doriface-mark-light.svg" alt="Doriterm" width="128" height="128" />
-    </picture>
-    <br />
-    Doriterm
-  </p>
-</h1>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/brand/doriface-mark-dark.svg" />
+    <img src="apps/web/brand/doriface-mark-light.svg" alt="Doriterm" width="128" height="128" />
+  </picture>
+</p>
+
+<h1 align="center">Doriterm</h1>
 
 <p align="center">
   Your terminals and coding agents, on every screen.
@@ -16,7 +14,6 @@
 </p>
 
 <p align="center">
-  <a href="https://doriterm.com">doriterm.com</a> ·
   <a href="#install">install</a> ·
   <a href="#pairing-and-how-the-relay-fits">how the relay fits</a> ·
   <a href="#security">security</a> ·
@@ -43,8 +40,8 @@ crosses the network is a Noise session, not a remote-desktop stream.
 
 - **Your terminals, on every screen.** One workspace in a browser tab, on a phone as an installed PWA, and in the desktop app:
   the same tabs, panes and layout.
-- **Agents that say when they need you.** The sidebar keeps every session under _needs you_, _working_ or _idle_, so you read
-  the list instead of cycling through panes looking for the one that stopped.
+- **Agents that say when they need you.** The sidebar groups every session as _needs you_, _working_, _idle_, _done_ or
+  _offline_, so you read the list instead of cycling through panes looking for the one that stopped.
 - **One window, many machines.** A host added over ssh, or through the relay with `hc machine add --via`, appears next to your
   local ones as `b/t1`, `b/t2`, … with its own reconnect.
 - **An encrypted pipe, not a proxy.** Each client holds its own Noise session with the host: IKpsk2 with the pairing code's
@@ -54,7 +51,7 @@ crosses the network is a Noise session, not a remote-desktop stream.
 - **Installs and stays installed.** The desktop app starts the host and `hc` on the computer it runs on, starts the host again
   if it stops, and installs herdr-core for this user when it is missing or too old.
 
-| Needs you, day theme                                                                                                                          | The same workspace on a phone                                                                                                                                   |
+| Needs you, day theme                                                                                                                          | A terminal on a phone                                                                                                                                           |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | <img src="docs/design/app/agents-attention-1440-day.png" width="620" alt="The agent list in the day theme, one agent waiting for approval" /> | <img src="docs/design/app/mobile-keys-bar-390-night.png" width="210" alt="A terminal on a phone, with a key bar for ctrl, shift, tab, esc, arrows and paste" /> |
 
@@ -67,13 +64,13 @@ app; and the **relay** between them, which is already deployed. Install the clie
 
 [Releases](https://github.com/sisyphuslabs/doriterm/releases/latest) carries the app for every supported platform:
 
-| Platform                          | File                                                                                |
-| --------------------------------- | ----------------------------------------------------------------------------------- |
-| macOS, Apple silicon              | `doriface-<version>-arm64.dmg`, or `.zip`                                           |
-| macOS, Intel                      | `doriface-<version>-x64.dmg`, or `.zip`                                             |
-| Windows, x64 and arm64            | `doriface-<version>-x64-setup.exe`, `doriface-<version>-arm64-setup.exe`            |
-| Linux, x64 and arm64              | `doriface-<version>-x86_64.AppImage`, `-arm64.AppImage`, `_amd64.deb`, `_arm64.deb` |
-| The web client, to serve yourself | `doriface-web-<version>.zip`                                                        |
+| Platform                          | File                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| macOS, Apple silicon              | `doriface-<version>-arm64.dmg`, or `doriface-<version>-arm64-mac.zip`                                 |
+| macOS, Intel                      | `doriface-<version>-x64.dmg`, or `doriface-<version>-x64-mac.zip`                                     |
+| Windows, x64 and arm64            | `doriface-<version>-x64-setup.exe`, `doriface-<version>-arm64-setup.exe`                              |
+| Linux, x64 and arm64              | `doriface-<version>-x86_64.AppImage`, `-arm64.AppImage`, `doriface_<version>_amd64.deb`, `_arm64.deb` |
+| The web client, to serve yourself | `doriface-web-<version>.zip`                                                                          |
 
 The macOS app has been signed with a Developer ID certificate and notarized since v0.1.1, and its disk image is stapled; v0.1.0
 was only ad-hoc signed, so macOS blocks its first open until you choose **Open Anyway** in System Settings > Privacy &
@@ -84,11 +81,11 @@ The desktop app starts a host on the computer it runs on, so that computer's ter
 
 ### In a browser
 
-The web client is the same app. Open [doriterm.com](https://doriterm.com), and use your browser's "install" or "add to home
-screen" if you want it in a window of its own; an installed PWA opens full screen and precaches its shell, so a dropped
-network does not empty the window. A release build reaches your machines through the relay only — a development build
-(`bun run --cwd apps/web dev`) also offers "Loopback dev" in Settings > Connections, with the token from
-`doriface-host --print-token`.
+The web client is the same app and needs no install: it is live at [doriface.omo.dev](https://doriface.omo.dev), and moves to
+doriterm.com when that domain lands. Use your browser's "install" or "add to home screen" if you want it in a window of its
+own; an installed PWA opens full screen and precaches its shell, so a dropped network does not empty the window. A release
+build reaches your machines through the relay only — a development build (`bun run --cwd apps/web dev`) also offers "Loopback
+dev" in Settings > Connections, with the token from `doriface-host --print-token`.
 
 Chrome or Edge 119, Safari 17.4 (iOS 17.4), or Firefox 121 and newer. An older browser gets an "Update your browser" screen
 naming what it lacks instead of the app (`apps/web/src/baseline.ts`).
@@ -103,13 +100,13 @@ bun install
 bun run --cwd apps/host start --print-token   # the gateway on 127.0.0.1:7766, and its client token
 ```
 
-`doriface-host --install-hc` installs herdr-core into `~/.local/bin` from its checksummed release when the machine has none.
-The host keeps its keys and the devices it paired in `$XDG_STATE_HOME/doriface-host` (or `--state-dir`), and
-`doriface-host devices list` and `doriface-host devices revoke <id>` manage what is paired.
+`doriface-host --install-hc` installs or updates herdr-core in `~/.local/bin` from its checksummed release, then exits. The host
+keeps its keys and the devices it paired in `$XDG_STATE_HOME/doriface-host` (or `--state-dir`), and `doriface-host devices
+list` and `doriface-host devices revoke <id>` manage what is paired.
 
 ## Pairing, and how the relay fits
 
-A client reaches a host through the relay, in a Noise session the relay cannot read:
+A client reaches another machine's host through the relay, in a Noise session the relay cannot read:
 
 ```
 browser / PWA / desktop ──┐                         ┌── doriface-host ── hc connect ── herdr-core
@@ -136,24 +133,26 @@ Other machines join the same way, through the same relay:
 hc machine add --via 'doriface-host connect <B hostId>' --name b   # B's terminals appear as b/t1, b/t2, …
 ```
 
-Every client reaches a host through the relay, and the host also serves the contract's direct path (`/v1/e2ee` on its LAN
-listener), though no shipped client dials it. On the same machine the host serves a token-gated, loopback-only
-`ws://127.0.0.1:7766/v1/hc`, which is how the desktop app talks to its own local host. The host never parses what `hc` says —
-it pipes the stream — so the client SDK speaks herdr-core's protocol itself and a future native app can reuse it. The full
-design is in [docs/architecture.md](docs/architecture.md), and the wire contract every package is built against is
-[docs/transport.md](docs/transport.md).
+A client reaches another machine's host through the relay, and the host also serves the contract's direct path — `/v1/e2ee`
+is mounted on the main listener and on `--lan-listen` when that is given — though no shipped client dials it. On the same
+machine the host serves a token-gated, loopback-only `ws://127.0.0.1:7766/v1/hc`, which is how the desktop app talks to its own
+local host. The host never parses what `hc` says — it pipes the stream — so the client SDK speaks herdr-core's protocol itself
+and a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire contract
+every package is built against is [docs/transport.md](docs/transport.md).
 
 ## Security
 
-Every byte past loopback is Noise-authenticated: `Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` when the pairing code's preshared key
-is used, `Noise_IK_25519_ChaChaPoly_BLAKE2s` after that, with a ChaCha20-Poly1305 record layer that rekeys every 2^20
-messages.
+Every byte between a client and a host — through the relay, or over `/v1/e2ee` — is Noise-authenticated:
+`Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s` when the pairing code's preshared key is used, `Noise_IK_25519_ChaChaPoly_BLAKE2s`
+after that, with a ChaCha20-Poly1305 record layer that rekeys every 2^20 messages.
 
-- **The relay forwards records it cannot read.** It can drop, delay, replay or reorder them, and the session fails; it cannot
-  read or forge `hc` bytes, impersonate either side, or splice two sessions.
+- **The relay forwards records it cannot read.** It can drop, replay or reorder them — a delayed record in order fails
+  nothing — and when it does, the session fails: it cannot read or forge `hc` bytes, impersonate either side, or splice two
+  sessions. Its known leverage is the pairing window: the device name rides in IKpsk2 msg1 in the clear, and a code allows one
+  online preshared-key guess.
 - **What the relay does see:** the `hostId`, source addresses, timing and sizes, session ids, the pairing slots and their
-  public keys, the device name in the first IKpsk2 message, and — for a paired session — which host dialled which, so it learns
-  the shape of your mesh. Nothing a terminal prints.
+  public keys, the device name in the first IKpsk2 message, and — for a session a host proves with a relay pass, which is the
+  machine-to-machine dials — which host dialled which, so it learns the shape of your mesh. Nothing a terminal prints.
 - **Keys stay on your machines.** The host's Ed25519 identity and X25519 static live in its state directory, mode 0600, beside
   the paired-device store; the web client's device key is non-extractable wherever WebCrypto allows, which stops export but not
   same-origin use of the key.
@@ -191,7 +190,7 @@ bun run --cwd apps/host start --print-token   # the host gateway on 127.0.0.1:77
 bun run --cwd apps/web dev                    # the web client
 bun run --cwd apps/desktop start              # the desktop app
 bun run --cwd packages/ui showcase            # every component and screen mockup
-bun run capture:readme                        # recapture the screenshots in this file, from the real build
+bun run capture:readme                        # recapture the workspace screenshots in this file, from the real build
 ```
 
 `bun run --cwd apps/web test:e2e` and `bun run --cwd apps/desktop test:e2e` run the Playwright suites against a real `hc`.
@@ -200,7 +199,9 @@ bun run capture:readme                        # recapture the screenshots in thi
 `bun run check` does not need it. `bun run relay:dev` serves that relay locally.
 
 Pull requests into `dev` are gated by `Check`, `Relay e2e` and `Web e2e`. [CONTRIBUTING.md](CONTRIBUTING.md) covers what each
-one runs, and what a pull request from a fork does about `Relay e2e`, which needs a secret that forks never receive.
+one runs, and what a pull request from a fork does about `Relay e2e`, which needs a secret that forks never receive. The
+platform jobs — `Desktop`, `Desktop (macOS)`, `Windows private state` on both architectures — run after the merge, on the push
+to `dev`, and never on a pull request; `Ghostty wasm provenance` runs on every event.
 
 ## Contributing
 
@@ -220,11 +221,12 @@ The [release workflow](.github/workflows/release.yml) builds every file on GitHu
 
 1. Set `version` there and merge it.
 2. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The workflow builds everything into a draft release, launches the
-   uploaded Linux AppImage and macOS app, then publishes the release.
+   uploaded Linux AppImage and macOS app, installs the Windows installer, then publishes the release.
 
 A tag that does not match `apps/desktop/package.json` fails the run. A prerelease of that version, such as `vX.Y.Z-rc.1`, is
-accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with a
-version such as `X.Y.Z-rc.1`: it builds the same files into a draft release and leaves it a draft.
+accepted and published as a prerelease. To try the pipeline without publishing, run the workflow from the Actions tab with
+that version plus a prerelease suffix, such as `0.1.2-rc.1`: it builds the same files into a draft release and leaves it a
+draft.
 
 ## Design
 
