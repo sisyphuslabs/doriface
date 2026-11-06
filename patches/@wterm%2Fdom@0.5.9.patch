@@ -1,5 +1,5 @@
 diff --git a/dist/input.d.ts b/dist/input.d.ts
-index 3bc52a7..8b31842 100644
+index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02f1804d30 100644
 --- a/dist/input.d.ts
 +++ b/dist/input.d.ts
 @@ -20,6 +20,7 @@ export declare class InputHandler {
@@ -23,27 +23,114 @@ index 3bc52a7..8b31842 100644
      private handleCompositionEnd;
      private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 78a86ff..3740d5a 100644
+index 78a86ffd96eec03222777f40e9db6a0561684c3f..ca0447617d18967c418aba8d8fe551cc510a9fff 100644
 --- a/dist/input.js
 +++ b/dist/input.js
-@@ -86,6 +86,8 @@ export class InputHandler {
+@@ -70,6 +70,12 @@ const COMPOSITION_INPUT_DEDUP_MS = 250;
+ const SCROLLBACK_BOTTOM_TOLERANCE = 5;
+ // iOS needs a deletable value to keep emitting input events for held Backspace.
+ const TOUCH_INPUT_PLACEHOLDER = "\u200b";
++// A Hangul letter or syllable: WebKit's Korean keyboards compose these in the field as plain text edits, with no
++// composition events, so the field has to keep them until the syllable is finished.
++const HANGUL = /[\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\uac00-\ud7a3\ud7b0-\ud7ff]$/u;
++function isHangulKey(e) {
++    return !e.ctrlKey && !e.metaKey && !e.altKey && Array.from(e.key).length === 1 && HANGUL.test(e.key);
++}
+ function isAltGraphTextInput(event, pressedModifiers) {
+     if (event.metaKey ||
+         !(event.getModifierState("AltGraph") ||
+@@ -86,6 +92,12 @@ export class InputHandler {
          this.composing = false;
          this.compositionWidth = 0;
          this.recentCompositionCommit = null;
 +        // The preedit the host took mid-composition, until the browser reports that composition's end.
 +        this.takenComposition = null;
++        // WebKit's Korean input without composition events: what of the field's run of Hangul was sent, and the
++        // syllable still being typed after it, which is drawn at the cursor and sent once the next one starts.
++        this.localSent = "";
++        this.localPreedit = "";
          // The first native deletion mirrors the Backspace already sent on keydown.
          this.suppressNextTouchDeleteInput = false;
          this.mouseButtons = 0;
-@@ -462,6 +464,7 @@ export class InputHandler {
+@@ -157,6 +169,7 @@ export class InputHandler {
+         };
+         this._onBlur = () => {
+             this.tabExitArmed = false;
++            this.commitLocalPreedit();
+             this.focused = false;
+             this.composing = false;
+             this.recentCompositionCommit = null;
+@@ -224,10 +237,12 @@ export class InputHandler {
+         this.textarea.focus({ preventScroll: true });
+     }
+     syncInputPosition() {
+-        if (this.composing || this.touchPrimary)
++        if (this.composing || this.touchPrimary || this.localPreedit !== "")
+             this.positionTextarea();
+     }
+     destroy() {
++        // A syllable still being typed belongs to this terminal: it is sent before the field goes.
++        this.commitLocalPreedit();
+         this.accessibility.destroy();
+         this.textarea.removeEventListener("keydown", this._onKeyDown);
+         this.textarea.removeEventListener("keyup", this._onKeyUp);
+@@ -259,6 +274,19 @@ export class InputHandler {
+             this.suppressedKeyUps.add(keyId);
+             return;
+         }
++        // An iPhone or iPad Korean keyboard names the jamo in its keydown and then composes it in the field: the field
++        // must get it, or the next jamo has nothing to join. Backspace inside a syllable still being typed takes back a
++        // jamo of it, which is the field's edit too.
++        if (isHangulKey(e) ||
++            (this.localPreedit !== "" &&
++                e.key === "Backspace" &&
++                !e.ctrlKey &&
++                !e.metaKey &&
++                !e.altKey)) {
++            this.tabExitArmed = false;
++            this.suppressedKeyUps.add(keyId);
++            return;
++        }
+         this.recentCompositionCommit = null;
+         const bridge = this.getBridge();
+         const kittyFlags = bridge?.kittyKeyboardFlags?.() ?? 0;
+@@ -371,6 +399,8 @@ export class InputHandler {
+         if (kittyFlags !== 0) {
+             const seq = encodeKittyKey(e, kittyFlags, e.repeat ? "repeat" : "press", this.pressedModifiers, bridge?.cursorKeysApp?.() ?? false);
+             if (seq) {
++                if (!physicalModifier)
++                    this.commitLocalPreedit();
+                 if (!physicalModifier)
+                     this.selectionActions?.clearSelection();
+                 if (nativeTouchDelete)
+@@ -385,6 +415,7 @@ export class InputHandler {
+         }
+         const seq = this.keyToSequence(e);
+         if (seq) {
++            this.commitLocalPreedit();
+             this.selectionActions?.clearSelection();
+             if (nativeTouchDelete)
+                 this.suppressNextTouchDeleteInput = true;
+@@ -421,6 +452,9 @@ export class InputHandler {
+         this.recentCompositionCommit = null;
+         this.suppressNextTouchDeleteInput = false;
+         const text = e.clipboardData?.getData("text");
++        // The syllable being typed goes before the paste, and the field starts over, so a paste the browser inserts
++        // itself (below) carries only the pasted text.
++        this.commitLocalPreedit();
+         // Some mobile browsers leave clipboardData empty but insert the paste
+         // into the textarea. Let that input event carry the text instead.
+         if (!text)
+@@ -462,6 +496,8 @@ export class InputHandler {
      }
      handleCompositionStart() {
          this.tabExitArmed = false;
++        this.commitLocalPreedit();
 +        this.takenComposition = null;
          this.prepareComposition();
          this.composing = true;
          this.recentCompositionCommit = null;
-@@ -472,11 +475,18 @@ export class InputHandler {
+@@ -472,11 +508,22 @@ export class InputHandler {
          this.positionTextarea();
          const s = this.textarea.style;
          s.opacity = "1";
@@ -59,13 +146,17 @@ index 78a86ff..3740d5a 100644
      handleCompositionEnd(e) {
 +        const taken = this.takenComposition;
 +        this.takenComposition = null;
-+        // A composition the host already took ends with the text it took (WebKit) or none (Blink); either was sent.
-+        if (taken !== null && !this.composing && (!e.data || e.data === taken))
++        // The end of a composition the host already took carries the text it took, or none: that text was sent. The
++        // field is still cleared, in case the input method put the text back before ending.
++        if (taken !== null && !this.composing && (!e.data || e.data === taken)) {
++            this.hideComposition();
++            this.resetInputValue();
 +            return;
++        }
          this.composing = false;
          this.hideComposition();
          this.resetInputValue();
-@@ -485,6 +495,26 @@ export class InputHandler {
+@@ -485,6 +532,31 @@ export class InputHandler {
              this.onData(e.data);
          }
      }
@@ -75,6 +166,11 @@ index 78a86ff..3740d5a 100644
 +     * input method's composition, and that composition's end sends nothing.
 +     */
 +    takeComposition() {
++        if (!this.composing && this.localPreedit !== "") {
++            const pending = this.localPreedit;
++            this.endLocalRun();
++            return pending;
++        }
 +        if (!this.composing)
 +            return "";
 +        const raw = this.textarea.value;
@@ -92,7 +188,102 @@ index 78a86ff..3740d5a 100644
      hideComposition() {
          this.compositionWidth = 0;
          const s = this.textarea.style;
-@@ -821,7 +851,7 @@ export class InputHandler {
+@@ -502,7 +574,7 @@ export class InputHandler {
+         if (!bridge || !cellSize || !firstRow || !bridge.getCursor) {
+             this.textarea.style.left = "0px";
+             this.textarea.style.top = "0px";
+-            if (this.composing) {
++            if (this.composing || this.localPreedit !== "") {
+                 this.textarea.style.width = `${Math.max(1, this.compositionWidth)}px`;
+                 this.textarea.style.height = `${cellSize?.rowHeight ?? 17}px`;
+             }
+@@ -519,7 +591,7 @@ export class InputHandler {
+         const s = this.textarea.style;
+         s.left = `${rowRect.left - hostRect.left - this.element.clientLeft + this.element.scrollLeft + col * charWidth}px`;
+         s.top = `${rowRect.top - hostRect.top - this.element.clientTop + this.element.scrollTop + row * rowHeight}px`;
+-        if (this.composing) {
++        if (this.composing || this.localPreedit !== "") {
+             s.width = `${Math.min((bridge.getCols() - col) * charWidth, Math.max(charWidth, this.compositionWidth))}px`;
+             s.height = `${rowHeight}px`;
+         }
+@@ -536,6 +608,57 @@ export class InputHandler {
+             : charWidth;
+         this.positionTextarea();
+     }
++    /** Sends the syllable still being typed in a WebKit Korean run, and ends the run. */
++    commitLocalPreedit() {
++        if (this.localPreedit !== "")
++            this.onData(this.localPreedit);
++        if (this.localSent !== "" || this.localPreedit !== "")
++            this.endLocalRun();
++    }
++    endLocalRun() {
++        this.localSent = "";
++        this.localPreedit = "";
++        this.hideComposition();
++        this.resetInputValue();
++    }
++    /**
++     * The field after a WebKit Korean keyboard's edit, its text kept so the keyboard can join the next jamo to it: text
++     * the program already has and the edit took back is erased there, everything up to the last Hangul letter is sent,
++     * and that letter stays as the syllable being typed. A run that ends in anything else is sent whole and the field
++     * starts over.
++     */
++    editLocalRun(value) {
++        const sent = Array.from(this.localSent);
++        const now = Array.from(value);
++        let kept = 0;
++        while (kept < sent.length && kept < now.length && sent[kept] === now[kept])
++            kept += 1;
++        for (let erased = kept; erased < sent.length; erased += 1)
++            this.sendTouchDelete();
++        const rest = now.slice(kept);
++        const last = rest.at(-1);
++        const pending = last !== undefined && HANGUL.test(last) ? last : "";
++        const commit = (pending === "" ? rest : rest.slice(0, -1)).join("");
++        if (commit !== "") {
++            this.selectionActions?.clearSelection();
++            this.onData(commit);
++        }
++        if (pending === "") {
++            this.endLocalRun();
++            return;
++        }
++        this.localSent = sent.slice(0, kept).join("") + commit;
++        this.localPreedit = pending;
++        const s = this.textarea.style;
++        s.opacity = "1";
++        s.color = "var(--term-preedit-fg, var(--term-fg, currentColor))";
++        s.background = "var(--term-preedit-bg, var(--term-bg, transparent))";
++        s.caretColor = "var(--term-preedit-fg, var(--term-fg, currentColor))";
++        // A syllable takes two cells; one more is left for the caret. Only the end of the field shows.
++        this.compositionWidth = 3 * (this.getCellSize()?.charWidth ?? 0);
++        this.positionTextarea();
++        this.textarea.scrollLeft = this.textarea.scrollWidth;
++    }
+     resetInputValue() {
+         this.textarea.value = this.touchPrimary ? TOUCH_INPUT_PLACEHOLDER : "";
+         if (this.touchPrimary)
+@@ -565,6 +688,18 @@ export class InputHandler {
+         const value = this.touchPrimary && rawValue.startsWith(TOUCH_INPUT_PLACEHOLDER)
+             ? rawValue.slice(TOUCH_INPUT_PLACEHOLDER.length)
+             : rawValue;
++        const repeatsCommit = this.recentCompositionCommit !== null &&
++            value === this.recentCompositionCommit.text &&
++            performance.now() - this.recentCompositionCommit.at < COMPOSITION_INPUT_DEDUP_MS;
++        if (inputType !== "insertFromPaste" &&
++            (this.localSent !== "" ||
++                this.localPreedit !== "" ||
++                (!repeatsCommit && inputType !== "deleteContentBackward" && HANGUL.test(value)))) {
++            this.recentCompositionCommit = null;
++            this.suppressNextTouchDeleteInput = false;
++            this.editLocalRun(value);
++            return;
++        }
+         this.resetInputValue();
+         const recent = this.recentCompositionCommit;
+         this.recentCompositionCommit = null;
+@@ -821,7 +956,7 @@ export class InputHandler {
                  return other;
          }
          if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -101,7 +292,7 @@ index 78a86ff..3740d5a 100644
              if (control !== null)
                  return control;
              if (e.key === "Backspace")
-@@ -855,6 +885,17 @@ export class InputHandler {
+@@ -855,6 +990,17 @@ export class InputHandler {
          return null;
      }
  }
@@ -120,7 +311,7 @@ index 78a86ff..3740d5a 100644
   * xterm modifyOtherKeys level 2: keys whose legacy encoding loses their
   * modifiers become `CSI 27 ; modifier ; code ~`. Like xterm, and unlike
 diff --git a/dist/renderer.d.ts b/dist/renderer.d.ts
-index dbff026..b9be38a 100644
+index dbff0264a6d9d0fe4feea8d7de0ef8c617216b8b..b9be38a24246578ff2713e1e8798a5a8385bb88f 100644
 --- a/dist/renderer.d.ts
 +++ b/dist/renderer.d.ts
 @@ -114,6 +114,8 @@ export declare class Renderer {
@@ -133,7 +324,7 @@ index dbff026..b9be38a 100644
      invalidateColors(): void;
      /** Replaces decorations only, preserving native text selection. */
 diff --git a/dist/renderer.js b/dist/renderer.js
-index 077910e..7b0dbf3 100644
+index 077910eeb3822f38089dd3ad6a9f345ef2a2a38a..7b0dbf34c37f51d6bc357688567a895755d386c3 100644
 --- a/dist/renderer.js
 +++ b/dist/renderer.js
 @@ -158,8 +158,42 @@ function cellSpanPart(className, style, text) {
@@ -274,7 +465,7 @@ index 077910e..7b0dbf3 100644
      invalidateColors() {
          this.colorsChanged = true;
 diff --git a/dist/wterm.d.ts b/dist/wterm.d.ts
-index a6746f4..7ef2bfc 100644
+index a6746f499859ba9da2d7884dfd71694205c6d819..7ef2bfcb6c94d74a4e6ff9aec76a6e417fe1467c 100644
 --- a/dist/wterm.d.ts
 +++ b/dist/wterm.d.ts
 @@ -131,6 +131,17 @@ export declare class WTerm {
@@ -296,10 +487,38 @@ index a6746f4..7ef2bfc 100644
      /**
       * Hands the core the theme colors the page's CSS resolves to, unless the
 diff --git a/dist/wterm.js b/dist/wterm.js
-index 6f31f07..7c5a441 100644
+index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..fffa81453596df9f2d711fca64271d67c61c24cb 100644
 --- a/dist/wterm.js
 +++ b/dist/wterm.js
-@@ -418,6 +418,7 @@ export class WTerm {
+@@ -131,6 +131,11 @@ export class WTerm {
+         };
+         this._shouldScrollToBottom = false;
+         this._pinnedToBottom = true;
++        // The user moved the view off the bottom (a scroll, a search reveal, a
++        // prompt jump): only that stops a view from following output. A change
++        // of geometry (a refit, a row height) can leave the element short of its
++        // bottom for a moment, and must not.
++        this._scrolledAway = false;
+         this._scrollbackDiscardedCount = 0;
+         this._programmaticScrollTop = null;
+         this._pendingResizeScrollTop = null;
+@@ -227,6 +232,7 @@ export class WTerm {
+                 const match = this._search.matches[this.getSearchState().activeIndex];
+                 if (match) {
+                     this._shouldScrollToBottom = false;
++                    this._scrolledAway = true;
+                     this._pendingResizeScrollTop = null;
+                     this._setScrollTop((match.start.row + 0.5) * this._rowHeight -
+                         this.element.clientHeight / 2);
+@@ -349,6 +355,7 @@ export class WTerm {
+             }
+             this._programmaticScrollTop = null;
+             this._shouldScrollToBottom = false;
++            this._scrolledAway = !atBottom;
+             this._scheduleRender();
+         };
+         this.element.addEventListener("scroll", this._onScroll, { passive: true });
+@@ -418,6 +425,7 @@ export class WTerm {
                  maxImageHeight: this.maxImageHeight,
                  renderer: this._rendererOption,
              });
@@ -307,7 +526,7 @@ index 6f31f07..7c5a441 100644
              this.renderer.setup(this.cols, this.rows);
              this.input = new InputHandler(this.element, (data, preserveScroll = false) => this._deliverInput(data, preserveScroll), () => this.bridge, () => this._charWidth > 0 && this._rowHeight > 0
                  ? { charWidth: this._charWidth, rowHeight: this._rowHeight }
-@@ -453,7 +454,6 @@ export class WTerm {
+@@ -453,7 +461,6 @@ export class WTerm {
              if (!this.autoResize) {
                  this._lockHeight();
              }
@@ -315,7 +534,15 @@ index 6f31f07..7c5a441 100644
              this._initialRender();
              this._registerWebMCP();
              if (this.cols !== initialCols || this.rows !== initialRows)
-@@ -508,6 +508,29 @@ export class WTerm {
+@@ -471,6 +478,7 @@ export class WTerm {
+         return this._pinnedToBottom;
+     }
+     _scrollToBottom() {
++        this._scrolledAway = false;
+         this._setScrollTop(this.element.scrollHeight);
+     }
+     _setScrollTop(value, frame) {
+@@ -508,6 +516,29 @@ export class WTerm {
              throw new Error("This terminal core cannot change its scrollback");
          this.bridge.setScrollbackLines(this._scrollbackLines);
      }
@@ -345,3 +572,58 @@ index 6f31f07..7c5a441 100644
      /**
       * Apply host colors without writing terminal input or restarting the session.
       * Pass `null` to drop them and answer color queries from the page's CSS again.
+@@ -553,7 +584,7 @@ export class WTerm {
+         this.renderer?.beforeMutation(this.bridge);
+         if (this.debug)
+             this.debug.traceWrite(data);
+-        this._shouldScrollToBottom = this._pinnedToBottom;
++        this._shouldScrollToBottom = this._pinnedToBottom || !this._scrolledAway;
+         // Answer theme color queries with the colors the page shows right now.
+         if (mayQueryThemeColors(data))
+             this._syncCssThemeColors();
+@@ -732,9 +763,17 @@ export class WTerm {
+         this._rectangleDrag.cancel();
+         this._historySelection.invalidate();
+         this.renderer?.beforeMutation(this.bridge);
++        const atBottom = this._isScrolledToBottom();
+         this._shouldScrollToBottom =
+-            this._pendingResizeScrollTop === null && this._isScrolledToBottom();
++            this._pendingResizeScrollTop === null && (atBottom || !this._scrolledAway);
++        // Ghostty ends synchronized output on a resize, but the program is still
++        // writing the update it opened: reopened, the screen keeps showing the
++        // last finished frame until the program ends it (or the hold times out),
++        // instead of the frame half drawn.
++        const synchronizedBefore = this.bridge.synchronizedOutput?.() ?? false;
+         this.bridge.resize(cols, rows);
++        if (synchronizedBefore && !(this.bridge.synchronizedOutput?.() ?? false))
++            this.bridge.writeString("\x1b[?2026h");
+         this._outputAnnouncements.invalidate();
+         this.cols = this.bridge.getCols();
+         this.rows = this.bridge.getRows();
+@@ -798,6 +837,7 @@ export class WTerm {
+             return false;
+         const before = this.element.scrollTop;
+         this._shouldScrollToBottom = false;
++        this._scrolledAway = true;
+         this._searchReveal = false;
+         this._pendingResizeScrollTop = target * this._rowHeight;
+         this._doRender();
+@@ -1576,14 +1616,15 @@ export class WTerm {
+         const height = this._visibleContentHeight(contentHeight);
+         const newCols = Math.max(1, Math.floor(containerRect.width / charWidth));
+         const newRows = Math.max(1, Math.floor(height / rowHeight));
+-        const atBottom = this._isScrolledToBottom();
++        const following = this._isScrolledToBottom() || !this._scrolledAway;
+         this._setKeyboardInset(contentHeight - height);
+         if (newCols !== this.cols || newRows !== this.rows) {
+             this.resize(newCols, newRows);
+         }
+-        else if (atBottom) {
++        // A following view stays on its bottom now: the keyboard's spacer just
++        // changed the element's height, and the next paint is a frame away.
++        if (following)
+             this._scrollToBottom();
+-        }
+     }
+     destroy() {
+         this._destroyed = true;
