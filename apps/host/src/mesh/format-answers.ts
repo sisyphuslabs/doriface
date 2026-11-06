@@ -8,10 +8,6 @@ export class FormatAnswers {
     this.#reads.set(hostId, reads);
   }
 
-  forget(hostId: string): void {
-    this.#reads.delete(hostId);
-  }
-
   all(): readonly FormatSupport[] {
     return [...this.#reads].map(([hostId, reads]) => ({ hostId, reads }));
   }

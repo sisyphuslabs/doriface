@@ -8,6 +8,7 @@ import type { MeshStore } from "../state/mesh.ts";
 import type { LineLink } from "./lines.ts";
 import type { MeshView } from "./mesh-view.ts";
 import { MemberDialer } from "./member-dialer.ts";
+import { machinesOf } from "./mesh-view.ts";
 import { MemberBook, StoredMesh } from "./stored-mesh.ts";
 import { RevokedLast } from "./revoked-last.ts";
 import { Claims } from "./claims.ts";
@@ -296,9 +297,20 @@ export class Gossip implements SyncHost {
     if (this.#sessions.get(session.peer) === session) this.#sessions.delete(session.peer);
   }
 
-  /** Members that are owed records: their confirmed heads do not cover this host's set. */
+  /**
+   * Members that are owed records: their confirmed heads do not cover this host's set.
+   *
+   * A client that is still a member is never owed one, because it is refused on the mesh stream and could not take delivery.
+   * A client that has left or been revoked is owed its revoke like anyone else, so only CURRENT clients are dropped here.
+   */
   owed(): readonly MemberEntry[] {
-    return this.#known.all().filter((member) => member.signPub !== this.self && this.owedCount(member.signPub) > 0);
+    const clients = new Set(
+      this.#view.members.filter((member) => member.kind === "client").map((member) => member.signPub),
+    );
+    return this.#known
+      .all()
+      .filter((member) => member.signPub !== this.self && !clients.has(member.signPub))
+      .filter((member) => this.owedCount(member.signPub) > 0);
   }
 
   /** The dial policy's wake-up: deliver what the member is owed. */
@@ -351,6 +363,6 @@ export class Gossip implements SyncHost {
   }
 
   #members(): readonly MemberEntry[] {
-    return this.#view.members.filter((member) => member.signPub !== this.self);
+    return machinesOf(this.#view).filter((member) => member.signPub !== this.self);
   }
 }

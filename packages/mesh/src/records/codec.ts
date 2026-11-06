@@ -144,6 +144,9 @@ function cardBodyOf(body: JsonObject): CardBody | undefined {
   if (!isKey(signPub) || !isKey(noisePub) || (devicePub !== undefined && !isKey(devicePub))) {
     return undefined;
   }
+  // A client is reached by its session key and has no Noise line of its own to dial from, so a client card without a
+  // devicePub would name a member nothing can reach (design of #942). A machine may carry one or not.
+  if (memberKind === "client" && devicePub === undefined) return undefined;
   if (typeof mesh !== "string" || typeof inviter !== "string" || typeof nonce !== "string") return undefined;
   if (!decodes(nonce, 16) || typeof hostId !== "string" || typeof hcId !== "string") return undefined;
   if (typeof name !== "string" || !checkName(name)) return undefined;

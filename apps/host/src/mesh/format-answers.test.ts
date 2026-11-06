@@ -18,11 +18,4 @@ describe("FormatAnswers", () => {
     answers.record("a", [2, 3]);
     expect(answers.all()).toEqual([{ hostId: "a", reads: [2, 3] }]);
   });
-
-  test("a member that left takes its answer with it", () => {
-    const answers = new FormatAnswers();
-    answers.record("a", [3]);
-    answers.forget("a");
-    expect(answers.all()).toEqual([]);
-  });
 });

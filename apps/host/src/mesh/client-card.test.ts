@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { signCard, verifyCard } from "@doriface/mesh";
 import { cardBody } from "../state/mesh.ts";
-import { cardFor, machine, signPubOf } from "../testing/mesh-history.ts";
+import { cardFor, deviceOf, machine, signPubOf } from "../testing/mesh-history.ts";
 
 const a = machine("a");
 const b = machine("b");
-const own = { name: a.name, hcId: a.hcId };
+const own = { name: a.name, hcId: a.hcId, devicePub: deviceOf(a) };
 
 describe("a card's member kind", () => {
   test("a version 1 card is a machine, because that is all the format ever meant", () => {
@@ -22,6 +22,14 @@ describe("a card's member kind", () => {
     const parsed = verifyCard(card);
     expect(parsed?.kind).toBe("client");
     expect(parsed?.v).toBe(2);
+  });
+
+  test("a version 2 client card without a session key is refused, because nothing could reach that member", () => {
+    const card = signCard(
+      cardBody(a.identity, { name: a.name, hcId: a.hcId }, "mesh-1", signPubOf(b), undefined, "client"),
+      a.identity.sign.secretKey,
+    );
+    expect(verifyCard(card)).toBeUndefined();
   });
 
   test("a version 2 card that names no kind is refused rather than read as a machine", () => {

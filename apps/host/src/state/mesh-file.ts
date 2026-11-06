@@ -112,6 +112,18 @@ export function parseMeshFile(value: unknown): MeshFile {
   };
 }
 
+/** The outer format a reader must know for a client to mean anything: before it, a client's kind is dropped. */
+export const CLIENT_FORMAT = 3;
+
+/**
+ * The version to write a file with. A client member needs {@link CLIENT_FORMAT}, because a reader that only knows version 2
+ * drops `kind` and then authorizes the client's Noise key as a machine that dials the mesh stream: the exact reversal this
+ * work exists to prevent, on a host that was rolled back (design of #942, section 7.1).
+ */
+export const writeVersionOf = (
+  index: { readonly members: readonly { readonly kind?: string | undefined }[] } | undefined,
+): number => (index?.members.some((member) => member.kind === "client") === true ? CLIENT_FORMAT : WRITE_VERSION);
+
 /** A new mesh's first file, in the format this build writes today. */
 export const newMeshFile = (meshId: string, records: readonly Signed[], selfN: number): MeshFile => ({
   version: WRITE_VERSION,

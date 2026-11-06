@@ -54,3 +54,35 @@ describe("a client member in the authorization index", () => {
     expect(index.client("noise-box")).toBeUndefined();
   });
 });
+
+describe("a revoked client is cleaned like any other member", () => {
+  test("its session key is no longer a client's, so a paired entry holding it is removed", () => {
+    const gone = member("old-phone", "client");
+    const index = new AuthorizeIndex({
+      generation: 1,
+      members: [],
+      overCap: [],
+      revoked: [{ signPub: gone.signPub, hostId: gone.hostId, keys: [gone.noisePub, gone.devicePub] }],
+      superseded: [],
+      named: [],
+    });
+    expect(index.client(gone.devicePub)).toBeUndefined();
+    expect(index.cleanup().keys.has(gone.devicePub)).toBe(true);
+  });
+
+  test("a machine's key stays in the cleanup even while a client's does not, so the roster still wins for machines", () => {
+    const phone = member("phone", "client");
+    const box = member("box");
+    const index = new AuthorizeIndex({
+      generation: 1,
+      members: [phone, box],
+      overCap: [],
+      revoked: [],
+      superseded: [],
+      named: [],
+    });
+    const keys = index.cleanup().keys;
+    expect(keys.has(phone.devicePub)).toBe(false);
+    expect(keys.has(box.noisePub)).toBe(true);
+  });
+});
