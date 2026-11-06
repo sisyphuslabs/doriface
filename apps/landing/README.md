@@ -1,5 +1,7 @@
 # doriterm.com
 
+**Your devices. One terminal.** Every machine you own, linked through an end-to-end encrypted mesh.
+
 The landing page for doriterm.com. The app itself is `apps/web`, served at app.doriterm.com.
 
 ```sh
