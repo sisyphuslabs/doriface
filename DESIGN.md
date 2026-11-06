@@ -1,12 +1,12 @@
-# doriface Design System
+# Doriterm Design System
 
-The single source of truth for doriface's look and behaviour. Tokens live in `packages/ui/src/styles`, the theme engine in `packages/ui/src/theme`, primitives in `packages/ui/src/components`. The showcase (`bun run --filter @doriface/ui showcase`) renders every primitive in every state and every screen below; `bun run --filter @doriface/ui capture` writes `docs/design/`.
+The single source of truth for Doriterm's look and behaviour. Tokens live in `packages/ui/src/styles`, the theme engine in `packages/ui/src/theme`, primitives in `packages/ui/src/components`. The showcase (`bun run --filter @doriface/ui showcase`) renders every primitive in every state and every screen below; `bun run --filter @doriface/ui capture` writes `docs/design/`.
 
 ## 0. Research Log
 
 - Grounding: Apple HIG digests (color, dark mode, typography, layout, accessibility, motion, buttons, progress, feedback, modality, settings, keyboards, pointing devices) and herdr-app's visual model (42-token `resolve()`, sidebar/tab/status-bar geometry, status grammar, shortcuts). Both are quoted by rule below; no screen copies another product's pixels.
 - t3code grounding: `@57cd0590`, the reference web/desktop stack `docs/architecture.md` cites as `T3:`. Not a pixel source (herdr-app's visual model is); what it grounds here is the component stack this system builds on — Base UI primitives behind a shadcn-shaped `components.json`, which `docs/architecture.md` D16 records as the path t3code proves (`T3:apps/web/components.json:1-27`, SOURCE).
-- Embedded refs: shortlisted Layer B `warp.md`, `linear.app.md`, `raycast.md` -> read `minimalist-skill.md` (Layer A) and `warp.md` (Layer B) in full. Warp because doriface is a terminal client: warm near-black instead of blue-black, parchment ink, monochrome chrome, hairline containment, no glass. Minimalist because the product is an operational tool where restraint and typographic hierarchy beat atmosphere. Overridden on purpose by lead decisions: minimalist's "no Lucide" and editorial serif (lucide-react and the system UI stack are binding), and Warp's pill buttons and marketing-scale type (an app shell runs at 13-14 px).
+- Embedded refs: shortlisted Layer B `warp.md`, `linear.app.md`, `raycast.md` -> read `minimalist-skill.md` (Layer A) and `warp.md` (Layer B) in full. Warp because Doriterm is a terminal client: warm near-black instead of blue-black, parchment ink, monochrome chrome, hairline containment, no glass. Minimalist because the product is an operational tool where restraint and typographic hierarchy beat atmosphere. Overridden on purpose by lead decisions: minimalist's "no Lucide" and editorial serif (lucide-react and the system UI stack are binding), and Warp's pill buttons and marketing-scale type (an app shell runs at 13-14 px).
 - Lazyweb: 4 queries (terminal app agent sidebar tabs; developer tool command palette; device pairing QR code setup; terminal ssh mobile app), 12 screens downloaded, viewed GitHub Codespaces' palette, Wise's authenticator pairing and Termius' mobile host list. Taken: palette anchored near the top with grouped results and right-aligned key hints; pairing as a narrow centred column with step indicator, QR, "or" divider and a typed code; phone list rows that lead with state and end with age. Screenshots stay out of the repo.
 - StyleGallery: CATALOG fetched; patterns chosen per screen in section 4 (fixed-sidenav-shell, split-screen, center, step-nav, imposter, list-detail, scroll-body-shell, switcher).
 - Imagen drafts: 3 drafts (gpt-image-2.5-flare) seeded with the night/day tokens: workspace shell, command palette, light pairing screen. Picked the shell draft as the composition contract (sectioned agent list with "Needs you" chip, pane header with status chip and `branch · ⌘1`, status bar with "N needs you"). Rejected from the drafts: the blue-filled active tab and segment and the accent underline under the current step (accent-edge tells); selection is a tonal wash here.
@@ -56,8 +56,8 @@ The theme input is a herdr-app terminal palette (background, foreground, selecti
 
 | Theme                | Source    | bg / chrome / canvas        | ink                      | ansi4 (accent) | status working / blocked / done |
 | -------------------- | --------- | --------------------------- | ------------------------ | -------------- | ------------------------------- |
-| Night (dark default) | doriface  | #161513 / #0f0e0d / #121210 | #d8d4cb term, #eeeeef UI | #9fb4e6        | #e2b86b / #ef7d6b / #7fa8f5     |
-| Day (light default)  | doriface  | #fbfaf7 / #f0efea / #f7f6f3 | #2a2723 term, #1b1b1e UI | #2f5fc4        | #8a5a00 / #bf3a2b / #2f5fc4     |
+| Night (dark default) | Doriterm  | #161513 / #0f0e0d / #121210 | #d8d4cb term, #eeeeef UI | #9fb4e6        | #e2b86b / #ef7d6b / #7fa8f5     |
+| Day (light default)  | Doriterm  | #fbfaf7 / #f0efea / #f7f6f3 | #2a2723 term, #1b1b1e UI | #2f5fc4        | #8a5a00 / #bf3a2b / #2f5fc4     |
 | Graphite             | herdr-app | #17191d / #101114 / #131518 | herdr-app                | #96b2d7        | herdr-app                       |
 | Paper                | herdr-app | #ffffff / #f1f1ee / #fafaf9 | herdr-app                | #1f62d0        | herdr-app                       |
 
