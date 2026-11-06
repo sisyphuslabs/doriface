@@ -46,6 +46,21 @@ On the same machine the host also serves a token-gated, loopback-only `ws://127.
 
 The host never parses what `hc` says; it pipes the stream. The client SDK speaks herdr-core's protocol itself, so a future native app can reuse it. The full design is in [docs/architecture.md](docs/architecture.md), and the wire format every package is built against is the [transport contract](docs/transport.md).
 
+## Set up every machine you own
+
+Each machine you want to reach runs `doriface-host` as a user service: a systemd user unit on Linux, a LaunchAgent on macOS. It keeps the relay uplink up across logouts and reboots, and the machines join one mesh so each reaches the others. [docs/install.md](docs/install.md) walks through it, and a coding agent can do it for you with the [doriterm-setup skill](skills/doriterm-setup/SKILL.md):
+
+```sh
+git clone https://github.com/sisyphuslabs/doriterm.git ~/.local/share/doriface-host/src
+cd ~/.local/share/doriface-host/src && bun install --frozen-lockfile
+bun apps/host/scripts/setup/cli.ts install          # the service, herdr-core if missing, waits for the relay; safe to re-run
+bun apps/host/scripts/setup/cli.ts invite --out ~/doriterm-invite   # on a member: a single-use join link, in a 0600 file
+bun apps/host/scripts/setup/cli.ts join --from ~/doriterm-invite    # on the machine that joins
+bun apps/host/scripts/setup/cli.ts pair             # a QR code for a phone, which opens doriface.omo.dev/pair
+```
+
+The service keeps its own state dir (`~/.local/state/doriface-host-mesh`), so it never shares keys or devices with the desktop app's own host.
+
 ## Other machines through the relay
 
 `hc machine add` reaches other machines over ssh, or over any command given with `--via` that pipes `hc connect`. `doriface-host connect` is that command for a machine running `doriface-host`: it pipes stdin and stdout to that host's `hc connect`, end-to-end encrypted through the relay, so the machine needs no ssh and no open port.
