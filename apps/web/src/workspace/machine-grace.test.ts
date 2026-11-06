@@ -86,6 +86,32 @@ test("a machine never seen connected is held only on the first read, and only wh
   expect(stepHeld(NONE, FIRST, [machine("rack", "connecting")], 100_000).size).toBe(0);
 });
 
+/** Steps the hold through reads as useMachines does (first answer, machines read connected), returning what shows. */
+function replay(reads: readonly (readonly [number, readonly MachineView[]])[]): string[] {
+  let held: Held = NONE;
+  let before: Parameters<typeof stepHeld>[1] = FIRST;
+  const states: string[] = [];
+  for (const [now, views] of reads) {
+    held = stepHeld(held, before, views, now);
+    const first = before.first ?? { at: now, ids: new Set(views.map((view) => view.id)) };
+    const up = new Set(before.up);
+    for (const view of views) if (view.state === "connected") up.add(view.id);
+    before = { views, at: now, first, up };
+    states.push(shown(views, held, now)[0]?.[1] ?? "none");
+  }
+  return states;
+}
+
+test("with the host's clock 25 s ahead, a grace that ended after a drop never holds the machine again", () => {
+  const reads: [number, MachineView[]][] = [];
+  // Reads at 5, 15, ... s; the line drops at 100 s, which the host's clock calls 125 s.
+  for (let now = 5; now <= 95; now += 10) reads.push([now * 1_000, [machine("rack", "connected")]]);
+  for (let now = 105; now <= 305; now += 10) reads.push([now * 1_000, [machine("rack", "unreachable", 125_000)]]);
+  const states = replay(reads).slice(10);
+  const heldReads = Math.ceil(OFFLINE_GRACE_MS / 10_000);
+  expect(states).toEqual([...Array(heldReads).fill("connected"), ...Array(21 - heldReads).fill("unreachable")]);
+});
+
 test("a page opened while a line redials holds that machine once hc names its drop, and only for what is left", () => {
   const opening = [machine("air", "connecting")];
   const first = { at: 100_000, ids: new Set(["id-air"]) };
