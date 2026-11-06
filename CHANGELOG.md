@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Korean text on Android
+
+- The terminal draws Hangul on Android again: the font stack named only Latin faces, and a device that has none of them fell through to a generic monospace with no Korean glyphs, so every syllable was blank space while Latin text was fine. The stack now names the CJK faces Android and Windows ship (Noto Sans Mono CJK, Nanum Gothic Coding, Malgun Gothic) before the generic fallback, and they come after the Latin faces so nothing changes on a machine that has them. (#959)
+
 ### Settings
 
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
