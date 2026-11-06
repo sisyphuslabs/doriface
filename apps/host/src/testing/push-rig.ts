@@ -66,6 +66,11 @@ export class FakeCore implements PushCore {
     if (failure !== undefined) throw failure;
   }
 
+  /** Text pasted with `send`: a notice never sends any, so a test fails loudly if one does. */
+  async send(address: string, text: string): Promise<void> {
+    throw new Error(`a notice pasted ${JSON.stringify(text)} into ${address}`);
+  }
+
   readonly #docs = new Map<string, { value: JsonValue; version: number }>();
 
   /** As hc 0.1.17's documents: `doc.set` is a compare-and-set on the version read; every call yields first. */
