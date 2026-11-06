@@ -186,8 +186,8 @@ test("the host's name is saved beside the paired host, so a load without it stil
     close: () => undefined,
     hello: { core: { id: "c0re", name: "studio" } },
   };
-  const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" }, () =>
-    Promise.resolve(announcing as unknown as HcConnection),
+  const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h0st", hostKey: "k3y" }, (): Promise<OpenConnection> =>
+    Promise.resolve({ connection: announcing as unknown as HcConnection, path: "relay" }),
   );
   const open = new Promise<void>((resolve) => {
     const off = store.subscribe(() => {
