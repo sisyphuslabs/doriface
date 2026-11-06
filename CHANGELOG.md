@@ -9,7 +9,7 @@
 
 ### Host install
 
-- One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service (systemd `--user` on Linux, a LaunchAgent on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
+- One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have (systemd `--user` with `Restart=always` and the top CPU and IO weights on Linux, an `Interactive` LaunchAgent kept alive on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
 - `doriface-host pair --wait-host <seconds>` waits for a host that is still starting, and for the relay to register the code, so the first code it prints works. (#668)
 
 ## v0.1.2

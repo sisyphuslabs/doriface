@@ -41,7 +41,8 @@ curl -fsSL https://github.com/sisyphuslabs/doriface/releases/latest/download/ins
 ```
 
 It downloads `doriface-host` into `~/.local/bin` and checks it against the release's `SHA256SUMS.txt`, installs
-herdr-core when `hc` is missing, runs the host as a user service (systemd `--user` on Linux, a LaunchAgent on macOS),
+herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have
+(systemd `--user` on Linux, an `Interactive` LaunchAgent on macOS),
 then prints a QR code, a link and an 8-character code to pair your first device. `sh -s -- --help` lists the options;
 `--uninstall` removes the service and the binary and keeps the host's keys and paired devices. On Windows, the desktop
 app carries the host. The installer ships from the first release after v0.1.2.

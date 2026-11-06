@@ -56,13 +56,19 @@ function rig(system: "Linux" | "Darwin", machine = "x86_64"): Rig {
   return { root, home, release, stubs, log };
 }
 
-function install(r: Rig, args: readonly string[] = [], extraPath: readonly string[] = []) {
+function install(
+  r: Rig,
+  args: readonly string[] = [],
+  extraPath: readonly string[] = [],
+  extraEnv: Readonly<Record<string, string>> = {},
+) {
   const proc = Bun.spawnSync(["/bin/sh", SCRIPT, "--from", `file://${r.release}`, ...args], {
     env: {
       HOME: r.home,
       PATH: [r.stubs, ...extraPath, "/usr/bin", "/bin"].join(":"),
       SHELL: "/bin/zsh",
       TMPDIR: r.root,
+      ...extraEnv,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -94,7 +100,10 @@ describe("install.sh on Linux", () => {
     const unit = readFileSync(join(r.home, ".config", "systemd", "user", "doriface-host.service"), "utf8");
     expect(unit).toContain(`ExecStart="${join(bin, "doriface-host")}" --hc "${hc}"`);
     expect(unit).toContain(`Environment="PATH=${bin}:${bin}:${r.stubs}:/usr/bin:/bin" "SHELL=/bin/zsh"`);
-    expect(unit).toContain("Restart=on-failure");
+    expect(unit).toContain("Restart=always");
+    expect(unit).toContain("CPUWeight=10000");
+    expect(unit).toContain("IOWeight=10000");
+    expect(unit).not.toMatch(/^Nice=/m);
     expect(unit).toContain("WantedBy=default.target");
     expect(run.out).toContain("doriface://pair#h=fake");
   });
@@ -111,6 +120,16 @@ describe("install.sh on Linux", () => {
     const unit = readFileSync(join(r.home, ".config", "systemd", "user", "doriface-host.service"), "utf8");
     expect(unit).toContain(`--hc "${join(tools, "hc")}"`);
     expect(run.out).toContain("using herdr-core at");
+  });
+
+  test("says how to keep the service after logout when the user does not linger, and stays quiet when it does", () => {
+    const r = rig("Linux");
+    stub(r.stubs, "loginctl", 'echo "$LINGER_ANSWER"');
+    const lingering = install(r, ["--no-pair"], [], { LINGER_ANSWER: "yes" });
+    expect(lingering.out).not.toContain("enable-linger");
+    const not = install(r, ["--no-pair"], [], { LINGER_ANSWER: "no" });
+    expect(not.code).toBe(0);
+    expect(not.out).toContain("loginctl enable-linger");
   });
 
   test("a download that does not match SHA256SUMS.txt installs nothing and starts nothing", () => {
@@ -166,7 +185,9 @@ describe("install.sh on macOS", () => {
     const plist = readFileSync(join(r.home, "Library", "LaunchAgents", "dev.omo.doriface-host.plist"), "utf8");
     expect(plist).toContain(`<string>${join(r.home, ".local", "bin", "doriface-host")}</string>`);
     expect(plist).toContain("<key>RunAtLoad</key><true/>");
-    expect(plist).toContain("<key>SuccessfulExit</key><false/>");
+    expect(plist).toContain("<key>KeepAlive</key><true/>");
+    expect(plist).toContain("<key>ProcessType</key><string>Interactive</string>");
+    expect(plist).not.toMatch(/LowPriority|<key>Nice<\/key>|Background/);
   });
 });
 

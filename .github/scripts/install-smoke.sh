@@ -44,6 +44,33 @@ if grep -q 'not registered with the relay\|no relay slot' "$out"; then
   exit 1
 fi
 
+# The service runs at the highest priority a user service can have (#668): read it back from the running service.
+if [ "$os" = linux ]; then
+  systemctl --user show doriface-host.service -p MainPID -p Restart -p CPUWeight -p IOWeight -p Nice | tee "$RUNNER_TEMP/priority.txt"
+  pid="$(systemctl --user show doriface-host.service -p MainPID --value)"
+  for want in Restart=always CPUWeight=10000 IOWeight=10000; do
+    grep -qx "$want" "$RUNNER_TEMP/priority.txt" || { echo "::error::the running service has no $want"; exit 1; }
+  done
+  cat "/proc/$pid/cgroup"
+  for core in $(pgrep -f 'herdr-core' || true); do
+    echo "== core $core: $(tr '\0' ' ' < "/proc/$core/cmdline")"
+    cat "/proc/$core/cgroup"
+  done
+else
+  plist="$HOME/Library/LaunchAgents/dev.omo.doriface-host.plist"
+  [ "$(plutil -extract ProcessType raw "$plist")" = Interactive ] || { echo "::error::ProcessType is not Interactive"; exit 1; }
+  launchctl print "gui/$(id -u)/dev.omo.doriface-host" | tee "$RUNNER_TEMP/priority.txt" | grep -iE 'spawn type|pid =|state ='
+  pid="$(awk '/^\tpid = / { print $3; exit }' "$RUNNER_TEMP/priority.txt")"
+  # The core hc starts runs under its own launchd job; its class decides how fast the host's terminals are.
+  launchctl print "gui/$(id -u)" | grep -iE 'herdr|hc' || echo "no herdr launchd job listed"
+  for job in $(launchctl list | awk 'tolower($3) ~ /herdr/ { print $3 }'); do
+    echo "== $job"
+    launchctl print "gui/$(id -u)/$job" | grep -iE 'spawn type|program|pid =|state =' || true
+  done
+fi
+ps -o pid,ni,pri,comm -p "$pid"
+ps -o pid,ni,pri,comm -ax | grep -iE 'herdr|hc' | grep -v grep || true
+
 sh apps/host/install/install.sh --from "file://$release" --no-pair
 service_running || { echo "::error::the host service is not running after an upgrade"; exit 1; }
 

@@ -174,8 +174,11 @@ After=network-online.target
 [Service]
 ExecStart="${host_bin}" --hc "${hc_path}"
 Environment="PATH=${service_path}" "SHELL=${service_shell}"
-Restart=on-failure
+Restart=always
 RestartSec=2
+# The highest share a user unit can ask for; a negative Nice needs privilege, so none is set.
+CPUWeight=10000
+IOWeight=10000
 
 [Install]
 WantedBy=default.target
@@ -184,6 +187,9 @@ EOF
   systemctl --user enable doriface-host.service >/dev/null
   systemctl --user restart doriface-host.service
   say "doriface-host runs as the systemd user service doriface-host.service (logs: journalctl --user -u doriface-host)"
+  if have loginctl && [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != yes ]; then
+    say "it stops when you log out; to keep it running after logout and start it at boot, run: loginctl enable-linger $(id -un)"
+  fi
 else
   xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
   mkdir -p "${HOME}/Library/LaunchAgents" "${HOME}/Library/Logs"
@@ -205,7 +211,8 @@ else
     <key>SHELL</key><string>$(xml "$service_shell")</string>
   </dict>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>$(xml "${HOME}/Library/Logs/doriface-host.log")</string>
   <key>StandardErrorPath</key><string>$(xml "${HOME}/Library/Logs/doriface-host.log")</string>
 </dict>
