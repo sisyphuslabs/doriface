@@ -123,6 +123,8 @@ export async function addMachine(
   const stop = async (): Promise<void> => {
     rmSync(spec.dir, { recursive: true, force: true });
     const control = Bun.spawn([hc, "connect", "--session", session], { env: there, stdin: "pipe", stdout: "pipe" });
+    // Drained, as above: the core's reply is read and dropped so a stopped core can never wait on a full pipe.
+    void new Response(control.stdout).text();
     control.stdin.write('{"jsonrpc":"2.0","id":1,"method":"server.stop"}\n');
     await control.stdin.flush();
     void control.stdin.end();
@@ -136,9 +138,12 @@ export async function addMachine(
       stdout: "ignore",
       stderr: "pipe",
     });
-    if ((await add.exited) !== 0) {
-      throw new Error(`hc machine add for the second core failed: ${await new Response(add.stderr).text()}`);
-    }
+    // Read while it runs: hc can write more to stderr than a pipe holds on a slow dial, and a full pipe would block the
+    // add for good, with nothing on stdout to say where it stopped (#502).
+    const said = new Response(add.stderr).text();
+    const code = await add.exited;
+    const why = await said;
+    if (code !== 0) throw new Error(`hc machine add for the second core failed (exit ${code}): ${why}`);
     if (withSeeds) await seedsListed(hc, env, spec);
   } catch (error) {
     await stop();

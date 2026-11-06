@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { join } from "node:path";
-import { createInterface, type Interface } from "node:readline";
-import { expect, type Page } from "@playwright/test";
+import { createInterface } from "node:readline";
+import type { Page } from "@playwright/test";
 import { FAKE_RELAY } from "./capture-relay.ts";
 import { E2E_WEB_PORT } from "./config.ts";
 
@@ -45,66 +45,205 @@ export async function routeRelaySockets(page: Page, toRelay: string): Promise<vo
   });
 }
 
-/** `machine`: the host's core also has an added machine (the sidebar then lists machines with their state). */
-export async function startFakeRelayHost(options: { readonly machine?: boolean } = {}): Promise<FakeRelayHost> {
-  const script = join(import.meta.dirname, "fake-relay-host.ts");
-  const driver: ChildProcess = spawn(
-    "bun",
-    [script, `http://127.0.0.1:${E2E_WEB_PORT}`, FAKE_RELAY, ...(options.machine === true ? ["--machine"] : [])],
-    {
-      cwd: join(import.meta.dirname, ".."),
-      stdio: ["pipe", "pipe", "inherit"],
-    },
-  );
+/**
+ * How long one startup stage may take before the start fails naming it (#502). Measured on a 40-core host before this
+ * bound existed: the slowest stage is the added machine's `hc machine add`, 41-54 ms idle and 90-120 ms at load ~113,
+ * and the whole start is 280-356 ms idle and 368-463 ms loaded. A stage that is merely slow therefore stays far inside
+ * this, while a stage that is blocked fails in ten seconds naming itself instead of running out a hook's 60 s silently.
+ */
+export const STAGE_DEADLINE_MS = 10_000;
+
+/** A startup whose lines this reads: `startFakeRelayHost` runs fake-relay-host.ts, and the whole file's contract is
+ * the protocol its command prints. */
+interface Startup {
+  /**
+   * Prints one `{"stage": <name>, "ms": <n>}` line per startup stage it finishes, then `{"bridge": <url>}` once clients
+   * can be routed, then one `{"link": <url>}` per `link` line read on its stdin, until that stdin ends or it is stopped.
+   */
+  readonly command: readonly string[];
+  readonly cwd: string;
+  readonly stageDeadlineMs: number;
+}
+
+type Line = Record<string, unknown>;
+
+interface Waiter {
+  readonly resolve: (line: Line) => void;
+  readonly reject: (error: Error) => void;
+}
+
+function isLine(value: unknown): value is Line {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The driver's lines, with the stage it is in. A wait fails at once when the driver exits, so a start that died is
+ * never waited out (#502), and it fails naming the stage when that stage outlasts `deadlineMs`, so a start that is
+ * blocked says where instead of running out the hook's time.
+ */
+function readProtocol(driver: ChildProcess, deadlineMs: number): { readonly next: (what: string) => Promise<Line> } {
   const out = driver.stdout;
-  const input = driver.stdin;
-  if (out === null || input === null) throw new Error("the fake relay host has no stdio");
-  const lines: Interface = createInterface({ input: out });
-  type Line = Record<string, unknown>;
-  const waiting: { readonly resolve: (value: Line) => void; readonly reject: (error: Error) => void }[] = [];
+  if (out === null) throw new Error("the fake relay host has no stdout");
+  const lines = createInterface({ input: out });
+  const waiting: Waiter[] = [];
   const queued: Line[] = [];
+  const done: string[] = [];
+  let stage = "its first stage";
+  let since = Date.now();
   let ended: Error | undefined;
+
+  const where = (): string => `it is in ${stage}${done.length === 0 ? "" : ` (done: ${done.join(", ")})`}`;
+  const fail = (error: Error): void => {
+    ended ??= error;
+    for (const waiter of waiting.splice(0)) waiter.reject(error);
+  };
+
   void (async () => {
     for await (const line of lines) {
       if (!line.startsWith("{")) continue;
-      const parsed: unknown = JSON.parse(line);
-      if (typeof parsed !== "object" || parsed === null) continue;
-      const next = waiting.shift();
-      if (next === undefined) queued.push(parsed as Line);
-      else next.resolve(parsed as Line);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        fail(new Error(`the fake relay host printed a line that is not its protocol: ${line.slice(0, 200)}`));
+        return;
+      }
+      if (!isLine(parsed)) continue;
+      const reported = parsed["stage"];
+      if (typeof reported === "string") {
+        done.push(`${reported} ${String(parsed["ms"] ?? 0)} ms`);
+        stage = reported;
+        since = Date.now();
+        continue;
+      }
+      const waiter = waiting.shift();
+      if (waiter === undefined) queued.push(parsed);
+      else waiter.resolve(parsed);
     }
-    // Its stdout closed: it exited (its error is on this run's stderr). Nothing more is coming, so a wait fails now
-    // instead of running out the hook's time (#502).
-    ended = new Error(
-      `the fake relay host exited (code ${String(driver.exitCode ?? driver.signalCode)}); see its stderr above`,
+    // Its exit is a tick behind the end of its stdout: wait for the code, so the failure can carry it.
+    await exited(driver, 1_000);
+    fail(
+      new Error(
+        `the fake relay host exited (code ${String(driver.exitCode ?? driver.signalCode ?? "unknown")}) while ${where()}; see its stderr above`,
+      ),
     );
-    for (const next of waiting.splice(0)) next.reject(ended);
   })();
-  const nextLine = (): Promise<Line> =>
-    new Promise((resolve, reject) => {
-      const ready = queued.shift();
-      if (ready !== undefined) resolve(ready);
-      else if (ended !== undefined) reject(ended);
-      else waiting.push({ resolve, reject });
-    });
-  const first = await nextLine();
-  const bridge = first["bridge"];
-  if (typeof bridge !== "string") throw new Error("the fake relay host printed no bridge");
 
-  return {
-    async pairingLink() {
-      input.write("link\n");
-      const { link } = await nextLine();
-      if (typeof link !== "string") throw new Error("the fake relay host printed no pairing link");
-      return link;
-    },
-    route: (page) => routeRelaySockets(page, bridge),
-    async stop() {
-      if (driver.exitCode !== null) return;
-      input.end();
+  const next = (what: string): Promise<Line> =>
+    new Promise<Line>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter: Waiter = {
+        resolve: (line) => {
+          if (timer !== undefined) clearTimeout(timer);
+          resolve(line);
+        },
+        reject: (error) => {
+          if (timer !== undefined) clearTimeout(timer);
+          reject(error);
+        },
+      };
+      const arrived = queued.shift();
+      if (arrived !== undefined) {
+        waiter.resolve(arrived);
+        return;
+      }
+      if (ended !== undefined) {
+        waiter.reject(ended);
+        return;
+      }
+      timer = setTimeout(
+        () => {
+          const at = waiting.indexOf(waiter);
+          if (at < 0) return;
+          waiting.splice(at, 1);
+          reject(
+            new Error(
+              `the fake relay host did not finish ${what} within ${deadlineMs} ms: ${where()}, and it printed no error`,
+            ),
+          );
+        },
+        Math.max(0, since + deadlineMs - Date.now()),
+      );
+      waiting.push(waiter);
+    });
+
+  return { next };
+}
+
+/** Resolves when the driver has exited, or after `withinMs`: the web tsconfig types `ChildProcess` without events. */
+function exited(driver: ChildProcess, withinMs: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const deadline = Date.now() + withinMs;
+    const tick = setInterval(() => {
+      if (driver.exitCode === null && driver.signalCode === null && Date.now() < deadline) return;
+      clearInterval(tick);
+      resolve();
+    }, 50);
+  });
+}
+
+/** Starts a driver and waits for its bridge; a start that dies or blocks fails at once, naming the stage it reached. */
+async function startDriver(options: Startup): Promise<FakeRelayHost> {
+  const deadlineMs = options.stageDeadlineMs;
+  const [program, ...args] = options.command;
+  if (program === undefined) throw new Error("the fake relay host has no command to run");
+  const driver = spawn(program, args, { cwd: options.cwd, stdio: ["pipe", "pipe", "inherit"] });
+  const input = driver.stdin;
+  if (input === null) throw new Error("the fake relay host has no stdin");
+  const protocol = readProtocol(driver, deadlineMs);
+  let stopping: Promise<void> | undefined;
+  const stop = (): Promise<void> => {
+    stopping ??= (async () => {
+      if (driver.exitCode !== null || driver.signalCode !== null) return;
+      try {
+        input.end();
+      } catch {
+        // Its stdin is gone already, and the line reader holds the reason the start failed.
+      }
       driver.kill("SIGTERM");
-      // It stops the host, its core and the relay before it exits.
-      await expect.poll(() => driver.exitCode ?? driver.signalCode, { timeout: 60_000 }).not.toBeNull();
-    },
+      await exited(driver, deadlineMs);
+      if (driver.exitCode === null && driver.signalCode === null) driver.kill("SIGKILL");
+    })();
+    return stopping;
   };
+
+  try {
+    const first = await protocol.next("the bridge");
+    const bridge = first["bridge"];
+    if (typeof bridge !== "string") throw new Error("the fake relay host printed no bridge");
+    return {
+      async pairingLink() {
+        input.write("link\n");
+        const { link } = await protocol.next("a pairing link");
+        if (typeof link !== "string") throw new Error("the fake relay host printed no pairing link");
+        return link;
+      },
+      route: (page) => routeRelaySockets(page, bridge),
+      stop,
+    };
+  } catch (error) {
+    // A start that failed stops its driver: a stalled or dead fake host would otherwise keep cores for the next spec.
+    await stop();
+    throw error;
+  }
+}
+
+/**
+ * `machine`: the host's core also has an added machine (the sidebar then lists machines with their state).
+ * `stageDeadlineMs`: a shorter stage deadline, for a test that proves the bound without a blocked start running 10 s.
+ */
+export function startFakeRelayHost(
+  options: { readonly machine?: boolean; readonly stageDeadlineMs?: number } = {},
+): Promise<FakeRelayHost> {
+  return startDriver({
+    command: [
+      "bun",
+      join(import.meta.dirname, "fake-relay-host.ts"),
+      `http://127.0.0.1:${E2E_WEB_PORT}`,
+      FAKE_RELAY,
+      ...(options.machine === true ? ["--machine"] : []),
+    ],
+    cwd: join(import.meta.dirname, ".."),
+    stageDeadlineMs: options.stageDeadlineMs ?? STAGE_DEADLINE_MS,
+  });
 }
