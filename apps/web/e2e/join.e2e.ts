@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Browser, Locator, Page } from "@playwright/test";
 import { expect, pressNewTab, test } from "./fixtures.ts";
 import { type FakeRelayHost, startFakeRelayHost } from "./relay-route.ts";
@@ -27,6 +28,13 @@ async function newTerminal(page: Page): Promise<Locator> {
   return terminal;
 }
 
+/** The fingerprint the link's own Noise key has, computed here rather than read from the app under test. */
+function fingerprintOfLink(link: string): string {
+  const key = new URLSearchParams(link.slice(link.indexOf("#") + 1)).get("k") ?? "";
+  const noise = Uint8Array.from(Buffer.from(key, "base64url"));
+  return createHash("sha256").update(noise).digest("hex").slice(0, 40).toUpperCase();
+}
+
 test("a browser with no pairing joins by an invite, takes input on a terminal, and is still joined after a reload", async ({
   browser,
 }) => {
@@ -38,8 +46,12 @@ test("a browser with no pairing joins by an invite, takes input on a terminal, a
     await expect(page.getByRole("heading", { name: "Connect to a host" })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(INVITE)).toBeVisible();
 
-    await page.goto(await host.pairingLink());
-    await expect(page.getByRole("button", { name: "They match" })).toBeVisible({ timeout: 15_000 });
+    const link = await host.pairingLink();
+    await page.goto(link);
+    // The check the person is asked to make: the key on screen is the one the invite named, group for group.
+    await expect(page.getByRole("figure").filter({ hasText: "Host key (SHA-256)" })).toContainText(
+      fingerprintOfLink(link),
+    );
     await page.getByRole("button", { name: "They match" }).click();
     await expect(page.getByText(PAIRED)).toBeVisible({ timeout: 60_000 });
     await page
@@ -55,8 +67,8 @@ test("a browser with no pairing joins by an invite, takes input on a terminal, a
 
     // A revisit needs no new invite: the browser kept its device key and the pairing it saved.
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Connect to a host" })).toHaveCount(0);
     await expect(page.locator("[data-terminal]").first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("heading", { name: "Connect to a host" })).toHaveCount(0);
     await page.context().close();
   } finally {
     await host.stop();
