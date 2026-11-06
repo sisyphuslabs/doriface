@@ -1,3 +1,4 @@
+import { DEFAULT_RELAY_URL } from "@doriface/crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -33,7 +34,10 @@ export class LocalHostStartError extends Error {
 const READY_LINE = /listening on (ws:\/\/\S+?\/v1\/hc)(?:\s|$)/;
 const STDERR_TAIL = 20;
 
-/** One doriface-host child on an ephemeral loopback port, started on demand and shared by every caller. */
+/**
+ * One doriface-host child on an ephemeral loopback port with its relay uplink, started on demand and shared by every
+ * caller.
+ */
 export class LocalHost {
   readonly #options: LocalHostOptions;
   #starting: Promise<LocalHostEndpoint> | undefined;
@@ -73,7 +77,8 @@ export class LocalHost {
       ...command.args,
       "--listen",
       "127.0.0.1:0",
-      "--no-relay",
+      "--relay",
+      DEFAULT_RELAY_URL,
       ...(binary === undefined ? [] : ["--hc", binary]),
     ];
     const child = spawn(command.file, args, {

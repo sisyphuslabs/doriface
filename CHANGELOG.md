@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Desktop local host and pairing by code
+
+- The host the desktop app starts joins the relay, so a phone or another computer can pair with this computer by code or link and reach its terminals. (#596)
+
 ## v0.1.2
 
 ### Tabs and spaces
