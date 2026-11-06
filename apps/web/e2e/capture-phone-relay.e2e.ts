@@ -27,6 +27,12 @@ test("a phone session through the production relay", async ({ browser }) => {
     await page.getByRole("button", { name: "New tab" }).click({ timeout: 30_000 });
     const terminal = page.locator("[data-terminal]");
     await expect(terminal).toContainText("$", { timeout: 90_000 });
+    // The prompt is the host shell's own, so it carries that shell's account and computer names into a public repo
+    // (#926). A neutral prompt is set here, before anything a capture shows, and cleared so the first line already uses
+    // it - the shots must not contain a real account, host or run path.
+    await page.keyboard.type("export PS1='demo@my-laptop:~/project$ '\r");
+    await page.keyboard.type("clear\r");
+    await expect(terminal).toContainText("demo@my-laptop:~/project$", { timeout: 30_000 });
     await page.keyboard.type("printf 'relay-%s\\n' 'alpha-line more'\r");
     await expect(terminal).toContainText("relay-alpha-line more", { timeout: 30_000 });
     const shot = async (name: string): Promise<void> => {
