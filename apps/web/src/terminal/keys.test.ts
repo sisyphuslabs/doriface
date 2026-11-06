@@ -15,6 +15,13 @@ test.each([
   expect(applyModifiers(typed, latched(...ids), "other")).toEqual({ kind: "write", data: bytes });
 });
 
+test.each(["\u001b[I", "\u001b[0n", "\u001b[12;5R", "\u001b[200~", "\u001b[?25h"])(
+  "a latched modifier leaves %j alone, since it is a report and not a key",
+  (report) => {
+    expect(applyModifiers(report, latched("ctrl", "shift"), "other")).toEqual({ kind: "write", data: report });
+  },
+);
+
 test.each([
   ["esc", "\u001b"],
   ["interrupt", "\u0003"],

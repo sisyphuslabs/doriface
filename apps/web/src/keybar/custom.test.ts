@@ -78,9 +78,12 @@ test.each(["Ctrl", "Control", "Shift", "Alt", "Option", "Cmd"])(
   },
 );
 
-test.each(["1+1", "a + b", "C++", "x + y"])("text that contains a plus sign sends that text", (input) => {
-  expect(key(input).bytes).toBe(input);
-});
+test.each(["1+1", "a + b", "C++", "x + y", "chmod +x", "date +%s", "echo $((2+3))", "ls | wc -l"])(
+  "text with a plus, a space or a symbol sends that text",
+  (input) => {
+    expect(key(input).bytes).toBe(input);
+  },
+);
 
 test("a modifier that would change nothing is refused instead of dropped", () => {
   expect(reason("Ctrl+Shift+Tab")).toBe("Ctrl does not change Tab.");

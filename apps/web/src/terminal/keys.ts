@@ -46,6 +46,26 @@ export function control(char: string): string {
 
 const ESC = "\u001b";
 
+/** The keys a bar can send as `\e[<number>~`: Insert, Delete, the pages, and F5 to F12. */
+const NUMBERED_KEYS: ReadonlySet<string> = new Set([
+  "1",
+  "2",
+  "3",
+  "5",
+  "6",
+  "15",
+  "17",
+  "18",
+  "19",
+  "20",
+  "21",
+  "23",
+  "24",
+]);
+
+/** The keys a bar can send as `\e[<letter>`: the arrows, Home and End. */
+const LETTER_KEYS: ReadonlySet<string> = new Set(["A", "B", "C", "D", "F", "H"]);
+
 export interface SequenceModifiers {
   readonly ctrl: boolean;
   readonly shift: boolean;
@@ -58,8 +78,9 @@ function sequenceParameter(modifiers: SequenceModifiers): number {
 }
 
 /**
- * The modified form of a key whose plain bytes are an xterm sequence: `\e[5~` with Ctrl is `\e[5;5~`, `\eOP` with Shift
- * is `\e[1;2P`. Null for anything that is not a sequence, so a caller falls back to typing it.
+ * The modified form of a key whose plain bytes are an xterm sequence: `\e[5~` with Ctrl is `\e[5;5~`, `\e[H` with Ctrl
+ * is `\e[1;5H`. Only the sequences a key bar can send are rewritten, so a focus report (`\e[I`) or a status report
+ * (`\e[0n`) that arrives while a modifier is latched passes through untouched. Null means "type it as before".
  */
 export function modifiedSequence(bytes: string, modifiers: SequenceModifiers): string | null {
   if (!bytes.startsWith(ESC)) return null;
@@ -67,10 +88,12 @@ export function modifiedSequence(bytes: string, modifiers: SequenceModifiers): s
   const final = rest.slice(-1);
   if (rest.startsWith("[")) {
     const body = rest.slice(1, -1);
-    if (!/^[A-Za-z~]$/u.test(final) || !/^\d*$/u.test(body)) return null;
-    return `${ESC}[${body === "" ? "1" : body};${sequenceParameter(modifiers)}${final}`;
+    if (!/^\d*$/u.test(body)) return null;
+    if (final === "~" && NUMBERED_KEYS.has(body)) return `${ESC}[${body};${sequenceParameter(modifiers)}~`;
+    if (body === "" && LETTER_KEYS.has(final)) return `${ESC}[1;${sequenceParameter(modifiers)}${final}`;
+    return null;
   }
-  if (rest.startsWith("O") && rest.length === 2 && /^[A-Z]$/u.test(final)) {
+  if (rest.startsWith("O") && rest.length === 2 && "PQRS".includes(final)) {
     return `${ESC}[1;${sequenceParameter(modifiers)}${final}`;
   }
   return null;

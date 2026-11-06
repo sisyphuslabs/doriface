@@ -139,15 +139,21 @@ export function parseKeyInput(input: string): KeyInput {
   const base = trimmed[trimmed.length - 1] ?? "";
   const heads = trimmed.slice(0, -1);
   const modifiers = new Set<Modifier>();
-  for (const part of heads) {
-    const modifier = modifierOf(part);
-    if (modifier === undefined) {
-      // One-letter heads are text with a plus in it ("1+1", "a + b"); a word that looks like a key name is a mistake.
-      return heads.every((head) => [...head].length <= 1)
-        ? typing(NO_MODIFIERS, text, text)
-        : refuse(`"${part}" is not a modifier. Use Ctrl, Alt or Shift.`);
-    }
-    modifiers.add(modifier);
+  let stray: string | null = null;
+  for (const head of heads) {
+    const modifier = modifierOf(head);
+    if (modifier === undefined) stray ??= head;
+    else modifiers.add(modifier);
+  }
+  if (stray !== null) {
+    // A space or a symbol anywhere means the person typed text ("chmod +x", "date +%s"); a bare word that reads like a
+    // key name ("Hyper+X") is a mistake, and a one-letter head ("1+1") is text.
+    const typedText =
+      parts.some((part) => part !== part.trim() || !/^[A-Za-z0-9]+$/u.test(part)) ||
+      heads.every((head) => [...head].length <= 1);
+    return typedText
+      ? typing(NO_MODIFIERS, text, text)
+      : refuse(`"${stray}" is not a modifier. Use Ctrl, Alt or Shift.`);
   }
   if (base === "") return refuse("End the key with what it presses, e.g. Ctrl+X.");
   const named = NAMED[base.toLowerCase()];
