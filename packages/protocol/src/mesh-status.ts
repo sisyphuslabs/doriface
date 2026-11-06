@@ -51,6 +51,22 @@ export type MeshStuckReason =
  */
 export type MeshGate = { readonly kind: "offline"; readonly refusals: number; readonly nextProbeAt: string };
 
+/** How the machine a mesh line replaced had been added: over ssh, with a `doriface-host connect` via, or another via. */
+export type MeshReplacedKind = "ssh" | "connect" | "command";
+
+/** The kind only: an ssh target or via command can carry a user, an address or a key path, so neither is copied. */
+export type MeshReplacedMachine = { readonly name: string; readonly kind: MeshReplacedKind };
+
+const REPLACED_KIND_TEXT: { readonly [K in MeshReplacedKind]: string } = {
+  ssh: "added over ssh",
+  connect: "doriface-host connect",
+  command: "added with a --via command",
+};
+
+/** `replaced machine "old" (added over ssh) with the mesh line`, as status and the reconciler's log say it. */
+export const replacedMachineText = (replaced: MeshReplacedMachine): string =>
+  `replaced machine "${replaced.name}" (${REPLACED_KIND_TEXT[replaced.kind]}) with the mesh line`;
+
 /** Times are ISO 8601 and display only. Every key is a hostId. */
 export type MeshMemberStatus = {
   readonly hostId: string;
@@ -69,10 +85,10 @@ export type MeshMemberStatus = {
   /** The core id of the latest line hello from it; the card's `hcId` check uses it (design section 7.6). */
   readonly helloCoreId: string | null;
   /**
-   * The machine a `doriface-host connect` had added for the same core, which the reconciler replaced with the mesh
+   * The machine added earlier for the same core (over ssh or with a via), which the reconciler replaced with the mesh
    * line (design section 8.1, migration).
    */
-  readonly replacedMachine: string | null;
+  readonly replacedMachine: MeshReplacedMachine | null;
   /** An authenticated session from it is open now. */
   readonly presence: boolean;
   readonly lastSync: string | null;

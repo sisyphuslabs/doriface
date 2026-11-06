@@ -14,6 +14,8 @@ const hostId = hostIdOf(signPub);
 
 export const PAIR_CODE = "K7QM 4XPD";
 export const PAIR_LINK = `/pair#h=${hostId}&k=${b64url(noisePub)}&s=${b64url(signPub)}&p=${b64url(new Uint8Array(32).fill(3))}&r=${FAKE_RELAY}`;
+/** The same offer as a mesh invite (`&m=1`), which admits a machine instead of a device. */
+export const MESH_LINK = `${PAIR_LINK}&m=1`;
 /** A link whose host ID does not belong to its signing key. */
 export const BAD_LINK = PAIR_LINK.replace(`h=${hostId}`, `h=${"a".repeat(26)}`);
 
