@@ -30,7 +30,7 @@
 
 - The phone terminal has a held touch, a field and a two-slot keys bar, with the input beside a scrolling key strip and a keyboard toggle that stays put. (#680, #682)
 - A one-tap ^C sits after Esc in the phone key row. (#678)
-- A syllable still composing is finished before a key-bar key, a chord or a paste, so the bar never eats it. (#718)
+- A syllable still composing is finished before a key-bar key, a chord or a paste, so the bar never eats it and never sends the syllable twice. (#718, #738)
 - The phone draws its sort control only when an agent can be sorted. (#657)
 
 ### Native apps
