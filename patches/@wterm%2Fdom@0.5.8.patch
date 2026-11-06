@@ -295,7 +295,7 @@ index e307b168727cef08a2d644e33ca8cc4d8c23cfb1..04cbfc73f380b80233da981248ce1905
      /**
       * Hands the core the theme colors the page's CSS resolves to, unless the
 diff --git a/dist/wterm.js b/dist/wterm.js
-index 848e1c3f7880842c4439541fc4565ff4a42c0201..3a69b5ccab58680500721e787d159dfaea8804a1 100644
+index 848e1c3f7880842c4439541fc4565ff4a42c0201..4f115168867138a530f259397a8abc1528ef88b6 100644
 --- a/dist/wterm.js
 +++ b/dist/wterm.js
 @@ -372,6 +372,7 @@ export class WTerm {
@@ -344,3 +344,18 @@ index 848e1c3f7880842c4439541fc4565ff4a42c0201..3a69b5ccab58680500721e787d159dfa
      /**
       * Apply host colors without writing terminal input or restarting the session.
       * Pass `null` to drop them and answer color queries from the page's CSS again.
+@@ -669,8 +692,13 @@ export class WTerm {
+         this._rectangleDrag.cancel();
+         this._historySelection.invalidate();
+         this.renderer?.beforeMutation(this.bridge);
++        // A view following output keeps following: output written since the
++        // last paint can leave the element short of its bottom until that
++        // paint scrolls it there, and only a scroll by the user stops it.
++        const atBottom = this._isScrolledToBottom();
+         this._shouldScrollToBottom =
+-            this._pendingResizeScrollTop === null && this._isScrolledToBottom();
++            this._pendingResizeScrollTop === null &&
++                (this._shouldScrollToBottom || atBottom);
+         this.bridge.resize(cols, rows);
+         this._outputAnnouncements.invalidate();
+         this.cols = this.bridge.getCols();
