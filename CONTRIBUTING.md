@@ -53,13 +53,15 @@ need the private relay are skipped, each with the same one-line reason:
 
 ```sh from-zero
 cd apps/web
+bun run build
 bunx playwright install --with-deps chromium
 bun run test:e2e
+bun run test:e2e:two-runs
 ```
 
-That is everything `Check` and `Web e2e` run. The relay suites are optional for a contributor; with access to the
-private relay, `RELAY_REPO=<owner>/<name> bun run relay:test` runs them (see below), and without it that command says so
-and stops.
+That is everything `Check` and `Web e2e` run: the web build, the browser suite, and two short runs at once on their own
+ports. The relay suites are optional for a contributor; with access to the private relay,
+`RELAY_REPO=<owner>/<name> bun run relay:test` runs them (see below), and without it that command says so and stops.
 
 ## Checks
 

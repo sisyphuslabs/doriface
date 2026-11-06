@@ -78,7 +78,9 @@ test("CONTRIBUTING.md's from-zero path installs the tools, clones, checks and ru
     "bun install --frozen-lockfile",
     "bun run check",
     "bunx playwright install --with-deps chromium",
+    "bun run build",
     "bun run test:e2e",
+    "bun run test:e2e:two-runs",
   ]) {
     expect({ wanted, found: all.includes(wanted) }).toEqual({ wanted, found: true });
   }
