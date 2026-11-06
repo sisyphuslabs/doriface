@@ -469,6 +469,8 @@ export function TerminalView(props: TerminalViewProps) {
         onPaste={(text) => {
           typed(text);
           setPaste(null);
+          // The confirmed paste is the line now being typed: the terminal takes the keyboard back, as a tap in it does.
+          handle.current?.focus();
         }}
       />
       <PointMenu at={selectAt} onClose={closeSelectionMenu} label="Selected text">
