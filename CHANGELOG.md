@@ -6,6 +6,11 @@
 
 - A landing page for doriterm.com in `apps/landing` (a static Vite build) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the hero line "Your devices. One terminal.", the app shown live from its own components, the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
 
+### Joining a mesh from a browser
+
+- A browser with no account and no pairing opens the web app, follows an invite link a member sent, checks the host's fingerprint and lands on the mesh's terminals; a revisit needs no new invite. (#709)
+- A mesh invite (`&m=1`) is no longer read as a device invite: the web app says it adds a machine, with the command that does, instead of reporting a link that was already used. (#709)
+
 ### Answering agents from the card
 
 - The card pinned over a waiting agent answers every prompt Claude Code and Codex draw, not only Allow or Deny: each of the agent's own rows with its key, its questions (one or several in a row, multi-select, a typed answer), and a plan to approve. It shows what the agent said above the question, the directory it works in, the diff or file it touches, and opens the files it names. Every answer is still checked against the live screen first. (#669)
