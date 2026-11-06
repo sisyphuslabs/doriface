@@ -84,3 +84,25 @@ test("an attempt the caller abandoned does not dial the relay at all", async () 
     relay.stop();
   }
 });
+
+test("an attempt deadline fails inside itself, and closes the relay socket it was dialing", async () => {
+  const closed = Promise.withResolvers<void>();
+  const relay = neverAnswers({ close: () => closed.resolve() });
+  try {
+    const started = performance.now();
+    const outcome = await Promise.race([
+      connect(settings(relay.port), undefined, deps, { deadlineMs: 150 }).then(
+        () => "opened",
+        (caught: unknown) => caught,
+      ),
+      Bun.sleep(2_000).then(() => "still dialing"),
+    ]);
+    expect(String(outcome)).toContain("no session within 150 ms");
+    expect(performance.now() - started).toBeLessThan(1_500);
+    expect(await Promise.race([closed.promise.then(() => "closed"), Bun.sleep(1_000).then(() => "still open")])).toBe(
+      "closed",
+    );
+  } finally {
+    relay.stop();
+  }
+});
