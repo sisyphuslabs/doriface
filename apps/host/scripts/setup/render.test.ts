@@ -4,6 +4,7 @@ import {
   bunMeetsFloor,
   desktopStateDir,
   hcVersionOf,
+  installedHcPath,
   lastRelayState,
   readExistingService,
   readMeshPair,
@@ -228,6 +229,13 @@ describe("the host's own output", () => {
       "unreachable",
     ]);
     expect(withCoreLines(status, undefined)).toEqual(status);
+  });
+
+  test("the installer's own path is used, since it adds no hc link when an older hc is on PATH", () => {
+    const output =
+      "herdr-core 0.1.18 installed at /home/u/.local/bin/herdr-core\nAdd /home/u/.local/bin to your PATH, or pass --hc /home/u/.local/bin/herdr-core.\n";
+    expect(installedHcPath(output)).toBe("/home/u/.local/bin/herdr-core");
+    expect(() => installedHcPath("doriface-host --install-hc: no network")).toThrow(/did not say/);
   });
 
   test("versions", () => {

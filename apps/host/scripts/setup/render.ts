@@ -282,6 +282,14 @@ const versionParts = (value: string): number[] =>
     .slice(0, 3)
     .map((part) => Number.parseInt(part, 10) || 0);
 
+/** `doriface-host --install-hc` prints `herdr-core <version> <installed|updated|...> at <path>`. */
+export function installedHcPath(output: string): string {
+  const path = /^herdr-core \S+ \S+ at (\S+)$/m.exec(output)?.[1];
+  if (path === undefined)
+    throw new SetupError("hc", "doriface-host --install-hc did not say where it installed herdr-core");
+  return path;
+}
+
 export function bunMeetsFloor(version: string, floor = "1.4.4"): boolean {
   const [a, b] = [versionParts(version), versionParts(floor)];
   for (let i = 0; i < 3; i += 1) {

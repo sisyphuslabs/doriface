@@ -25,6 +25,7 @@ import {
   bunMeetsFloor,
   desktopStateDir,
   hcVersionOf,
+  installedHcPath,
   lastRelayState,
   readExistingService,
   readMeshPair,
@@ -142,31 +143,43 @@ export async function updateCheckout(context: SetupContext, ref: string): Promis
   return { sha: target, changed };
 }
 
-/** herdr-core on PATH or in ~/.local/bin, installed or updated by the host's own checksummed installer when missing or below the floor. */
+/**
+ * herdr-core in ~/.local/bin, else on PATH; installed or updated by the host's own checksummed installer when none
+ * meets the floor. The installer writes `~/.local/bin/herdr-core` and adds the `hc` link beside it only when no `hc`
+ * is on PATH, so the path it reports is the one used, and a qualifying ~/.local/bin binary wins over an older `hc`
+ * elsewhere on PATH (otherwise every re-run would install again).
+ */
 export async function ensureHc(context: SetupContext): Promise<string> {
-  const local = join(context.home, ".local", "bin", "hc");
-  const found = hcOnMachine(context);
-  if (found !== undefined) {
-    const version = hcVersionOf((await context.run([found, "--version"])).stdout);
+  for (const candidate of hcCandidates(context)) {
+    // oxlint-disable-next-line no-await-in-loop -- the first candidate that meets the floor wins
+    const version = hcVersionOf((await context.run([candidate, "--version"])).stdout);
     if (version !== undefined && meetsHcFloor(version)) {
-      context.report("hc", "unchanged", `herdr-core ${version} at ${found}`);
-      return found;
+      context.report("hc", "unchanged", `herdr-core ${version} at ${candidate}`);
+      return candidate;
     }
   }
-  await must(context, "hc", [process.execPath, cliOf(srcOf(context)), "--install-hc"]);
-  const version = hcVersionOf((await must(context, "hc", [local, "--version"])).stdout);
-  context.report("hc", "changed", `installed herdr-core ${version ?? "?"} at ${local} (floor ${HC_VERSION_FLOOR})`);
-  return local;
+  const installed = installedHcPath(
+    (await must(context, "hc", [process.execPath, cliOf(srcOf(context)), "--install-hc"])).stdout,
+  );
+  const version = hcVersionOf((await must(context, "hc", [installed, "--version"])).stdout);
+  if (version === undefined || !meetsHcFloor(version)) {
+    throw new SetupError("hc", `${installed} reports ${version ?? "no version"}, below the floor ${HC_VERSION_FLOOR}`);
+  }
+  context.report("hc", "changed", `installed herdr-core ${version} at ${installed} (floor ${HC_VERSION_FLOOR})`);
+  return installed;
 }
 
-function hcOnMachine(context: SetupContext): string | undefined {
-  const local = join(context.home, ".local", "bin", "hc");
-  return Bun.which("hc") ?? (existsSync(local) ? local : undefined);
+function hcCandidates(context: SetupContext): string[] {
+  const bin = join(context.home, ".local", "bin");
+  const onPath = Bun.which("hc");
+  return [...new Set([join(bin, "hc"), join(bin, "herdr-core"), ...(onPath === null ? [] : [onPath])])].filter((path) =>
+    existsSync(path),
+  );
 }
 
 /** For the commands after install, which must not install anything. */
 export function findHc(context: SetupContext): string {
-  const found = hcOnMachine(context);
+  const found = hcCandidates(context)[0];
   if (found === undefined) throw new SetupError("hc", "herdr-core (hc) is not installed; run install first");
   return found;
 }
