@@ -1,5 +1,5 @@
 import { DirectionPad, ExtraKeysBar, KeyboardButton, Menu, MenuItem } from "@doriface/ui";
-import type { RefObject } from "react";
+import { type RefObject, useCallback, useState } from "react";
 import { activeEntries, specialEntries } from "../keybar/entries.ts";
 import { toExtra } from "../keybar/render.tsx";
 import { useKeyBarSettings } from "../keybar/store.ts";
@@ -43,6 +43,25 @@ export interface PhoneKeysProps {
    * soft keyboard and the bar's key puts it down.
    */
   readonly onKeys?: (shown: boolean) => void;
+  /** The bar's height in px as it is drawn (taller while the field has a row of its own); 0 while it is closed. */
+  readonly onBarHeight?: (px: number) => void;
+}
+
+/** Reports an element's border-box height as it changes, and 0 once it is gone. */
+function useHeightReport(report: ((px: number) => void) | undefined): (element: HTMLDivElement | null) => void {
+  return useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element === null || report === undefined) return undefined;
+      const observer = new ResizeObserver(() => report(element.getBoundingClientRect().height));
+      observer.observe(element);
+      report(element.getBoundingClientRect().height);
+      return () => {
+        observer.disconnect();
+        report(0);
+      };
+    },
+    [report],
+  );
 }
 
 function hideKeyboard(): void {
@@ -55,7 +74,32 @@ function hideKeyboard(): void {
  * keyboard up the bar rides on it; with it down, only a round keyboard button stays, at the bottom right.
  */
 export function PhoneKeys(props: PhoneKeysProps) {
-  const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu, pad, onPad, onPacks, onKeys } = props;
+  const {
+    port,
+    open,
+    inset,
+    host,
+    sticky,
+    terminals,
+    current,
+    onOpen,
+    onMenu,
+    pad,
+    onPad,
+    onPacks,
+    onKeys,
+    onBarHeight,
+  } = props;
+  const [typing, setTyping] = useState(false);
+  const [barHeight, setBarHeight] = useState(0);
+  const reportHeight = useCallback(
+    (px: number) => {
+      setBarHeight(px);
+      onBarHeight?.(px);
+    },
+    [onBarHeight],
+  );
+  const barRef = useHeightReport(reportHeight);
   const settings = useKeyBarSettings();
   const own = specialEntries(settings, host);
   const packed = activeEntries(settings);
@@ -85,10 +129,12 @@ export function PhoneKeys(props: PhoneKeysProps) {
         <DirectionPad
           onKey={sticky.press}
           className="absolute right-3 z-10"
-          style={{ bottom: `calc(${bottom} + ${KEYS_BAR_HEIGHT} + 0.5rem)` }}
+          style={{ bottom: `calc(${bottom} + ${barHeight > 0 ? `${barHeight}px` : KEYS_BAR_HEIGHT} + 0.5rem)` }}
         />
       ) : null}
       <ExtraKeysBar
+        ref={barRef}
+        inputActive={typing}
         className="absolute inset-x-0 z-10"
         style={{ bottom }}
         keys={own.map(toExtra)}
@@ -101,7 +147,9 @@ export function PhoneKeys(props: PhoneKeysProps) {
         onPaste={sticky.paste}
         inputField={
           <InputBox
-            className="w-[clamp(8rem,40vw,12rem)] shrink-0 p-0"
+            className={typing ? "w-full p-0" : "w-[clamp(8rem,40vw,12rem)] shrink-0 p-0"}
+            draftKey={current}
+            onActive={setTyping}
             onSend={(text) => port.current?.send(`${text}\r`)}
           />
         }

@@ -1,5 +1,14 @@
 import { ClipboardPaste, GamepadDirectional, Keyboard, KeyboardOff, List, TextCursorInput } from "lucide-react";
-import { type CSSProperties, type ReactElement, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "../lib/cn.ts";
 import { DEFAULT_EXTRA_KEYS } from "./extra-keys-defaults.tsx";
 import { idleKey, keepFocus, KeyButton, keyTarget as key, latchedKey } from "./extra-key-button.tsx";
@@ -74,6 +83,9 @@ export interface ExtraKeysBarProps {
   readonly onInputBox?: () => void;
   /** A real input field in the first fixed column, in place of the field toggle. */
   readonly inputField?: ReactNode;
+  /** The input field is in use: it takes a row of its own across the bar, above the keys, which keep their width. */
+  readonly inputActive?: boolean;
+  readonly ref?: Ref<HTMLDivElement>;
   readonly onHideKeyboard?: () => void;
   /** The hide button's name: Hide keyboard by default; Hide keys where the bar shows without a soft keyboard. */
   readonly hideLabel?: string;
@@ -99,6 +111,7 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
     onKeyHold,
     padOpen = false,
     inputBox = false,
+    inputActive = false,
   } = props;
   const [fade, scroller] = useEdgeFade();
   const textKey = (entry: ExtraKey) => (
@@ -117,6 +130,7 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
   );
   return (
     <div
+      ref={props.ref}
       role="toolbar"
       aria-label="Terminal keys"
       style={props.style}
@@ -125,12 +139,20 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
         props.className,
       )}
     >
-      <div className="flex h-[3.25rem] items-center rounded-full border border-border bg-chrome/95 p-1 shadow-lg backdrop-blur-md">
+      <div
+        className={cn(
+          "border border-border bg-chrome/95 p-1 shadow-lg backdrop-blur-md",
+          inputActive
+            ? "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-y-1 rounded-[1.625rem]"
+            : "flex h-[3.25rem] items-center rounded-full",
+        )}
+      >
         <div
           ref={scroller}
           data-slot="terminal-keys-scroll"
           data-fade={fade}
           className={cn(
+            inputActive && "col-start-1 row-start-2 h-11",
             "flex min-w-0 flex-1 items-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
             "data-[fade=end]:[mask-image:linear-gradient(to_right,black_calc(100%-0.75rem),transparent)]",
             "data-[fade=start]:[mask-image:linear-gradient(to_left,black_calc(100%-0.75rem),transparent)]",
@@ -162,27 +184,27 @@ export function ExtraKeysBar(props: ExtraKeysBarProps) {
             <ClipboardPaste />
           </button>
         </div>
-        {divider("h-6")}
-        <div className="flex shrink-0 items-center">
-          {props.inputField ??
-            (props.onInputBox === undefined ? null : (
-              <button
-                type="button"
-                aria-label="Type in a field"
-                aria-pressed={inputBox}
-                onMouseDown={keepFocus}
-                onClick={props.onInputBox}
-                className={cn(key, inputBox ? latchedKey : idleKey)}
-              >
-                <TextCursorInput />
-              </button>
-            ))}
+        {inputActive ? null : divider("h-6")}
+        <div className={inputActive ? "contents" : "flex shrink-0 items-center"}>
+          <div className={inputActive ? "col-span-2 row-start-1 min-w-0" : "contents"}>{props.inputField}</div>
+          {props.inputField !== undefined || props.onInputBox === undefined ? null : (
+            <button
+              type="button"
+              aria-label="Type in a field"
+              aria-pressed={inputBox}
+              onMouseDown={keepFocus}
+              onClick={props.onInputBox}
+              className={cn(key, inputBox ? latchedKey : idleKey)}
+            >
+              <TextCursorInput />
+            </button>
+          )}
           <button
             type="button"
             aria-label={props.hideLabel ?? "Hide keyboard"}
             onMouseDown={keepFocus}
             onClick={props.onHideKeyboard}
-            className={cn(key, idleKey)}
+            className={cn(key, idleKey, inputActive && "col-start-2 row-start-2")}
           >
             <KeyboardOff />
           </button>
