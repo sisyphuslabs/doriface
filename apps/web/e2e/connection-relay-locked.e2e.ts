@@ -1,4 +1,4 @@
-// A release build reaches only the production relay (#389): Settings > Connections offers no relay address to edit and
+// A release build reaches only the production relay (#389): Settings > Advanced connection offers no relay address to edit and
 // no Loopback dev switch, and a custom relay address saved by an older build is never dialled.
 import { devices, type Page } from "@playwright/test";
 import { join } from "node:path";

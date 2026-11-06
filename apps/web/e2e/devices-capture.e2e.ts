@@ -1,4 +1,4 @@
-// Settings > Paired devices with the paired host stopped, in both themes at 1440 and 390:
+// Settings > This device (Host) with the paired host stopped, in both themes at 1440 and 390:
 // CAPTURE=1 bunx playwright test devices-capture
 import { type Browser, devices, type Page } from "@playwright/test";
 import { join } from "node:path";

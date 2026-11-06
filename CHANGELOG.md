@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so a connected machine shows how it is reached and whether it is there now. (#772)
+- Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
 
 ### Setting up your machines
 

@@ -8,7 +8,7 @@ const devices = [
 test.use({ serviceWorkers: "block" });
 
 /**
- * Settings > Paired devices with the desktop shell's two calls answered by a fake, which is the only way a browser spec
+ * Settings > This device (Host) with the desktop shell's two calls answered by a fake, which is the only way a browser spec
  * can reach them: the real ones arrive over IPC from the shell that spawned this computer's host.
  */
 test("settings lists this computer's paired devices and asks before revoking one", async ({ page }, info) => {

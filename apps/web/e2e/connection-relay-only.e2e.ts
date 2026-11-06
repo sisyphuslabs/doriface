@@ -1,4 +1,4 @@
-// #458: the direct-address feature is hidden. Settings > Connections offers no Direct address and shows the relay with
+// #458: the direct-address feature is hidden. Settings > Advanced connection offers no Direct address and shows the relay with
 // no field to edit it, in a release build and in a dev build (E2E_WEB_MODE=development), and adding a machine offers
 // only the relay path. A dev build still reads another relay and the direct address from saved settings.
 import type { Page } from "@playwright/test";
