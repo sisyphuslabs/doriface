@@ -21,6 +21,8 @@ usage: install.sh [options]
 
   --version <vX.Y.Z>    the release to install (default: the one this script came with, else the latest)
   --web-origin <url>    the web app the pairing QR code and link open (default: the doriface desktop app's link)
+  --join <link>         join the mesh of the host that made this link (the app's Add a machine command), instead
+                        of printing a pairing
   --bin-dir <dir>       where doriface-host goes (default ~/.local/bin)
   --from <url>          the release's download base, file:// included (default: the GitHub release)
   --no-service          install only; start doriface-host yourself
@@ -43,6 +45,7 @@ from="${DORIFACE_RELEASE_BASE:-}"
 service=1
 pair=1
 uninstall=0
+join=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -50,6 +53,7 @@ while [ $# -gt 0 ]; do
     --web-origin) [ $# -ge 2 ] || fail "--web-origin wants a URL"; web_origin="$2"; shift 2 ;;
     --bin-dir) [ $# -ge 2 ] || fail "--bin-dir wants a directory"; bin_dir="$2"; shift 2 ;;
     --from) [ $# -ge 2 ] || fail "--from wants a URL"; from="$2"; shift 2 ;;
+    --join) [ $# -ge 2 ] || fail "--join wants a mesh link"; join="$2"; shift 2 ;;
     --no-service) service=0; shift ;;
     --no-pair) pair=0; shift ;;
     --uninstall) uninstall=1; shift ;;
@@ -162,6 +166,11 @@ else
   say "using herdr-core at ${hc_path} ($("$hc_path" --version 2>/dev/null || echo 'version unknown'))"
 fi
 
+if [ "$service" -eq 0 ] && [ -n "$join" ]; then
+  "$host_bin" mesh join --yes --hc "$hc_path" --state-dir "$state_dir" "$join"
+  say "joined; start the host with: ${host_bin} --hc ${hc_path}"
+  exit 0
+fi
 if [ "$service" -eq 0 ]; then
   say "start the host with: ${host_bin} --hc ${hc_path} --state-dir ${state_dir}"
   say "then pair a device with: ${host_bin} pair --state-dir ${state_dir}"
@@ -232,11 +241,21 @@ else
 </plist>
 EOF
   launchctl bootout "gui/$(id -u)/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+  # bootout returns before launchd has unloaded the old agent, and bootstrap fails with 5 (EIO) until it has.
+  waited=0
+  while launchctl print "gui/$(id -u)/${SERVICE_LABEL}" >/dev/null 2>&1; do
+    waited=$((waited + 1))
+    [ "$waited" -le 100 ] || fail "the old ${SERVICE_LABEL} did not unload within 10 s; run: launchctl bootout gui/$(id -u)/${SERVICE_LABEL}"
+    sleep 0.1
+  done
   launchctl bootstrap "gui/$(id -u)" "$plist"
   say "doriface-host runs as the LaunchAgent ${SERVICE_LABEL} (logs: ~/Library/Logs/doriface-host.log)"
 fi
 
-if [ "$pair" -eq 1 ]; then
+if [ -n "$join" ]; then
+  "$host_bin" mesh join --wait-host 60 --yes --state-dir "$state_dir" "$join"
+  say "this machine joined the mesh; its terminals show in the app under its name"
+elif [ "$pair" -eq 1 ]; then
   echo
   if [ -n "$web_origin" ]; then
     "$host_bin" pair --wait-host 60 --state-dir "$state_dir" --web-origin "$web_origin"
