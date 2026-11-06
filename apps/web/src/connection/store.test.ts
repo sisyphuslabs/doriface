@@ -255,7 +255,14 @@ test("the open state carries the path its session opened on (#446 §5)", async (
   const live: Pick<HcConnection, "onClose" | "close" | "hello"> = {
     onClose: () => () => undefined,
     close: () => undefined,
-    hello: { core: { id: "c0re", name: "h" } },
+    hello: {
+      core: { id: "c0re", name: "h" },
+      features: [],
+      framed: true,
+      generation: 0,
+      methods: [],
+      version: "0.0.0",
+    },
   };
   const connection = live as HcConnection;
   const store = new ConnectionStore({ ...DEFAULT_SETTINGS, hostId: "h", hostKey: "k" }, (): Promise<OpenConnection> =>
@@ -280,7 +287,14 @@ test("a direct link that drops sends the next attempt to the relay at once, once
   const live: Pick<HcConnection, "onClose" | "close" | "hello"> = {
     onClose: (fn) => (closes.push(fn), () => undefined),
     close: () => undefined,
-    hello: { core: { id: "c0re", name: "h" } },
+    hello: {
+      core: { id: "c0re", name: "h" },
+      features: [],
+      framed: true,
+      generation: 0,
+      methods: [],
+      version: "0.0.0",
+    },
   };
   const connection = live as HcConnection;
   const skip: (boolean | undefined)[] = [];
