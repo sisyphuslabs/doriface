@@ -76,15 +76,16 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
       /tab 1 of 2$/,
     );
 
-    // The counts move as hc reports each agent's state, without a reload.
+    // The counts move as hc reports each agent's state, without a reload. The agent is the one in the other tab: herdr-app's
+    // done is "finished while you weren't looking", so an agent this phone is showing goes back to idle (#611).
     const before = await readCounts(page);
-    const [address] = started;
-    if (address === undefined) throw new Error("no terminal started");
-    report(address, "working");
+    const beyond = started[1];
+    if (beyond === undefined) throw new Error("no second terminal started");
+    report(beyond, "working");
     await expect(counts(page)).toHaveText(said({ ...before, working: before.working + 1, idle: before.idle - 1 }), {
       timeout: 15_000,
     });
-    report(address, "done");
+    report(beyond, "done");
     await expect(counts(page)).toHaveText(said({ ...before, done: before.done + 1, idle: before.idle - 1 }), {
       timeout: 15_000,
     });
@@ -118,6 +119,8 @@ test("on a phone the terminal header says where you are, follows hc's agent stat
     await tabRow("2").click();
     await expect(sheet).toBeHidden();
     await expect(header(page).getByRole("heading", { name: "2", exact: true })).toBeVisible({ timeout: 15_000 });
+    // Reaching the tab that agent finished in is looking at it: it asks for nobody, so the counts read as before it did.
+    await expect(counts(page)).toHaveText(said(before), { timeout: 15_000 });
     await expect(page.locator("[data-phone-tabs]").getByRole("button", { name: /^Switch tab, / })).toContainText("2/2");
 
     // A new tab in the same space, saved by another device, is counted at once.

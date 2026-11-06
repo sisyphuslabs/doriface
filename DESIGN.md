@@ -13,7 +13,7 @@ The single source of truth for doriface's look and behaviour. Tokens live in `pa
 
 ## 1. Atmosphere & Identity
 
-A quiet control room at night. Terminals are the content; everything around them is warm graphite chrome that steps back. The signature is **status you can read without colour**: a spinning arc for working, a "Needs you" chip or `!` mark for blocked, a filled dot for done, a ring for idle, the same grammar on desktop, phone and in the tab strip. Depth comes from tonal steps and 1 px hairlines, never glass or heavy shadow.
+A quiet control room at night. Terminals are the content; everything around them is warm graphite chrome that steps back. The signature is **status you can read without colour**: a spinning arc for working, a "Needs you" chip or `!` mark for blocked, a filled dot for done, a ring for idle, the same grammar on desktop, phone and in the tab strip. Done is attention, not history, as in herdr-app: it is a finish this screen has not looked at yet, and showing that pane turns it idle here, while another device that has not looked still shows it (#611). Depth comes from tonal steps and 1 px hairlines, never glass or heavy shadow.
 
 ## 2. Color
 
