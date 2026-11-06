@@ -6,6 +6,10 @@
 
 - Settings > Keyboard puts the keys bar in your own hands: the bar itself at the top, the keys it carries with the order you set by dragging or by keyboard, and Add keys for the ones you took out. Packs (Navigation, Ctrl chords, Tmux, Coding agents) are rows you switch on, and Your keys carries your own entries — a label plus the exact bytes or chord it sends, checked against the chord grammar so a bare modifier is refused rather than sent as text. The bar belongs to the host the phone talks to, so an iPhone on a Linux machine is offered no Command key. (#770)
 
+### Reconnecting
+
+- A page that comes back (a tab shown again, a page restored from the back/forward cache, the network returning) while its link still looks open asks the host once; a link that does not answer within 10 seconds is dropped and reconnects at once, instead of leaving the terminal frozen until the 45-second heartbeat gives up. A link that answers, even with a refusal, is left alone. (#775)
+
 ### Setting up your machines
 
 - [docs/install.md](docs/install.md) and the README show how to run the host as a user service on every Linux and macOS machine you own, join them into one mesh, and pair phones and browsers. The [doriterm-setup skill](skills/doriterm-setup/SKILL.md) lets a coding agent do it with `apps/host/scripts/setup/cli.ts` (`install`, `verify`, `invite`, `join`, `pair`, `uninstall`), which is safe to re-run and never prints a join link or key. (#778)
@@ -27,6 +31,7 @@
 ### Web app and PWA
 
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
+- Pointing a connection at another host moves its notifications there once: the new host's name arriving with its first answer no longer started a second move beside the first, which could leave the new host holding two subscriptions for one device. (#876)
 - A resize no longer moves a terminal's view: a terminal following its output stays on its last line when the window is resized, a split divider is dragged or the phone keyboard opens, even while an agent redraws its whole transcript for the new width, and a terminal scrolled into its history keeps its line at the top. (#811)
 
 ### Rendering performance
@@ -37,6 +42,7 @@
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#705)
 - An Android app: the same web client in a native shell, with notifications that arrive with the app closed and Allow and Deny on a permission prompt, answered once the app is on screen. The status and navigation bars follow the theme. (#704, #705)
+- An iOS app around the same web client: a Notification Service Extension opens each notice with the app's own keys, so the text is shown without the bridge or Apple reading it. (#704, #705)
 
 ### Desktop local host and pairing by code
 
@@ -48,6 +54,24 @@
 ### Machine mesh
 
 - A machine you had already added over ssh or with a via is replaced by its mesh line under the same name, and mesh status and the Mesh panel say what kind of entry it replaced. Its open tabs and layout carry over. (#710)
+
+### Website
+
+- A landing page for doriterm.com in `apps/landing` (a static Vite build) with its design system in `docs/design/landing/DESIGN-LANDING.md`: the hero line "Your devices. One terminal.", the app shown live from its own components, the relay as a ciphertext-only pipe, pairing by QR or code, and the mesh, each drawn as an animation that stops under reduced motion, in dark and light. (#735)
+
+### Pasting images
+
+- An image pasted into a terminal, or a file dropped on one, goes to that terminal's machine, this one or an added one, and its path is pasted there, as in herdr-app, so an agent there can read it. Text pastes as before, Ctrl+V works as before, and **Paste image** can be bound to a key in Settings > Keybindings. (#701)
+
+### First run
+
+- A newly paired device walks through its first run: pair, start or open an agent, then see it in the agents list. Each step completes on its own, the guide can be skipped, and Settings > Device > **Getting started** shows it again. (#668)
+
+### Host install
+
+- One step installs a host on Linux or macOS: `install.sh` (a release asset) downloads `doriface-host` and checks it against `SHA256SUMS.txt`, installs herdr-core when `hc` is missing, runs the host as a user service at the highest priority a user service can have (systemd `--user` with `Restart=always` and the top CPU and IO weights on Linux, an `Interactive` LaunchAgent kept alive on macOS) and prints the pairing QR code; running it again upgrades in place, and `--uninstall` removes it and keeps the keys. (#668)
+- **Add a machine** is one command: the dialog asks this host for a single-use mesh offer and shows `curl -fsSL …/install.sh | sh -s -- --join '<link>'` to run on the machine to add, which installs the host, runs it as a service and joins this host's mesh; the cores then add each other as machines, and the dialog says when it joined. The three hand-run steps stay under **Advanced**. (#668)
+- `doriface-host pair --wait-host <seconds>` waits for a host that is still starting, and for the relay to register the code, so the first code it prints works. (#668)
 
 ## v0.1.2 - 2026-11-06
 
