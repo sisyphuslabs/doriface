@@ -164,8 +164,15 @@ export class MeshConnections {
     this.#notify();
   }
 
+  /**
+   * Begins dialling every member again.
+   *
+   * This is also the "Try now" the first-connect screen offers, which means retry everything: with the started set left in place a
+   * member that had already dialled was skipped and the button did nothing (caught by first-connect-offline in CI).
+   */
   start(): void {
     this.#running = true;
+    this.#started.clear();
     this.#startAll();
   }
 
