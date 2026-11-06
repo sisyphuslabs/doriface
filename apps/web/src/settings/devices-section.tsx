@@ -9,6 +9,8 @@ import type { DesktopPairedDevice } from "../desktop/pair-bridge.ts";
 import { hostRouteOf } from "./host-route.ts";
 import { PairDeviceOffer } from "./pair-device-offer.tsx";
 import { deviceSummary, pairedDevicesView, type PairedDevicesView } from "./paired-devices.ts";
+import { sessionPathLabel } from "./session-path.ts";
+import { useHostRoundTrip } from "./use-host-round-trip.ts";
 
 function useConnectionSettings(): ConnectionSettings {
   return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
@@ -73,6 +75,7 @@ export function DevicesSection() {
   const state = useConnection();
   const settings = useConnectionSettings();
   const route = hostRouteOf(settings);
+  const roundTrip = useHostRoundTrip(state.phase === "open" ? state.connection : null);
   const devices = useMemo(() => desktopDevices(), []);
   const [paired, setPaired] = useState<DesktopDevicesAnswer | null>(null);
   const [revoking, setRevoking] = useState<DesktopPairedDevice | null>(null);
@@ -121,6 +124,12 @@ export function DevicesSection() {
         description={
           <>
             {describe(state)}
+            {state.phase === "open" ? (
+              <span className="block text-muted-foreground">
+                {sessionPathLabel(state.path, state.directReason)}
+                {roundTrip === undefined ? "" : ` · ${roundTrip} ms round trip`}
+              </span>
+            ) : null}
             {route.label === undefined ? null : <span className="block text-muted-foreground">{route.label}</span>}
           </>
         }
