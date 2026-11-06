@@ -33,6 +33,19 @@ test("a connected machine whose line is redialing reads connected until the grac
   expect(stepHeld(again, { views: dropped, at: 31_050 }, dropped, 1_000 + OFFLINE_GRACE_MS).size).toBe(0);
 });
 
+test("the slowest return measured on a real relay blip, 62 s after the drop, never reads offline", () => {
+  const connected = [machine("jobdori", "connected")];
+  const dropped = [machine("jobdori", "unreachable", 2_000)];
+  let held = stepHeld(NONE, { views: connected, at: 0 }, dropped, 4_000);
+  let before = { views: dropped, at: 4_000 as number | undefined };
+  for (let now = 14_000; now <= 64_000; now += 10_000) {
+    held = stepHeld(held, before, dropped, now);
+    before = { views: dropped, at: now };
+    expect(shown(dropped, held, now)).toEqual([["jobdori", "connected"]]);
+  }
+  expect(stepHeld(held, before, connected, 64_100).size).toBe(0);
+});
+
 test("a line back inside the grace never showed anything but connected, and a second drop starts a fresh grace", () => {
   const connected = [machine("rack", "connected")];
   const dropped = [machine("rack", "connecting")];
@@ -93,7 +106,8 @@ test("with the host's clock ahead, a first read holds at most one grace and an e
     before = { views: ahead, at: now };
     states.push(shown(ahead, held, now)[0]?.[1] ?? "none");
   }
-  expect(states).toEqual([...Array(4).fill("connected"), ...Array(8).fill("unreachable")]);
+  const held10 = Math.ceil(OFFLINE_GRACE_MS / 10_000) - 1;
+  expect(states).toEqual([...Array(held10).fill("connected"), ...Array(12 - held10).fill("unreachable")]);
 });
 
 test("a held machine's live terminals stay live in its grace and read offline once it ends", () => {
@@ -111,6 +125,6 @@ test("a held machine's live terminals stay live in its grace and read offline on
   };
   const dropped = [machine("rack", "unreachable", 0)];
   const held = stepHeld(NONE, { views: [machine("rack", "connected")], at: 0 }, dropped, 0);
-  expect(withReach([live], graceViews(dropped, held, 44_000))[0]?.offline).toBeUndefined();
+  expect(withReach([live], graceViews(dropped, held, OFFLINE_GRACE_MS - 1))[0]?.offline).toBeUndefined();
   expect(withReach([live], graceViews(dropped, held, OFFLINE_GRACE_MS))[0]?.offline).toBe(true);
 });
