@@ -117,3 +117,12 @@ export function machineGroups(
     spaces: spaces.filter((space) => (space.machine ?? undefined) === (machine.local ? undefined : machine.name)),
   }));
 }
+
+/**
+ * The spaces in the order the sidebar shows them, which the space keys count by: with one machine its document's order,
+ * else each machine's spaces under that machine, the machines as the person ordered them.
+ */
+export function spacesInOrder(machines: readonly MachineEntry[], spaces: readonly Space[]): readonly Space[] {
+  const groups = machineGroups(machines, spaces);
+  return groups === undefined ? spaces : groups.flatMap((group) => group.spaces);
+}

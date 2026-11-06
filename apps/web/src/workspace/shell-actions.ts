@@ -29,6 +29,10 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
     "session.rename",
     "session.end",
     "space.rename",
+    // herdr-app's palette lists the space cycle keys; a space's number chords select what a person points at, which
+    // herdr's palette hides `space.select` for the same reason.
+    "space.next",
+    "space.prev",
     "voice.dictate",
     "layout.toggle:sidebar",
     "app.zoom_in",

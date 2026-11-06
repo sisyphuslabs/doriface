@@ -15,6 +15,9 @@ const DORIFACE_ONLY: Readonly<Record<"mac" | "other", readonly string[]>> = {
   mac: ["layout.focus:sidebar", "tab.move:left", "tab.move:right"],
   other: [
     "layout.focus:sidebar",
+    // herdr-app cycles spaces with Ctrl+Shift+PgUp/PgDn here; doriface's terminal keeps those, so it cycles with Ctrl+Alt+[ / ].
+    "space.next",
+    "space.prev",
     "pane.resize:left",
     "pane.resize:right",
     "pane.resize:up",

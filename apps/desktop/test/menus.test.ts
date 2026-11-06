@@ -92,6 +92,10 @@ describe("menus", () => {
       "separator",
       "Close Pane",
       "Close Tab",
+      "separator",
+      "Select Space",
+      "Previous Space",
+      "Next Space",
     ]);
     expect(shell[2]).toMatchObject({ accelerator: "Command+D", registerAccelerator: false });
     expect(shell[3]).toMatchObject({ accelerator: "Command+Shift+D", registerAccelerator: false });
@@ -99,6 +103,24 @@ describe("menus", () => {
     expect(shell[0]?.accelerator).toBeUndefined();
     shell[3]?.click?.(Object.create(null), undefined, Object.create(null));
     expect(ran).toEqual(["pane.split:down"]);
+  });
+
+  test("Select Space lists the nine space chords with their live keys, and each runs its own space action", () => {
+    const ran: string[] = [];
+    const keys = new Map([
+      ["space.select:1", "ctrl+1"],
+      ["space.select:2", "ctrl+2"],
+      ["space.prev", "alt+super+["],
+      ["space.next", "alt+super+]"],
+    ]);
+    const shell = submenuOf(menuTemplate(options("darwin", { keys, runAction: (id) => ran.push(id) }))[3]);
+    const select = shell.find((item) => item.label === "Select Space");
+    expect(submenuOf(select).map((item) => item.label)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    expect(submenuOf(select)[1]).toMatchObject({ accelerator: "Ctrl+2", registerAccelerator: false });
+    expect(shell.find((item) => item.label === "Next Space")).toMatchObject({ accelerator: "Command+Option+]" });
+    submenuOf(select)[1]?.click?.(Object.create(null), undefined, Object.create(null));
+    shell.find((item) => item.label === "Previous Space")?.click?.(Object.create(null), undefined, Object.create(null));
+    expect(ran).toEqual(["space.select:2", "space.prev"]);
   });
 
   test("a trigger becomes Electron's accelerator, and one Electron cannot name shows none", () => {

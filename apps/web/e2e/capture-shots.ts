@@ -220,6 +220,16 @@ export const SHOTS: readonly Shot[] = [
       await scrollToEnd(page);
     },
   })),
+  {
+    // The space keys (#619): the number chords and the cycle pair, with the note that a terminal keeps the number chord.
+    name: "settings-keybindings-spaces",
+    start: "connected",
+    run: async (page) => {
+      await section(page, "Keybindings");
+      await page.getByLabel("Search keybindings").fill("space");
+      await expect(page.getByText("Go to space 1").first()).toBeVisible();
+    },
+  },
   { name: "settings-mesh", start: "connected", run: meshLoaded },
   {
     // The fail-closed removal and its re-found command, which neither the top nor the end frame shows at 390.

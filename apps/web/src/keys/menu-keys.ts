@@ -25,6 +25,9 @@ export const MENU_ACTIONS: readonly string[] = [
   "pane.zoom",
   "pane.close",
   "tab.close",
+  ...Array.from({ length: 9 }, (_, index) => `space.select:${index + 1}`),
+  "space.prev",
+  "space.next",
 ];
 
 /** The first trigger bound to each menu action; an unbound one is left out, so its item shows no shortcut. */

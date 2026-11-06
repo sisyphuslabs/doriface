@@ -20,6 +20,10 @@ const MAC: readonly [string, string][] = [
   ["super+shift+left", "tab.move:left"],
   ["super+shift+right", "tab.move:right"],
   ...digits("super+", "tab.select"),
+  // herdr-app's space keys: Ctrl+1-9 select a space (Cmd+1-9 are its tabs), and Cmd+Alt+[ / ] cycle them.
+  ...digits("ctrl+", "space.select"),
+  ["super+alt+[", "space.prev"],
+  ["super+alt+]", "space.next"],
   ["super+d", "pane.split:right"],
   ["super+shift+d", "pane.split:down"],
   ["super+w", "pane.close"],
@@ -83,8 +87,11 @@ const OTHER: readonly [string, string][] = [
   // Ghostty's own move_tab; its ctrl+shift+left/right are previous/next tab, which doriface leaves alone.
   ["ctrl+shift+page_up", "tab.move:left"],
   ["ctrl+shift+page_down", "tab.move:right"],
-  ...digits("ctrl+", "tab.select"),
   ...digits("alt+", "tab.select"),
+  // herdr-app's space keys: Ctrl+1-9 select a space (Alt+1-9 are its tabs), and Ctrl+Alt+[ / ] cycle them.
+  ...digits("ctrl+", "space.select"),
+  ["ctrl+alt+[", "space.prev"],
+  ["ctrl+alt+]", "space.next"],
   ["ctrl+shift+o", "pane.split:right"],
   ["ctrl+shift+e", "pane.split:down"],
   ["ctrl+shift+x", "pane.close"],

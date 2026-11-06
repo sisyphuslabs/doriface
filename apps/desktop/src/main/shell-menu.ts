@@ -41,6 +41,10 @@ const ITEMS: readonly (readonly [string, string] | null | readonly [string, read
     null,
     ["pane.close", "Close Pane"],
     ["tab.close", "Close Tab"],
+    null,
+    ["Select Space", Array.from({ length: 9 }, (_, index) => [`space.select:${index + 1}`, `${index + 1}`] as const)],
+    ["space.prev", "Previous Space"],
+    ["space.next", "Next Space"],
   ];
 
 export const SHELL_MENU_ACTIONS: ReadonlySet<string> = new Set(

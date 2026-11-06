@@ -17,6 +17,11 @@ const terminal = (address: string): Terminal => ({
   state: "live",
 });
 const noop = (): void => undefined;
+/** The spaces the space keys count, in the order the sidebar lists them, and where selecting one goes. */
+const spaces = (calls: string[] = []) => ({
+  spaceKeys: ["space:spc1", "space:spc2", "space:spc3"] as const,
+  onSelectSpace: (key: string) => calls.push(key),
+});
 const pane = { id: "p1", address: "t1", mod: null };
 const tab: LayoutTab = {
   key: "tb1",
@@ -63,6 +68,7 @@ const handlers = {
     {
       terminals: [terminal("t1"), terminal("t2")],
       layout,
+      ...spaces(),
       onNew: noop,
       onSplit: noop,
       onCloseTab: noop,
@@ -131,6 +137,7 @@ describe("moving a tab", () => {
             active: stripTab("t1"),
             moveTab: (key, to) => calls.push([key, to]),
           },
+          ...spaces(),
           onNew: noop,
           onSplit: noop,
           onCloseTab: noop,
@@ -203,6 +210,7 @@ describe("dictation (#194)", () => {
         {
           terminals: [],
           layout,
+          ...spaces(),
           onNew: noop,
           onSplit: noop,
           onCloseTab: noop,
@@ -234,5 +242,56 @@ describe("dictation (#194)", () => {
       )("voice.dictate"),
     ).toBe(false);
     expect(runs).toEqual(["desktop", "phone"]);
+  });
+});
+
+const spaceHandler = (spaceKeys: readonly string[], active: string | null, calls: string[]) =>
+  desktopActions(
+    {
+      terminals: [],
+      layout: active === null ? { ...layout, active: null } : { ...layout, active: { ...tab, spaceKey: active } },
+      spaceKeys,
+      onSelectSpace: (key) => calls.push(key),
+      onNew: noop,
+      onSplit: noop,
+      onCloseTab: noop,
+      onClosePane: noop,
+      onRenameTab: noop,
+      onToggleSidebar: noop,
+      onFocusSidebar: noop,
+      onSession: () => true,
+      onDictate: () => false,
+    },
+    noop,
+  );
+
+describe("space keys, as herdr-app binds them", () => {
+  const three = ["space:s1", "space:s2", "space:s3"];
+
+  test("a number chord shows that place in the sidebar, and one with no space there leaves the key alone", () => {
+    const calls: string[] = [];
+    const run = (action: string, active: string | null = "space:s1") => spaceHandler(three, active, calls)(action);
+    expect(run("space.select:2")).toBe(true);
+    expect(run("space.select:9")).toBe(false);
+    expect(run("space.select:1")).toBe(false);
+    expect(calls).toEqual(["space:s2"]);
+  });
+
+  test("next and previous step in sidebar order and wrap at either end", () => {
+    const calls: string[] = [];
+    const at = (active: string, action: string) => spaceHandler(three, active, calls)(action);
+    expect(at("space:s3", "space.next")).toBe(true);
+    expect(at("space:s1", "space.prev")).toBe(true);
+    expect(at("space:s2", "space.next")).toBe(true);
+    expect(at("space:s2", "space.prev")).toBe(true);
+    expect(calls).toEqual(["space:s1", "space:s3", "space:s3", "space:s1"]);
+  });
+
+  test("with no space at all they are left to the terminal", () => {
+    const calls: string[] = [];
+    expect(spaceHandler([], null, calls)("space.select:1")).toBe(false);
+    expect(spaceHandler([], null, calls)("space.next")).toBe(false);
+    expect(spaceHandler([], null, calls)("space.prev")).toBe(false);
+    expect(calls).toEqual([]);
   });
 });

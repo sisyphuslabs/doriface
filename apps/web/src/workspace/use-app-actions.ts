@@ -29,6 +29,9 @@ export interface AppActionTargets {
   readonly onDictate: () => boolean;
   /** The tab that has keyboard focus, which a key moves instead of the active one; none when focus is elsewhere. */
   readonly focusedTab?: () => string | null;
+  /** Every space in the order the sidebar lists them (`spaceKey`s): what the space keys select and cycle through. */
+  readonly spaceKeys: readonly string[];
+  readonly onSelectSpace: (key: string) => void;
 }
 
 export type SessionVerb = (verb: "rename" | "end" | "rename-space") => boolean;
@@ -138,6 +141,15 @@ function openAgent(layout: Layout, address: string | null): boolean {
   return true;
 }
 
+/** The space `step` places away in `spaceKeys`, wrapping at either end; null when there is nowhere to go. */
+function steppedSpace(spaceKeys: readonly string[], active: string | null, step: 1 | -1): string | null {
+  if (spaceKeys.length === 0) return null;
+  const at = active === null ? -1 : spaceKeys.indexOf(active);
+  if (at === -1) return spaceKeys[step === 1 ? 0 : spaceKeys.length - 1] ?? null;
+  const key = spaceKeys[(at + step + spaceKeys.length) % spaceKeys.length] ?? null;
+  return key === active ? null : key;
+}
+
 export function desktopActions(
   {
     terminals,
@@ -152,6 +164,8 @@ export function desktopActions(
     onSession,
     onDictate,
     focusedTab,
+    spaceKeys,
+    onSelectSpace,
   }: AppActionTargets,
   openSettings: () => void,
 ): ActionHandler {
@@ -160,8 +174,15 @@ export function desktopActions(
     // The tab bar's tabs: the selected space's (#404).
     const keys = layout.shown.map((tab) => tab.key);
     const active = layout.active?.key ?? null;
+    const activeSpace = layout.active?.spaceKey ?? null;
     const focused = layout.focused?.address ?? null;
     const [verb, argument = ""] = action.split(":");
+    // A space key shows a space the sidebar lists; no space there, or the one in view, leaves the key to the terminal.
+    const selectSpace = (key: string | null): boolean => {
+      if (key === null || key === activeSpace) return false;
+      onSelectSpace(key);
+      return true;
+    };
     switch (verb) {
       case "tab.new":
         onNew();
@@ -183,6 +204,12 @@ export function desktopActions(
         return true;
       case "tab.move":
         return moveTab(layout, focusedTab?.() ?? active, argument);
+      case "space.select":
+        return selectSpace(spaceKeys[Number(argument) - 1] ?? null);
+      case "space.next":
+        return selectSpace(steppedSpace(spaceKeys, activeSpace, 1));
+      case "space.prev":
+        return selectSpace(steppedSpace(spaceKeys, activeSpace, -1));
       case "pane.split":
         if (focused === null || (argument !== "right" && argument !== "down")) return false;
         onSplit(argument === "right" ? "row" : "column");

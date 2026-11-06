@@ -3,6 +3,7 @@ import { Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { actionFor, displayActionId, type ActionDef } from "../keys/actions.ts";
 import type { Keymap } from "../keys/defaults.ts";
+import { TERMINAL_KEEPS } from "../keys/terminal-keeps.ts";
 import { triggerFromEvent, triggerKeys, type Platform } from "../keys/trigger.ts";
 
 export interface KeybindingRowProps {
@@ -117,7 +118,12 @@ export function KeybindingRow({
       }
       description={
         pending === null ? (
-          <span className="font-mono text-xs">{displayActionId(action.id)}</span>
+          <>
+            <span className="block font-mono text-xs">{displayActionId(action.id)}</span>
+            {TERMINAL_KEEPS.has(action.id) ? (
+              <span className="block text-xs">A focused terminal program keeps this key.</span>
+            ) : null}
+          </>
         ) : (
           // Keep is the safe default: it takes focus, and Escape means Keep. data-captures-keys tells Settings'
           // own Escape (close) to leave the key to this prompt.

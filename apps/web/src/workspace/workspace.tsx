@@ -17,7 +17,7 @@ import { availableActions } from "./shell-actions.ts";
 import { PhoneShell } from "./phone-shell.tsx";
 import type { SessionVerb } from "./use-app-actions.ts";
 import { useMachineRuns } from "./use-machine-runs.ts";
-import { PIN_LABEL } from "./sidebar-model.ts";
+import { PIN_LABEL, spacesInOrder } from "./sidebar-model.ts";
 import { PinContext, type PinTerminal } from "./use-pin.ts";
 import { MachinesContext, useMachines } from "./use-machines.ts";
 import { runParamsFor } from "./new-terminal.ts";
@@ -291,6 +291,8 @@ export function Workspace({ connection }: WorkspaceProps) {
     [entries, terminalsLoaded, machinesListed, listError, openAddMachine, views, retry, moveMachine, runs, inNewSpace],
   );
   const { selectSpace } = layout;
+  // The space keys count the spaces as the sidebar lists them, so "space 2" is the second row a person sees.
+  const spaceKeys = useMemo(() => spacesInOrder(entries, spaces).map((space) => space.id), [entries, spaces]);
   const selectedSpace = layout.active?.spaceKey ?? null;
   const spaceSelection = useMemo(
     () => ({ spaces, selected: selectedSpace, select: selectSpace }),
@@ -329,6 +331,8 @@ export function Workspace({ connection }: WorkspaceProps) {
                     terminals={terminals}
                     loaded={fed.loaded}
                     layout={layout}
+                    spaceKeys={spaceKeys}
+                    onSelectSpace={selectSpace}
                     onNew={() => newTerminal()}
                     onNewAgent={(template) => newTerminal(template)}
                     onNewSpace={() => runs.start({}, inNewSpace)}
