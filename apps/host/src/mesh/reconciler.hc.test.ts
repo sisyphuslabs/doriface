@@ -195,7 +195,7 @@ describe("the reconciler against real hc (R-1, R-2, R-9, R-10, R-11)", () => {
   );
 
   test(
-    "a member's core already added with plain doriface-host connect is migrated to the mesh line",
+    "a member's core already added with a via command is migrated to the mesh line, and the note says it was a command",
     async () => {
       const { self, members, local, reconciler, run, list } = await mesh(["b"]);
       const [b] = members;
