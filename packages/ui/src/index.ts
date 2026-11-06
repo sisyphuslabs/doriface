@@ -16,11 +16,9 @@ export { Dialog, DialogClose, DialogPanel, type DialogPanelProps, type DialogPro
 export { EmptyState, type EmptyStateProps } from "./components/empty-state.tsx";
 export { DirectionPad, type DirectionPadProps } from "./components/direction-pad.tsx";
 export {
-  DEFAULT_EXTRA_KEYS,
   ExtraKeysBar,
-  extraKeys,
+  HOLD_MS,
   KeyboardButton,
-  SWIPE_KEYS,
   type ExtraKey,
   type ExtraKeysBarProps,
   type KeyboardButtonProps,

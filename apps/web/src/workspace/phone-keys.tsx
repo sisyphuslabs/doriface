@@ -1,10 +1,14 @@
-import { DirectionPad, ExtraKeysBar, extraKeys, KeyboardButton, Menu, MenuItem } from "@doriface/ui";
+import { DirectionPad, ExtraKeysBar, type ExtraKey, KeyboardButton, Menu, MenuItem } from "@doriface/ui";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import type { RefObject } from "react";
+import type { BarIcon } from "../keybar/catalog.ts";
+import { type BarEntry, activeEntries, specialEntries } from "../keybar/entries.ts";
+import { useKeyBarSettings } from "../keybar/store.ts";
 import type { HostPlatform } from "../terminal/keys.ts";
 import type { TerminalPort } from "../terminal/terminal-port.ts";
+import { InputBox } from "./input-box.tsx";
 import { machineOf, type Session, terminalTitle } from "./model.ts";
 import type { StickyKeys } from "./use-sticky-keys.ts";
-import { InputBox } from "./input-box.tsx";
 
 export function keysBottom(inset: number): string {
   return inset > 0 ? `${inset}px` : "var(--safe-bottom)";
@@ -19,6 +23,21 @@ export const KEYBOARD_BUTTON_CLEARANCE = "calc(max(1rem, calc(var(--safe-bottom)
 /** How far up from the terminal's bottom the arrow pad reaches: its 0.5rem gap, three 3rem rows with their gaps and padding. */
 export const DIRECTION_PAD_CLEARANCE = "calc(0.5rem + 9rem + 0.5rem + 0.75rem + 2px)";
 
+const GLYPHS: Readonly<Record<BarIcon, typeof ArrowLeft>> = {
+  left: ArrowLeft,
+  right: ArrowRight,
+  up: ArrowUp,
+  down: ArrowDown,
+};
+
+function toExtra(entry: BarEntry): ExtraKey {
+  const Glyph = entry.icon === null ? null : GLYPHS[entry.icon];
+  const label = Glyph === null ? entry.label : <Glyph aria-hidden />;
+  return entry.bytes === null
+    ? { id: entry.id, label, name: entry.name, modifier: true }
+    : { id: entry.id, label, name: entry.name };
+}
+
 export interface PhoneKeysProps {
   readonly port: RefObject<TerminalPort | null>;
   readonly open: boolean;
@@ -32,6 +51,8 @@ export interface PhoneKeysProps {
   /** The arrow pad is open over the keys bar; the terminal keeps its own controls above it. */
   readonly pad: boolean;
   readonly onPad: (open: boolean) => void;
+  /** Opens the packs panel: the bar's pack button, or Ctrl held down. */
+  readonly onPacks: () => void;
   /**
    * Set where the bar opens without a soft keyboard (a mouse-only device, #287): the round button reads Show keys and
    * calls this with true, and the bar's last key reads Hide keys and calls it with false. Unset, the button raises the
@@ -45,11 +66,22 @@ function hideKeyboard(): void {
 }
 
 /**
- * The phone terminal's keys (after t3code's terminal screen): with the soft keyboard up, the keys bar rides on it and
- * can open the arrow pad; with it down, only a round keyboard button stays, at the bottom right.
+ * The phone terminal's keys (after t3code's terminal screen): the person's own keys from Settings > Keyboard, then the
+ * active pack's, then the controls that never move (the arrow pad, Switch session, Paste, and the fixed slots). With the
+ * soft keyboard up the bar rides on it; with it down, only a round keyboard button stays, at the bottom right.
  */
 export function PhoneKeys(props: PhoneKeysProps) {
-  const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu, pad, onPad, onKeys } = props;
+  const { port, open, inset, host, sticky, terminals, current, onOpen, onMenu, pad, onPad, onPacks, onKeys } = props;
+  const settings = useKeyBarSettings();
+  const own = specialEntries(settings, host);
+  const packed = activeEntries(settings);
+  const entries = new Map([...own, ...packed].map((entry) => [entry.id, entry]));
+  const press = (id: string): void => {
+    const entry = entries.get(id);
+    if (entry === undefined) return;
+    if (entry.bytes === null) sticky.press(id);
+    else sticky.send(entry.bytes);
+  };
   if (!open) {
     return (
       <KeyboardButton
@@ -75,9 +107,11 @@ export function PhoneKeys(props: PhoneKeysProps) {
       <ExtraKeysBar
         className="absolute inset-x-0 z-10"
         style={{ bottom }}
-        keys={extraKeys(host === "mac")}
+        keys={own.map(toExtra)}
+        packKeys={packed.map(toExtra)}
         latched={[...sticky.latched]}
-        onKey={sticky.press}
+        onKey={press}
+        onKeyHold={() => onPacks()}
         padOpen={pad}
         onPad={() => onPad(!pad)}
         onPaste={sticky.paste}
