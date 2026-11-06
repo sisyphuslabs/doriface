@@ -219,22 +219,28 @@ export function DesktopShell(props: DesktopShellProps) {
       {sidebar ? (
         <Sidebar terminals={terminals} active={focusedAddress} onOpen={layout.openTerminal} onPalette={onPalette} />
       ) : null}
-      {/* One sidebar toggle in the same place whether the sidebar is open or not, right after the window buttons (#415). It
-          comes after the sidebar in the DOM so the skip links stay the first Tab stops and it is the stop just before the tabs. */}
-      <div
-        data-titlebar
-        className="absolute top-(--safe-top) left-[calc(var(--safe-left)+var(--titlebar-inset-start,0.5rem))] z-10 flex h-11 items-center"
-      >
-        <IconButton
-          label={sidebar ? "Hide sidebar" : "Show sidebar"}
-          aria-expanded={sidebar}
-          {...(sidebarKeys === undefined ? {} : { keys: sidebarKeys })}
-          icon={<PanelLeft />}
-          onClick={() => setSidebar((shown) => !shown)}
-        />
-      </div>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <TabBar
+          // One sidebar toggle in the same place whether the sidebar is open or not, right after the window buttons (#415):
+          // positioned against the shell, which is the nearest positioned box, so it does not move with the strip. It sits
+          // inside the strip in the DOM, after the strip's own drag row: Electron lets the later of two overlapping
+          // app-regions win, and with the sidebar hidden or a rail the strip lies under the toggle, so a toggle before the
+          // strip took no click on macOS and the sidebar never came back (#643). In the DOM it is still after the sidebar
+          // and before the tabs, so the skip links stay the first Tab stops and it is the stop just before the tabs.
+          leading={
+            <div
+              data-titlebar
+              className="absolute top-(--safe-top) left-[calc(var(--safe-left)+var(--titlebar-inset-start,0.5rem))] z-10 flex h-11 items-center"
+            >
+              <IconButton
+                label={sidebar ? "Hide sidebar" : "Show sidebar"}
+                aria-expanded={sidebar}
+                {...(sidebarKeys === undefined ? {} : { keys: sidebarKeys })}
+                icon={<PanelLeft />}
+                onClick={() => setSidebar((shown) => !shown)}
+              />
+            </div>
+          }
           tabs={tabList}
           activeId={layout.active?.key ?? ""}
           {...(newTabKeys === undefined ? {} : { newTabKeys })}
