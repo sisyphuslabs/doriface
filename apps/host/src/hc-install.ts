@@ -10,8 +10,9 @@ import { chmod, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 
-/** The oldest hc this host works with: the protocol it speaks and every measured reply are hc 0.1.17's. */
-export const HC_VERSION_FLOOR = "0.1.17";
+// The floor and the version order are shared with the client, which checks a core it reached against the same floor.
+export { compareHcVersions, HC_VERSION_FLOOR, meetsHcFloor } from "@doriface/protocol";
+import { compareHcVersions, HC_VERSION_FLOOR, meetsHcFloor } from "@doriface/protocol";
 
 export const DEFAULT_RELEASES_URL = "https://releases.herdr.dev";
 
@@ -26,25 +27,6 @@ export function hcTarget(platform: NodeJS.Platform, arch: string): HcTarget | un
   if (platform === "win32" && cpu === "x86_64") return "windows-x86_64";
   return undefined;
 }
-
-const numbers = (version: string): number[] =>
-  version
-    .replace(/^hc /, "")
-    .split(/[.-]/)
-    .slice(0, 3)
-    .map((part) => Number.parseInt(part, 10) || 0);
-
-/** Compares two `major.minor.patch` versions (a pre-release suffix is ignored): negative when `a` is older. */
-export function compareHcVersions(a: string, b: string): number {
-  const [left, right] = [numbers(a), numbers(b)];
-  for (let i = 0; i < 3; i += 1) {
-    const diff = (left[i] ?? 0) - (right[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return 0;
-}
-
-export const meetsHcFloor = (version: string): boolean => compareHcVersions(version, HC_VERSION_FLOOR) >= 0;
 
 export type HcInstallPhase = "manifest" | "download" | "verify" | "extract" | "check" | "install";
 

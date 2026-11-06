@@ -1,3 +1,4 @@
+import { HcCoreMismatchError, type HcCoreMismatch } from "@doriface/client";
 import { DeviceNotPairedError } from "./connect.ts";
 import { LoopbackAddressError } from "./loopback-address.ts";
 
@@ -11,9 +12,22 @@ const BY_CODE: Readonly<Record<number, string>> = {
 
 const FALLBACK = "Your host isn't answering. Check that its computer is on and doriface-host is running.";
 
+/** A core this client cannot use: which side to update, and how (#651). */
+function coreMismatch(mismatch: HcCoreMismatch): string {
+  switch (mismatch.kind) {
+    case "core-too-old":
+      return `Your host's herdr-core is ${mismatch.version}, and doriface needs ${mismatch.need} or newer. Run hc update on that computer.`;
+    case "core-older":
+      return `Your host's herdr-core is too old for doriface, which needs ${mismatch.need} or newer. Run hc update on that computer.`;
+    case "core-newer":
+      return "Your host's herdr-core is newer than this doriface understands. Update doriface.";
+  }
+}
+
 /** Why this device cannot reach its host, in plain words: the close code decides, never the transport's message. */
 export function hostFailure(error: Error): string {
   if (error instanceof DeviceNotPairedError || error instanceof LoopbackAddressError) return error.message;
+  if (error instanceof HcCoreMismatchError) return coreMismatch(error.mismatch);
   const code = "code" in error && typeof error.code === "number" ? error.code : undefined;
   return (code === undefined ? undefined : BY_CODE[code]) ?? FALLBACK;
 }

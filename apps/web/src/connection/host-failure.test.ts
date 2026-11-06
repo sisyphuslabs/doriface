@@ -1,3 +1,4 @@
+import { HcCoreMismatchError } from "@doriface/client";
 import { describe, expect, test } from "bun:test";
 import { hostFailure } from "./host-failure.ts";
 import { LoopbackAddressError } from "./loopback-address.ts";
@@ -13,5 +14,22 @@ describe("why the host cannot be reached, in plain words (#477)", () => {
   test("a refused loopback address keeps its own sentence (#462)", () => {
     const refusal = new LoopbackAddressError("The loopback address must be on this computer.");
     expect(hostFailure(refusal)).toBe(refusal.message);
+  });
+
+  test.each([
+    [
+      { kind: "core-too-old", version: "0.1.15", need: "0.1.17" } as const,
+      "Your host's herdr-core is 0.1.15, and doriface needs 0.1.17 or newer. Run hc update on that computer.",
+    ],
+    [
+      { kind: "core-older", generation: 0, need: "0.1.17" } as const,
+      "Your host's herdr-core is too old for doriface, which needs 0.1.17 or newer. Run hc update on that computer.",
+    ],
+    [
+      { kind: "core-newer", generation: 2 } as const,
+      "Your host's herdr-core is newer than this doriface understands. Update doriface.",
+    ],
+  ])("a core this client cannot use says which side to update (#651): %o", (mismatch, words) => {
+    expect(hostFailure(new HcCoreMismatchError(mismatch))).toBe(words);
   });
 });
