@@ -23,6 +23,7 @@
 ### Web app and PWA
 
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
+- Pointing a connection at another host moves its notifications there once: the new host's name arriving with its first answer no longer started a second move beside the first, which could leave the new host holding two subscriptions for one device. (#876)
 - A resize no longer moves a terminal's view: a terminal following its output stays on its last line when the window is resized, a split divider is dragged or the phone keyboard opens, even while an agent redraws its whole transcript for the new width, and a terminal scrolled into its history keeps its line at the top. (#811)
 
 ### Rendering performance
