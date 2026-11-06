@@ -26,6 +26,7 @@ test("pairing closes the open relay socket when the device key cannot load", asy
     secret: { mode: "code", code: "ABCDEFGH" },
     relayUrl,
     fingerprint: "",
+    target: "device",
   } as const;
   await expect(pairWithHost(offer, "phone", deps)).rejects.toBe(keyFailure);
   expect(await closed.promise).toBe(1000);
