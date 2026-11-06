@@ -31,7 +31,7 @@ herdr-core is missing or too old, it offers **Install herdr-core**, for your use
 
 ## 3. Pair your phone
 
-1. In the app, open **Settings > Connections** and choose **Pair a device**. It shows a QR code, an 8-character code,
+1. In the app, open **Settings > Pair a phone or computer** and choose **Pair a device**. It shows a QR code, an 8-character code,
    this computer's key and how long the offer lasts.
 2. Scan the QR code with the phone's camera. It opens the pair page of the hosted web app, https://doriface.omo.dev.
    No camera at hand: open https://doriface.omo.dev/pair on the phone and type the code.
