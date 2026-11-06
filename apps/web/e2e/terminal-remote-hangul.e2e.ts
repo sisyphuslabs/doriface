@@ -81,7 +81,7 @@ test("a terminal on another machine paints every Hangul syllable at its ideograp
       .soft(glyph.advance, `${glyph.text}: painted, at the ideograph width rather than nothing or the whole two cells`)
       .toBeGreaterThan(extent.ideograph - 1.5);
   for (const glyph of extent.wide)
-    expect.soft(glyph.advance, `${glyph.text}: never stretched past the ideograph width`).toBeLessThanOrEqual(
-      extent.ideograph + 1,
-    );
+    expect
+      .soft(glyph.advance, `${glyph.text}: never stretched past the ideograph width`)
+      .toBeLessThanOrEqual(extent.ideograph + 1);
 });
