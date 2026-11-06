@@ -104,6 +104,28 @@ test.describe("on a wide screen", () => {
     await expect(settingsDialog(page)).toHaveCount(0);
   });
 
+  test("opened as the first screen, Settings keeps a titlebar band across the top that starts past the window buttons (#969)", async ({
+    page,
+  }) => {
+    // The desktop shell's inset for its window buttons, as layout.e2e sets it.
+    const inset = 78;
+    await page.goto("/settings");
+    await page.addStyleTag({ content: `:root { --titlebar-inset-start: ${inset}px; }` });
+    await expect(settingsDialog(page)).toBeVisible();
+    const bands = await page.evaluate(() =>
+      [...document.querySelectorAll("[data-titlebar]")].flatMap((el) => {
+        const box = el.getBoundingClientRect();
+        if (!el.checkVisibility() || box.top > 1) return [];
+        return [
+          { left: box.left, right: box.right, start: box.left + Number.parseFloat(getComputedStyle(el).paddingLeft) },
+        ];
+      }),
+    );
+    const width = page.viewportSize()?.width ?? 0;
+    // One band spans the window: the desktop app moves the window by it, whatever the workspace behind has drawn.
+    expect(bands.some((band) => band.left <= 0 && band.right >= width && band.start >= inset)).toBe(true);
+  });
+
   test("in a browser, a click on the backdrop's top band, under the titlebar strip, closes Settings too (#673)", async ({
     page,
   }) => {
