@@ -4,12 +4,14 @@ import type { MachineView } from "@doriface/protocol";
  * How long a machine read connected may then read connecting or unreachable before the page shows it offline (#904).
  *
  * hc marks a machine unreachable on the first failed redial, within 50 ms of its line ending, and a healthy line ends
- * often: any relay blip ends every mesh line at once, the host then refuses new lines for its 10-20 s settle
- * (apps/host/src/mesh/dial-policy.ts, DIAL_LIMITS.settleMaxMs), and hc's doubling redial lands the line 16-32 s after
- * the drop. 45 s covers that with a margin, so a blip never reads offline, while a machine that is really gone (a laptop
- * asleep) reads offline 45 s after its line dropped. needs_login is an answer, not a blip: it shows at once.
+ * often: any relay blip ends every mesh line at once. The host then refuses new lines for its 10-20 s settle
+ * (apps/host/src/mesh/dial-policy.ts, DIAL_LIMITS.settleMaxMs), and a member that was reconnecting too answers its
+ * first dial with a 4404, which gates it until its first probe 30 s later (DIAL_LIMITS.probeFirstMs). hc's doubling
+ * redial (0.25 s up to a 30 s cap) next tries 61.75 s after the drop, the slowest return measured on a real relay blip
+ * (62 s). 75 s covers that with a margin, so a blip never reads offline, while a machine that is really gone (a laptop
+ * asleep) reads offline 75 s after its line dropped. needs_login is an answer, not a blip: it shows at once.
  */
-export const OFFLINE_GRACE_MS = 45_000;
+export const OFFLINE_GRACE_MS = 75_000;
 
 const DOWN = new Set(["connecting", "unreachable"]);
 
@@ -25,12 +27,12 @@ export interface Before {
 /**
  * The hold after one machine.list answer read at `now`. A machine held already keeps its start. A machine that reads
  * down is held from its drop when it read connected at the read before (dropped since then), or when this is the page's
- * first read and hc says when it dropped (a page opened mid-blip); a machine listed later for the first time (just added,
- * still dialing) was never connected, so it shows as hc says. The drop is hc's `since_ms`, which is the host's clock, so it is kept
- * between the read before (or one grace back, on a first read) and `now`: no host clock can lengthen a hold, and a
- * machine that went down while the page was hidden is not held for a drop that is older than its grace. A machine that
- * already read down at the read before is never held anew, so a grace that ended does not start again. Anything else
- * (connected, needs_login, down past the grace, gone from the list) is not held.
+ * first read and hc says when it dropped (a page opened mid-blip); a machine listed later for the first time (just
+ * added, still dialing) was never connected, so it shows as hc says. The drop is hc's `since_ms`, which is the host's
+ * clock, so it is kept between the read before (or one grace back, on a first read) and `now`: no host clock can
+ * lengthen a hold, and a machine that went down while the page was hidden is not held for a drop that is older than its
+ * grace. A machine that already read down at the read before is never held anew, so a grace that ended does not start
+ * again. Anything else (connected, needs_login, down past the grace, gone from the list) is not held.
  */
 export function stepHeld(held: Held, before: Before, list: readonly MachineView[], now: number): Map<string, number> {
   const seen = new Map(before.views.map((view) => [view.id, view.state]));
