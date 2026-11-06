@@ -72,6 +72,9 @@ export function TabBar({
   // keyboard to (a terminal being started takes it at once, type-ahead).
   const chose = useRef(false);
   const handedTo = useRef<HTMLElement | null>(null);
+  // Whether the open tab menu's item handed the keyboard to a question it opened. The choice decides, not who holds
+  // the keyboard as the menu closes: the question's first paint can come after that, and the strip would take it back.
+  const handedOn = useRef(false);
   // The tabs the strip drew before its last change of tabs: they carry data-arrived, so the DOM move a reorder makes
   // does not replay their arrival; a tab new to the list draws once without it and arrives.
   const ids = tabs.map((tab) => tab.id);
@@ -209,15 +212,20 @@ export function TabBar({
             <ContextMenu
               key={tab.id}
               trigger={item}
-              // An item that opened a dialog (Rename tab…) has already given it the keyboard, and the menu closes a
-              // moment later: taking focus back to the tab would lose the name typed meanwhile.
+              // An item that opened a dialog (Rename tab…) has given it the keyboard, and the menu closes a moment
+              // later: taking focus back to the tab would lose the name typed meanwhile. The question's first paint can
+              // come after that close, so what the item chose decides, not who holds the keyboard as the menu goes.
               finalFocus={() => {
+                if (handedOn.current) return false;
                 const holder = document.activeElement;
                 if (holder instanceof HTMLElement && holder.closest('[role="dialog"]') !== null) return false;
                 return buttons.current.get(tab.id) ?? true;
               }}
               open={menuFor === tab.id}
-              onOpenChange={(open) => setMenuFor(open ? tab.id : null)}
+              onOpenChange={(open) => {
+                if (open) handedOn.current = false;
+                setMenuFor(open ? tab.id : null);
+              }}
             >
               <MenuItem
                 icon={<ArrowLeft />}
@@ -236,12 +244,24 @@ export function TabBar({
                 Move tab right
               </MenuItem>
               {onRename === undefined ? null : (
-                <MenuItem icon={<Pencil />} onClick={() => onRename(tab.id)}>
+                <MenuItem
+                  icon={<Pencil />}
+                  onClick={() => {
+                    handedOn.current = true;
+                    onRename(tab.id);
+                  }}
+                >
                   Rename tab…
                 </MenuItem>
               )}
               {onNew === undefined ? null : (
-                <MenuItem icon={<Plus />} onClick={onNew}>
+                <MenuItem
+                  icon={<Plus />}
+                  onClick={() => {
+                    handedOn.current = true;
+                    onNew();
+                  }}
+                >
                   New tab
                 </MenuItem>
               )}
