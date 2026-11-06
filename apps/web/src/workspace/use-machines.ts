@@ -20,7 +20,10 @@ export interface Machines {
   readonly listError: string | undefined;
   /** Shows how to add a machine (the pairing commands). */
   readonly openAddMachine: () => void;
-  /** The added machines as machine.list last said: state, `why`, since when. */
+  /**
+   * The added machines as the page shows them: as machine.list last said (state, `why`, since when), except a machine
+   * whose line hc is redialing, which reads connected for `OFFLINE_GRACE_MS` (#904).
+   */
   readonly views: readonly MachineView[];
   /** Dials a machine now (`machine.connect`) instead of at hc's next retry, then reads machine.list again. */
   readonly retry: (machine: string) => Promise<void>;
@@ -71,10 +74,11 @@ export interface MachineState {
 
 /** machine.list, read again when a machine's live terminals change, on a timer while visible, and on return. */
 export function useMachines(connection: HcConnection, terminals: readonly Terminal[]): MachineState {
-  const [read, setRead] = useState<{ readonly views: readonly MachineView[]; readonly held: Held }>({
-    views: [],
-    held: new Map(),
-  });
+  const [read, setRead] = useState<{
+    readonly views: readonly MachineView[];
+    readonly at: number | undefined;
+    readonly held: Held;
+  }>({ views: [], at: undefined, held: new Map() });
   const [now, setNow] = useState(Date.now);
   const [reads, setReads] = useState(0);
   const [listError, setListError] = useState<string | undefined>(undefined);
@@ -103,7 +107,7 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
         const at = Date.now();
         setRead((before) => {
           const views = orderMachines(list.machines);
-          return { views, held: stepHeld(before.held, before.views, views, at) };
+          return { views, at, held: stepHeld(before.held, before, views, at) };
         });
         setNow(at);
         setListError(undefined);
@@ -132,7 +136,8 @@ export function useMachines(connection: HcConnection, terminals: readonly Termin
   const ends = graceEnds(read.held, now);
   useEffect(() => {
     if (ends === undefined) return undefined;
-    const timer = setTimeout(() => setNow(Date.now()), Math.max(0, ends - Date.now()));
+    // A timer may fire a moment early: `now` is moved to the end itself, so the grace ends and `ends` moves on.
+    const timer = setTimeout(() => setNow(Math.max(Date.now(), ends)), Math.max(0, ends - Date.now()));
     return () => clearTimeout(timer);
   }, [ends]);
   const views = useMemo(() => graceViews(read.views, read.held, now), [read, now]);

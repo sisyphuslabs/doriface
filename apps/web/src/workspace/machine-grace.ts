@@ -13,35 +13,34 @@ export const OFFLINE_GRACE_MS = 45_000;
 
 const DOWN = new Set(["connecting", "unreachable"]);
 
-/**
- * The longest a drop can precede the read that first sees it: one periodic machine.list read (MACHINE_REFRESH_MS). hc's
- * `since_ms` is the host's clock, so it only moves a hold's start back within this bound, never past it.
- */
-const READ_LAG_MS = 10_000;
-
 /** Since when (this page's clock) each machine, by its permanent id, has read down while held as connected. */
 export type Held = ReadonlyMap<string, number>;
 
+/** The machine.list answer the page read before, and when (this page's clock); none before the first answer. */
+export interface Before {
+  readonly views: readonly MachineView[];
+  readonly at: number | undefined;
+}
+
 /**
- * The hold after one machine.list answer read at `now`. A machine that reads down after it last read connected is held
- * from its drop: hc's `since_ms`, kept within the one read before `now`; one held already keeps its start; one this page never saw connected is held only when hc's own
- * `since_ms` puts its drop inside the grace (a page opened mid-blip). Anything else (connected, needs_login, down past
- * the grace, gone from the list) is not held.
+ * The hold after one machine.list answer read at `now`. A machine held already keeps its start. A machine that reads
+ * down is held from its drop when it read connected at the read before (dropped since then), or when this is the first
+ * read that lists it (a page opened mid-blip). The drop is hc's `since_ms`, which is the host's clock, so it is kept
+ * between the read before (or one grace back, on a first read) and `now`: no host clock can lengthen a hold, and a
+ * machine that went down while the page was hidden is not held for a drop that is older than its grace. A machine that
+ * already read down at the read before is never held anew, so a grace that ended does not start again. Anything else
+ * (connected, needs_login, down past the grace, gone from the list) is not held.
  */
-export function stepHeld(
-  held: Held,
-  before: readonly MachineView[],
-  list: readonly MachineView[],
-  now: number,
-): Map<string, number> {
-  const wasConnected = new Set(before.filter((view) => view.state === "connected").map((view) => view.id));
+export function stepHeld(held: Held, before: Before, list: readonly MachineView[], now: number): Map<string, number> {
+  const seen = new Map(before.views.map((view) => [view.id, view.state]));
   const next = new Map<string, number>();
   for (const view of list) {
     if (!DOWN.has(view.state)) continue;
-    const dropped = view.since_ms ?? now;
-    const since =
-      held.get(view.id) ??
-      (wasConnected.has(view.id) ? Math.min(now, Math.max(now - READ_LAG_MS, dropped)) : (view.since_ms ?? undefined));
+    const kept = held.get(view.id);
+    const was = seen.get(view.id);
+    const fresh = was === "connected" || was === undefined;
+    const earliest = was === "connected" && before.at !== undefined ? before.at : now - OFFLINE_GRACE_MS;
+    const since = kept ?? (fresh ? Math.min(now, Math.max(earliest, view.since_ms ?? now)) : undefined);
     if (since !== undefined && now - since < OFFLINE_GRACE_MS) next.set(view.id, since);
   }
   return next;

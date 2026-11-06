@@ -22,6 +22,8 @@ export interface Shot {
   readonly storageFails?: true;
   /** The shot shows a drag in progress: the pointer stays where `run` left it, still pressed. */
   readonly holdsPointer?: true;
+  /** Longer than the default test timeout: the shot waits out a machine's offline grace (#904). */
+  readonly timeoutMs?: number;
   readonly run: (page: Page, width: Width) => Promise<void>;
   /** Ends what `run` started, once the shot is taken. */
   readonly cleanup?: () => void;
@@ -341,6 +343,7 @@ export const SHOTS: readonly Shot[] = [
     // A session whose program ended while its machine was offline, so its view first attaches to a finished terminal.
     name: "session-ended",
     start: "connected",
+    timeoutMs: 180_000,
     run: async (page, width) => {
       ended = startShell("machine", "nightly-build");
       await page.goto("/");
