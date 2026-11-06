@@ -1,4 +1,4 @@
-# doriface transport contract v1.9.4
+# doriface transport contract v1.9.5
 
 This is the binding wire contract for every doriface package. Each rule below is the current one; the change log at the end records what each revision changed.
 
@@ -31,6 +31,15 @@ Layering, outermost first:
 - Failed typed-code attempts: the host counts every typed-code attempt it answers (see "Session kinds" below) and persists the count with the offer. After 10 answered attempts it retires the typed code: it clears its relay slot and answers no further typed-code attempt (4429). The link secret stays valid until the offer expires. Each answered attempt tests exactly one guess, so an attacker's chance to learn a code is at most 10 in 2^25 per offer, whatever the relay does. Attempts that the host refuses before answering are not counted. Anyone who can make 10 answered attempts (through the relay's budget below) can retire a code but cannot learn it; the remedy is the QR/link or a new code.
 - On success the host appends `{clientStaticPub, name, pairedAt}` to its paired-devices store and burns the offer. The offer is burned before the device is stored, so a failed store never leaves it usable.
 - Revoking a device removes it from the store and closes its live sessions.
+
+### This host's own offer
+
+The app that runs a host asks it for the offer it would otherwise print (v1.9.5), so a person can pair a phone without a terminal. These two routes sit on the host's plaintext listener beside `/v1/hc`, behind the same per-launch token presented as `Authorization: Bearer <token>`; a request without it is answered 401 and nothing else. The LAN listener does not serve them: it serves only `/healthz` and `/v1/e2ee`. A host started without a state directory (no identity, no pairing store) serves neither route.
+
+- `POST /v1/pair` opens one offer, replacing any pending one, and answers it: `{"state":"pending","offer":{…}}`.
+- `GET /v1/pair` answers what stands: the same `pending` shape, `{"state":"paired","device":{"name":"…","id":"…","pairedAt":"…"}}` (or `"device": null` when the store names none), `{"state":"expired"}`, or `{"state":"none"}` when this host opened none since it started.
+- The offer is `doriface-host pair`'s, unchanged: `code` is the 8 characters unformatted, `link` and `opens` are the artifact the form above describes (a deep link reads `"desktop"`, a `<web origin>/pair#…` link reads `"web"`), `hostId` is the 26 characters, `fingerprint` is the 10 groups of 4, and `expiresAt` is the offer's expiry in ms since the epoch. `slot` is the typed code's relay slot as the host knows it (`pending`, `registered` or `unavailable`), and `codeUsable` is false once that code is retired or has no slot, which leaves the link and QR code working.
+- A live offer reads `pending`. An offer that disappeared before its expiry was burned by a completed pairing (see "On success"), so it reads `paired` and names the newest device recorded since that offer opened; its `id` is the 8 uppercase hex characters the `devices` commands accept. Nothing new is written to decide this, and no route here changes the handshake, the relay or an offer's lifetime.
 
 ### Session kinds
 
@@ -326,6 +335,7 @@ Web push notices (v1.7). The relay is not on the push path and does not change: 
 
 ## Change log
 
+- v1.9.5 (host behaviour, no relay change): the plaintext listener's `/v1/pair` pair, `POST` to open this host's offer and `GET` to read what stands, behind the same per-launch bearer token as `/v1/hc` and never on the LAN listener, so the desktop app shows this computer's code, QR code, link, fingerprint and expiry without a terminal (#614).
 - v1.9.4 (host behaviour, no wire change): `doriface-host pair` prints the desktop app's `doriface://pair#…` deep link, and the QR code encodes it, unless `--web-origin` names a web app (`<web origin>/pair#…`); the printed text says which one opens the link. `mesh pair` prints the same deep link with `&m=1`, and `connect` and `mesh join` accept either form. `DEFAULT_WEB_ORIGIN` is gone: no dead web origin is advertised by default (#594).
 - v1.9.3 (documentation, no wire change): rules the relay already enforced, so a stand-in built from this section matches it (#45): a clear of a registered slot is acknowledged with PAIR_SLOT_ACK status 0 and the released slot, which the host waits for; a PAIR_SLOT whose first 3 bytes are not a slot closes the uplink with 4402 rather than status 2; a request without `cf-connecting-ip` is keyed as `unknown`, one shared bucket; and a stand-in is in effect a wrangler project (`wrangler.jsonc`, `node_modules/.bin/wrangler`, Node 22 or newer).
 - v1.9.2 (host behaviour, no wire change): a `machine.add` reserves its two upgrades together and gives back what it leaves undialed, so the join bound holds at every mesh size: within ceil((3N - 3) / 12) windows of 60 s (#106, M-E3).
