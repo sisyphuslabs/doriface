@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Desktop window
+
+- The desktop window reopens where it was left even after a crash, a force quit or a kill: its position and size are saved once a move or a resize comes to rest, not only when the window closes. (#803)
+
+### Terminal
+
+- The terminal renderer is @wterm 0.5.9 with its Ghostty WASM rebuilt from the same source, keeping the Korean-input fixes on WebKit. (#823)
+
 ### Joining a mesh
 
 - A phone can join a host by pointing its camera at the invite QR instead of typing the code: only a pairing link is accepted, an unrecognised code says so instead of looking for a host, and the camera stops as soon as the scan ends, is cancelled, or the page is left. (#855)
@@ -51,10 +59,13 @@
 
 ### Machine mesh
 
+- A phone or another client can join the mesh as its own member rather than as a guest of one computer, and the approval row says what that gives it: control of every machine in the mesh. Every machine has to read the new format before one may join, and a client that does not is turned away with that reason. (#942)
+
 - A machine whose mesh line drops for a moment, as on any relay hiccup, no longer flips to offline in the web app with all its tabs: it keeps reading connected while the line comes back, and reads offline only after 75 s without it, as a laptop that went to sleep still does. (#909)
 
 ### Settings
 
+- Settings holds machines and their membership on one screen: the computers this host reaches are listed with their own state, a machine added by hand keeps its own route, connecting a machine joins it to your mesh, and the joins that need your approval sit on the same screen; the advanced-connection settings move into This device. (#942)
 - Settings is one place per question: this device, your machines, pairing, and the advanced connection sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
 
 ### Notifications
