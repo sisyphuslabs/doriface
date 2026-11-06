@@ -116,4 +116,4 @@ const assets = readdirSync(assetsDir)
   .filter((name) => name !== "SHA256SUMS.txt")
   .toSorted();
 const changes = resolved.notes;
-console.log([`# doriface v${version}`, changes, `## Downloads\n\n${downloads(assets)}`, SIGNING].join("\n\n"));
+console.log([`# Doriterm v${version}`, changes, `## Downloads\n\n${downloads(assets)}`, SIGNING].join("\n\n"));
