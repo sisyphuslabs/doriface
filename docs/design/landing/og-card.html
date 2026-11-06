@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Doriterm — social card</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: #121210;
+        color: #eeeeef;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .card {
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+        padding: 72px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        font-size: 32px;
+        font-weight: 620;
+        letter-spacing: -0.02em;
+      }
+
+      .brand img {
+        width: 64px;
+        height: 64px;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 1010px;
+        font-size: 84px;
+        font-weight: 640;
+        line-height: 1.02;
+        letter-spacing: -0.045em;
+      }
+
+      p {
+        margin: 22px 0 0;
+        max-width: 820px;
+        color: #a09f9f;
+        font-size: 29px;
+        line-height: 1.35;
+      }
+
+      .foot {
+        display: flex;
+        justify-content: space-between;
+        color: #807f7d;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 19px;
+        letter-spacing: 0.02em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="brand">
+        <img src="../../../apps/landing/src/assets/mark-dark.svg" alt="" />
+        <span>Doriterm</span>
+      </div>
+      <div>
+        <h1>Your terminals and coding agents, on every screen.</h1>
+        <p>End-to-end encrypted, through a relay that never sees them.</p>
+      </div>
+      <div class="foot">
+        <span>doriterm.com</span>
+        <span>AGPL-3.0</span>
+      </div>
+    </div>
+  </body>
+</html>

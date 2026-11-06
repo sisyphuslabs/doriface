@@ -1,0 +1,13 @@
+// doriterm.com: the static landing page, served as Workers static assets with no Worker code (apps/landing/src).
+// .github/workflows/deploy-landing.yml builds dist/ and deploys it by hand, once the zone carries the doriterm.com record.
+// Self-hosters: put your own hostname in "routes", or delete it to serve from workers.dev.
+{
+  "name": "doriterm-landing",
+  "compatibility_date": "2026-11-06",
+  "assets": {
+    "directory": "./dist",
+  },
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "doriterm.com", "custom_domain": true }],
+}

@@ -45,6 +45,10 @@
         "@doriface/protocol": "workspace:*",
       },
     },
+    "apps/landing": {
+      "name": "@doriface/landing",
+      "version": "0.1.0",
+    },
     "apps/push-bridge": {
       "name": "@doriface/push-bridge",
       "version": "0.1.0",
@@ -392,6 +396,8 @@
     "@doriface/ghostty-wasm": ["@doriface/ghostty-wasm@workspace:packages/ghostty-wasm"],
 
     "@doriface/host": ["@doriface/host@workspace:apps/host"],
+
+    "@doriface/landing": ["@doriface/landing@workspace:apps/landing"],
 
     "@doriface/mesh": ["@doriface/mesh@workspace:packages/mesh"],
 

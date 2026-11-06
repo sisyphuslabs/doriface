@@ -112,6 +112,11 @@ Layout lines:
 - Layout: phone agents list - the sidebar lists as the whole screen -> scroll-body-shell; scroll owner: `[data-slot=agents-list]`; above `md` the showcase draws it inside a phone frame (`data-density="coarse"`, iPhone 14 insets) instead of stretching the rows across the window.
 - Layout: states board - three equal frames that stack on phones -> switcher (https://github.com/changeroa/StyleGallery/blob/main/patterns/split-sidebar/switcher.md); scroll owner: document; anti-patterns: frames of unequal height in one row, horizontal scrolling at 390.
 
+The landing page at doriterm.com keeps its own brief, display ladder and components in
+[docs/design/landing/DESIGN-LANDING.md](docs/design/landing/DESIGN-LANDING.md), with the line below:
+
+- Layout: doriterm.com landing - one long document whose sections each own one decision -> scroll-body-shell (https://github.com/changeroa/StyleGallery/blob/main/patterns/viewport-shell/scroll-body-shell.md); scroll owner: document; anti-patterns: a sticky header covering an anchor target, a second nested scroller inside a feature, a hero that overflows at 1280.
+
 ## 5. Components
 
 Every interactive primitive: hover, pressed, focus-visible (2 px `--ring` outline), disabled (45 % opacity, legible) and, where it can wait, loading; the box never changes size between states (state is colour, opacity or a 0.97 press scale only). Hit areas are at least 24x24 CSS px on fine pointers and 44x44 on coarse pointers (an invisible `::after` extends small controls). Built on Base UI (lead decision 2) restyled with cva + tailwind-merge; icons lucide-react; no emoji; no motion library.
