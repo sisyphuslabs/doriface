@@ -1,0 +1,101 @@
+name: Deploy web
+
+# Serves apps/web with Workers static assets (apps/web/wrangler.jsonc, #700). One build is deployed to staging
+# (https://doriface-staging.omo.dev) and probed (.github/scripts/probe-web.ts), and only then the same bytes go to
+# production (https://doriface.omo.dev) and are probed again. A push on dev that touches the web build runs both; a
+# manual run on dev can stop at staging. A pull request from this repository labelled deploy-staging deploys its head to
+# staging only, so a change can be seen live before it merges. The repository secrets CLOUDFLARE_API_TOKEN and
+# CLOUDFLARE_ACCOUNT_ID are the Cloudflare account that serves relay-doriface.omo.dev.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - apps/web/**
+      - packages/**
+      - package.json
+      - bun.lock
+      - .github/scripts/probe-web.ts
+      - .github/workflows/deploy-web.yml
+  pull_request:
+    types: [labeled, synchronize]
+  workflow_dispatch:
+    inputs:
+      production:
+        description: Deploy production after staging passes its probe (dev only)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: 1.4.4
+  NODE_VERSION: 24
+  WRANGLER: wrangler@4.158.0
+
+jobs:
+  staging:
+    name: Staging
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'deploy-staging') &&
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Build apps/web
+        run: bun run --cwd apps/web build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Deploy staging
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx "$WRANGLER" deploy --env staging
+      - name: Probe staging
+        run: bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev
+
+  production:
+    name: Production
+    needs: staging
+    if: github.ref == 'refs/heads/dev' && (github.event_name == 'push' || inputs.production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # The bytes staging served and passed, not a second build.
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+      - name: Deploy production
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx "$WRANGLER" deploy --env ""
+      - name: Probe production
+        run: bun .github/scripts/probe-web.ts https://doriface.omo.dev

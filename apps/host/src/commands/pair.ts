@@ -1,4 +1,5 @@
 import {
+  DEFAULT_PAIRING_WEB_ORIGIN,
   DEFAULT_RELAY_URL,
   fingerprintOf,
   formatPairingCode,
@@ -12,11 +13,12 @@ import { requestControl } from "../control.ts";
 import { defaultStateDir } from "../state/files.ts";
 import { loadHostIdentity } from "../state/host-keys.ts";
 import { type PendingPairing, PairingStore, pendingFromWire } from "../state/pairing.ts";
-import { pairingArtifact, type PairingArtifact } from "../pair-link.ts";
+import { pairingArtifact, type PairingArtifact, phonePairingLink } from "../pair-link.ts";
 
 export const PAIR_USAGE = `usage: doriface-host pair [options]
 
-  --web-origin <url>  the web app that opens the link (default: the doriface desktop app's deep link)
+  --web-origin <url>  the web app that opens the link and the QR code (default: the desktop app's deep link for
+                      the link, ${DEFAULT_PAIRING_WEB_ORIGIN} for the QR code)
   --relay <url>       the relay the device dials (default ${DEFAULT_RELAY_URL})
   --state-dir <dir>   the host's state (default $DORIFACE_HOST_STATE_DIR, else $XDG_STATE_HOME/doriface-host)
   --no-qr             print no QR code`;
@@ -63,21 +65,21 @@ export async function pairCommand(args: readonly string[], out: (text: string) =
   const stateDir = values["state-dir"] ?? defaultStateDir();
   const identity = loadHostIdentity(stateDir);
   const offer = await openOffer(stateDir);
-  const artifact = pairingArtifact(
-    {
-      hostId: identity.hostId,
-      noiseStaticPub: identity.noise.publicKey,
-      signPub: identity.sign.publicKey,
-      linkSecret: offer.linkSecret,
-      relayUrl: values.relay,
-    },
-    webOrigin,
-  );
-  const ways = values["no-qr"] ? "or type the code" : "scan the QR code, or type the code";
+  const target = {
+    hostId: identity.hostId,
+    noiseStaticPub: identity.noise.publicKey,
+    signPub: identity.sign.publicKey,
+    linkSecret: offer.linkSecret,
+    relayUrl: values.relay,
+  };
+  const artifact = pairingArtifact(target, webOrigin);
+  const ways = values["no-qr"] ? "or type the code" : "scan the QR code with a phone, or type the code";
   const lines = [
     `${opensWith(artifact.opens)} on the device you want to pair, ${ways}. It works once, for ${PAIRING_TTL_MS / 60_000} minutes.`,
     "",
-    ...(values["no-qr"] ? [] : [renderUnicodeCompact(artifact.url, { ecc: "L", border: 2 }), ""]),
+    ...(values["no-qr"]
+      ? []
+      : [renderUnicodeCompact(phonePairingLink(target, webOrigin), { ecc: "L", border: 2 }), ""]),
     artifact.url,
     "",
     `code        ${formatPairingCode(offer.code)}${SLOT_NOTES[offer.slot]}`,
