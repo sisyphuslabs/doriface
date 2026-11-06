@@ -30,7 +30,25 @@ export function savedPlacement(file: string, log: Log = console.error): Area | u
   return parsePlacement(readSaved(file, log));
 }
 
+/** The part of the window placement saving needs: where it is when it rests, and when it moves, resizes and closes. */
+export interface PlacedWindow {
+  onMove(listener: () => void): void;
+  onResize(listener: () => void): void;
+  onClose(listener: () => void): void;
+  normalBounds(): Area;
+}
+
+/** Electron's window as `rememberPlacement` reads it. */
+export function placedWindow(window: BrowserWindow): PlacedWindow {
+  return {
+    onMove: (listener) => void window.on("move", listener),
+    onResize: (listener) => void window.on("resize", listener),
+    onClose: (listener) => void window.on("close", listener),
+    normalBounds: () => window.getNormalBounds(),
+  };
+}
+
 /** Saves the window's normal bounds when it closes, so the next launch reopens it there. */
-export function rememberPlacement(window: BrowserWindow, file: string): void {
-  window.on("close", () => writeSaved(file, window.getNormalBounds()));
+export function rememberPlacement(window: PlacedWindow, file: string): void {
+  window.onClose(() => writeSaved(file, window.normalBounds()));
 }
