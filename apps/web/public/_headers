@@ -1,0 +1,18 @@
+# Response headers for the hosted web app (wrangler.jsonc). Workers static assets read this file and never serve it.
+
+# Hashed build output: a new build gets new names, so these never change in place.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The service worker and the manifest are revalidated on every load, so a release reaches an installed app through the
+# worker's update prompt. index.html keeps the platform default (max-age=0, must-revalidate).
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: no-cache
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
