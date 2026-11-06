@@ -55,7 +55,6 @@
 - A tab's menu hands the keyboard to the question its item opened, so a rename typed at once is kept. (#591, #632)
 - Right-clicking a sidebar row opens its menu, so Rename is there without the "..." button. (#720)
 - The sidebar toggle takes a click on macOS with the sidebar hidden or in a rail, a click on it is not a window drag, and the tab strip still moves the window beside it. (#646, #659, #690)
-- A filter in the sidebar narrows machines, spaces and agents to the ones whose labels match, and the filter key opens the sidebar at its field. (#820)
 
 ### Fonts, Korean text and the terminal
 
