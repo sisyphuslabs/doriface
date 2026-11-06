@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "types",
+    "rootDir": ".",
+    "types": ["bun"]
+  },
+  "include": ["src", "package.json"],
+  "references": [
+    {
+      "path": "../../packages/crypto"
+    },
+    {
+      "path": "../../packages/protocol"
+    },
+    {
+      "path": "../host"
+    }
+  ]
+}
