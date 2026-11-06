@@ -57,6 +57,10 @@
 
 - Nerd Font icons, powerline separators, box drawing, braille spinners and agent marks such as `⏺ ⎿` are drawn from fonts the app ships, so they show on an iPhone instead of empty boxes. The icon font is only downloaded the first time a terminal shows an icon. (#960)
 
+### Website
+
+- The doriterm.com landing page opens on the app itself, its desktop window and phone with OmO first, then shows your machines as one mesh around the relay: a machine is dialed only after its signed admit record reaches every member, and a revoked one keeps working until its revoke record lands. It says who makes it, the people behind Dori and OmO, its buttons stack evenly on phones, and its social card shows the app as captured. (#927, #947)
+
 ## v0.1.4 - 2026-11-06
 
 ### The product is Doriterm
