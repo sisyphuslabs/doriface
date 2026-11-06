@@ -25,7 +25,10 @@ on:
       - bun.lock
       - bunfig.toml
       - tests/relay/private-relay.ts
-      - apps/web/e2e/private-relay.ts
+      - apps/web/package.json
+      - apps/web/playwright.config.ts
+      - apps/web/e2e/**
+      - apps/web/scripts/e2e-two-runs.ts
       - docs/getting-started.md
       - apps/desktop/e2e/hosted-relay-pair.e2e.ts
 

@@ -112,7 +112,14 @@ test("the From zero workflow runs the guide on a clean runner with no secrets", 
   expect(workflow.on).toHaveProperty("schedule");
   expect(workflow.on).toHaveProperty("workflow_dispatch");
   expect(workflow.on.pull_request?.paths).toEqual(
-    expect.arrayContaining(["CONTRIBUTING.md", ".github/workflows/from-zero.yml", "tests/ci/from-zero.ts"]),
+    expect.arrayContaining([
+      "CONTRIBUTING.md",
+      ".github/workflows/from-zero.yml",
+      "tests/ci/from-zero.ts",
+      "apps/web/package.json",
+      "apps/web/playwright.config.ts",
+      "apps/web/e2e/**",
+    ]),
   );
   const job = workflow.jobs["contributor"];
   expect(job?.["runs-on"]).toBe("ubuntu-latest");

@@ -48,7 +48,7 @@ private relay, so this prints one line saying they were skipped and why:
 bun run check
 ```
 
-Run the browser suite against a real `hc`. Chromium's system libraries need `sudo` the first time. The few specs that
+Run the browser suite against a real `hc`. `playwright install --with-deps` installs Chromium's system libraries with `sudo apt-get` each time it runs. The few specs that
 need the private relay are skipped, each with the same one-line reason:
 
 ```sh from-zero
