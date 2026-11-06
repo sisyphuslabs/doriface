@@ -69,7 +69,6 @@ function member(sources: MeshSources, names: Names, key: string, now: Date): Mes
     helloCoreId: line?.helloCoreId ?? null,
     replacedMachine: line?.replaced ?? null,
     presence: peer?.presence ?? false,
-    dialMs: peer?.dialMs ?? null,
     lastSync: iso(peer?.lastSync ?? null),
     owed: peer?.owed ?? 0,
     gate:

@@ -40,19 +40,6 @@ function pair(): { clock: FakeClock; mesh: MeshNet; a: NetHost; b: NetHost } {
   return { clock, mesh, a, b };
 }
 
-describe("a member's dial time in status (#787)", () => {
-  test("a member this host reached carries that dial's cost, and one it has not reached carries none", async () => {
-    const { clock, a, b } = pair();
-    const reached = liveFactsOf(
-      { ...partsOf(a), dialMs: (signPub) => (signPub === b.member.signPub ? 240 : undefined) },
-      clock,
-    );
-    expect(reached.peers.get(b.member.signPub)?.dialMs).toBe(240);
-    const unreached = liveFactsOf({ ...partsOf(a), dialMs: () => undefined }, clock);
-    expect(unreached.peers.get(b.member.signPub)?.dialMs).toBeNull();
-  });
-});
-
 describe("a member's presence in status (section 8.6: an authenticated session from it is open now)", () => {
   test("is shown while its session is open, and not after it went offline and answered 4404", async () => {
     const { clock, mesh, a, b } = pair();

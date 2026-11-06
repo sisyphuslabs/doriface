@@ -94,12 +94,7 @@ describe("mesh status", () => {
   });
 
   test("carries presence, last sync, owed records and the 4404 gate of each peer", () => {
-    expect(memberNamed("build-box")).toMatchObject({
-      presence: true,
-      dialMs: null,
-      lastSync: "2026-11-03T11:58:00.000Z",
-      owed: 0,
-    });
+    expect(memberNamed("build-box")).toMatchObject({ presence: true, lastSync: "2026-11-03T11:58:00.000Z", owed: 0 });
     expect(memberNamed("tablet")).toMatchObject({ owed: 1, gate: null });
     expect(memberNamed("laptop")?.gate).toEqual({
       kind: "offline",
@@ -126,7 +121,6 @@ describe("mesh status", () => {
       const peers = new Map(fixture.sources.peers);
       peers.set(keys["build-box"], {
         presence: false,
-        dialMs: null,
         lastSync: null,
         owed: 0,
         gate: null,
