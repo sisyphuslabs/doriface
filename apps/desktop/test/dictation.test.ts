@@ -184,6 +184,31 @@ describe("one session, owned by the page that started it", () => {
     expect(page.sent).toEqual([]);
   });
 
+  test("a page that reloads or navigates while the system prompt is open gets no session once it is answered", async () => {
+    const prompt = Promise.withResolvers<boolean>();
+    const addon = new Addon();
+    const host = new DictationHost(addon, { status: () => "not-determined", ask: () => prompt.promise });
+    const page = new Page(1);
+    const asked = host.start(page, "en-US");
+    host.dropOwner(1);
+    prompt.resolve(true);
+    expect(await asked).toEqual({ refused: "service" });
+    expect(addon.started).toEqual([]);
+    // The page that came back asks again and gets its session.
+    expect(await new DictationHost(addon, mic("granted")).start(page, "en-US")).toEqual({ session: 1 });
+  });
+
+  test("quitting while the system prompt is open starts nothing", async () => {
+    const prompt = Promise.withResolvers<boolean>();
+    const addon = new Addon();
+    const host = new DictationHost(addon, { status: () => "not-determined", ask: () => prompt.promise });
+    const asked = host.start(new Page(1), "en-US");
+    host.stopAll();
+    prompt.resolve(true);
+    expect(await asked).toEqual({ refused: "service" });
+    expect(addon.started).toEqual([]);
+  });
+
   test("a page that reloads, navigates or closes ends its session; so does quitting", async () => {
     const { host, addon } = setup();
     await host.start(new Page(1), "en-US");

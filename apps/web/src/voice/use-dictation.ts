@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { voiceBlocked } from "../settings/voice-support.ts";
 import { desktopDictation, desktopRecognizer } from "./desktop-recognizer.ts";
 import { Dictation, type DictationOptions, type DictationState } from "./dictation.ts";
-import { findRecognizer, type Support, type Unavailable } from "./recognizer.ts";
+import { findRecognizer, type RecognizerClass, type Support, type Unavailable } from "./recognizer.ts";
 import { recognitionLanguage } from "./voice-settings.ts";
 import { voiceStore } from "./voice-store.ts";
 
@@ -18,15 +18,28 @@ export interface Voice {
 const language = () => recognitionLanguage(voiceStore.value, navigator.language);
 
 /**
+ * The shell's recognizer, made once per page: it subscribes to the shell's events once, however many surfaces mount and
+ * unmount a dictation, so no listener piles up.
+ */
+let shellRecognizer: RecognizerClass | null | undefined;
+function desktopShellRecognizer(): RecognizerClass | null {
+  if (shellRecognizer === undefined) {
+    const shell = desktopDictation();
+    shellRecognizer = shell === null ? null : desktopRecognizer(shell);
+  }
+  return shellRecognizer;
+}
+
+/**
  * How dictation runs on this page. The macOS desktop app uses the system recognizer on this Mac only, so there is no
  * service to ask about and the stored choice is neither read nor written there (#726).
  */
 function dictationOptions(): DictationOptions {
   const blocked = voiceBlocked(window);
-  const shell = desktopDictation();
-  if (blocked === null && shell !== null) {
+  const recognizer = blocked === null ? desktopShellRecognizer() : null;
+  if (recognizer !== null) {
     return {
-      support: { kind: "ok", recognizer: desktopRecognizer(shell) },
+      support: { kind: "ok", recognizer },
       language,
       engine: () => "device",
       remember: () => undefined,

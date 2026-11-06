@@ -64,6 +64,7 @@ static void CallJs(napi_env env, napi_value callback, void *context, void *data)
 @property(nonatomic) BOOL audioEnded;
 @property(nonatomic) BOOL ended;
 @property(nonatomic) NSUInteger silenceMark;
+@property(nonatomic, strong) id configObserver;
 @end
 
 @implementation DFSession
@@ -88,17 +89,23 @@ static void Emit(DFSession *session, const char *kind, const char *code, NSStrin
 }
 
 static void StopAudio(DFSession *session) {
-  if (session.tapped) {
-    [session.engine.inputNode removeTapOnBus:0];
-    session.tapped = NO;
+  @try {
+    if (session.tapped) [session.engine.inputNode removeTapOnBus:0];
+    if (session.engine.isRunning) [session.engine stop];
+  } @catch (NSException *exception) {
+    // The device went away under the engine; there is nothing left to stop.
   }
-  if (session.engine.isRunning) [session.engine stop];
+  session.tapped = NO;
 }
 
 /** The one way a session ends: audio off, task done, an optional error, then `end`, once. */
 static void Finish(DFSession *session, const char *error) {
   if (session.ended) return;
   session.ended = YES;
+  if (session.configObserver != nil) {
+    [[NSNotificationCenter defaultCenter] removeObserver:session.configObserver];
+    session.configObserver = nil;
+  }
   StopAudio(session);
   [session.request endAudio];
   [session.task cancel];
@@ -267,31 +274,45 @@ static napi_value Start(napi_env env, napi_callback_info info) {
   session.request = request;
   session.engine = [AVAudioEngine new];
 
-  AVAudioInputNode *input = session.engine.inputNode;
-  AVAudioFormat *format = [input outputFormatForBus:0];
   napi_value result;
   napi_create_int64(env, session.identifier, &result);
-  if (format.sampleRate == 0 || format.channelCount == 0) {
+  // AVFoundation raises NSException (a device or format change between the read and the tap); it must never cross
+  // the Node-API boundary, where it would abort the app. Any failure here ends the session as audio-capture.
+  BOOL started = NO;
+  @try {
+    AVAudioInputNode *input = session.engine.inputNode;
+    AVAudioFormat *format = [input outputFormatForBus:0];
+    if (format.sampleRate > 0 && format.channelCount > 0) {
+      [input installTapOnBus:0
+                  bufferSize:1024
+                      format:format
+                       block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
+                         [request appendAudioPCMBuffer:buffer];
+                       }];
+      session.tapped = YES;
+      [session.engine prepare];
+      NSError *failure = nil;
+      started = [session.engine startAndReturnError:&failure];
+    }
+  } @catch (NSException *exception) {
+    started = NO;
+  }
+  if (!started) {
     dispatch_async(dispatch_get_main_queue(), ^{
       Finish(session, "audio-capture");
     });
     return result;
   }
-  [input installTapOnBus:0
-              bufferSize:1024
-                  format:format
-                   block:^(AVAudioPCMBuffer *buffer, AVAudioTime *when) {
-                     [request appendAudioPCMBuffer:buffer];
-                   }];
-  session.tapped = YES;
-  [session.engine prepare];
-  NSError *failure = nil;
-  if (![session.engine startAndReturnError:&failure]) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      Finish(session, "audio-capture");
-    });
-    return result;
-  }
+  // The input device changed (AirPods connected, a mic unplugged): the engine stops on its own. End the audio so the
+  // words heard so far still arrive, or say the microphone went away when nothing was heard yet.
+  session.configObserver = [[NSNotificationCenter defaultCenter]
+      addObserverForName:AVAudioEngineConfigurationChangeNotification
+                  object:session.engine
+                   queue:[NSOperationQueue mainQueue]
+              usingBlock:^(NSNotification *note) {
+                if (session.heard) EndAudio(session);
+                else Finish(session, "audio-capture");
+              }];
 
   session.task = [recognizer
       recognitionTaskWithRequest:request

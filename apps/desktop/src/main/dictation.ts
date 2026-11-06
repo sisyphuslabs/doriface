@@ -46,7 +46,8 @@ export class DictationHost {
   readonly #addon: SpeechAddon;
   readonly #microphone: Microphone;
   #current: Current | null = null;
-  #prompting = false;
+  /** The page waiting on the system's prompts; a reload, navigation or close while they are open cancels its start. */
+  #pending: { readonly ownerId: number; dropped: boolean } | null = null;
 
   constructor(addon: SpeechAddon, microphone: Microphone) {
     this.#addon = addon;
@@ -59,17 +60,19 @@ export class DictationHost {
 
   async start(owner: DictationOwner, lang: unknown): Promise<DictationStartAnswer> {
     if (!isDictationLanguage(lang)) return { refused: "service" };
-    if (this.#prompting) return { refused: "busy" };
+    if (this.#pending !== null) return { refused: "busy" };
     if (this.#current !== null && this.#current.owner.id !== owner.id) return { refused: "busy" };
-    this.#prompting = true;
+    const pending = { ownerId: owner.id, dropped: false };
+    this.#pending = pending;
     let refusal: DictationStartAnswer | null;
     try {
       refusal = await this.#permitted(lang);
     } finally {
-      this.#prompting = false;
+      this.#pending = null;
     }
     if (refusal !== null) return refusal;
-    if (owner.isDestroyed()) return { refused: "service" };
+    // The page that asked is gone (reloaded, navigated, closed or quit) while the prompt was open: start nothing.
+    if (pending.dropped || owner.isDestroyed()) return { refused: "service" };
     if (this.#current !== null && this.#current.owner.id !== owner.id) return { refused: "busy" };
     // The same page starting again ends its own session first; the addon runs one at a time.
     this.#end();
@@ -98,10 +101,12 @@ export class DictationHost {
 
   /** The page reloaded, navigated, crashed or closed: its session ends with it. */
   dropOwner(id: number): void {
+    if (this.#pending?.ownerId === id) this.#pending.dropped = true;
     if (this.#current?.owner.id === id) this.#end();
   }
 
   stopAll(): void {
+    if (this.#pending !== null) this.#pending.dropped = true;
     this.#end();
   }
 
