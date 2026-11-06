@@ -32,10 +32,14 @@ export function PacksSheet({ open, onOpenChange, settings, readOnly }: PacksShee
               className="flex min-h-14 items-center gap-3 border-b border-border py-2.5 last:border-b-0"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-base text-foreground">{row.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {row.description} · {count} {count === 1 ? "key" : "keys"}
+                <p className="flex items-baseline gap-2 text-base text-foreground">
+                  <span className="min-w-0 truncate">{row.name}</span>
+                  {/* The count sits on the title line so the description can ellipsize without eating it. */}
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                    {count} {count === 1 ? "key" : "keys"}
+                  </span>
                 </p>
+                <p className="truncate text-xs text-muted-foreground">{row.description}</p>
               </div>
               <Switch
                 aria-label={`${on ? "Remove" : "Add"} ${row.name} pack`}
