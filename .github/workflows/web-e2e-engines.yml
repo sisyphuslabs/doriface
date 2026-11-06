@@ -57,8 +57,15 @@ jobs:
           # --with-deps runs apt, and on #855 a stalled azure.archive.ubuntu.com mirror spent the whole 30-minute job
           # there without the suite ever starting. Bound it and fall back to the engines alone: a missing system library
           # then fails the first browser launch loudly, which is a job that reports a real error instead of a silent hang.
-          if ! timeout 900 bunx playwright install --with-deps chromium firefox webkit; then
-            echo "::warning::--with-deps did not finish in 15 minutes; installing the engines without system packages"
+          set +e
+          timeout 900 bunx playwright install --with-deps chromium firefox webkit
+          code=$?
+          set -e
+          if [ "$code" -eq 124 ]; then
+            echo "::warning::the bounded install hit its 15-minute limit; installing the engines without system packages"
+            timeout 600 bunx playwright install chromium firefox webkit
+          elif [ "$code" -ne 0 ]; then
+            echo "::warning::--with-deps exited $code, not on the time limit; installing the engines without system packages"
             timeout 600 bunx playwright install chromium firefox webkit
           fi
       - name: Which engines this run actually got
