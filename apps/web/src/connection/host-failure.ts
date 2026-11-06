@@ -16,13 +16,13 @@ const FALLBACK = "Your host isn't answering. Check that its computer is on and d
 function coreMismatch(mismatch: HcCoreMismatch): string {
   switch (mismatch.kind) {
     case "core-too-old":
-      return `Your host's herdr-core is ${mismatch.version}, and doriface needs ${mismatch.need} or newer. Run hc update on that computer.`;
+      return `Your host's herdr-core is ${mismatch.version}, and Doriterm needs ${mismatch.need} or newer. Run hc update on that computer.`;
     case "core-older":
-      return `Your host's herdr-core is too old for doriface, which needs ${mismatch.need} or newer. Run hc update on that computer.`;
+      return `Your host's herdr-core is too old for Doriterm, which needs ${mismatch.need} or newer. Run hc update on that computer.`;
     case "core-missing":
-      return `Your host's herdr-core is missing ${mismatch.methods.join(", ")}, which doriface needs. Run hc update on that computer.`;
+      return `Your host's herdr-core is missing ${mismatch.methods.join(", ")}, which Doriterm needs. Run hc update on that computer.`;
     case "core-newer":
-      return "Your host's herdr-core is newer than this doriface understands. Update doriface.";
+      return "Your host's herdr-core is newer than this Doriterm understands. Update Doriterm.";
   }
 }
 
@@ -32,4 +32,16 @@ export function hostFailure(error: Error): string {
   if (error instanceof HcCoreMismatchError) return coreMismatch(error.mismatch);
   const code = "code" in error && typeof error.code === "number" ? error.code : undefined;
   return (code === undefined ? undefined : BY_CODE[code]) ?? FALLBACK;
+}
+
+/**
+ * A failure a retry cannot fix: the host does not know this device, the address is not on this computer, or its core has
+ * to be updated on one side or the other (#462, #515, #651). None of them is helped by dialing again.
+ */
+export function isFinal(error: Error): boolean {
+  return (
+    error instanceof DeviceNotPairedError ||
+    error instanceof LoopbackAddressError ||
+    error instanceof HcCoreMismatchError
+  );
 }
