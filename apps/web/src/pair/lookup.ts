@@ -57,5 +57,5 @@ export async function lookupCode(code: string, relayUrl: string, signal?: AbortS
       : { hostId, noiseStaticPub, signPub };
   const verdict = pairSlotVerdict(record, slotOf(code), Date.now());
   if (verdict !== "signed") return { ok: false, reason: sentence(pairSlotRefusal(verdict)) };
-  return offerFrom({ hostId, noiseStaticPub, signPub }, { mode: "code", code }, relayUrl);
+  return offerFrom({ hostId, noiseStaticPub, signPub }, { mode: "code", code }, { relayUrl, target: "device" });
 }
