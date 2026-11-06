@@ -1,0 +1,33 @@
+{
+  "note": "provisional, replaced by the measured noise floor",
+  "limits": {
+    "frameP95": {
+      "ratio": 1.25,
+      "floor": 4
+    },
+    "busyShare": {
+      "ratio": 1.25,
+      "floor": 0.05
+    },
+    "catchUpMs": {
+      "ratio": 1.5,
+      "floor": 100
+    },
+    "drawnBytesPerSec": {
+      "ratio": 0.8,
+      "floor": 0
+    },
+    "heapMB": {
+      "ratio": 1.25,
+      "floor": 10
+    },
+    "hiddenBusyShare": {
+      "ratio": 1.5,
+      "floor": 0.05
+    },
+    "showCatchUpMs": {
+      "ratio": 1.5,
+      "floor": 200
+    }
+  }
+}

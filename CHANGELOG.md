@@ -10,6 +10,10 @@
 
 - The installed web app carries its own app id and language, ships a maskable icon at 192 as well as 512, and opens standalone from an iOS home screen with its own title and status bar. (#709)
 
+### Rendering performance
+
+- `bun run bench:render` measures the web client drawing 1, 15 and 50 live panes against a real core: frame times, main-thread load, long tasks, drawing throughput and lag, memory, and the cost of panes in a hidden tab. Every release now benches its web client against the last release's on one runner, stops before the draft when rendering regressed past the recorded limits, and attaches the results to the release. (#670)
+
 ### Native apps
 
 - A push bridge for the coming iOS and Android apps: the host's encrypted notices reach them through APNs and FCM, and the bridge never holds a key that opens one. (#705)

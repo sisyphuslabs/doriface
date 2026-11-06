@@ -26,6 +26,7 @@ const DOWNLOADS: readonly Download[] = [
   { label: "Linux x64", matches: (name) => !isArm(name) && (name.endsWith(".AppImage") || name.endsWith(".deb")) },
   { label: "Linux arm64", matches: (name) => isArm(name) && (name.endsWith(".AppImage") || name.endsWith(".deb")) },
   { label: "Web client and PWA (static files)", matches: (name) => has(name, "-web-") && name.endsWith(".zip") },
+  { label: "Render bench against the last release (#670)", matches: (name) => has(name, "-render-bench.") },
 ];
 
 const escapeRegExp = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
