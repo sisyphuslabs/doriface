@@ -21,6 +21,16 @@ const SPACES = " ".repeat(40);
 
 const PAGES: readonly { readonly name: string; readonly html: string; readonly found: readonly string[] }[] = [
   {
+    name: "a control placed by an outer box, outside the row it sits in",
+    html: `<div style="position:relative;width:300px;height:40px"><div style="margin-left:200px;width:100px;height:20px"><button style="position:absolute;left:0;top:0;width:24px;height:30px">x</button></div></div>`,
+    found: [],
+  },
+  {
+    name: "a control placed past the edge of the box it is positioned in",
+    html: `<div style="position:relative;width:100px;height:40px"><div style="width:100px;height:20px"><button style="position:absolute;left:0;top:0;width:160px;height:20px">x</button></div></div>`,
+    found: ["spill"],
+  },
+  {
     name: "text clipped by its box",
     html: `<div style="width:100px;overflow:hidden;white-space:nowrap">${LONG}</div>`,
     found: ["clipped"],

@@ -62,6 +62,19 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
       el.checkVisibility({ visibilityProperty: true }) &&
       !hidden(el),
   );
+  // An absolutely positioned box is laid out against its containing block (its offsetParent), not its parent: it can
+  // never overflow the parent, and it belongs to the block it is placed in, which measures it instead (#643).
+  const placedIn = new Map<Element, HTMLElement[]>();
+  // oxlint-disable-next-line unicorn/consistent-function-scoping -- page.evaluate sends this function as source, so its helpers live inside it
+  const placedElsewhere = (node: Element): node is HTMLElement =>
+    node instanceof HTMLElement &&
+    getComputedStyle(node).position === "absolute" &&
+    node.offsetParent !== null &&
+    node.offsetParent !== node.parentElement;
+  for (const el of elements) {
+    if (!placedElsewhere(el) || el.offsetParent === null) continue;
+    placedIn.set(el.offsetParent, [...(placedIn.get(el.offsetParent) ?? []), el]);
+  }
   for (const el of elements) {
     const style = getComputedStyle(el);
     const box = el.getBoundingClientRect();
@@ -113,7 +126,7 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
         return;
       }
       if (!(node instanceof Element) || !node.checkVisibility({ visibilityProperty: true })) return;
-      if (getComputedStyle(node).position === "fixed") return;
+      if (getComputedStyle(node).position === "fixed" || placedElsewhere(node)) return;
       if (!flows(node)) {
         if (node.clientWidth > 1 || node.clientHeight > 1) measure(node.getBoundingClientRect());
         return;
@@ -136,6 +149,9 @@ export function findOverflows(skip: readonly string[]): Overflow[] {
       for (const child of node.childNodes) flow(child);
     };
     for (const child of el.childNodes) flow(child);
+    for (const placed of placedIn.get(el) ?? []) {
+      if (placed.clientWidth > 1 || placed.clientHeight > 1) measure(placed.getBoundingClientRect());
+    }
     // An ellipsis draws only in a block container; a flex or grid box with text-overflow just cuts the text.
     const ellipsis = style.textOverflow === "ellipsis" && !/flex|grid/.test(style.display);
     const truncated = ellipsis && el.scrollWidth > el.clientWidth + slack;
