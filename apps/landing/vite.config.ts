@@ -5,8 +5,8 @@ import { defineConfig } from "vite";
 
 /**
  * Two pages: the landing itself (plain HTML, CSS and one module) and mockup/index.html (served at /mockup/), which renders the app's own
- * components with fixture data. The landing embeds the mockup in lazy iframes, so React and Tailwind load only when a
- * mockup scrolls near the viewport and never style the landing page.
+ * components with fixture data. The landing embeds the mockup in iframes in its hero, so React and Tailwind stay inside
+ * the frames and never style the landing page.
  */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
