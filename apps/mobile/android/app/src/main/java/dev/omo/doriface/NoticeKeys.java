@@ -94,10 +94,18 @@ final class NoticeKeys {
             try {
                 PrivateKey privateKey = KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(open(sealedKey)));
                 return new NoticeKeys(privateKey, b64(pub), open(sealedAuth));
-            } catch (GeneralSecurityException unsealable) {
-                // Keys this device's Keystore cannot open (restored from another device, or its key was lost): make new
-                // ones and forget the token, so the page subscribes again with keys the host can encrypt to.
+            } catch (Exception unopenable) {
+                // Keys this device cannot open (restored from another device, a lost or unreadable wrap key, a corrupt
+                // value): forget them, the token and the wrap key, so new ones are made below and the page subscribes
+                // again with keys the host can encrypt to.
                 prefs.edit().clear().commit();
+                try {
+                    KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+                    store.load(null);
+                    store.deleteEntry(WRAP_ALIAS);
+                } catch (Exception ignored) {
+                    // No entry to delete, or none readable: wrapKey() below makes a new one either way.
+                }
             }
         }
         KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
