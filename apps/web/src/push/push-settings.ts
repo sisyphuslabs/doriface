@@ -2,7 +2,9 @@ import { base64urlDecode } from "@doriface/crypto";
 import { DEFAULT_PUSH_PREFS, type PushHostLine, type PushPrefs } from "@doriface/protocol";
 import { type ConnectionSettings, isConfigured } from "../connection/settings.ts";
 import { connectionStore } from "../connection/store.ts";
+import { MoveQueue } from "./move-queue.ts";
 import { pushChannel } from "./push-channel.ts";
+import { recordPushMove } from "./push-move-probe.ts";
 import {
   loadPushPrefs,
   loadPushRoute,
@@ -48,8 +50,8 @@ const manager = async (): Promise<PushManager> => (await navigator.serviceWorker
 class PushSettings {
   #view: PushView = INITIAL;
   readonly #listeners = new Set<() => void>();
-  /** The move in flight; the next one starts once it is done (see `retarget`). */
-  #moving: Promise<void> = Promise.resolve();
+  /** Moves run one at a time (see `retarget`). */
+  readonly #moves = new MoveQueue();
 
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
@@ -124,9 +126,8 @@ class PushSettings {
    * second move that read the saved route while the first was still registering redid the whole move beside it (#780).
    */
   retarget(settings: ConnectionSettings): Promise<void> {
-    const moved = this.#moving.then(() => this.#retarget(settings));
-    // A move that throws (a gateway that is not a URL) must not stop the ones after it.
-    this.#moving = moved.catch(() => undefined);
+    const moved = this.#moves.run(() => this.#retarget(settings));
+    recordPushMove(this.#moves.idle);
     return moved;
   }
 
