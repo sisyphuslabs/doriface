@@ -107,6 +107,16 @@ test("a long line in the field is shown whole, and the keys stay reachable under
   await expect(terminal).toContainText("한글 42", { timeout: 15_000 });
 });
 
+test("an idle, empty field keeps the pill's 44 pt height, and grows only while in use", async ({ page }) => {
+  const terminal = await openPhoneTerminal(page);
+  await terminal.click();
+  await expect(field(page)).toBeVisible();
+  await expect.poll(async () => (await field(page).boundingBox())?.height).toBe(44);
+  await field(page).click();
+  await page.keyboard.type("echo one two three four five six seven eight nine ten eleven twelve");
+  await expect.poll(async () => (await field(page).boundingBox())?.height ?? 0).toBeGreaterThan(44);
+});
+
 test("what is typed in the field is still there after the keyboard closes and opens again", async ({ page }) => {
   await openPhoneTerminal(page);
   await field(page).click();

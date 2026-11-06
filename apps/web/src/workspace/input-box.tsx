@@ -42,9 +42,14 @@ export function InputBox({ onSend, draftKey, onActive, className, style }: Input
     onActiveNow.current?.(active);
   }, [active]);
   useLayoutEffect(() => () => onActiveNow.current?.(false), []);
+  // The field in use is as tall as its wrapped text, up to MAX_HEIGHT_PX; an idle field keeps its pill height (h-11).
   useLayoutEffect(() => {
     const element = field.current;
     if (element === null) return;
+    if (!active) {
+      element.style.height = "";
+      return;
+    }
     element.style.height = "auto";
     element.style.height = `${Math.min(MAX_HEIGHT_PX, element.scrollHeight + element.offsetHeight - element.clientHeight)}px`;
   }, [text, active]);
