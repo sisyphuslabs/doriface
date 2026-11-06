@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- An agent row shows how far its own todo list has got, as done/total (2/4), read from the task list Claude Code draws when its task tools are on; a long list's folded line counts too. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
+
 ### Joining a mesh from a browser
 
 - A browser with no account and no pairing opens the web app, follows an invite link a member sent, checks the host's fingerprint and lands on the mesh's terminals; a revisit needs no new invite. (#709)
