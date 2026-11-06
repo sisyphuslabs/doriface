@@ -4,6 +4,8 @@
 
 ### Settings
 
+- The terminal preview in Settings draws its sample text at the size its rows are cut for: it asked for the configured point size while the row height comes from the pixel size the terminal renders at, so every line spilled a pixel past its box at every window size. (#955)
+
 - Settings on a phone no longer shows the agent list's Pin and More buttons drawn over its sections: nothing of the workspace kept behind Settings is drawn while it is open. (#898)
 
 ### Pairing from a phone
