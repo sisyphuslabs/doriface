@@ -122,9 +122,11 @@ export function AgentsGroup({ terminals, active, onOpen, rail = false, heading =
   if (!heading)
     return (
       <section aria-label="Agents" className="flex flex-col gap-px">
-        <div className="flex justify-end px-2">
-          <SortMenu />
-        </div>
+        {groups.length === 0 ? null : (
+          <div className="flex justify-end px-2">
+            <SortMenu />
+          </div>
+        )}
         {list}
       </section>
     );

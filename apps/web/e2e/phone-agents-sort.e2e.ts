@@ -1,0 +1,28 @@
+import { devices } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
+import { hcOn } from "./machine-switch.ts";
+
+const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
+test.use({ ...phone, serviceWorkers: "block" });
+
+/** The terminals one core lists, so a spec can end them all and count from zero. */
+function addressesOn(core: "host" | "machine"): string[] {
+  const listed: unknown = JSON.parse(hcOn(core, ["ls", "--json"]));
+  const terminals = typeof listed === "object" && listed !== null ? Reflect.get(listed, "terminals") : undefined;
+  if (!Array.isArray(terminals)) return [];
+  return terminals.map((terminal: unknown) =>
+    typeof terminal === "object" && terminal !== null ? String(Reflect.get(terminal, "address")) : "",
+  );
+}
+
+test("with two machines and no agent, the phone shows no sort control", async ({ page }) => {
+  for (const core of ["host", "machine"] as const) {
+    for (const address of addressesOn(core)) hcOn(core, ["kill", address]);
+  }
+  await expect.poll(() => [...addressesOn("host"), ...addressesOn("machine")], { timeout: 20_000 }).toEqual([]);
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("status").filter({ hasText: "No terminals yet" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Sort agents" })).toHaveCount(0);
+});
