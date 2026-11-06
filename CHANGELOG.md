@@ -5,6 +5,7 @@
 ### Phone
 
 - On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
+- On a phone, an agent row shows its "..." alone, with Pin to top as its first item, so the summary, machine and age have room. (#950)
 
 ### Machine mesh
 

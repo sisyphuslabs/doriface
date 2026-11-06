@@ -86,7 +86,10 @@ function AgentMenuItems({ agent }: { readonly agent: Agent }) {
   );
 }
 
-/** Hover or keyboard focus shows only these two; everything else about the agent is in the "..." menu. */
+/**
+ * Hover or keyboard focus shows only these two; everything else about the agent is in the "..." menu. A touch screen
+ * draws More alone: Pin is its menu's first item, and the row keeps its age and machine (#950, after #798/#808).
+ */
 function AgentActions({ agent }: { readonly agent: Agent }) {
   const pin = usePin();
   const pinned = agent.pinned === true;
@@ -95,7 +98,7 @@ function AgentActions({ agent }: { readonly agent: Agent }) {
       <IconButton
         label={`${pinned ? "Unpin" : "Pin"} ${agent.name}`}
         icon={pinned ? <PinOff /> : <Pin />}
-        className="size-6"
+        className="size-6 coarse:hidden"
         onClick={() => pin(agent.id, !pinned)}
       />
       <Menu
