@@ -68,7 +68,7 @@ export const ACTIONS: readonly ActionDef[] = [
   app("app.zoom_reset", "Reset terminal text size", "reset_font_size"),
   term("terminal.copy", "Copy", "copy_to_clipboard"),
   term("terminal.paste", "Paste", "paste_from_clipboard"),
-  // herdr-app's terminal.paste_image, unbound here (#701): Ctrl+V stays ^V for vim and quoted insert unless bound to it.
+  // herdr-app's terminal.paste_image, unbound here (#701): Ctrl+V keeps its own handling unless bound to it.
   term("terminal.paste_image", "Paste image"),
   term("terminal.select_all", "Select all", "select_all"),
   term("terminal.clear", "Clear screen", "clear_screen"),
