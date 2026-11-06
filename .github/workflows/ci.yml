@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 
+# A pull request into dev must pass three checks: Check, Relay e2e and Web e2e. The platform jobs — Desktop,
+# Desktop (macOS) and Windows private state — are gated to a push on dev, so they run after the merge and never on a
+# pull request; the CI section of README.md says the same for a reader.
 jobs:
   check:
     name: Check
@@ -204,7 +207,9 @@ jobs:
           if-no-files-found: ignore
 
   desktop:
+    # After the merge, not on the pull request: nothing here can hold a pull request before it lands.
     name: Desktop
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -255,9 +260,10 @@ jobs:
   desktop-macos:
     # The desktop app ships for macOS first (signed and notarized dmg and zip), and part of its suite only runs there:
     # the hidden-inset titlebar spec and the app-menu spec skip on every other platform, and the shortcut, split-focus
-    # and pairing-link specs take their Command branch only on a Mac (#609). Without this job those paths reach dev
-    # unproven.
+    # and pairing-link specs take their Command branch only on a Mac (#609). Like the other platform jobs it runs after
+    # the merge, on the push to dev, and never on a pull request.
     name: Desktop (macOS)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
@@ -371,6 +377,8 @@ jobs:
     # Host key custody on Windows (#406): ACLs, not POSIX mode bits. Both supported Windows architectures run the
     # real-ACL suite and the compiled host, so bun:ffi is proven in the packaged binary too.
     name: Windows private state (${{ matrix.arch }})
+    # After the merge, not on the pull request, like the rest of the platform jobs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     strategy:
       fail-fast: false
       matrix:

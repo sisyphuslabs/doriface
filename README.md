@@ -76,6 +76,21 @@ The relay server (Cloudflare Workers + Durable Objects, `relay-doriface.omo.dev`
 contract is the relay section of [docs/transport.md](docs/transport.md), which every package here is built against, so
 any server that follows it can stand in.
 
+## CI
+
+A pull request into `dev` runs three checks, and they are the required ones: `Check` (type checker, linter, formatter
+check, API codegen check and tests), `Relay e2e` (this repository's host and client against the relay at
+`relay-pin.json`, plus a two-host pairing spec) and `Web e2e` (the browser suite against a real `hc`).
+
+The platform jobs run after the merge instead, on the push to `dev`, and never on a pull request: `Desktop` (the
+packaged app on Linux with its Electron suite), `Desktop (macOS)` (the same suite on a Mac, where the titlebar, app-menu
+and shortcut specs actually run, and only when the change can reach the app) and `Windows private state (x64)` and
+`Windows private state (arm64)` (host key custody on real Windows ACLs, both supported architectures).
+`Ghostty wasm provenance` runs on every event.
+
+On a pull request those four jobs are skipped: they report as `skipped`, and none of them is a required check, so they
+never hold a merge. A push that breaks one of them leaves `dev` red until it is fixed.
+
 ## Development
 
 Requires [Bun](https://bun.sh) 1.4.4 or newer, and [herdr-core](https://github.com/herdrdev/herdr-core) (`hc`) 0.1.17 on `PATH` to run the host, the desktop app, `bun run check` and the end-to-end tests.
