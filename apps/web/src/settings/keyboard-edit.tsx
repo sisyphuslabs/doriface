@@ -134,7 +134,7 @@ export function KeyboardEdit({ settings, host, readOnly }: KeyboardEditProps) {
               <IconButton
                 label={`Add ${entry.name}`}
                 icon={<Plus />}
-                className="size-6 rounded-full bg-online text-avatar-ink hover:bg-online/90"
+                className="size-6 rounded-full bg-affirmative text-affirmative-foreground hover:bg-affirmative/90"
                 disabled={readOnly}
                 onClick={() => void keyBarStore.update((current) => restoreKey(current, entry.id))}
               />
