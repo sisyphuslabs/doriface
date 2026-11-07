@@ -15,6 +15,7 @@
 ### Notifications
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+- In the desktop app, Send test passes only when an agent's notification would: it waits for the app to follow the agents, then fails with the reason when notifications are off, the agents cannot be followed, every event is turned off, or this computer is muted, instead of showing a test that proves none of that. (#796)
 
 ### Settings
 
