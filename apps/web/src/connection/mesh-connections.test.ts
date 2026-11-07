@@ -190,9 +190,13 @@ describe("one connection per member", () => {
     // A form read the settings when it opened; the shown machine changed after that.
     const opened = mesh.settings;
     mesh.select("b");
-    const current = mesh.settings;
+    const { members: currentMembers, ...current } = mesh.settings;
     mesh.edit({ token: "fresh" });
-    expect(mesh.settings).toEqual({ ...current, token: "fresh" });
+    const { members, ...after } = mesh.settings;
+    expect(after).toEqual({ ...current, token: "fresh" });
+    expect(members.map((entry) => entry.hostId).toSorted()).toEqual(
+      currentMembers.map((entry) => entry.hostId).toSorted(),
+    );
     expect(mesh.settings.hostId).not.toBe(opened.hostId);
   });
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Settings
+
+- Changing a field under Advanced connection no longer brings back the machine that was shown when Settings opened: only the changed field is saved, onto the current settings. (#1006)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
