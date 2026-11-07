@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Website
+
+- The doriterm.com link preview shows the app's whole agent list: its third idle agent is no longer cut off by the sidebar's Settings footer. (#954)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
