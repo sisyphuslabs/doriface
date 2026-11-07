@@ -1,6 +1,7 @@
 import { devices } from "@playwright/test";
 import { endAgent, startAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
+import { fakeSoftKeyboard, key } from "./phone-key-bar.ts";
 
 const { defaultBrowserType: _browser, ...phone } = devices["iPhone 14"];
 test.use({ ...phone, serviceWorkers: "block" });
@@ -55,7 +56,9 @@ test("a switch inside an open terminal still leaves for the list on Back, not th
   }
 });
 
-test("Settings opened over an open terminal keeps it mounted instead of reattaching it", async ({ page }) => {
+test("on a desktop, Settings opened over an open terminal keeps it mounted instead of reattaching it", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const address = startAgent("host", "backkeep", "idle");
   try {
@@ -156,10 +159,11 @@ test("a cold open on ?t= comes back to the list instead of leaving the app", asy
   }
 });
 
-test("entering a terminal adds exactly one entry, so Back leaves the app after the list", async ({ page }) => {
+test("a switch inside an open terminal replaces its entry, so one Back reaches the list", async ({ page }) => {
   const first = startAgent("host", "switchone", "idle");
   const second = startAgent("host", "switchtwo", "idle");
   try {
+    await fakeSoftKeyboard(page);
     await page.goto("/");
     const before = await page.evaluate(() => history.length);
     const one = page.getByRole("button", { name: /switchone/ }).first();
@@ -168,19 +172,28 @@ test("entering a terminal adds exactly one entry, so Back leaves the app after t
     await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible({ timeout: 20_000 });
     expect(await page.evaluate(() => history.length), "entering a terminal adds one entry").toBe(before + 1);
 
-    // One Back leaves the terminal; a second leaves the app. If the switch had pushed an entry of its own, the second
-    // Back would land on a list again instead of leaving, which is the shape the review measured.
-    await page.getByRole("button", { name: "Back to agents" }).click();
+    // Switch session, from inside the open terminal: the switch replaces the entry rather than adding one.
+    await page.locator(`[data-terminal="${first}"]`).getByRole("textbox").focus();
+    await key(page, "Switch session").click();
+    await page
+      .getByRole("menu")
+      .getByRole("menuitem", { name: /switchtwo/ })
+      .click();
+    await expect(page.locator(`[data-terminal="${second}"]`)).toBeVisible({ timeout: 20_000 });
+    expect(await page.evaluate(() => history.length), "the switch adds no entry").toBe(before + 1);
+
+    await page.goBack();
     await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
     await expect.poll(() => new URL(page.url()).searchParams.get("t")).toBeNull();
-    void second;
   } finally {
     endAgent("host", first);
     endAgent("host", second);
   }
 });
 
-test("at 390, Settings that names the open terminal keeps it mounted", async ({ page }) => {
+test("at 390, Settings opened from an open terminal keeps it mounted, and Settings after Back mounts none", async ({
+  page,
+}) => {
   const address = startAgent("host", "backdeep", "idle");
   try {
     await page.goto("/");
@@ -188,22 +201,34 @@ test("at 390, Settings that names the open terminal keeps it mounted", async ({ 
     await expect(row).toBeVisible({ timeout: 20_000 });
     await row.click();
     await expect(page.getByRole("button", { name: "Back to agents" })).toBeVisible({ timeout: 20_000 });
-    const key = new URL(page.url()).searchParams.get("t");
-    expect(key, "opening a terminal on a phone names it in the route").not.toBeNull();
+    expect(
+      new URL(page.url()).searchParams.get("t"),
+      "opening a terminal on a phone names it in the route",
+    ).not.toBeNull();
+    const terminal = page.locator(`[data-terminal="${address}"]`);
+    await terminal.evaluate((el) => ((el as HTMLElement).dataset["kept"] = "yes"));
 
-    // The phone reaches Settings as a route of its own; a route that names the terminal must keep it, not report that
-    // nothing is open (which unmounted it and reattached it on the way back).
-    await page.goto(`/settings?t=${encodeURIComponent(key ?? "")}`);
+    // Settings from inside the terminal, an in-app route with no ?t=: the terminal stays mounted (the same node).
+    await page.keyboard.press("ControlOrMeta+Shift+KeyP");
+    await page.getByRole("combobox", { name: "Command" }).fill("Settings");
+    await page.keyboard.press("Enter");
     await expect(page.getByRole("heading", { name: "Settings" }).first()).toBeVisible({ timeout: 20_000 });
     await expect(
-      page.locator(`[data-terminal="${address}"]`),
+      page.locator(`[data-terminal="${address}"][data-kept="yes"]`),
       "the terminal is still mounted under Settings",
     ).toHaveCount(1);
-
-    // Closing Settings lands on the list, which is a route with no terminal in it; the terminal comes back from the row.
     await page.getByRole("button", { name: "Close settings" }).click();
-    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("button", { name: /backdeep/ }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(`[data-terminal="${address}"][data-kept="yes"]`)).toHaveCount(1);
+
+    // Back to the list closes the terminal; Settings opened from the list then mounts none under it.
+    await page.getByRole("button", { name: "Back to agents" }).click();
+    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+    await page
+      .getByRole("link", { name: /Settings/ })
+      .first()
+      .click();
+    await expect(page.getByRole("heading", { name: "Settings" }).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(`[data-terminal="${address}"]`), "no closed terminal under Settings").toHaveCount(0);
   } finally {
     endAgent("host", address);
   }

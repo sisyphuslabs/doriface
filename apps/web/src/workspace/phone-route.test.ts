@@ -23,7 +23,8 @@ describe("the phone's open terminal, read from the route", () => {
 
   test("what is remembered follows the route, and survives one that says nothing", () => {
     expect(rememberOpenKey("/", "machine-c", null)).toBe("machine-c");
-    expect(rememberOpenKey("/", null, "machine-c")).toBe("machine-c");
+    // The list with no ?t= closed the terminal (Back): nothing is remembered, so a later Settings opens none (review of #1078).
+    expect(rememberOpenKey("/", null, "machine-c")).toBeNull();
     expect(rememberOpenKey("/settings", null, "machine-c")).toBe("machine-c");
     expect(rememberOpenKey("/settings", "machine-e", "machine-c")).toBe("machine-e");
   });
