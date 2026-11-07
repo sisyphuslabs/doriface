@@ -1,4 +1,3 @@
-import { once } from "node:events";
 import { constants, createReadStream, openSync, readdirSync, writeFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -11,7 +10,7 @@ export interface SilentHc {
   connects(): string[];
   /** Resolves once `count` more connects have started. */
   started(count: number): Promise<void>;
-  /** Ends the reader, then its stream closes the FIFO's fd: settles once no read is left on it (#1146). */
+  /** Ends the reader, then its stream closes the FIFO's fd: settles once no read is left on it (#1146). Idempotent. */
   close(): Promise<void>;
 }
 
@@ -38,6 +37,19 @@ export function silentHc(dir: string): SilentHc {
   const input = createReadStream("", { fd, autoClose: true });
   const lines = createInterface({ input });
   const reads = lines[Symbol.asyncIterator]();
+  const closeInput = async (): Promise<void> => {
+    lines.close();
+    if (input.closed) return;
+    const closed = new Promise<void>((resolve) => input.once("close", () => resolve()));
+    // A destroyed stream (an errored one is too) is already closing the fd, so nothing may be written to it. A live
+    // one's read waits on the FIFO until a line comes: this one returns it, so destroy can close the fd.
+    if (!input.destroyed) {
+      writeSync(fd, "\n");
+      input.destroy();
+    }
+    await closed;
+  };
+  let closing: Promise<void> | undefined;
   return {
     hc,
     connects: () => readdirSync(dir).filter((name) => name.startsWith("connect-")),
@@ -46,13 +58,6 @@ export function silentHc(dir: string): SilentHc {
       if ((await reads.next()).done === true) throw new Error("the connects' FIFO ended");
       return started(count - 1);
     },
-    close: async () => {
-      lines.close();
-      const closed = once(input, "close");
-      // The stream's read waits on the FIFO until a line comes: this one returns it, so destroy can close the fd.
-      writeSync(fd, "\n");
-      input.destroy();
-      await closed;
-    },
+    close: () => (closing ??= closeInput()),
   };
 }
