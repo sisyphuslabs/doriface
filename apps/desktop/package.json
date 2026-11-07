@@ -1,6 +1,6 @@
 {
   "name": "@doriface/desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Doriterm desktop shell",
   "homepage": "https://github.com/sisyphuslabs/doriterm",
@@ -27,6 +27,7 @@
     "electron": "45.2.1",
     "electron-builder": "26.18.0",
     "electron-updater": "6.8.11",
+    "node-api-headers": "1.9.0",
     "ws": "8.18.3"
   },
   "productName": "Doriterm"
