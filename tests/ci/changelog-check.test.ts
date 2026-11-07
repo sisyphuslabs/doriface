@@ -169,6 +169,40 @@ test("a release pull request that moves Unreleased into a new version section pa
   expect((await check(dir, base)).code).toBe(0);
 });
 
+test("an empty release heading does not stand in for an Unreleased line", async () => {
+  const { dir, base } = await repo({
+    "apps/web/src/app.ts": "export const a = 1;\n",
+    "CHANGELOG.md": BASE_CHANGELOG.replace("## v1.0.0\n", "## v9.9.9\n\n## v1.0.0\n"),
+  });
+  const result = await check(dir, base);
+  expect(result.code).toBe(1);
+  expect(result.out).toContain("v9.9.9");
+});
+
+test("a release section whose version apps/desktop/package.json does not set is not a release", async () => {
+  const { dir, base } = await repo({
+    "apps/web/src/app.ts": "export const a = 1;\n",
+    "CHANGELOG.md": BASE_CHANGELOG.replace(
+      "## Unreleased\n\n### Terminals\n\n- Already there. (#1)\n",
+      "## Unreleased\n\n## v1.1.0 - 2026-11-06\n\n### Terminals\n\n- Already there. (#1)\n",
+    ),
+  });
+  const result = await check(dir, base);
+  expect(result.code).toBe(1);
+  expect(result.out).toContain("apps/desktop/package.json");
+});
+
+test("a release section that leaves Unreleased as it was is not a release", async () => {
+  const { dir, base } = await repo({
+    "apps/desktop/package.json": '{ "version": "1.1.0" }\n',
+    "apps/web/src/app.ts": "export const a = 1;\n",
+    "CHANGELOG.md": BASE_CHANGELOG.replace("## v1.0.0\n", "## v1.1.0\n\n- Written here instead. (#2)\n\n## v1.0.0\n"),
+  });
+  const result = await check(dir, base);
+  expect(result.code).toBe(1);
+  expect(result.out).toContain("Already there");
+});
+
 test("the Changelog workflow runs the check on every pull request event a label can change", () => {
   const workflow = Bun.YAML.parse(
     readFileSync(join(ROOT, ".github", "workflows", "changelog.yml"), "utf8"),
