@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- When the host cannot answer with its terminals at first, the agents list says so with Try again, on a phone and in the desktop sidebar, instead of loading forever. (#819)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window

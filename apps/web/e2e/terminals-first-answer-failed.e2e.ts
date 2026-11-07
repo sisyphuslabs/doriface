@@ -30,7 +30,12 @@ for (const [width, height] of [
     link.hold();
     await notice.getByRole("button", { name: "Try again" }).click();
     await expect(notice).toHaveCount(0);
-    await expect(page.getByRole("region", { name: "Agents" }).or(page.getByRole("heading", { name: "Agents" })).first()).toBeVisible({
+    await expect(
+      page
+        .getByRole("region", { name: "Agents" })
+        .or(page.getByRole("heading", { name: "Agents" }))
+        .first(),
+    ).toBeVisible({
       timeout: 15_000,
     });
   });
