@@ -78,16 +78,18 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
       - name: Deploy staging
+        id: deploy
         working-directory: apps/web
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx "$WRANGLER" deploy --env staging
-      # One step per host, so a host that fails is named and the other is still probed.
+      # One step per host, so a host that fails is named and the other is still probed; after a failed deploy neither
+      # is, since each probe retries for minutes and there is nothing new to find (#929).
       - name: Probe staging (staging.app.doriterm.com)
         run: bun .github/scripts/probe-web.ts https://staging.app.doriterm.com
       - name: Probe staging (doriface-staging.omo.dev)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         run: bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev
 
   production:
@@ -110,6 +112,7 @@ jobs:
           name: web-dist
           path: apps/web/dist
       - name: Deploy production
+        id: deploy
         working-directory: apps/web
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -118,5 +121,5 @@ jobs:
       - name: Probe production (app.doriterm.com)
         run: bun .github/scripts/probe-web.ts https://app.doriterm.com
       - name: Probe production (doriface.omo.dev)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
         run: bun .github/scripts/probe-web.ts https://doriface.omo.dev
