@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Notifications
+
+- When this computer refuses Doriterm's notifications while they are on, Settings > Notifications shows Turn off beside Check again, and Send test and the event and machine switches wait until notifications are allowed. (#796)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
