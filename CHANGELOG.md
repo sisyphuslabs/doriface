@@ -2,10 +2,19 @@
 
 ## Unreleased
 
+### Mesh
+
+- When a member's mesh line replaces an earlier ssh or command entry for the same machine, `mesh status` still names the replaced entry if the line was added on a later try, and a removal herdr refuses is retried with its reason shown instead of only logged. (#728)
+
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
+- On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
 - A syllable an input method is still composing is drawn as cells at the cursor, as Ghostty draws it: a wide one over two cells at the size it will have once committed (it no longer jumps on commit), underlined over the cells it covers, shifted left at the end of the row, following the cursor if output moves it, and with no cursor drawn meanwhile. (#674)
+
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
 
 ## v0.1.5 - 2026-11-07
 
