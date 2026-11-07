@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- With Settings open over the workspace, a notification about the terminal behind it is sent as usual: the app no longer tells the host that terminal is the one being read, which held its notice back (on the web, as a push, and in the desktop app). (#1024)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
