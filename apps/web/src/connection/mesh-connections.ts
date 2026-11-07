@@ -173,14 +173,19 @@ export class MeshConnections {
   }
 
   /**
-   * Begins dialling every member again.
+   * Begins dialling every member that is not open or connecting.
    *
-   * This is also the "Try now" the first-connect screen offers, which means retry everything: with the started set left in place a
-   * member that had already dialled was skipped and the button did nothing (caught by first-connect-offline in CI).
+   * This is also the "Try now" the first-connect screen offers, which means retry every member that failed: with the started set
+   * left in place a member that had already dialled was skipped and the button did nothing (caught by first-connect-offline in
+   * CI). A member that is open or mid-connect is left alone, because its store's `start()` stops it first: an open session would
+   * close and a connecting one would go back to its first attempt (#1005).
    */
   start(): void {
     this.#running = true;
-    this.#started.clear();
+    for (const [hostId, store] of this.#stores) {
+      const phase = store.state.phase;
+      if (phase !== "open" && phase !== "connecting") this.#started.delete(hostId);
+    }
     this.#startAll();
   }
 
