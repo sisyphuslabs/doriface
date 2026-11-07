@@ -12,9 +12,10 @@ export interface HerdrDifference {
 const APP_MENU = "the desktop app's macOS app menu carries it (a standard menu role); a browser keeps it for itself";
 const NO_HELP = "no shortcuts dialog yet (#733); Settings > Keybindings lists every key";
 const NO_SEARCH = "no find bar in a terminal yet (#732)";
-const NO_IMAGE_PASTE = "no image paste action yet (#701); Ctrl+V is left to the terminal's own key handling";
-const NO_MODS = "doriface has no mods, so there is no picker mod to open";
-const NO_LAYOUTS = "doriface has no layout files to switch between";
+const NO_IMAGE_PASTE =
+  "Ctrl+V is left to the terminal's own key handling; a pasted image already reaches the terminal's machine through the paste itself (#742), and Paste image can be bound in Settings > Keybindings";
+const NO_MODS = "Doriterm has no mods, so there is no picker mod to open";
+const NO_LAYOUTS = "Doriterm has no layout files to switch between";
 
 /**
  * Every herdr-app default (herdr-app/keys*.json) that doriface binds differently. `herdr-app-parity.test.ts` holds this
