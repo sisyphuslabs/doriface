@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Host setup
+
+- The setup tool refuses a `--timeout` that is not a positive number of seconds before it changes anything, instead of waiting for the relay forever. (#821)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
