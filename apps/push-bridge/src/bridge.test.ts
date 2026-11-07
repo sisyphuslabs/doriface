@@ -550,6 +550,29 @@ describe("a rate limit per device token (#830)", () => {
     expect(await tokenKey("apns", APNS_TOKEN)).not.toBe(await tokenKey("apns-sandbox", APNS_TOKEN));
   });
 
+  test("an APNs token in another letter case counts against the same allowance and reaches APNs as one token", async () => {
+    const { sent, fetch } = upstream();
+    const limiter = countingLimiter(2);
+    const bridge = createBridge(await config(), { fetch, now: () => NOW, limiter });
+    const keys = await receiverKeys();
+    const vapid = await vapidKey();
+    const post: PushFetch = (url, init) => bridge(new Request(url, init));
+    const push = (token: string) =>
+      deliverPush({ endpoint: `${ORIGIN}/v1/apns/${token}`, ...keys }, NOTICE, vapid, post, { now: () => NOW });
+    // APNs reads a device token in any letter case as the same device.
+    const results = [];
+    for (const token of [APNS_TOKEN.toLowerCase(), APNS_TOKEN.toUpperCase(), APNS_TOKEN.toUpperCase()]) {
+      // oxlint-disable-next-line no-await-in-loop -- the limiter counts in order
+      results.push(await push(token));
+    }
+    expect(results).toEqual(["sent", "sent", "failed"]);
+    expect(new Set(limiter.keys)).toEqual(new Set([await tokenKey("apns", APNS_TOKEN.toLowerCase())]));
+    expect(sent.map((request) => request.url.split("/").at(-1))).toEqual([
+      APNS_TOKEN.toLowerCase(),
+      APNS_TOKEN.toLowerCase(),
+    ]);
+  });
+
   test("a request the bridge refuses (no valid VAPID) spends nothing of the token's allowance", async () => {
     const limiter = countingLimiter(1);
     const bridge = createBridge(await config(), { fetch: upstream().fetch, now: () => NOW, limiter });
