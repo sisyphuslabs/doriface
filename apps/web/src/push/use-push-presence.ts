@@ -1,4 +1,4 @@
-import { use, useEffect } from "react";
+import { useContext, useEffect } from "react";
 import { ActionsPaused } from "../keys/dispatcher.ts";
 import { desktopNotices } from "./desktop-notices.ts";
 import { pushChannel } from "./push-channel.ts";
@@ -7,15 +7,16 @@ const seen = (): boolean => document.visibilityState === "visible" && document.h
 
 /**
  * Tells the host which pane this device shows while the page is visible and focused, so it sends no push about it; the
- * desktop app's own notifications hold back the same way. While Settings is up (ActionsPaused, router.tsx) no pane is
- * shown: the workspace stays mounted under it, inert, whether Settings is the phone's sheet over it or the dialog that
- * leaves it in view (#843), and a notice about a pane behind Settings must still come (#1024).
+ * desktop app's own notifications hold back the same way. Under Settings no pane counts as shown: the workspace stays
+ * mounted there, as a full-screen sheet's hidden layer or behind the dialog, where it still draws but is inert, and a
+ * pane the workspace still calls focused is not one anyone is watching (#993).
  */
 export function usePushPresence(terminal: string | null): void {
-  const covered = use(ActionsPaused);
+  const underSettings = useContext(ActionsPaused);
+  const inView = underSettings ? null : terminal;
   useEffect(() => {
     const report = (): void => {
-      const shown = !covered && seen() ? terminal : null;
+      const shown = seen() ? inView : null;
       pushChannel.focus(shown);
       desktopNotices?.focus(shown);
     };
@@ -30,5 +31,5 @@ export function usePushPresence(terminal: string | null): void {
       pushChannel.focus(null);
       desktopNotices?.focus(null);
     };
-  }, [terminal, covered]);
+  }, [inView]);
 }
