@@ -5,6 +5,7 @@ import { endAgent } from "./agents.ts";
 import { expect, test } from "./fixtures.ts";
 import { seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
+import { pressShortcut } from "./platform-keys.ts";
 import { rows } from "./sidebar-measure.ts";
 
 // The service worker reloads the page once it takes control; only pwa.e2e.ts tests it.
@@ -61,7 +62,7 @@ test("typing in the sidebar filter narrows spaces and agents by their labels, ke
   const before = await rowNames();
 
   // The filter key opens the field with focus in it, from wherever focus was.
-  await page.keyboard.press("Control+Alt+F");
+  await pressShortcut(page, "layout.filter:sidebar");
   const field = sidebar.getByRole("searchbox", { name: "Filter sidebar" });
   await expect(field).toBeFocused();
   await page.keyboard.type("bet");
@@ -110,7 +111,7 @@ test("behind the command palette the filter key does nothing: the palette keeps 
   const palette = page.getByRole("dialog");
   await expect(palette).toBeVisible();
   const focused = await page.evaluate(() => document.activeElement?.outerHTML ?? "");
-  await page.keyboard.press("Control+Alt+F");
+  await pressShortcut(page, "layout.filter:sidebar");
   await expect(palette).toBeVisible();
   await expect(sidebar.getByRole("searchbox", { name: "Filter sidebar" })).toHaveCount(0);
   expect(await page.evaluate(() => document.activeElement?.outerHTML ?? "")).toBe(focused);
