@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Pairing
+
+- A broken link made by `doriface-host mesh pair` says to run `doriface-host mesh pair` again, not `doriface-host pair`, and a typed code the host refuses says it may be a mesh invite, which `doriface-host mesh join` takes, instead of only that it was used. (#727)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
