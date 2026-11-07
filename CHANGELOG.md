@@ -2,9 +2,23 @@
 
 ## Unreleased
 
+### Terminal
+
+- A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
+
+## v0.1.5 - 2026-11-07
+
 ### Desktop window
 
 - The desktop window reopens where it was left even after a crash, a force quit or a kill: its position and size are saved once a move or a resize comes to rest, not only when the window closes. (#803)
+
+### Terminal
+
+- The terminal renderer is @wterm 0.5.9 with its Ghostty WASM rebuilt from the same source, keeping the Korean-input fixes on WebKit. (#823)
+
+### Desktop updates
+
+- An installed desktop app finds its updates: every release now carries electron-updater's feed (`latest-mac.yml`, `latest.yml`, `latest-linux.yml` and `latest-linux-arm64.yml`), one file per name listing both CPUs' downloads at the size and SHA-512 the release serves, including the macOS dmg after its notarization ticket is stapled. The macOS zip and the Windows installer ship with their `.blockmap`, so once the installed version has one too, an update downloads only the blocks that changed. (#924)
 
 ### Joining a mesh
 
@@ -13,12 +27,14 @@
 ### Workspace
 
 - An agent row shows how far its own todo list has got, as done/total (2/4), read from the list the agent draws: Claude Code's task list when its task tools are on (a long list's folded line counts too), and omp's TODO list with its phases added up. An agent with no list, or one that draws none, shows nothing, and while it waits on a question the row keeps its last count. (#673)
+- A machine renamed while its layout was still loading keeps every tab's terminal: a tab that opened before this screen heard the new name no longer stays on "This terminal didn't open", and attaches at the machine's new name instead. (#852)
 - The sidebar has a filter: the funnel button, Cmd+Alt+F on macOS or Ctrl+Alt+F elsewhere opens a field that narrows machines, spaces and agents to the rows whose shown labels match what is typed (letters in order, any case). The selected space and agent stay as context, a folded machine opens to show its matches, and Escape clears the query, then closes the field and returns to the terminal. (#673)
 
 ### Phone
 
 - On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
 - On a phone, an agent row shows its "..." alone, with Pin to top as its first item, so the summary, machine and age have room. (#950)
+- On a phone or tablet, every Settings switch takes a tap anywhere in the 44x44 box around it, Apple's touch minimum: its hit area was 2 px short and missed taps along its bottom edge. The switch looks the same. (#1030)
 
 ### The pairing pages name the app host
 
@@ -26,8 +42,10 @@
 
 ### Web app
 
+- Your machines lists every machine this app holds its own connection to, each with that machine's own state, so a machine that is away is one row saying so. Each machine has its own connection, which means the others stay usable while one is gone. (#942)
 - A link to app.doriterm.com now unfurls with a preview card: the app as captured, with "Open Doriterm in your browser." (#963)
 - A machine's terminal count and a space's tab count stay on one line however many digits they have: on a phone, "19" no longer breaks into "1" above "9" in the Spaces list. (#899)
+- A disabled button reads as a labelled control instead of an empty grey pill, such as Pair before a code is typed. It is dimmed with its own quiet fill and a grey label of at least 4.5:1 in both themes, where it used to fade the whole button, label included. (#1031)
 
 ### Korean input after selecting text
 
