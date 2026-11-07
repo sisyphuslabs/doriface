@@ -10,6 +10,7 @@ import { hostRouteOf } from "./host-route.ts";
 import { PairDeviceOffer } from "./pair-device-offer.tsx";
 import { deviceSummary, pairedDevicesView, type PairedDevicesView } from "./paired-devices.ts";
 import { sessionPathLabel } from "./session-path.ts";
+import { linkFacts } from "./round-trip.ts";
 import { useHostRoundTrip } from "./use-host-round-trip.ts";
 
 function useConnectionSettings(): ConnectionSettings {
@@ -127,7 +128,9 @@ export function DevicesSection() {
             {state.phase === "open" ? (
               <span className="block text-muted-foreground">
                 {sessionPathLabel(state.path, state.directReason)}
-                {roundTrip === undefined ? "" : ` · ${roundTrip} ms round trip`}
+                {linkFacts(state.connectMs, roundTrip).map((fact) =>
+                  fact.kind === "connect" ? ` · connected in ${fact.ms} ms` : ` · ${fact.ms} ms round trip`,
+                )}
               </span>
             ) : route.label === undefined ? null : (
               <span className="block text-muted-foreground">{route.label}</span>

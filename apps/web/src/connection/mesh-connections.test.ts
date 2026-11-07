@@ -48,7 +48,7 @@ class FakeConnection implements MemberConnection {
 
   start(): void {
     this.started += 1;
-    this.#state = { phase: "open", connection: undefined as never, path: "relay" };
+    this.#state = { phase: "open", connection: undefined as never, path: "relay", connectMs: 1 };
     this.#emit();
   }
 

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Connection
+
+- Settings, This device, shows how long this device took to open its session with the host, beside the round trip it already measures, so a slow link can be told from a slow host. Both numbers are measured on the live connection and are left out when there is none. (#637)
+
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)

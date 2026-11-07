@@ -31,6 +31,8 @@ export type ConnectionState =
       readonly connection: HcConnection;
       readonly path: ConnectionPath;
       readonly directReason?: DirectReason | undefined;
+      /** How long this attempt took to open the session, measured on this device from its start (#637). */
+      readonly connectMs: number;
     }
   /** This computer's host did not start: nothing is tried until a start succeeds. */
   | { readonly phase: "host-failed"; readonly failure: HostStartFailure }
@@ -184,6 +186,7 @@ export class ConnectionStore {
     const relayFirst = this.#relayFirst;
     this.#relayFirst = false;
     this.#set({ phase: "connecting", attempt, stale: this.#stale });
+    const started = Date.now();
     try {
       const opened: OpenConnection = await this.#budget.bounded(
         this.#connect(this.#settings, abort.signal, undefined, relayFirst ? { skipDirect: true } : {}),
@@ -209,6 +212,7 @@ export class ConnectionStore {
         connection,
         path: opened.path,
         ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
+        connectMs: Date.now() - started,
       });
     } catch (error) {
       if (this.#abort !== abort) return;
