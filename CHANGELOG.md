@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Adding a machine
+
+- A machine that joins through **Add a machine** while the host's own line to its core is reconnecting is shown as joined once the line is back, instead of the offer reading expired, and a computer clock set back during the offer no longer leaves its link up past the offer's end. (#834)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
