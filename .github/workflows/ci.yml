@@ -246,7 +246,7 @@ jobs:
       - name: Restore the Playwright system packages
         if: env.RELAY_TOKEN_SET == 'true'
         id: playwright-apt
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/playwright-apt
           # One key per run: a set saved after an archive update can never overwrite an older one, so the newest wins by prefix.
@@ -272,7 +272,7 @@ jobs:
           fi
       - name: Save the Playwright system packages
         if: env.RELAY_TOKEN_SET == 'true' && steps.chromium.outputs.save-debs == 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-apt.outputs.cache-primary-key }}
@@ -335,7 +335,7 @@ jobs:
       # whether they are enough, so this only restores them.
       - name: Restore the Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/playwright-apt
           # One key per run: a set saved after an archive update can never overwrite an older one, so the newest wins by prefix.
@@ -360,7 +360,7 @@ jobs:
           fi
       - name: Save the Playwright system packages
         if: steps.chromium.outputs.save-debs == 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-apt.outputs.cache-primary-key }}
