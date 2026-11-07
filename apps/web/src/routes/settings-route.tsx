@@ -177,7 +177,7 @@ export function SettingsRoute() {
                 </Group>
                 <Group title="In your mesh">
                   <MeshSection />
-                </Group>{" "}
+                </Group>
               </>
             ) : section === "pair" ? (
               <>
