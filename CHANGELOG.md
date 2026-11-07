@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Find in a terminal: Cmd+F (Ctrl+Shift+F elsewhere) or the palette opens a find bar that searches the screen and scrollback, marks every match, steps with Enter and Shift+Enter, and keeps each terminal's query (#732)
+
 ### Keys, as herdr-app binds them
 
 - Cmd+Shift+R (Ctrl+Shift+R on Linux and Windows) renames the tab, beside F2; the desktop app's View > Force Reload no longer takes it. (#702)
