@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Website
+
+- On the doriterm.com landing page, starting the Revoke scene again shows cloud-box at work until its revoke record lands, instead of an empty machine that reads working. (#936)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
