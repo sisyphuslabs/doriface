@@ -53,6 +53,7 @@ jobs:
           REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
         run: bun .github/scripts/release-version.ts "$REQUESTED"
       # A release is published with its CHANGELOG section as its notes; with no section, or an empty one, it stops here.
+      # The release pull request writes that section from Unreleased and changes/unreleased/ (changelog-assemble.ts).
       - name: CHANGELOG.md has this release's section
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
