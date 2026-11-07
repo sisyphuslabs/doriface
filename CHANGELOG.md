@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Website
 
 - The doriterm.com landing page has a Pause animations button beside the theme switch: it stops the mesh scenes, the relay pipe and the pairing loop on their still frames, and the page remembers it. (#928)
