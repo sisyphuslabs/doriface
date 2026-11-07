@@ -12,6 +12,7 @@ import type { OutputPacer } from "./output-pacer.ts";
 import { type TerminalEnd, terminalEnd } from "./terminal-end.ts";
 import { type CoreAnswer, type Settled, settled, type Unsent, unsentReason } from "./terminal-settle.ts";
 import type { TerminalInput } from "./terminal-view.tsx";
+import { useReopenWhenMoved } from "./use-reopen-when-moved.ts";
 
 const HISTORY_LINES = 2_000;
 /** RIS: clears the screen and scrollback before an attach replay draws them again. */
@@ -59,6 +60,10 @@ export function useTerminalAttach(sources: AttachSources): Attachment {
   const [restarting, setRestarting] = useState(false);
   const [ended, setEnded] = useState(false);
   const [unopened, setUnopened] = useState<string | null>(null);
+  const unopenedAt = useReopenWhenMoved(address, unopened, () => {
+    setWt(null);
+    setUnopened(null);
+  });
   const [opening, setOpening] = useState(false);
 
   const unmounted = useRef(false);
@@ -116,7 +121,10 @@ export function useTerminalAttach(sources: AttachSources): Attachment {
         restarting: () => setRestarting(true),
         reattach: () => attach(ready),
         replaced: () => undefined,
-        error: () => setUnopened(openFailure(address, "error" in answer ? answer.error : refusal?.cause)),
+        error: () => {
+          unopenedAt(address);
+          setUnopened(openFailure(address, "error" in answer ? answer.error : refusal?.cause));
+        },
       };
       return then[settled(answer, program.current, !attachedBefore.current, refusal !== null)]();
     });
