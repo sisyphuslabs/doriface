@@ -55,9 +55,12 @@ class FakeConnection implements MemberConnection {
     this.#emit();
   }
 
-  adopt(opened: OpenConnection): void {
+  adopt(opened: OpenConnection, settings?: ConnectionSettings): void {
+    if (settings !== undefined) this.settings = settings;
     this.adopted.push(opened);
     this.#state = { phase: "open", connection: opened.connection, path: opened.path };
+    // As the real store does: the session's hello names the host, learned as it opens.
+    this.rename(opened.connection.hello.core.name);
     this.#emit();
   }
 
@@ -71,7 +74,10 @@ class FakeConnection implements MemberConnection {
     this.retries += 1;
   }
 
+  updates = 0;
+
   update(settings: ConnectionSettings): void {
+    this.updates += 1;
     this.settings = settings;
   }
 
@@ -132,10 +138,11 @@ afterEach(() => {
   globalThis.localStorage?.clear?.();
 });
 
-/** A session pairing proved, standing in for the open HcConnection: only close is ever called on it here. */
-function provedSession(): { readonly opened: OpenConnection; readonly closed: () => number } {
+/** A session pairing proved, standing in for the open HcConnection: its hello's name and close are all that is read. */
+function provedSession(name = "Build Box"): { readonly opened: OpenConnection; readonly closed: () => number } {
   let closes = 0;
   const connection = {
+    hello: { core: { id: "core", name } },
     close: () => {
       closes += 1;
     },
@@ -153,6 +160,21 @@ describe("pairing hands its session on (#1271)", () => {
     expect(paired?.started).toBe(0);
     expect(mesh.state.phase).toBe("open");
     expect(closed()).toBe(0);
+  });
+
+  it("the paired machine keeps the name its proved session answered with", () => {
+    const { mesh } = running(settingsWith([member("a")], "a"));
+    mesh.pair(settingsWith([member("b")], "b"), provedSession("Build Box").opened);
+    expect(mesh.settings.hostName).toBe("Build Box");
+    expect(mesh.settings.members.find((entry) => entry.hostId === "b")?.hostName).toBe("Build Box");
+  });
+
+  it("re-pairing a machine the app already holds hands it the session without telling it to dial first", () => {
+    const { mesh, made } = running(settingsWith([member("b", "B")], "b"));
+    const held = made.find((connection) => connection.settings.hostId === "b");
+    const { opened } = provedSession("B");
+    mesh.pair(settingsWith([member("b", "B")], "b"), opened);
+    expect([held?.started, held?.updates, held?.adopted]).toEqual([1, 0, [opened]]);
   });
 });
 

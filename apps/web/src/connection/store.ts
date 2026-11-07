@@ -208,8 +208,9 @@ export class ConnectionStore {
    * and dialing again for the workspace cost a relay socket, a Noise handshake and a hello more (#1271). A drop then
    * reconnects as any other drop does.
    */
-  adopt(opened: OpenConnection): void {
+  adopt(opened: OpenConnection, settings?: ConnectionSettings): void {
     this.stop();
+    if (settings !== undefined) this.#settings = lockRelay(settings);
     this.#relayFirst = false;
     const abort = new AbortController();
     this.#abort = abort;
