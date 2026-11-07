@@ -2,15 +2,51 @@
 
 ## Unreleased
 
-- Find in a terminal: Cmd+F (Ctrl+Shift+F elsewhere) or the palette opens a find bar that searches the screen and scrollback, marks every match, steps with Enter and Shift+Enter, and keeps each terminal's query (#732)
+## v0.1.6 - 2026-11-07
 
-### Keys, as herdr-app binds them
+### Mesh
 
-- Cmd+Shift+R (Ctrl+Shift+R on Linux and Windows) renames the tab, beside F2; the desktop app's View > Force Reload no longer takes it. (#702)
-- The default keys follow herdr-app's own key files, and `docs/keymap-herdr-app.md` lists every herdr-app key with what Doriterm does with it. Keys you changed in Settings > Keybindings stay as you set them. Changed defaults: (#702)
-  - macOS: Cmd+W closes the tab (Cmd+Alt+W still does) and Cmd+Shift+W the focused pane; the desktop app's File > Close Window has no key. Cmd+N starts a new space.
-  - Linux and Windows: Ctrl+1-9 select a tab and Alt+1-9 a space (swapped from before). Ctrl+Shift+PgUp / PgDn step through the spaces, so moving a tab is Ctrl+Alt+Shift+PgUp / PgDn. Alt+arrows and Alt+H/J/K/L move focus between panes and Alt+Shift+H/J/K/L swap them. Ctrl+Shift+N starts a new space.
-- New space and Rename tab are in the command palette and the desktop app's Shell menu. (#702)
+- When a member's mesh line replaces an earlier ssh or command entry for the same machine, `mesh status` still names the replaced entry if the line was added on a later try, and a removal herdr refuses is retried with its reason shown instead of only logged. (#728)
+- `doriface-host mesh status` and the Mesh panel show each member's line as herdr lists it when they read it: a line that finished connecting after the last membership change reads connected, instead of connecting until the next one. (#754)
+
+### Terminal
+
+- Closing a pane or a tab takes it off the screen at once, also on a machine reached through the relay: the program still ends behind it, and if it does not, a notice says so and the session keeps running. Before, the tab stayed until the host had answered two round trips, a second or more on a far machine. (#1271)
+- A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
+- On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
+
+### Workspace
+
+- Terminals a space takes in as tabs line up in the order they started: `t10` no longer comes before `t9`, so a terminal opened from the sidebar shows in the tab it started in. (#1269)
+- A machine renamed while its layout was still loading keeps every tab's terminal: a tab that opened before this screen heard the new name no longer stays on "This terminal didn't open", and attaches at the machine's new name instead. (#852)
+
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+- In the desktop app, Send test passes only when an agent's notification would: it waits for the app to follow the agents, then fails with the reason when notifications are off, the agents cannot be followed, every event is turned off, or this computer is muted, instead of showing a test that proves none of that. (#796)
+- When this computer refuses Doriterm's notifications while they are on, Settings > Notifications shows Turn off beside Check again, and Send test and the event and machine switches wait until notifications are allowed. (#796)
+
+### Settings
+
+- A disabled field, number stepper, switch or menu item is dimmed with its own colours instead of fading as a whole, so its text stays readable and a switch still shows whether it is on, in every theme. (#1034)
+- In a browser, the text-size keys Settings > Appearance shows step the terminals' text while Settings is open, as they do in the desktop app, and resizing the window between the Settings dialog and the full-screen sheet keeps the open section and a shortcut being recorded. (#859)
+- With Settings open as a dialog, an agent in the pane behind it notifies again when it finishes or asks for input: the desktop app's notification and the host's web push both held back for that pane as if it were being watched, since the dialog leaves the workspace drawn behind it. (#993)
+
+### Pairing
+
+- Typing a pairing code looks its host up as soon as the first three characters are in, so the key check shows the moment the code is complete instead of most of a second later on a far relay; Pair asks the relay nothing more. (#1271)
+
+### Pairing
+
+- After you confirm a pairing, the workspace opens on the session the pairing just proved instead of reconnecting through the relay, so a newly added machine shows its terminals about a round trip and a handshake sooner (most of a second on a far machine). (#1271)
+
+### Settings
+
+- Settings is one place per question: this device, your machines, and pairing sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
+
+### Web app
+
+- A disabled button reads as a labelled control instead of an empty grey pill, such as Pair before a code is typed. It is dimmed with its own quiet fill and a grey label of at least 4.5:1 in both themes, where it used to fade the whole button, label included. (#1031)
 
 ## v0.1.5 - 2026-11-07
 
