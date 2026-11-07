@@ -91,6 +91,32 @@ describe("window placement while the window moves", () => {
       done();
     }
   });
+
+  test("a move or resize during teardown schedules nothing, so no save reads the destroyed window (#818)", () => {
+    jest.useFakeTimers();
+    const { file, done } = placementFile();
+    try {
+      const { window, fire, moveTo } = placedWindow(resting);
+      let destroyed = false;
+      const closing = {
+        ...window,
+        normalBounds: () => {
+          if (destroyed) throw new Error("Object has been destroyed");
+          return window.normalBounds();
+        },
+      };
+      rememberPlacement(closing, file);
+      fire("close");
+      destroyed = true;
+      moveTo({ x: 5, y: 5, width: 500, height: 400 });
+      fire("move");
+      fire("resize");
+      expect(() => jest.advanceTimersByTime(PLACEMENT_SETTLE_MS * 2)).not.toThrow();
+      expect(savedPlacement(file)).toEqual(resting);
+    } finally {
+      done();
+    }
+  });
 });
 
 describe("window placement across launches", () => {
