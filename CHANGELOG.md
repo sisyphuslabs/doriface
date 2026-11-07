@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- While the sidebar filter holds a query, a machine's header offers no fold button, since every machine shows its matches; its folded state is as it was once the filter is cleared. (#850)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
