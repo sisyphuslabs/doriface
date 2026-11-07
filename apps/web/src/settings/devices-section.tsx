@@ -1,9 +1,8 @@
 import { Button, Dialog, SettingRow } from "@doriface/ui";
 import { Laptop, Monitor, Server } from "lucide-react";
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { ConnectionSettings } from "../connection/settings.ts";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { hostFailure } from "../connection/host-failure.ts";
-import { connectionStore, useConnection, type ConnectionState } from "../connection/store.ts";
+import { useConnection, useConnectionSettings, type ConnectionState } from "../connection/store.ts";
 import { desktopDevices, type DesktopDevicesAnswer } from "../desktop/device-bridge.ts";
 import type { DesktopPairedDevice } from "../desktop/pair-bridge.ts";
 import { hostRouteOf } from "./host-route.ts";
@@ -11,10 +10,6 @@ import { PairDeviceOffer } from "./pair-device-offer.tsx";
 import { deviceSummary, pairedDevicesView, type PairedDevicesView } from "./paired-devices.ts";
 import { sessionPathLabel } from "./session-path.ts";
 import { useHostRoundTrip } from "./use-host-round-trip.ts";
-
-function useConnectionSettings(): ConnectionSettings {
-  return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
-}
 
 function describe(state: ConnectionState): ReactNode {
   switch (state.phase) {
