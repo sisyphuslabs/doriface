@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Mesh
+
+- When a member's mesh line replaces an earlier ssh or command entry for the same machine, `mesh status` still names the replaced entry if the line was added on a later try, and a removal herdr refuses is retried with its reason shown instead of only logged. (#728)
+
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
