@@ -54,6 +54,8 @@ export function placedWindow(window: BrowserWindow): PlacedWindow {
 /** Saves the window's normal bounds when it moves, resizes and closes, so the next launch reopens it there. */
 export function rememberPlacement(window: PlacedWindow, file: string, log: Log = console.error): void {
   let settling: ReturnType<typeof setTimeout> | undefined;
+  // Electron can still send a move or resize between `close` and `closed`; by then the window may be destroyed.
+  let closed = false;
   const save = (): void => {
     settling = undefined;
     writeSaved(file, window.normalBounds(), log);
@@ -61,12 +63,14 @@ export function rememberPlacement(window: PlacedWindow, file: string, log: Log =
   // A drag or a live resize fires this many times a second: the last one writes once the window rests, so a crash or a
   // kill keeps the place it was left at even though the close that used to be the only writer never came.
   const settle = (): void => {
+    if (closed) return;
     clearTimeout(settling);
     settling = setTimeout(save, PLACEMENT_SETTLE_MS);
   };
   window.onMove(settle);
   window.onResize(settle);
   window.onClose(() => {
+    closed = true;
     clearTimeout(settling);
     save();
   });
