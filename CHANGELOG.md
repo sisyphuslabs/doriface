@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Settings
+
+- A disabled field, number stepper, switch or menu item is dimmed with its own colours instead of fading as a whole, so its text stays readable and a switch still shows whether it is on, in every theme. (#1034)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
