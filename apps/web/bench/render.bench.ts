@@ -1,7 +1,8 @@
 // The render bench (#670): N live panes (1, 15, 50 by default) in one tab, each pane's program writing the same fixed
 // workload, measured from outside the app (Chromium's own metrics over CDP and a probe added before the page loads), so
 // the same spec measures the last release's build and the candidate's. A second phase repeats the workload with the
-// panes' tab not selected: the hidden-tab cost. One JSON file per pane count lands in BENCH_OUT.
+// panes' tab not selected: the hidden-tab cost. A third prints a fixed byte count per pane as fast as it can: drawing
+// throughput, which the paced phases cannot show (#844). One JSON file per pane count lands in BENCH_OUT.
 import type { CDPSession, Page } from "@playwright/test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,10 +24,13 @@ const CHUNK = Array.from({ length: 10 }, (_, line) => {
 /** Every 100 ms for 6 s: 100 lines a second per pane. */
 const WORKLOAD: Workload = { chunk: CHUNK, ticks: 60 };
 const TICK_SECONDS = "0.1";
+/** The unpaced phase: ten times the paced workload, about 480 KB per pane, printed with no pause. */
+const UNPACED: Workload = { chunk: CHUNK, ticks: 600 };
 
 /**
  * Pane `pane`'s program: says it is ready, then for each phase waits for that phase's go file, writes the workload, its
- * end line and a done file, and keeps the terminal open. `sleep` is the only process it starts per tick.
+ * end line and a done file, and keeps the terminal open. Phases 1 and 2 pace the workload with one `sleep` per tick (the
+ * only process it starts); phase 3 prints the unpaced workload without one.
  */
 const program = (dir: string, pane: number): string[] => [
   "sh",
@@ -34,9 +38,10 @@ const program = (dir: string, pane: number): string[] => [
   [
     `d='${dir}'; i=${pane}; chunk=$(cat "$d/chunk")`,
     `printf 'bench-ready-%s\\n' "$i"`,
-    "for phase in 1 2; do",
+    "for phase in 1 2 3; do",
     `  while [ ! -e "$d/go$phase" ]; do sleep 0.05; done`,
-    `  n=0; while [ "$n" -lt ${WORKLOAD.ticks} ]; do printf '%s\\n' "$chunk"; sleep ${TICK_SECONDS}; n=$((n+1)); done`,
+    `  if [ "$phase" = 3 ]; then ticks=${UNPACED.ticks}; pause=0; else ticks=${WORKLOAD.ticks}; pause=${TICK_SECONDS}; fi`,
+    `  n=0; while [ "$n" -lt "$ticks" ]; do printf '%s\\n' "$chunk"; [ "$pause" = 0 ] || sleep "$pause"; n=$((n+1)); done`,
     `  printf 'bench-end-%s-%s\\n' "$phase" "$i"; : > "$d/done$phase-$i"`,
     "done",
     "exec sleep 3600",
@@ -150,12 +155,11 @@ for (const panes of PANES) {
       // Visible: every pane in view while the programs write.
       await recording(page, true);
       const before = await metrics(cdp);
-      const go = performance.now();
       writeFileSync(join(dir, "go1"), "");
       await producersDone(dir, panes, 1);
       const produced = performance.now();
       await allShow(page, addresses, "bench-end-1-");
-      const drawn = performance.now();
+      const caughtUpVisible = performance.now();
       const after = await metrics(cdp);
       const probe = await recording(page, false);
       // Heap and DOM nodes after a full collection: what the page keeps, not what garbage collection had not reached yet.
@@ -163,7 +167,6 @@ for (const panes of PANES) {
       await cdp.send("HeapProfiler.collectGarbage");
       const kept = await metrics(cdp);
       const frames = frameStats(probe.frames);
-      const bytes = addresses.reduce((sum, _, pane) => sum + workloadBytes(WORKLOAD, pane), 0);
 
       // Hidden: the same workload with the idle tab selected, then the bench tab selected again.
       const tab = (name: string) => page.getByRole("tablist", { name: "Tabs" }).getByRole("tab", { name });
@@ -178,6 +181,13 @@ for (const panes of PANES) {
       await allShow(page, addresses, "bench-end-2-");
       const caughtUp = performance.now();
 
+      // Unpaced: every pane in view while each program prints its bytes as fast as the core takes them.
+      const flood = performance.now();
+      writeFileSync(join(dir, "go3"), "");
+      await allShow(page, addresses, "bench-end-3-");
+      const drawn = performance.now();
+      const bytes = addresses.reduce((sum, _, pane) => sum + workloadBytes(UNPACED, pane, 3), 0);
+
       const run: BenchRun = {
         build: BUILD,
         panes,
@@ -189,12 +199,12 @@ for (const panes of PANES) {
           busyShare: busy(before, after),
           longTasks: probe.longTasks.length,
           longTaskMs: probe.longTasks.reduce((sum, ms) => sum + ms, 0),
-          drawnBytesPerSec: bytes / ((drawn - go) / 1000),
-          catchUpMs: drawn - produced,
+          catchUpMs: caughtUpVisible - produced,
           heapMB: (kept["JSHeapUsedSize"] ?? 0) / 1024 / 1024,
           domNodes: kept["Nodes"] ?? 0,
         },
         hidden: { busyShare: busy(hiddenBefore, hiddenAfter), showCatchUpMs: caughtUp - shown },
+        unpaced: { drawnBytesPerSec: bytes / ((drawn - flood) / 1000) },
       };
       mkdirSync(OUT, { recursive: true });
       writeFileSync(join(OUT, `render-${BUILD}-${panes}-${Date.now()}.json`), `${JSON.stringify(run)}\n`);
