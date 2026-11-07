@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Machine mesh
+
+- A mesh takes any number of machines: the 12-member cap is gone, so adding a thirteenth machine no longer fails and mesh status no longer reports a limit. (#814)
+
+## v0.1.5 - 2026-11-07
+
 ### Desktop window
 
 - The desktop window reopens where it was left even after a crash, a force quit or a kill: its position and size are saved once a move or a resize comes to rest, not only when the window closes. (#803)
@@ -10,9 +16,9 @@
 
 - The terminal renderer is @wterm 0.5.9 with its Ghostty WASM rebuilt from the same source, keeping the Korean-input fixes on WebKit. (#823)
 
-### Machine mesh
+### Desktop updates
 
-- A mesh takes any number of machines: the 12-member cap is gone, so adding a thirteenth machine no longer fails and mesh status no longer reports a limit. (#814)
+- An installed desktop app finds its updates: every release now carries electron-updater's feed (`latest-mac.yml`, `latest.yml`, `latest-linux.yml` and `latest-linux-arm64.yml`), one file per name listing both CPUs' downloads at the size and SHA-512 the release serves, including the macOS dmg after its notarization ticket is stapled. The macOS zip and the Windows installer ship with their `.blockmap`, so once the installed version has one too, an update downloads only the blocks that changed. (#924)
 
 ### Joining a mesh
 
@@ -27,6 +33,7 @@
 
 - On a phone, Sort sits in the Agents header beside Search instead of on a row of its own above the list. (#950)
 - On a phone, an agent row shows its "..." alone, with Pin to top as its first item, so the summary, machine and age have room. (#950)
+- On a phone or tablet, every Settings switch takes a tap anywhere in the 44x44 box around it, Apple's touch minimum: its hit area was 2 px short and missed taps along its bottom edge. The switch looks the same. (#1030)
 
 ### The pairing pages name the app host
 
