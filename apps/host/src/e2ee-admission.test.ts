@@ -71,12 +71,16 @@ async function realClient(key = device): Promise<{ readonly hello: unknown; read
     remoteStatic: identity().noise.publicKey,
     early: HELLO_LINE,
   });
-  const hello: unknown = JSON.parse(new TextDecoder().decode(await client.reader.line()));
-  client.link.send(rpcFrame(1, "terminal.list"));
-  const list = await client.reader.frame();
-  client.link.close();
-  await client.closed;
-  return { hello, list };
+  try {
+    const hello: unknown = JSON.parse(new TextDecoder().decode(await client.reader.line()));
+    client.link.send(rpcFrame(1, "terminal.list"));
+    const list = await client.reader.frame();
+    client.link.close();
+    await client.closed;
+    return { hello, list };
+  } catch (error) {
+    throw new Error(`closed with ${await client.closed}: ${String(error)}`, { cause: error });
+  }
 }
 
 beforeAll(async () => {
@@ -119,8 +123,10 @@ describe("early-hello admission (#1271)", () => {
   test("captured message 1 replays on new connections hold no session: a real client is still admitted under a limit of one", async () => {
     const captured = await captureMessage1();
     const replays = await Promise.all([raw(captured), raw(captured)]);
-    const { hello } = await realClient();
+    const { hello, list } = await realClient();
     expect(hello).toMatchObject({ result: { framed: true } });
+    // The first client on a warm host: its hello was answered early, and its RPC still comes through, once.
+    expect(new TextDecoder().decode(list)).toContain('"id":1');
     expect(await Promise.all(replays.map((replay) => replay.closed))).toEqual([
       CloseCode.IdleTimeout,
       CloseCode.IdleTimeout,
@@ -129,7 +135,9 @@ describe("early-hello admission (#1271)", () => {
 
   test("two proven handshakes racing for one session slot: one is admitted, the other closes 4429", async () => {
     const settled = await Promise.allSettled([realClient(device), realClient(other)]);
-    expect(settled.filter((outcome) => outcome.status === "fulfilled").length).toBeLessThanOrEqual(1);
+    expect(settled.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    const refused = settled.find((outcome) => outcome.status === "rejected");
+    expect(refused?.status === "rejected" ? String(refused.reason) : "").toContain(String(CloseCode.RateLimited));
   });
 
   test("a device revoked between message 1 and its confirmation is never admitted: its RPC gets no answer", async () => {

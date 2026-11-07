@@ -63,7 +63,13 @@ export class SpeculativeHello {
   /** Starts a hello for `session` when the budget allows; otherwise nothing, and the hello waits for admission. */
   answer(early: Uint8Array, session: SecureLink): void {
     if (!this.#admit()) return;
-    const child = this.#spawn();
+    let child: SpeculativeChild | undefined;
+    try {
+      child = this.#spawn();
+    } catch {
+      // An early answer is optional: a child that cannot start (hc moved, no descriptors left) leaves the hello held.
+      return;
+    }
     if (child === undefined) return;
     this.#starts.push(this.#now());
     this.#children.add(child);

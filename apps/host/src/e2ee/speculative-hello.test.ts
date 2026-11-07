@@ -1,9 +1,10 @@
 import type { SecureLink } from "@doriface/crypto";
 import { describe, expect, test } from "bun:test";
 import type { DataHandler } from "../link.ts";
-import { type SpeculativeChild, SpeculativeHello } from "./speculative-hello.ts";
+import { type SpeculativeChild, SpeculativeHello, withoutFirstLine } from "./speculative-hello.ts";
 
 const HELLO = new TextEncoder().encode('{"jsonrpc":"2.0","id":0,"method":"hello","params":{"framed":true}}\n');
+const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 const ANSWER = new TextEncoder().encode('{"jsonrpc":"2.0","id":0,"result":{"framed":true}}\n');
 
 /** An `hc connect` stand-in whose exit the test decides, so a closed child can be kept draining. */
@@ -142,5 +143,31 @@ describe("the speculative hello (#1271)", () => {
     await stopped;
     await Promise.resolve();
     expect(hello.live).toBe(0);
+  });
+
+  test("a child that cannot be started is no failure: nothing is answered early and the hello waits for admission", () => {
+    const hello = new SpeculativeHello({
+      spawn: () => {
+        throw new Error("spawn hc ENOENT");
+      },
+    });
+    const s = session();
+    expect(() => hello.answer(HELLO, s.link)).not.toThrow();
+    expect(hello.live).toBe(0);
+    expect(hello.settle(s.link)).toBe("not-answered");
+  });
+
+  test("the admitted link drops exactly hc's first line, split or not, and passes everything after it", async () => {
+    const sent: string[] = [];
+    const link = withoutFirstLine({
+      send: async (bytes) => void sent.push(new TextDecoder().decode(bytes)),
+      onData: () => undefined,
+      onClose: () => undefined,
+      close: () => undefined,
+    });
+    await link.send(encode('{"id":0,'));
+    await link.send(encode('"result":{}}\nframe-1'));
+    await link.send(encode("frame-2\n"));
+    expect(sent).toEqual(["frame-1", "frame-2\n"]);
   });
 });
