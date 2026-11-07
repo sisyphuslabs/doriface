@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Terminal
+
+- A syllable an input method is still composing is drawn as cells at the cursor, as Ghostty draws it: a wide one over two cells at the size it will have once committed (it no longer jumps on commit), underlined over the cells it covers, shifted left at the end of the row, following the cursor if output moves it, and with no cursor drawn meanwhile. (#674)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
