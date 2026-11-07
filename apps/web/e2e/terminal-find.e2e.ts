@@ -65,6 +65,17 @@ test("the find chord finds a line only in the scrollback, steps, and Escape give
     input instanceof HTMLInputElement ? [input.selectionStart, input.selectionEnd] : null,
   );
   expect(selected).toEqual([0, "needle-7".length]);
+
+  // Asked for again from the field itself, with the caret at the end, the query is selected again.
+  await page.keyboard.press("End");
+  await page.keyboard.press(FIND);
+  await expect
+    .poll(() =>
+      field(page).evaluate((input) =>
+        input instanceof HTMLInputElement ? [input.selectionStart, input.selectionEnd] : null,
+      ),
+    )
+    .toEqual([0, "needle-7".length]);
 });
 
 test("the palette's Find in terminal opens the bar over the terminal in view", async ({ page }) => {

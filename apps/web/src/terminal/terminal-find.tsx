@@ -1,7 +1,7 @@
 import { FIND_CURRENT_CLASS, FIND_MATCH_CLASS, FindBar } from "@doriface/ui";
 import type { WTerm } from "@wterm/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { findMatches, type FindMatch, matchAtOrBefore, stepMatch } from "./find.ts";
+import { type RefObject, useEffect, useRef, useState } from "react";
+import { findMatches, type FindMatch, MatchCache, matchAtOrBefore, stepMatch } from "./find.ts";
 import type { CellSource } from "./links.ts";
 import { scrollTopAtRow, type ScrollBox } from "./scrollbar.ts";
 import type { TerminalScroll } from "./terminal-scroll.tsx";
@@ -56,6 +56,8 @@ export interface TerminalFindProps {
   readonly wt: WTerm;
   readonly address: string;
   readonly scroll: TerminalScroll;
+  /** Counts the output written to the terminal; the search reads the cells again only when it moves. */
+  readonly written: RefObject<number>;
   /** Goes up each time the find bar is asked for, so asking again while it is open selects the query again. */
   readonly opened: number;
   readonly onClose: () => void;
@@ -66,11 +68,12 @@ export interface TerminalFindProps {
  * every match in view without touching the text selection. Enter and Shift+Enter step (wrapping) and bring the
  * current match into view; Escape closes it and the terminal takes the keyboard back.
  */
-export function TerminalFind({ wt, address, scroll, opened, onClose }: TerminalFindProps) {
+export function TerminalFind({ wt, address, scroll, written, opened, onClose }: TerminalFindProps) {
   const [query, setQuery] = useState(() => queries.get(address) ?? "");
   const box = scroll.view?.box ?? null;
-  // Read again as output arrives: the scroll state is published once a frame after each write.
-  const matches = useMemo(() => (scroll.view === null ? [] : search(wt, query)), [wt, query, scroll.view]);
+  // Each published frame (a scroll or a write) draws again; only new output or a new query searches again.
+  const cache = useRef(new MatchCache());
+  const matches = box === null ? [] : cache.current.get(written.current, query, (next) => search(wt, next));
   const [current, setCurrent] = useState<number | null>(() =>
     box === null ? null : matchAtOrBefore(search(wt, query), bottomRow(box)),
   );

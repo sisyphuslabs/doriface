@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { findMatches, matchAtOrBefore, stepMatch } from "./find.ts";
+import { findMatches, MatchCache, matchAtOrBefore, stepMatch } from "./find.ts";
 import type { CellSource } from "./links.ts";
 
 /** A core with `history` rows of scrollback (oldest first) above a `screen`, `cols` wide; `wraps` holds row numbers that wrap on. */
@@ -77,5 +77,23 @@ describe("matchAtOrBefore", () => {
     expect(matchAtOrBefore(matches, 9)).toBe(2);
     expect(matchAtOrBefore(findMatches(core([], ["", "x"], 4), "x"), 0)).toBe(0);
     expect(matchAtOrBefore([], 0)).toBeNull();
+  });
+});
+
+describe("MatchCache", () => {
+  test("scrolling (the same output and query) never searches again; new output or a new query does", () => {
+    let searches = 0;
+    const search = (query: string) => {
+      searches += 1;
+      return query === "" ? [] : [{ row: searches, runs: [] }];
+    };
+    const cache = new MatchCache();
+    const first = cache.get(1, "x", search);
+    expect(cache.get(1, "x", search)).toBe(first);
+    expect(searches).toBe(1);
+    cache.get(2, "x", search);
+    expect(searches).toBe(2);
+    cache.get(2, "xy", search);
+    expect(searches).toBe(3);
   });
 });

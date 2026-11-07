@@ -120,6 +120,8 @@ export function TerminalView(props: TerminalViewProps) {
   const [finding, setFinding] = useState<number | null>(null);
   const openFind = useCallback(() => setFinding((count) => (count ?? 0) + 1), []);
   const handle = useRef<TerminalHandle | null>(null);
+  /** Counts the writes reaching the renderer, so a find reads the cells again only after new output. */
+  const written = useRef(0);
   const stream = useRef<TerminalStream | null>(null);
   // The program's output reaches the core through this: Kitty images sent as PNG are decoded to RGBA on the way.
   const output = useMemo(() => new KittyPngTranscoder((bytes) => handle.current?.write(bytes)), []);
@@ -128,6 +130,7 @@ export function TerminalView(props: TerminalViewProps) {
     () =>
       new OutputPacer((bytes) => {
         output.push(bytes);
+        written.current += 1;
         warmup.current?.note(bytes);
         outputShown.current();
       }),
@@ -513,6 +516,7 @@ export function TerminalView(props: TerminalViewProps) {
               wt={wt}
               address={address}
               scroll={scroll}
+              written={written}
               opened={finding}
               onClose={() => {
                 setFinding(null);

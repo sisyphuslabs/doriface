@@ -64,3 +64,18 @@ export function matchAtOrBefore(matches: readonly FindMatch[], row: number): num
   const before = matches.findLastIndex((match) => match.row <= row);
   return before === -1 ? 0 : before;
 }
+
+/**
+ * The last search, kept until the output or the query changes: a scroll redraws the marks but never reads the
+ * scrollback again. `version` counts the output written to the terminal.
+ */
+export class MatchCache {
+  private last: { readonly version: number; readonly query: string; readonly matches: FindMatch[] } | null = null;
+
+  get(version: number, query: string, search: (query: string) => FindMatch[]): FindMatch[] {
+    if (this.last?.version === version && this.last.query === query) return this.last.matches;
+    const matches = search(query);
+    this.last = { version, query, matches };
+    return matches;
+  }
+}
