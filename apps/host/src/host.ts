@@ -100,7 +100,14 @@ async function serve(
       () => push.kill().map((pid) => `hc connect pid ${pid}`),
     );
   }
-  const ends = endSweeper({ hc: options.hc, session: options.session, env: options.env }, options.log);
+  // What every `hc connect` the host's own writers start reaches, and how long its hello may go unanswered.
+  const core = {
+    hc: options.hc,
+    session: options.session,
+    env: options.env,
+    handshakeTimeoutMs: options.hcHandshakeTimeoutMs,
+  };
+  const ends = endSweeper(core, options.log);
   started(
     "end sweeper",
     () => ends.stop(),
@@ -108,7 +115,6 @@ async function serve(
   );
   // The host's OS goes on its core once a client opens a pipe, as the end sweeper starts: every hc call starts its
   // session's core when none runs, and a host that no one uses must not start one (#306).
-  const core = { hc: options.hc, session: options.session, env: options.env };
   // One expression for the status: the publisher and the control channel must answer from the same function (review #761).
   const meshStatus = options.meshStatus ?? e2ee?.meshStatus;
   // Both read herdr's machine list again first, bounded, so a line herdr connected since the last reconcile reads so (#754).

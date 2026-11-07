@@ -67,8 +67,13 @@ export class FakeMachines implements HcMachines {
     return Promise.resolve(machine);
   }
 
+  /** Each rm fails with the next queued error, then succeeds. */
+  readonly failRms: HcRpcError[] = [];
+
   rm(name: string): Promise<void> {
     this.#log(`rm ${name}`);
+    const failure = this.failRms.shift();
+    if (failure !== undefined) return Promise.reject(failure);
     this.#machines = this.#machines.filter((machine) => machine.name !== name);
     return Promise.resolve();
   }
