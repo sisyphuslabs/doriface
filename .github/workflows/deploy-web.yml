@@ -49,6 +49,8 @@ env:
 jobs:
   staging:
     name: Staging
+    # Its secrets come from the staging environment: a token scoped to the staging hosts, once the settings hold one (#816).
+    environment: staging
     if: >-
       github.event_name != 'pull_request' ||
       (contains(github.event.pull_request.labels.*.name, 'deploy-staging') &&
@@ -77,6 +79,11 @@ jobs:
           path: apps/web/dist
           include-hidden-files: true
           if-no-files-found: error
+      # The pull request's own wrangler.jsonc is what deploys: anything but the staging worker and hosts stops here (#816).
+      - name: Staging deploys to staging only
+        run: >-
+          bun .github/scripts/deploy-target.ts apps/web/wrangler.jsonc staging doriface-web-staging
+          staging.app.doriterm.com doriface-staging.omo.dev
       - name: Deploy staging
         working-directory: apps/web
         env:
@@ -92,6 +99,8 @@ jobs:
 
   production:
     name: Production
+    # Its secrets come from the production environment, which only dev and an approval reach once the settings say so.
+    environment: production
     needs: staging
     if: github.ref == 'refs/heads/dev' && (github.event_name == 'push' || inputs.production)
     runs-on: ubuntu-latest
@@ -109,6 +118,8 @@ jobs:
         with:
           name: web-dist
           path: apps/web/dist
+      - name: Production deploys to production only
+        run: bun .github/scripts/deploy-target.ts apps/web/wrangler.jsonc "" doriface-web app.doriterm.com doriface.omo.dev
       - name: Deploy production
         working-directory: apps/web
         env:

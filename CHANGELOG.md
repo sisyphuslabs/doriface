@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Answering agents from the card
 
 - A command, diff, new file, plan or question text that itself draws something shaped like a dialog no longer reads as the dialog: the card answers the dialog drawn at the bottom of the screen, with that dialog's own rows, and presses nothing when a row on the live screen does not say what the card showed for it. Where Codex's screen cannot tell the dialog from the agent's own text, the card offers nothing and the agent is answered in the terminal. (#776)
