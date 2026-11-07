@@ -1,4 +1,4 @@
-import type { GitFacts, JsonObject, Terminal } from "@doriface/protocol";
+import type { GitFacts, GitFactsDoc, JsonObject, Terminal } from "@doriface/protocol";
 import { describe, expect, test } from "bun:test";
 import { nextDocs, shownGit } from "./git-facts.ts";
 import { layoutSpaces } from "./model.ts";
@@ -27,9 +27,10 @@ describe("shownGit: only what is unusual", () => {
   });
 });
 
+const doc = (branch: string): GitFactsDoc => ({ v: 1, dirs: { "/work": { ...clean, branch } } });
+
 describe("nextDocs: a round of reads", () => {
-  const doc = (branch: string) => ({ dirs: { "/work": { ...clean, branch } } });
-  const before = new Map([
+  const before = new Map<string, GitFactsDoc>([
     ["", doc("main")],
     ["laptop", doc("feat/a")],
   ]);

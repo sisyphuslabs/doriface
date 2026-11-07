@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- An added machine's spaces and tabs keep their branch and diff facts while its mesh line redials, instead of losing them for a moment. (#913)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window

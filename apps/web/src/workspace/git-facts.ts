@@ -25,13 +25,21 @@ export const useGitFactsOf = (): GitFactsOf => use(GitFactsContext);
 /** One machine's read: the document it holds (undefined when it has none), or "failed" when it could not be asked. */
 export type FactsRead = readonly [machine: string, read: GitFactsDoc | undefined | "failed"];
 
-/** The documents after a round of reads. */
+/**
+ * The documents after a round of reads. A read that could not be made (a mesh line redialing, held as connected by the
+ * grace from #904) keeps the machine's last document, as the layout documents keep theirs, so its rows do not lose their
+ * git facts for a blip (#913). A machine that answers with no document has none, and one no longer asked (gone from the
+ * list, or offline past the grace) is dropped.
+ */
 export function nextDocs(
-  _before: ReadonlyMap<string, GitFactsDoc>,
+  before: ReadonlyMap<string, GitFactsDoc>,
   reads: readonly FactsRead[],
 ): ReadonlyMap<string, GitFactsDoc> {
   const next = new Map<string, GitFactsDoc>();
-  for (const [machine, read] of reads) if (read !== undefined && read !== "failed") next.set(machine, read);
+  for (const [machine, read] of reads) {
+    const doc = read === "failed" ? before.get(machine) : read;
+    if (doc !== undefined) next.set(machine, doc);
+  }
   return next;
 }
 
