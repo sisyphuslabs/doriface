@@ -13,6 +13,7 @@ import {
   SettingsTerminalScreen,
 } from "./screens/settings.tsx";
 import { ShellScreen } from "./screens/shell.tsx";
+import { ShortcutsScreen } from "./screens/shortcuts.tsx";
 import { SidebarRecomposeScreen } from "./screens/sidebar-recompose.tsx";
 import { StatesScreen } from "./screens/states.tsx";
 import { VoiceScreen } from "./screens/voice.tsx";
@@ -22,6 +23,7 @@ export const ROUTES = [
   { id: "shell", title: "Workspace shell", render: ShellScreen },
   { id: "pair", title: "Connect and pair", render: PairScreen },
   { id: "palette", title: "Command palette", render: PaletteScreen },
+  { id: "shortcuts", title: "Keyboard shortcuts", render: ShortcutsScreen },
   { id: "settings", title: "Settings", render: SettingsScreen },
   { id: "settings-appearance", title: "Settings: appearance", render: SettingsAppearanceScreen },
   { id: "settings-device", title: "Settings: device", render: SettingsDeviceScreen },

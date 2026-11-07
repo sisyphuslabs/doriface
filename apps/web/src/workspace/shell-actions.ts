@@ -38,6 +38,7 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
     "layout.toggle:sidebar",
     "app.zoom_in",
     "app.zoom_out",
+    "app.help",
     "app.settings",
   ],
   phone: [
@@ -48,6 +49,7 @@ const SHELL_ACTIONS: Readonly<Record<Shell, readonly string[]>> = {
     "voice.dictate",
     "app.zoom_in",
     "app.zoom_out",
+    "app.help",
     "app.settings",
   ],
 };
