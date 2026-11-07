@@ -5,6 +5,7 @@
 ### Mesh
 
 - When a member's mesh line replaces an earlier ssh or command entry for the same machine, `mesh status` still names the replaced entry if the line was added on a later try, and a removal herdr refuses is retried with its reason shown instead of only logged. (#728)
+- `doriface-host mesh status` and the Mesh panel show each member's line as herdr lists it when they read it: a line that finished connecting after the last membership change reads connected, instead of connecting until the next one. (#754)
 
 ### Terminal
 
