@@ -249,7 +249,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
-          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}
+          # One key per run: a set saved after an archive update can never overwrite an older one, so the newest wins by prefix.
+          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-${{ github.run_id }}
+          restore-keys: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-
       - name: Install Chromium
         if: env.RELAY_TOKEN_SET == 'true'
         id: chromium
@@ -336,7 +338,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
-          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}
+          # One key per run: a set saved after an archive update can never overwrite an older one, so the newest wins by prefix.
+          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-${{ github.run_id }}
+          restore-keys: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-
       - name: Install Chromium
         id: chromium
         working-directory: apps/web
@@ -567,6 +571,15 @@ jobs:
         if: steps.scope.outputs.match == 'true'
         working-directory: apps/desktop
         run: bun run pack
+      # The dictation addon (apps/desktop/native, #726) was just built by pack: it is universal and loads without a prompt.
+      - name: Dictation addon
+        if: steps.scope.outputs.match == 'true'
+        working-directory: apps/desktop
+        run: |
+          lipo -archs dist/native/speech.node | tee "$RUNNER_TEMP/archs.txt"
+          grep -q arm64 "$RUNNER_TEMP/archs.txt"
+          grep -q x86_64 "$RUNNER_TEMP/archs.txt"
+          bun scripts/speech-smoke.ts
       # Installing and packing must not rewrite tracked files (the same check the Linux Desktop job makes).
       - name: The tree is clean after install and pack
         if: steps.scope.outputs.match == 'true'
