@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Web app
+
+- An installed web app keeps one copy of the terminal's icon font: when a new version takes over, it drops the copies earlier versions left (about 1.2 MB each). (#967)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
