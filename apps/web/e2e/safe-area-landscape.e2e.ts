@@ -36,27 +36,44 @@ async function intoInsets(page: Page): Promise<string[]> {
   return page.evaluate(
     ({ insets, size }) => {
       const selector = 'button, a[href], input, [role="tab"], [role="button"], h1, h2, [data-titlebar]';
-      return [...document.querySelectorAll<HTMLElement>(selector)]
-        .filter((element) => {
-          const box = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          // A visually hidden element (sr-only: clipped to nothing) draws nothing until it is focused.
-          const clipped = style.clipPath === "inset(50%)" || style.clip === "rect(0px, 0px, 0px, 0px)";
-          if (box.width === 0 || box.height === 0 || style.visibility === "hidden" || clipped) return false;
-          if (box.right <= 0 || box.left >= size.width || box.bottom <= 0 || box.top >= size.height) return false;
-          return (
-            box.left < insets.left - 0.5 ||
-            box.right > size.width - insets.right + 0.5 ||
-            box.bottom > size.height - insets.bottom + 0.5
-          );
-        })
-        .map((element) => {
-          const box = element.getBoundingClientRect();
-          const name = (element.getAttribute("aria-label") ?? element.textContent ?? element.tagName)
-            .trim()
-            .slice(0, 30);
-          return `${name}: ${Math.round(box.left)}..${Math.round(box.right)} / ${Math.round(box.bottom)}`;
-        });
+      const found: string[] = [];
+      for (const element of document.querySelectorAll<HTMLElement>(selector)) {
+        const style = getComputedStyle(element);
+        // A visually hidden element (sr-only: clipped to nothing) draws nothing until it is focused.
+        const clipped = style.clipPath === "inset(50%)" || style.clip === "rect(0px, 0px, 0px, 0px)";
+        if (style.visibility === "hidden" || clipped) continue;
+        // What is actually painted is the box clipped by every scrolling ancestor: a heading half scrolled out of the
+        // settings body still reports its full rect, and reading that rect as drawn would fail any page long enough
+        // to scroll, which is not what this checks. The notch must stay clear; the body may scroll. A fixed box is
+        // placed against the viewport, so the ancestors above it clip nothing of it (#903).
+        const own = element.getBoundingClientRect();
+        let box = { left: own.left, right: own.right, top: own.top, bottom: own.bottom };
+        for (
+          let node: HTMLElement = element, parent = element.parentElement;
+          parent && getComputedStyle(node).position !== "fixed";
+          node = parent, parent = parent.parentElement
+        ) {
+          const ancestor = getComputedStyle(parent);
+          if (ancestor.overflowX === "visible" && ancestor.overflowY === "visible") continue;
+          const clip = parent.getBoundingClientRect();
+          box = {
+            left: Math.max(box.left, clip.left),
+            right: Math.min(box.right, clip.right),
+            top: Math.max(box.top, clip.top),
+            bottom: Math.min(box.bottom, clip.bottom),
+          };
+        }
+        if (box.right - box.left <= 0 || box.bottom - box.top <= 0) continue;
+        if (box.right <= 0 || box.left >= size.width || box.bottom <= 0 || box.top >= size.height) continue;
+        const reaches =
+          box.left < insets.left - 0.5 ||
+          box.right > size.width - insets.right + 0.5 ||
+          box.bottom > size.height - insets.bottom + 0.5;
+        if (!reaches) continue;
+        const name = (element.getAttribute("aria-label") ?? element.textContent ?? element.tagName).trim().slice(0, 30);
+        found.push(`${name}: ${Math.round(box.left)}..${Math.round(box.right)} / ${Math.round(box.bottom)}`);
+      }
+      return found;
     },
     { insets: INSETS, size: SIZE },
   );
@@ -76,6 +93,24 @@ for (const colorScheme of ["light", "dark"] as const) {
       await page.keyboard.press("Tab");
       await expect(page.getByRole("link", { name: "Skip to terminal" })).toBeFocused();
       expect(await intoInsets(page)).toEqual([]);
+    });
+
+    test("a fixed control in an inset is reported, even under an ancestor that clips its other children (#903)", async ({
+      page,
+    }) => {
+      await landscapeWithInsets(page);
+      await page.goto("/settings");
+      await expect(page.getByRole("navigation", { name: "Settings" })).toBeVisible({ timeout: 20_000 });
+      await page.evaluate(() => {
+        const clipping = document.createElement("div");
+        clipping.style.cssText = "position:absolute;left:200px;top:100px;width:40px;height:40px;overflow:hidden";
+        const planted = document.createElement("button");
+        planted.textContent = "Planted";
+        planted.style.cssText = "position:fixed;left:0;bottom:0;width:80px;height:30px";
+        clipping.append(planted);
+        document.body.append(clipping);
+      });
+      expect(await intoInsets(page)).toEqual(["Planted: 0..80 / 390"]);
     });
 
     test("Settings keeps every control out of the side and bottom insets", async ({ page }) => {

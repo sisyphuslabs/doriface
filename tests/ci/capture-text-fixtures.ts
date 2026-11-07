@@ -1,0 +1,21 @@
+/**
+ * The strings a capture must never show, one per leak shape: the half of the proof that says the check catches rather
+ * than merely spares. capture-text.test.ts runs every one, so a pattern widened until it matches nothing turns red.
+ */
+export const KNOWN_BAD: readonly { readonly text: string; readonly why: string }[] = [
+  { text: "alpha-center@build-box ~ % ls", why: "zsh prompt, no colon" },
+  { text: "User@Users-MacBook-Pro ~ % ls", why: "capitalised account and host" },
+  { text: "Alice@build-box:~$ ls", why: "capitalised account" },
+  { text: "alpha@build.example.com:~$ ls", why: "fully qualified host" },
+  { text: "someone@localhost:~$ ls", why: "named account on a neutral host" },
+  { text: "someone@my-laptop:~$ ls", why: "named account on a neutral host, my- prefix" },
+  { text: "alpha@a-host:/srv/run/clone$ ls", why: "account at host with a path" },
+  { text: "/Users/someone/project", why: "home directory" },
+  { text: "/home/someone/project", why: "home directory, Linux" },
+  { text: "/srv/runs/x/clone", why: "run root" },
+  { text: "/var/folders/xy/abc/T/x", why: "run root, macOS temp" },
+  { text: "/private/tmp/x/clone", why: "run root, macOS private temp" },
+  { text: "/tmp/x/clone", why: "run root, temp" },
+  { text: "/opt/omo-runs/x", why: "system install root" },
+  { text: "ssh someone@a-host", why: "ssh target" },
+];

@@ -1,15 +1,19 @@
-import type { HcConnection } from "@doriface/client";
+import { type HcConnection, HcLinkSilentError, HcTimeoutError } from "@doriface/client";
 import { useSyncExternalStore } from "react";
 import type { HostStartFailure } from "../desktop/bridge.ts";
 import { AttemptBudget, AttemptTimeoutError } from "./attempt-budget.ts";
 import { connect, type ConnectionPath, type OpenConnection } from "./connect.ts";
 import type { DirectReason } from "./direct-attempt.ts";
+import { helloName } from "./hello-name.ts";
 import { isFinal } from "./host-failure.ts";
+import { MeshConnections, type MemberEntry } from "./mesh-connections.ts";
 import {
   type ConnectionSettings,
   isConfigured,
   loadSettings,
   lockRelay,
+  normalizeSettings,
+  type Saver,
   saveSettings,
   staysOnThisComputer,
 } from "./settings.ts";
@@ -47,6 +51,12 @@ const BACKOFF_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
  * floor of this order — 10 s in one, 60 s in herdr (`#653`).
  */
 const STABLE_CONNECTION_MS = 10_000;
+
+/**
+ * How long a wake gives an open link to answer one call before it is treated as gone: a socket the page slept on can be
+ * half-open, and the heartbeat alone would take its whole timeout to notice (#653).
+ */
+const WAKE_PROBE_MS = 10_000;
 /** This computer's host, as the desktop app runs it: where it listens now, and why it did not start. */
 export interface LocalHostStarter {
   start(): Promise<{ readonly url: string; readonly token: string }>;
@@ -74,12 +84,23 @@ export class ConnectionStore {
   #current = 0;
   /** A wake already asked for this tick: several page events must cost one attempt, not three. */
   #wakeQueued = false;
+  /** The open connection a wake is asking right now, so several page events cost one call. */
+  #probing: HcConnection | null = null;
+  /** Why the store closed a connection itself, kept with that connection so no other drop can take it. */
+  #closedFor: { readonly connection: HcConnection; readonly reason: Error } | null = null;
   readonly #budget = new AttemptBudget();
   readonly #connect: typeof connect;
+  readonly #save: Saver;
 
-  constructor(settings: ConnectionSettings, open: typeof connect = connect) {
+  /**
+   * `save` is how this store records a change to its settings. A store that owns the saved settings writes them itself; one that
+   * is a single member of a mesh (`mesh-connections.ts`) passes a no-op, because its settings are a slice of a roster another
+   * object owns, and writing that slice back would replace the roster with it.
+   */
+  constructor(settings: ConnectionSettings, open: typeof connect = connect, save: Saver = saveSettings) {
     this.#settings = lockRelay(settings);
     this.#connect = open;
+    this.#save = save;
   }
 
   get settings(): ConnectionSettings {
@@ -97,10 +118,17 @@ export class ConnectionStore {
 
   /** Saves and connects with `settings`; a release build keeps the production relay whatever relay they name. */
   update(settings: ConnectionSettings): void {
-    const next = lockRelay(settings);
+    const locked = lockRelay(settings);
+    const sameHost = locked.hostId === this.#settings.hostId;
     // A name belongs to the host that said it: another paired host starts without one, and its own hello fills it in.
-    this.#settings = next.hostId === this.#settings.hostId ? next : { ...next, hostName: "" };
-    saveSettings(this.#settings);
+    const cleared = sameHost ? locked : { ...locked, hostName: "" };
+    // Pairing REPLACES the host this app is bound to; it does not quietly keep the one the user paired away from, or every
+    // later failure alternates the attempt onto a host that is gone and saves that as the selection (review of #994). A mesh
+    // join is what ADDS a member, and that path does not come through here.
+    const replaced = sameHost ? cleared : { ...cleared, members: [] };
+    // The file and what the app keeps in memory obey the same roster rule, or pairing shows one list and saves another.
+    this.#settings = normalizeSettings(replaced);
+    this.#save(this.#settings);
     this.start();
   }
 
@@ -136,6 +164,8 @@ export class ConnectionStore {
   }
 
   stop(): void {
+    this.#probing = null;
+    this.#closedFor = null;
     clearTimeout(this.#timer);
     clearTimeout(this.#stableTimer);
     this.#stable = false;
@@ -166,7 +196,10 @@ export class ConnectionStore {
         if (this.#abort !== abort) return;
         if (opened.path === "direct") this.#relayFirst = true;
         this.#stale = connection;
-        this.#retry(error ?? new Error("the host closed the connection"), this.#stable ? 0 : attempt + 1);
+        const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
+        this.#closedFor = null;
+        const reason = error ?? closedFor ?? new Error("the host closed the connection");
+        this.#retry(reason, this.#stable ? 0 : attempt + 1);
       });
       this.#stale = null;
       this.#budget.reset();
@@ -187,6 +220,31 @@ export class ConnectionStore {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * Moves the selection to the next member of the roster, when there is one to move to.
+   *
+   * The roster is what the saved settings carry; with one member this does nothing, so a single-host app behaves exactly as
+   * it did. Each rotation is saved, because the host this app is bound to is then the one it is reaching for.
+   */
+  #rotateMember(): void {
+    const { members } = this.#settings;
+    if (members.length < 2) return;
+    const at = members.findIndex((member) => member.hostId === this.#settings.hostId);
+    // A selected host that is not in the roster cannot be moved on from: the roster rule puts it there, so its absence means
+    // the two disagree, and picking members[0] would bind the app to a host nobody selected.
+    if (at === -1) return;
+    const next = members[(at + 1) % members.length];
+    if (next === undefined || next.hostId === this.#settings.hostId) return;
+    this.#settings = {
+      ...this.#settings,
+      hostId: next.hostId,
+      hostName: next.hostName,
+      hostKey: next.hostKey,
+      directUrl: next.directUrl,
+    };
+    this.#save(this.#settings);
   }
 
   /**
@@ -241,11 +299,10 @@ export class ConnectionStore {
    * must not fail over a name it could not read: Settings shows the host by id instead.
    */
   #rememberName(connection: HcConnection): void {
-    const hello: { readonly core?: { readonly name?: string } } | undefined = connection.hello;
-    const name = hello?.core?.name ?? "";
+    const name = helloName(connection);
     if (name === "" || name === this.#settings.hostName) return;
     this.#settings = { ...this.#settings, hostName: name };
-    saveSettings(this.#settings);
+    this.#save(this.#settings);
   }
 
   #retry(error: Error, attempt: number): void {
@@ -255,6 +312,12 @@ export class ConnectionStore {
       this.#set({ phase: "failed", error, retryInMs: null, retryAt: null, stale: null });
       return;
     }
+    // One host stopping must not end the app: the next attempt asks the next member this app knows (design of #942).
+    // This is the single place a retry is decided, so it covers a failed attempt AND a live link that dropped. It runs only
+    // after the final-error check, so a failure no retry can help never moves the selection out from under the message the
+    // user is reading, and never in loopback mode, where the address is this computer's own gateway rather than a member
+    // (review of #994).
+    if (this.#settings.mode !== "loopback") this.#rotateMember();
     const delay = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)] ?? 10_000;
     this.#set({ phase: "failed", error, retryInMs: delay, retryAt: Date.now() + delay, stale: this.#stale });
     this.#wait(attempt);
@@ -279,7 +342,7 @@ export class ConnectionStore {
     if (abort.signal.aborted || this.#settings !== asked) return undefined;
     if (where.url !== asked.loopbackUrl || where.token !== asked.token) {
       this.#settings = { ...asked, loopbackUrl: where.url, token: where.token };
-      saveSettings(this.#settings);
+      this.#save(this.#settings);
     }
     return this.#attempt(attempt);
   }
@@ -290,6 +353,7 @@ export class ConnectionStore {
    */
   retryNow(): void {
     if (this.#state.phase === "connecting") return this.#restart();
+    if (this.#state.phase === "open") return this.#probe(this.#state.connection);
     const attempt = this.#pending;
     if (attempt === null || this.#state.phase !== "failed") return;
     clearTimeout(this.#timer);
@@ -313,17 +377,49 @@ export class ConnectionStore {
     });
   }
 
+  /**
+   * Asks the open link one call the core answers at once. An answer of any kind, an error included, proves the link and
+   * leaves it alone; no answer within {@link WAKE_PROBE_MS} closes it, and the drop reconnects as any other drop does.
+   */
+  #probe(connection: HcConnection): void {
+    if (this.#probing === connection) return;
+    this.#probing = connection;
+    connection
+      .call("terminal.list", {}, { timeoutMs: WAKE_PROBE_MS })
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          // A stop, or a newer connection, ended this probe's claim on the link while it waited.
+          if (!(error instanceof HcTimeoutError) || this.#probing !== connection) return;
+          if (this.#state.phase !== "open" || this.#state.connection !== connection) return;
+          this.#closedFor = { connection, reason: new HcLinkSilentError(WAKE_PROBE_MS) };
+          connection.close();
+        },
+      )
+      .finally(() => {
+        if (this.#probing === connection) this.#probing = null;
+      });
+  }
+
   #set(state: ConnectionState): void {
     this.#state = state;
     for (const listener of this.#listeners) listener();
   }
 }
 
-export const connectionStore = new ConnectionStore(loadSettings());
+export const connectionStore = new MeshConnections(
+  loadSettings(),
+  (settings, save) => new ConnectionStore(settings, connect, save),
+);
 
 // The page can work again: the network returned, a page came back from the cache, or a tab became visible (#653).
 resumeOnWake(connectionStore);
 
-export function useConnection(store: ConnectionStore = connectionStore): ConnectionState {
+export function useConnection(store: Pick<MeshConnections, "subscribe" | "state"> = connectionStore): ConnectionState {
   return useSyncExternalStore(store.subscribe, () => store.state);
+}
+
+/** Every member and its own connection state, for a list that marks one machine offline rather than the whole app. */
+export function useMeshMembers(): readonly MemberEntry[] {
+  return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.entries());
 }

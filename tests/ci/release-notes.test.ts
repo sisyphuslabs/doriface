@@ -23,7 +23,7 @@ function checkout(changelog: string): string {
   copyFileSync(SCRIPT, join(dir, ".github", "scripts", "release-notes.ts"));
   writeFileSync(join(dir, "CHANGELOG.md"), changelog);
   mkdirSync(join(dir, "assets"));
-  writeFileSync(join(dir, "assets", "doriface-1.2.0-x86_64.AppImage"), "");
+  writeFileSync(join(dir, "assets", "Doriterm-1.2.0-x86_64.AppImage"), "");
   return dir;
 }
 
@@ -70,7 +70,25 @@ test("the notes carry the version's own CHANGELOG section", async () => {
   expect(code).toBe(0);
   expect(out).toContain("- A thing users see. (#7)");
   expect(out).not.toContain("Something coming");
-  expect(out).toContain("doriface-1.2.0-x86_64.AppImage");
+  expect(out).toContain("Doriterm-1.2.0-x86_64.AppImage");
+});
+
+test("the downloads list the zip and the installer but not their .blockmap or the update feed", async () => {
+  const dir = checkout(CHANGELOG);
+  for (const name of [
+    "Doriterm-1.2.0-arm64-mac.zip",
+    "Doriterm-1.2.0-arm64-mac.zip.blockmap",
+    "Doriterm-1.2.0-x64-setup.exe",
+    "Doriterm-1.2.0-x64-setup.exe.blockmap",
+    "latest-mac.yml",
+  ]) {
+    writeFileSync(join(dir, "assets", name), "");
+  }
+  const { code, out } = await run(dir, "1.2.0", "assets");
+  expect(code).toBe(0);
+  expect(out).toContain("- **macOS, Apple silicon:** `Doriterm-1.2.0-arm64-mac.zip`\n");
+  expect(out).toContain("- **Windows x64:** `Doriterm-1.2.0-x64-setup.exe`\n");
+  expect(out).not.toContain(".blockmap");
 });
 
 test("a release with no CHANGELOG section is refused, in --check and when writing the notes", async () => {

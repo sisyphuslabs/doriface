@@ -5,6 +5,7 @@ import { connectionStore } from "../connection/store.ts";
 import { deviceName } from "./device-name.ts";
 import type { OfferSecret, PairingOffer } from "./fragment.ts";
 import { pairAndRemember } from "./handshake.ts";
+import { guideStore } from "./first-run-guide.ts";
 import { Steps } from "./steps.tsx";
 
 type Outcome =
@@ -27,12 +28,13 @@ export function VerifyStep({ offer }: { readonly offer: PairingOffer }) {
     setOutcome({ kind: "pairing" });
     try {
       await pairAndRemember(offer, deviceName(), (host) =>
-        connectionStore.update({ ...connectionStore.settings, mode: "relay", ...host }),
+        connectionStore.pair({ ...connectionStore.settings, mode: "relay", ...host }),
       );
     } catch (error) {
       setOutcome({ kind: "failed", reason: error instanceof Error ? error.message : String(error) });
       return;
     }
+    guideStore.start();
     setOutcome({ kind: "paired" });
   };
   return (

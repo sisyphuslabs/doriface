@@ -29,6 +29,20 @@ declare const self: ServiceWorkerGlobalScope & {
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html")));
+
+/** Fonts left out of the precache, kept as each is first fetched; a file's name changes with its contents. */
+const FONT_CACHE = "doriterm-fonts-v1";
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && /\/symbols-nerd-font-mono-[^/]*\.woff2$/.test(url.pathname),
+  async ({ request }) => {
+    const cache = await caches.open(FONT_CACHE);
+    const kept = await cache.match(request);
+    if (kept !== undefined) return kept;
+    const fetched = await fetch(request);
+    if (fetched.ok) await cache.put(request, fetched.clone());
+    return fetched;
+  },
+);
 clientsClaim();
 
 self.addEventListener("message", (event) => {
@@ -54,7 +68,7 @@ self.addEventListener("push", (event) => {
   const notice = parsePushNotice(readPayload(event));
   // Every push shows a notification: a browser that sees pushes without one revokes or replaces the subscription.
   if (notice === undefined) {
-    event.waitUntil(self.registration.showNotification("doriface", { body: "Open doriface to see what changed." }));
+    event.waitUntil(self.registration.showNotification("Doriterm", { body: "Open Doriterm to see what changed." }));
     return;
   }
   event.waitUntil(showNotice(notice));

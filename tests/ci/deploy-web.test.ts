@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { evaluate, type Value } from "./gh-expression.ts";
 
-type Step = { name?: string; run?: string; uses?: string };
+type Step = { name?: string; if?: string; run?: string; uses?: string };
 type Job = { needs?: string; if?: string; steps: Step[] };
 type Workflow = { concurrency: { group: string; "cancel-in-progress": string | boolean }; jobs: Record<string, Job> };
-type Route = { pattern: string; custom_domain?: boolean };
+type Route = { pattern: string; zone_id?: string; custom_domain?: boolean };
 type Assets = { directory: string; not_found_handling?: string };
 type Wrangler = { assets: Assets; routes: Route[]; env: { staging: { assets: Assets; routes: Route[] } } };
 
@@ -15,11 +16,47 @@ const wrangler = Bun.JSONC.parse(readFileSync(join(ROOT, "apps", "web", "wrangle
 
 const runs = (job: Job): string[] => job.steps.flatMap((step) => (step.run === undefined ? [] : [step.run]));
 
-test("a pull request's run never shares dev's concurrency group, and dev deploys are never cancelled in progress", () => {
-  expect(workflow.concurrency.group).toBe(
-    "${{ github.event_name == 'pull_request' && format('deploy-web-pr-{0}', github.event.pull_request.number) || 'deploy-web-dev' }}",
+/** The github and inputs contexts of one event that starts this workflow. */
+type Event = { github: Record<string, Value>; inputs?: Record<string, Value> };
+const push: Event = { github: { event_name: "push", ref: "refs/heads/dev", run_id: 101 } };
+const pullRequest: Event = {
+  github: { event_name: "pull_request", ref: "refs/pull/7/merge", run_id: 102, event: { pull_request: { number: 7 } } },
+};
+const dispatch = (ref: string, production: boolean): Event => ({
+  github: { event_name: "workflow_dispatch", ref, run_id: 103 },
+  inputs: { production },
+});
+const group = (event: Event): Value => evaluate(workflow.concurrency.group, { contexts: event });
+const cancels = (event: Event): Value =>
+  evaluate(String(workflow.concurrency["cancel-in-progress"]), { contexts: event });
+
+// A group keeps one pending run, so whatever shares dev's group can replace a pending dev push run (#868, #884).
+test("only what deploys dev to production shares dev's concurrency group, and dev deploys are never cancelled", () => {
+  expect([group(push), cancels(push)]).toEqual(["deploy-web-dev", false]);
+  expect([group(dispatch("refs/heads/dev", true)), cancels(dispatch("refs/heads/dev", true))]).toEqual([
+    "deploy-web-dev",
+    false,
+  ]);
+  expect([group(pullRequest), cancels(pullRequest)]).toEqual(["deploy-web-pr-7", true]);
+  for (const manual of [dispatch("refs/heads/dev", false), dispatch("refs/heads/feature", true)]) {
+    expect(group(manual)).not.toBe("deploy-web-dev");
+    expect(group(manual)).toContain(String(manual.github["run_id"]));
+  }
+});
+
+test("a manual run from any branch but dev stops before it builds or deploys anything", () => {
+  const { staging } = workflow.jobs;
+  if (staging === undefined) throw new Error("deploy-web.yml lacks a staging job");
+  const stops = (event: Event): boolean => {
+    const first = staging.steps[0];
+    return (
+      first?.if !== undefined && evaluate(first.if, { contexts: event }) === true && /exit 1\s*$/.test(first.run ?? "")
+    );
+  };
+  expect(evaluate(staging.if ?? "true", { contexts: dispatch("refs/heads/feature", true) })).toBe(true);
+  expect([stops(dispatch("refs/heads/feature", false)), stops(dispatch("refs/heads/dev", false)), stops(push)]).toEqual(
+    [true, false, false],
   );
-  expect(workflow.concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
 });
 
 test("production deploys only from dev, after staging was deployed and probed, from staging's own build", () => {
@@ -27,23 +64,30 @@ test("production deploys only from dev, after staging was deployed and probed, f
   if (staging === undefined || production === undefined) throw new Error("deploy-web.yml lacks a job");
   expect(production.needs).toBe("staging");
   expect(production.if).toContain("github.ref == 'refs/heads/dev'");
-  expect(runs(staging)).toEqual(
-    expect.arrayContaining([
-      'bunx "$WRANGLER" deploy --env staging',
-      "bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev",
-    ]),
-  );
+  expect(runs(staging).slice(-3)).toEqual([
+    'bunx "$WRANGLER" deploy --env staging',
+    "bun .github/scripts/probe-web.ts https://staging.app.doriterm.com",
+    "bun .github/scripts/probe-web.ts https://doriface-staging.omo.dev",
+  ]);
   expect(runs(staging)).not.toContain('bunx "$WRANGLER" deploy --env ""');
   expect(runs(production)).toEqual([
     'bunx "$WRANGLER" deploy --env ""',
+    "bun .github/scripts/probe-web.ts https://app.doriterm.com",
     "bun .github/scripts/probe-web.ts https://doriface.omo.dev",
   ]);
   expect(production.steps.some((step) => step.uses?.startsWith("actions/download-artifact"))).toBe(true);
 });
 
-test("both hostnames serve the build with the SPA fallback, so /pair loads the app", () => {
-  expect(wrangler.routes).toEqual([{ pattern: "doriface.omo.dev", custom_domain: true }]);
-  expect(wrangler.env.staging.routes).toEqual([{ pattern: "doriface-staging.omo.dev", custom_domain: true }]);
+test("app.doriterm.com and the omo.dev host each serve the build with the SPA fallback, so /pair loads the app", () => {
+  const DORITERM_ZONE = "79ae74d5937b2858a42f6261887e436e";
+  expect(wrangler.routes).toEqual([
+    { pattern: "app.doriterm.com", zone_id: DORITERM_ZONE, custom_domain: true },
+    { pattern: "doriface.omo.dev", custom_domain: true },
+  ]);
+  expect(wrangler.env.staging.routes).toEqual([
+    { pattern: "staging.app.doriterm.com", zone_id: DORITERM_ZONE, custom_domain: true },
+    { pattern: "doriface-staging.omo.dev", custom_domain: true },
+  ]);
   for (const assets of [wrangler.assets, wrangler.env.staging.assets]) {
     expect(assets).toEqual({ directory: "./dist", not_found_handling: "single-page-application" });
   }
