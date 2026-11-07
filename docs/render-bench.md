@@ -26,6 +26,7 @@ It needs `hc` on `PATH` (or `HC_BIN`) and Playwright's Chromium (`bunx playwrigh
    - **Catch-up ms**: from the last program finishing to every pane showing its end line: how far drawing trails the output.
    - **Heap MB, DOM nodes**: `JSHeapUsedSize` and `Nodes` once recording has stopped and a full garbage collection (`HeapProfiler.collectGarbage`) has run: what the page keeps. Read without that collection they depended on when the collector last ran and swung about 30 MB between runs of one build (#1037).
 4. Hidden phase: the `idle` tab is selected, the same workload runs again, and **Hidden busy** is the main-thread share while the `bench` tab is not shown; then the `bench` tab is selected and **Show catch-up ms** is the time until every pane shows the hidden phase's end line.
+5. Prompt phase (#986): every pane in view, the programs write the same chunks again, and the `bench` tab's close button is clicked 5 times (Cancel after each; confirm-close-surface is `always`, so the question comes every time). **Close prompt ms** is each click's time from the browser's `pointerdown` timestamp to the first DOM mutation that shows the dialog, in the page's own clock (`bench/close-prompt.ts`): time the click waited behind the main thread counts, the driver's round trip does not. The programs keep writing until the bench creates a stop file after the last click, so every click lands while they write, however long the clicks take. This is #560's budget, which the Web e2e case `flood-input.e2e.ts` used to assert on whatever runner the suite shared; there it measured how much CPU the page got, so that case now only holds that every click is answered (within 10 s).
 
 Each program starts one `sleep` per tick; at 50 panes that is 500 short processes a second on the machine, the same for every build.
 
@@ -35,7 +36,7 @@ Each program starts one `sleep` per tick; at 50 panes that is 500 short processe
 
 - the candidate's web app is built from the release commit, and the baseline's from the tag of the last published release (`gh release view`: never a draft or a prerelease);
 - the candidate's bench drives both builds on the same runner (same spec, host and core: only the web app differs), every round running each build once and alternating which goes first, so drift on the runner falls on both;
-- `bench/run.ts --compare` takes each gated metric's median over the rounds per pane count and fails when the candidate passes its limit in `apps/web/bench/thresholds.json`: a metric that grows when worse fails past `ratio` times the baseline **and** `floor` above it; drawn bytes per second fails under `ratio` times the baseline;
+- `bench/run.ts --compare` takes each gated metric's median over the rounds per pane count and fails when the candidate passes its limit in `apps/web/bench/thresholds.json`: a metric that grows when worse fails past `ratio` times the baseline **and** `floor` above it; drawn bytes per second fails under `ratio` times the baseline; a metric with a `max` (Close prompt ms: 200, #560's product budget) also fails past it, however slow the baseline was;
 - a failure fails the release before the draft exists, so nothing is published; the table and every run are attached to the release as `Doriterm-<version>-render-bench.md` and `.json`.
 
 ## Noise floor

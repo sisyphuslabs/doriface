@@ -8,7 +8,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "../e2e/fixtures.ts";
 import { clearLayout, seedLayout, type Tree } from "../e2e/layout-doc.ts";
+import { setConfirmClose } from "../e2e/close-confirm.ts";
 import { hcOn } from "../e2e/machine-switch.ts";
+import { CLOSE_CLICKS, closePrompt } from "./close-prompt.ts";
 import { type BenchRun, type Workload, frameStats, gridOf, workloadBytes } from "./render-stats.ts";
 
 const PANES = (process.env["BENCH_PANES"] ?? "1,15,50").split(",").map(Number);
@@ -23,10 +25,14 @@ const CHUNK = Array.from({ length: 10 }, (_, line) => {
 /** Every 100 ms for 6 s: 100 lines a second per pane. */
 const WORKLOAD: Workload = { chunk: CHUNK, ticks: 60 };
 const TICK_SECONDS = "0.1";
+/** The prompt phase's cap: 2 minutes of the workload, far past what the clicks take; it normally ends at the stop file. */
+const PROMPT_TICKS = 1200;
 
 /**
  * Pane `pane`'s program: says it is ready, then for each phase waits for that phase's go file, writes the workload, its
- * end line and a done file, and keeps the terminal open. `sleep` is the only process it starts per tick.
+ * end line and a done file, and keeps the terminal open. `sleep` is the only process it starts per tick. The `prompt`
+ * phase writes the same chunks until the bench's stop file (at most `PROMPT_TICKS`), so every Close click lands while
+ * the panes write, however long the clicks take on the runner.
  */
 const program = (dir: string, pane: number): string[] => [
   "sh",
@@ -34,9 +40,10 @@ const program = (dir: string, pane: number): string[] => [
   [
     `d='${dir}'; i=${pane}; chunk=$(cat "$d/chunk")`,
     `printf 'bench-ready-%s\\n' "$i"`,
-    "for phase in 1 2; do",
+    "for phase in 1 2 prompt; do",
     `  while [ ! -e "$d/go$phase" ]; do sleep 0.05; done`,
-    `  n=0; while [ "$n" -lt ${WORKLOAD.ticks} ]; do printf '%s\\n' "$chunk"; sleep ${TICK_SECONDS}; n=$((n+1)); done`,
+    `  ticks=${WORKLOAD.ticks}; [ "$phase" = prompt ] && { ticks=${PROMPT_TICKS}; : > "$d/startedprompt-$i"; }`,
+    `  n=0; while [ "$n" -lt "$ticks" ] && [ ! -e "$d/stop$phase" ]; do printf '%s\\n' "$chunk"; sleep ${TICK_SECONDS}; n=$((n+1)); done`,
     `  printf 'bench-end-%s-%s\\n' "$phase" "$i"; : > "$d/done$phase-$i"`,
     "done",
     "exec sleep 3600",
@@ -80,13 +87,14 @@ const busy = (before: Metrics, after: Metrics): number =>
   ((after["TaskDuration"] ?? 0) - (before["TaskDuration"] ?? 0)) /
   ((after["Timestamp"] ?? 0) - (before["Timestamp"] ?? 0));
 
-/** Resolves once every pane's program has written its done file for `phase`. */
-async function producersDone(dir: string, panes: number, phase: number): Promise<void> {
+/** Resolves once every pane's program has written its `file` file (done by default) for `phase`. */
+async function producersDone(dir: string, panes: number, phase: number | "prompt", file = "done"): Promise<void> {
   const deadline = Date.now() + 120_000;
   const pending = new Set(Array.from({ length: panes }, (_, pane) => pane));
   while (pending.size > 0) {
-    for (const pane of pending) if (existsSync(join(dir, `done${phase}-${pane}`))) pending.delete(pane);
-    if (Date.now() > deadline) throw new Error(`${pending.size} panes' programs did not finish phase ${phase}`);
+    for (const pane of pending) if (existsSync(join(dir, `${file}${phase}-${pane}`))) pending.delete(pane);
+    if (Date.now() > deadline)
+      throw new Error(`${pending.size} panes' programs did not write ${file} for phase ${phase}`);
     // oxlint-disable-next-line no-await-in-loop -- the programs are other processes: their files are read again
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -142,7 +150,8 @@ for (const panes of PANES) {
         { id: "tb-idle", name: "idle", root: [{ pane: "bench-idle", terminal: idle }] },
       ]);
       await addProbe(page);
-      await page.goto("/");
+      // The question comes every time, whatever hc last reported running in the panes (confirm-close-surface).
+      await setConfirmClose(page, "always");
       await allShow(page, addresses, "bench-ready-");
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("Performance.enable");
@@ -178,6 +187,18 @@ for (const panes of PANES) {
       await allShow(page, addresses, "bench-end-2-");
       const caughtUp = performance.now();
 
+      // Prompt: the workload once more, every pane in view, and the bench tab's Close clicked while it runs.
+      writeFileSync(join(dir, "goprompt"), "");
+      await producersDone(dir, panes, "prompt", "started");
+      const closeMs: number[] = [];
+      for (let click = 0; click < CLOSE_CLICKS; click += 1) {
+        // oxlint-disable-next-line no-await-in-loop -- one click at a time, each answered before the next
+        closeMs.push(await closePrompt(page));
+      }
+      writeFileSync(join(dir, "stopprompt"), "");
+      await producersDone(dir, panes, "prompt");
+      await allShow(page, addresses, "bench-end-prompt-");
+
       const run: BenchRun = {
         build: BUILD,
         panes,
@@ -195,6 +216,7 @@ for (const panes of PANES) {
           domNodes: kept["Nodes"] ?? 0,
         },
         hidden: { busyShare: busy(hiddenBefore, hiddenAfter), showCatchUpMs: caughtUp - shown },
+        prompt: { closeMs },
       };
       mkdirSync(OUT, { recursive: true });
       writeFileSync(join(OUT, `render-${BUILD}-${panes}-${Date.now()}.json`), `${JSON.stringify(run)}\n`);
