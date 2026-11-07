@@ -105,6 +105,47 @@ function midSyllable(platform: Platform, letter: Letter): readonly ImeStep[] {
 
 const PLATFORMS: readonly Platform[] = ["macOS Chromium", "macOS Safari", "Windows Chromium"];
 
+/** か typed with romaji input: k, then a, each a processed keydown and a growing preedit. */
+const KA: readonly ImeStep[] = [
+  down("k", "KeyK", 229),
+  { kind: "compose", text: "k" },
+  up("k", "KeyK", 75),
+  down("a", "KeyA", 229),
+  { kind: "compose", text: "か" },
+  up("a", "KeyA", 65),
+];
+
+/**
+ * A Japanese input method's own Ctrl+letter key turning か into カ while the word still composes, then Enter confirming
+ * it: Ctrl+K on macOS (the Japanese input source's katakana key), Ctrl+I on Windows (Microsoft IME's full-width katakana
+ * key, keydown `key` "Process"). The chord belongs to the input method: the program reads only カ. Synthetic, as above.
+ */
+function conversion(platform: Platform, key: string, code: string, keyCode: number): readonly ImeStep[] {
+  const pressed = platform === "Windows Chromium" ? "Process" : key;
+  return [
+    ...KA,
+    down(pressed, code, 229, true),
+    { kind: "compose", text: "カ" },
+    up(key, code, keyCode, true),
+    down("Enter", "Enter", 229),
+    { kind: "commit", text: "カ" },
+    up("Enter", "Enter", 13),
+  ];
+}
+
+export const JAPANESE_IME_CHORDS: readonly ImeChord[] = [
+  {
+    name: "macOS Chromium, Japanese: Ctrl+K mid-word",
+    steps: conversion("macOS Chromium", "k", "KeyK", 75),
+    bytes: "e3 82 ab",
+  },
+  {
+    name: "Windows Chromium, Japanese: Ctrl+I mid-word",
+    steps: conversion("Windows Chromium", "i", "KeyI", 73),
+    bytes: "e3 82 ab",
+  },
+];
+
 export const KOREAN_IME_CHORDS: readonly ImeChord[] = PLATFORMS.flatMap((platform) =>
   LETTERS.flatMap((letter) => [
     {

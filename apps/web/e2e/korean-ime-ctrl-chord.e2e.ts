@@ -1,6 +1,6 @@
 import type { CDPSession, Page } from "@playwright/test";
 import { expect, openNewTerminal, test } from "./fixtures.ts";
-import { type ImeStep, KOREAN_IME_CHORDS } from "./korean-ime-chords.ts";
+import { type ImeStep, JAPANESE_IME_CHORDS, KOREAN_IME_CHORDS } from "./korean-ime-chords.ts";
 
 test.use({ serviceWorkers: "block" });
 
@@ -39,8 +39,10 @@ async function readRawBytes(page: Page, count: number): Promise<void> {
 const AFTER = "xyz";
 const AFTER_BYTES = "78 79 7a";
 
-for (const chord of KOREAN_IME_CHORDS) {
-  test(`${chord.name}: the program reads the syllable once, then the chord's control byte (#748)`, async ({ page }) => {
+for (const chord of [...KOREAN_IME_CHORDS, ...JAPANESE_IME_CHORDS]) {
+  test(`${chord.name}: the program reads what was typed once, and the chord only when it is the program's (#748)`, async ({
+    page,
+  }) => {
     await page.goto("/");
     const terminal = await openNewTerminal(page);
     const expected = `${chord.bytes} ${AFTER_BYTES}`;
