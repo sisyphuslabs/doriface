@@ -9,6 +9,7 @@
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
+- A pane out of view no longer fetches its terminal's replay when the host ends the stream while the program still runs: it re-attaches once it is shown, and a program that ended in the meantime closes its tab then. (#1092)
 
 ### Notifications
 
