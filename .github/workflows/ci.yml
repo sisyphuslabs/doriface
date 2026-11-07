@@ -249,7 +249,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
-          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}
+          # One key per run: a set saved after an archive update can never overwrite an older one, so the newest wins by prefix.
+          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-${{ github.run_id }}
+          restore-keys: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-
       - name: Install Chromium
         if: env.RELAY_TOKEN_SET == 'true'
         id: chromium
@@ -336,7 +338,9 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
-          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}
+          # One key per run: a set saved after an archive update can never overwrite an older one, so the newest wins by prefix.
+          key: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-${{ github.run_id }}
+          restore-keys: playwright-apt-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.distro }}-${{ steps.playwright.outputs.version }}-${{ hashFiles('.github/scripts/playwright-linux-deps.sh') }}-
       - name: Install Chromium
         id: chromium
         working-directory: apps/web
