@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 /**
  * Fails a pull request that changes what users get, a file under apps/ or packages/ that is not a test, an e2e spec, a
- * fixture, a showcase or a Markdown file, unless it adds a line under `## Unreleased` in CHANGELOG.md, adds a new
- * release section (a release pull request), or carries the `no-changelog` label for an internal change.
+ * fixture, a showcase or a Markdown file, unless it adds a line under `## Unreleased` in CHANGELOG.md, is a release
+ * pull request, or carries the `no-changelog` label for an internal change. A release pull request adds a `## vX.Y.Z`
+ * section with lines, empties Unreleased into it and sets that version in apps/desktop/package.json; a new heading that
+ * does less is refused, so an empty or hand-made section cannot stand in for an Unreleased line.
  *
  * Usage: bun .github/scripts/changelog-check.ts <base sha>
  * Reads the pull request's label names as a JSON array from $PR_LABELS; compares the merge base with HEAD.
@@ -39,19 +41,38 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-function unreleasedEntries(changelog: string): Set<string> {
+/** The `- ` lines of the first `## ` section whose heading matches, up to the next `## ` heading. */
+function sectionEntries(changelog: string, isHeading: (line: string) => boolean): string[] {
   const lines = changelog.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^##\s+\[?Unreleased\]?(?:\s|$)/i.test(line));
-  if (start === -1) return new Set();
+  const start = lines.findIndex(isHeading);
+  if (start === -1) return [];
   const rest = lines.slice(start + 1);
   const end = rest.findIndex((line) => /^##\s/.test(line));
-  return new Set(
-    (end === -1 ? rest : rest.slice(0, end)).map((line) => line.trim()).filter((line) => line.startsWith("- ")),
-  );
+  return (end === -1 ? rest : rest.slice(0, end)).map((line) => line.trim()).filter((line) => line.startsWith("- "));
 }
 
+const unreleasedEntries = (changelog: string): Set<string> =>
+  new Set(sectionEntries(changelog, (line) => /^##\s+\[?Unreleased\]?(?:\s|$)/i.test(line)));
+
+const RELEASE_HEADING = /^##\s+\[?v?(\d+\.\d+\.\d+[^\]\s]*)/;
+
 const releaseHeadings = (changelog: string): Set<string> =>
-  new Set(changelog.split(/\r?\n/).flatMap((line) => /^##\s+\[?v?(\d+\.\d+\.\d+[^\]\s]*)/.exec(line)?.[1] ?? []));
+  new Set(changelog.split(/\r?\n/).flatMap((line) => RELEASE_HEADING.exec(line)?.[1] ?? []));
+
+/** The version apps/desktop/package.json declares at a revision, or undefined when the file or its version is absent. */
+async function desktopVersion(revision: string): Promise<string | undefined> {
+  const shown = await git("show", `${revision}:apps/desktop/package.json`);
+  if (shown.code !== 0) return undefined;
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(shown.out);
+  } catch {
+    fail(`apps/desktop/package.json at ${revision} is not JSON`);
+  }
+  const version: unknown =
+    typeof manifest === "object" && manifest !== null ? Reflect.get(manifest, "version") : undefined;
+  return typeof version === "string" ? version : undefined;
+}
 
 function labels(): string[] {
   const raw = process.env["PR_LABELS"] ?? "";
@@ -98,8 +119,29 @@ if (added.length > 0) {
   process.exit(0);
 }
 if (newReleases.length > 0) {
-  console.log(`Changelog: new release section(s) ${newReleases.map((version) => `v${version}`).join(", ")}.`);
-  process.exit(0);
+  const [versionBefore, versionAfter] = await Promise.all([desktopVersion(mergeBase), desktopVersion("HEAD")]);
+  const stillUnreleased = unreleasedEntries(afterText);
+  const refusals = newReleases.flatMap((version): string[] => {
+    const entries = sectionEntries(afterText, (line) => RELEASE_HEADING.exec(line)?.[1] === version);
+    const reasons: string[] = [];
+    if (entries.length === 0) reasons.push("it has no lines");
+    if (versionAfter !== version || versionBefore === version)
+      reasons.push(`this pull request does not set version ${version} in apps/desktop/package.json`);
+    // The notes are often reworded on the way into the release section, so the lines need not match one for one; what
+    // a release always does is empty Unreleased.
+    const left = [...known].filter((entry) => stillUnreleased.has(entry));
+    if (left.length > 0) reasons.push(`Unreleased still holds ${left.join(" ")}`);
+    return reasons.length === 0 ? [] : [`v${version}: ${reasons.join("; ")}`];
+  });
+  if (refusals.length === 0) {
+    console.log(`Changelog: release section(s) ${newReleases.map((version) => `v${version}`).join(", ")}.`);
+    process.exit(0);
+  }
+  fail(
+    `This pull request adds a release section that is not a release (${refusals.join(" | ")}). A release pull ` +
+      `request moves every Unreleased line into the new section and sets that version in apps/desktop/package.json; ` +
+      `any other change adds its own line under "## Unreleased" or carries the ${EXEMPT_LABEL} label.`,
+  );
 }
 
 const shown =
