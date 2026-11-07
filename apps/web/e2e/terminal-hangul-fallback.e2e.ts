@@ -131,69 +131,70 @@ test("a committed Hangul syllable paints the ink height of the Latin beside it (
   }
 });
 
-test("the composing box spans the two cells a wide syllable takes (#1245)", async ({ page }) => {
-  const terminal = await hangulTerminal(page);
+/** Composes `text` in the focused terminal's field and expects its box to span `cells` cells, then commits it. */
+async function expectComposingCells(page: Page, terminal: Locator, text: string, cells: number): Promise<void> {
   const field = terminal.getByRole("textbox");
   await field.focus();
-  const cdp = await page.context().newCDPSession(page);
   const cell = await terminal.evaluate((root) =>
     Number.parseFloat(getComputedStyle(root).getPropertyValue("--term-cell-width")),
   );
-  const before = await field.boundingBox();
-  if (before === null) throw new Error("the field has no box");
-  await cdp.send("Input.imeSetComposition", { text: "한", selectionStart: 1, selectionEnd: 1 });
+  expect(cell).toBeGreaterThan(0);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", { text, selectionStart: text.length, selectionEnd: text.length });
   await expect
-    .poll(
-      async () => {
-        const box = await field.boundingBox();
-        return box === null ? 0 : Math.round(box.width);
-      },
-      { timeout: 5_000 },
+    .poll(async () => (await field.boundingBox())?.width ?? 0, {
+      message: `the box composing ${JSON.stringify(text)} spans ${cells} cells of ${cell}px`,
+      timeout: 5_000,
+    })
+    .toBeCloseTo(cell * cells, 0);
+  await cdp.send("Input.insertText", { text });
+  await cdp.detach();
+}
+
+/** Narrows every cell by `px` through adjust-cell-width, so a glyph's own advance is wider than its cells. */
+async function narrowCells(page: Page, px: number): Promise<Locator> {
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page
+    .getByRole("tab", { name: "Terminal" })
+    .or(page.getByRole("button", { name: "Terminal" }))
+    .first()
+    .click();
+  await page.getByRole("textbox", { name: "adjust-cell-width" }).fill(String(px));
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Close settings" }).first().click();
+  const focused = page.locator('[data-focused="true"] [data-terminal]');
+  await expect
+    .poll(() =>
+      focused
+        .locator(".term-row")
+        .first()
+        .evaluate((row) => Number.parseFloat(getComputedStyle(row).letterSpacing)),
     )
-    .toBeGreaterThan(0);
-  console.error(
-    "PROBE " +
-      JSON.stringify(
-        await field.evaluate((el) => {
-          const s = getComputedStyle(el);
-          const c = document.createElement("canvas").getContext("2d");
-          if (c === null) return "no canvas";
-          c.font = `${s.fontSize} ${s.fontFamily}`;
-          const canvasAdvance = c.measureText("한").width;
-          c.font = s.fontSize + " sans-serif";
-          const sansAdvance = c.measureText("한").width;
-          const probe = document.createElement("span");
-          probe.style.font = s.font;
-          probe.style.whiteSpace = "pre";
-          probe.textContent = "한";
-          document.body.appendChild(probe);
-          const spanWidth = probe.getBoundingClientRect().width;
-          probe.remove();
-          return {
-            font: s.font.slice(0, 40),
-            canvasAdvance,
-            sansAdvance,
-            spanWidth,
-            cell: Number.parseFloat(
-              getComputedStyle(el.closest(".terminal") ?? el).getPropertyValue("--term-cell-width"),
-            ),
-          };
-        }),
-      ),
-  );
-  console.error(
-    "PREEDIT " +
-      JSON.stringify({
-        value: await field.inputValue(),
-        width: (await field.boundingBox())?.width,
-        cell,
-        font: await field.evaluate((el) => getComputedStyle(el).fontFamily),
-        fontSize: await field.evaluate((el) => getComputedStyle(el).fontSize),
-        scrollWidth: await field.evaluate((el) => (el as HTMLTextAreaElement).scrollWidth),
-      }),
-  );
-  const composing = await field.boundingBox();
-  if (composing === null) throw new Error("the field has no box while composing");
-  await cdp.send("Input.insertText", { text: "한" });
-  expect(composing.width, "the composing box spans two cells").toBeCloseTo(cell * 2, 0);
+    .toBeLessThan(px / 2);
+  return focused;
+}
+
+test("the composing box spans the two cells a wide syllable takes (#1245)", async ({ page }) => {
+  await expectComposingCells(page, await hangulTerminal(page), "한", 2);
+});
+
+test("the composing box spans one cell per Latin letter of a preedit, as the grid draws them (#1245)", async ({
+  page,
+}) => {
+  await expectComposingCells(page, await hangulTerminal(page), "ni", 2);
+});
+
+test("a syllable composed as conjoining jamo spans its two cells: the vowel and final take none (#1245)", async ({
+  page,
+}) => {
+  await expectComposingCells(page, await hangulTerminal(page), "\u1112\u1161\u11ab", 2);
+});
+
+test("with cells narrowed by adjust-cell-width, the composing box still spans the cells the grid gives (#1245)", async ({
+  page,
+}) => {
+  await hangulTerminal(page);
+  const terminal = await narrowCells(page, -3);
+  await expectComposingCells(page, terminal, "한", 2);
+  await expectComposingCells(page, terminal, "ni", 2);
 });
