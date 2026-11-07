@@ -53,6 +53,9 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
+      # The guide runs `playwright install --with-deps` as written; this only bounds the apt requests it makes (doriterm#914).
+      - name: Bound apt's mirror requests
+        run: bash .github/scripts/apt-bounds.sh
       - name: Follow CONTRIBUTING.md from zero
         run: bun tests/ci/from-zero.ts CONTRIBUTING.md
         env:
