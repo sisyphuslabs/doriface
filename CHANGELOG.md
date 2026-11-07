@@ -5,6 +5,7 @@
 ### Mesh
 
 - When a member's mesh line replaces an earlier ssh or command entry for the same machine, `mesh status` still names the replaced entry if the line was added on a later try, and a removal herdr refuses is retried with its reason shown instead of only logged. (#728)
+- `doriface-host mesh status` and the Mesh panel show each member's line as herdr lists it when they read it: a line that finished connecting after the last membership change reads connected, instead of connecting until the next one. (#754)
 
 ### Terminal
 
@@ -14,6 +15,7 @@
 ### Notifications
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+- In the desktop app, Send test passes only when an agent's notification would: it waits for the app to follow the agents, then fails with the reason when notifications are off, the agents cannot be followed, every event is turned off, or this computer is muted, instead of showing a test that proves none of that. (#796)
 
 ### Settings
 
@@ -21,6 +23,7 @@
 
 ### Pairing
 
+- Typing a pairing code looks its host up as soon as the first three characters are in, so the key check shows the moment the code is complete instead of most of a second later on a far relay; Pair asks the relay nothing more. (#1271)
 - A broken link made by `doriface-host mesh pair` says to run `doriface-host mesh pair` again, not `doriface-host pair`, and a typed code the host refuses says it may be a mesh invite, which `doriface-host mesh join` takes, instead of only that it was used. (#727)
 
 ## v0.1.5 - 2026-11-07
