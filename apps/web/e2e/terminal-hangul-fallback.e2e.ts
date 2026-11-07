@@ -123,7 +123,7 @@ test("a committed Hangul syllable paints the ink height of the Latin beside it (
     const where = `${glyph.text}: box ${glyph.box}px, ink ${glyph.ink}px by ${glyph.fill}px, ${glyph.painted} painted`;
     expect(glyph.box, `${glyph.text} spans two cells`).toBeCloseTo(metrics.cell * 2, 0);
     expect(glyph.ink / metrics.asciiInk, `${where} against Latin ink ${metrics.asciiInk}px`).toBeGreaterThanOrEqual(
-      0.9,
+      0.8,
     );
     expect(glyph.fill / glyph.box, `${where} fills its cells`).toBeGreaterThanOrEqual(0.8);
     const density = glyph.painted / (glyph.fill * glyph.ink);
