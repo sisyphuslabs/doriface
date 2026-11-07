@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Host
 
 - `doriface-host --version` prints the host's version, and `/healthz` and the start-up line report the release the host was built from instead of 0.1.0 on every release. (#1039)

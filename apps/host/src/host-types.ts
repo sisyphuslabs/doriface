@@ -33,6 +33,11 @@ export interface HostOptions {
   readonly rekeyInterval?: number | undefined;
   /** For tests: the direct-path idle close (default 90 s). */
   readonly directIdleMs?: number | undefined;
+  /**
+   * For tests: how long the hello of an `hc connect` the host's own writers start (the end sweeper, the OS write, the
+   * git facts) may go unanswered before that connection fails (default 10 s). `Infinity` leaves those connects to stop.
+   */
+  readonly hcHandshakeTimeoutMs?: number | undefined;
   /** Registers typed-code pairing slots; defaults to the relay uplink when there is one. */
   readonly pairingSlots?: PairingSlotRegistrar | undefined;
   /** Keeps an authenticated uplink to this relay and answers E2EE sessions through it; needs `stateDir`. */
