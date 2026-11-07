@@ -89,11 +89,15 @@ static void Emit(DFSession *session, const char *kind, const char *code, NSStrin
 }
 
 static void StopAudio(DFSession *session) {
+  // Each call is guarded on its own: a tap that cannot be removed (the device went away under the engine) must not
+  // leave the engine, and the system's microphone indicator, running until the session object is freed.
   @try {
     if (session.tapped) [session.engine.inputNode removeTapOnBus:0];
+  } @catch (NSException *exception) {
+  }
+  @try {
     if (session.engine.isRunning) [session.engine stop];
   } @catch (NSException *exception) {
-    // The device went away under the engine; there is nothing left to stop.
   }
   session.tapped = NO;
 }
