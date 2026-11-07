@@ -1,4 +1,5 @@
-import { base64urlEncode, type SecureLink, SessionKind } from "@doriface/crypto";
+import { base64urlEncode, CloseCode, type SecureLink, SessionKind } from "@doriface/crypto";
+import { requireWithin } from "@doriface/policy";
 import type { WebSocketHandler } from "bun";
 import { type Context, Hono, type Next } from "hono";
 import { type BunWebSocketData, upgradeWebSocket } from "hono/bun";
@@ -10,6 +11,7 @@ import { acceptE2ee, type E2eeDeps, type E2eeTransport } from "./e2ee/accept.ts"
 import { meshPeer } from "./e2ee/authorize.ts";
 import { firstLineRefusal, gateHello } from "./e2ee/first-line.ts";
 import { type E2eeWire, plaintextLink, WsByteLink } from "./e2ee/links.ts";
+import { type SpeculativeHello, withoutFirstLine } from "./e2ee/speculative-hello.ts";
 import type { LiveSessions } from "./e2ee/sessions.ts";
 import type { Link } from "./link.ts";
 import type { AuthorizeIndex } from "./mesh/authorize-index.ts";
@@ -36,6 +38,8 @@ export interface GatewayOptions {
         readonly meshPresence?: MeshStreamHandler;
       })
     | undefined;
+  /** Answers an early hello before key confirmation, within its own budget (#1271); absent, every hello waits. */
+  readonly speculative?: Pick<SpeculativeHello, "answer" | "settle"> | undefined;
   /** For tests: the direct-path idle close (default {@link DIRECT_IDLE_MS}). */
   readonly directIdleMs?: number | undefined;
   /** Serves a device's push stream (`stream:"push"`, and `/v1/push` on loopback); without it both are refused. */
@@ -179,15 +183,35 @@ export function createGateway(options: GatewayOptions): Gateway {
 
   const serveE2ee = async (wire: E2eeWire, transport: E2eeTransport): Promise<void> => {
     if (e2ee === undefined) throw new Error("end-to-end encryption needs a state dir");
-    const secure = await acceptE2ee(wire, e2ee, transport);
+    const secure = await acceptE2ee(wire, { ...e2ee, speculative: options.speculative }, transport);
     if (secure === undefined) return;
     e2ee.meshPresence?.(secure);
     if (secure.stream === "mesh") return serveMesh(secure);
     if (secure.stream === "push") return servePush(secure);
-    e2ee.sessions.add(secure);
+    if (!admitHc(secure)) return;
     const gate = hcGate(secure);
     if (gate === undefined) return;
-    pipeTo(gate(plaintextLink(secure, wire)), (code, reason) => secure.close(code, reason));
+    const link = gate(plaintextLink(secure, wire));
+    const answered = options.speculative?.settle(secure) === "answered";
+    pipeTo(answered ? withoutFirstLine(link) : link, (code, reason) => secure.close(code, reason));
+  };
+
+  /**
+   * Admission, the barrier before any byte of a proven session reaches hc: in one synchronous step it re-checks the plan's
+   * session room against the sessions admitted now (message 1's check can be raced by another handshake) and registers
+   * the session, which re-checks revocation. Nothing is piped for a session that fails either (#1271).
+   */
+  const admitHc = (secure: SecureLink): boolean => {
+    if (e2ee === undefined) return false;
+    if (secure.kind === SessionKind.Session) {
+      const room = requireWithin(e2ee.policy, "sessions", e2ee.sessions.count());
+      if (!room.allowed) {
+        log(`plan: refused a session at admission: ${room.message}`);
+        secure.close(CloseCode.RateLimited, room.message);
+        return false;
+      }
+    }
+    return e2ee.sessions.add(secure);
   };
 
   /** A join is no member's session yet, so only a member's sync session is registered for revocation. */

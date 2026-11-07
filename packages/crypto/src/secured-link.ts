@@ -42,7 +42,6 @@ export class SecuredLink implements SecureLink {
   #draining = false;
   #closed = false;
   #closeError: Error | undefined;
-  readonly #proven = Promise.withResolvers<void>();
 
   constructor(link: ByteLink, transport: Transport, info: SessionInfo) {
     this.#link = link;
@@ -91,11 +90,6 @@ export class SecuredLink implements SecureLink {
     this.#link.close(code, reason);
   }
 
-  /** Resolves once a record from the peer authenticated: the peer holds the session's keys, so no replay sent it. */
-  get proven(): Promise<void> {
-    return this.#proven.promise;
-  }
-
   /** Hands bytes that arrived inside the handshake (IK early data) to the first data listener. */
   hold(bytes: Uint8Array): void {
     this.#enqueue(bytes);
@@ -111,7 +105,6 @@ export class SecuredLink implements SecureLink {
       this.fail(new SecureLinkError(CloseCode.CryptoFailure, "record failed authentication", { cause: error }));
       return;
     }
-    this.#proven.resolve();
     this.#enqueue(plaintext);
     this.#drain();
   }

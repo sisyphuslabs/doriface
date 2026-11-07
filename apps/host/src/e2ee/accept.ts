@@ -18,6 +18,7 @@ import type { DeviceStore } from "../state/devices.ts";
 import type { MeshStore } from "../state/mesh.ts";
 import type { ClaimRefusal, PairingClaim, PairingStore } from "../state/pairing.ts";
 import { authorizationOf, sessionPeer } from "./authorize.ts";
+import type { SpeculativeHello } from "./speculative-hello.ts";
 
 /** Where a session arrived: the direct listener, or a relay session (`openSlot` is the slot a `?pair` session named). */
 export type E2eeTransport =
@@ -39,6 +40,8 @@ export interface E2eeDeps {
   readonly policy: PlanPolicy;
   /** How many sessions this host serves now, for a plan's concurrent-session limit. */
   readonly live: { readonly count: () => number };
+  /** Answers an early hello before key confirmation, within its own budget (#1271); absent, every hello waits. */
+  readonly speculative?: Pick<SpeculativeHello, "answer"> | undefined;
 }
 
 const refuse = (closeCode: number, reason: string): Authorization => ({ accept: false, closeCode, reason });
@@ -46,9 +49,8 @@ const refuse = (closeCode: number, reason: string): Authorization => ({ accept: 
 const HELLO_LINE = new TextEncoder().encode(HELLO_REQUEST_LINE);
 
 /**
- * The one early payload this host acts on before the client confirms the keys: the exact framed hello every client
- * sends first, which names no core and so changes nothing in hc. A replayed message 1 gets at most this hello run on a
- * fresh `hc connect`, an answer sealed to keys it cannot derive, and a close at the confirmation deadline (#1271).
+ * The one early payload this host may answer before the client confirms the keys: the exact framed hello every client
+ * sends first, which names no core. Anything else waits for admission, as every byte after it does (#1271).
  */
 const isHelloLine = (early: Uint8Array): boolean =>
   early.byteLength === HELLO_LINE.byteLength && early.every((byte, index) => byte === HELLO_LINE[index]);
@@ -139,7 +141,9 @@ export async function acceptE2ee(
       authorize,
       lanUrls: deps.lanUrls,
       rekeyInterval: deps.rekeyInterval,
-      earlyBeforeConfirm: isHelloLine,
+      answerEarly: (early, session) => {
+        if (isHelloLine(early)) deps.speculative?.answer(early, session);
+      },
     });
   } catch (error) {
     deps.log(`e2ee handshake refused: ${error instanceof Error ? error.message : String(error)}`);

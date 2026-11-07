@@ -64,12 +64,12 @@ export interface ResponderOptions extends CommonOptions {
   /** IP-literal `ws://…/v1/e2ee` URLs for message 2 (at most 8). */
   readonly lanUrls?: readonly string[] | undefined;
   /**
-   * Session only: whether these IK early bytes may be acted on before the client confirms the keys, which a replayed
-   * message 1 never does. When true, the session resolves as message 2 goes out, holding them for its first listener,
-   * so their answer travels with message 2 instead of a round trip later (#1271); the client then has the handshake's
-   * deadline to confirm, or the session closes with 4408. Any other early bytes wait for the confirmation, as before.
+   * Session only, once message 2 has gone out: the host may answer these IK early bytes before the client confirms the
+   * keys, by sealing its answer with `session.send` (#1271). `session` is not established yet: only `send` may be called
+   * on it, never `onData`. The early bytes are still held for the session's first listener, and the session still
+   * resolves only on the client's confirmation, within the same absolute handshake deadline.
    */
-  readonly earlyBeforeConfirm?: ((early: Uint8Array) => boolean) | undefined;
+  readonly answerEarly?: ((early: Uint8Array, session: SecureLink) => void) | undefined;
   /** For tests only: fixed randomness. */
   readonly testRandomness?: HostFlightTestOptions | undefined;
 }
@@ -183,17 +183,6 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
     void start(EMPTY);
   }
 
-  /** A session resolved before its keys were confirmed closes with 4408 unless an authenticated record arrives in time. */
-  function awaitConfirmation(secured: SecuredLink): void {
-    const deadline = setTimeout(
-      () => secured.fail(failure(CloseCode.IdleTimeout, "the keys were not confirmed in time")),
-      options.timeoutMs ?? HANDSHAKE_TIMEOUT_MS,
-    );
-    const settle = (): void => clearTimeout(deadline);
-    void secured.proven.then(settle);
-    secured.onClose(settle);
-  }
-
   function runResponder(opts: ResponderOptions): void {
     let pending: SecuredLink | undefined;
     const confirm = guarded(async (record) => {
@@ -223,15 +212,9 @@ export function secureLink(link: ByteLink, options: SecureLinkOptions): Promise<
       );
       pending = establish(message.kind, handshake, { peerName: name, lanUrls: [], stream: hello.stream });
       if (hello.kind === "session") pending.hold(hello.early);
-      if (hello.kind === "session" && opts.earlyBeforeConfirm?.(hello.early) === true) {
-        const early = pending;
-        resolve(early);
-        link.send(reply);
-        awaitConfirmation(early);
-        return;
-      }
       step = confirm;
       link.send(reply);
+      if (hello.kind === "session" && hello.early.byteLength > 0) opts.answerEarly?.(hello.early, pending);
     });
   }
 }

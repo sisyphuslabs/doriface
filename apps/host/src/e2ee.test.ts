@@ -317,6 +317,24 @@ describe("/v1/e2ee against a real hc", () => {
     expect(code).toBe(CloseCode.IdleTimeout);
   });
 
+  test("with every speculative slot held by unconfirmed hellos, a fifth client is not kept waiting: its hello is answered once and its RPC carried", async () => {
+    const hello = new TextEncoder().encode(HELLO_REQUEST_LINE);
+    const held = [0, 1, 2, 3].map(() => unconfirmed(hello));
+    const client = await openE2eeClient(endpoint().url, {
+      hostId: pairing.hostId,
+      staticKey: rawStaticKey(device),
+      remoteStatic: pairing.noiseStaticPub,
+      early: hello,
+    });
+    expect(JSON.parse(new TextDecoder().decode(await client.reader.line())).result.framed).toBe(true);
+    client.link.send(rpcFrame(1, "terminal.list"));
+    expect(new TextDecoder().decode(await client.reader.frame())).toContain('"id":1');
+    client.link.close();
+    const unanswered = await Promise.all(held);
+    expect(unanswered.every(({ code }) => code === CloseCode.IdleTimeout)).toBe(true);
+    expect(unanswered.filter(({ answer }) => answer.length > 0).length).toBeLessThanOrEqual(4);
+  });
+
   test("devices revoke closes the live session with 4401 and refuses the next one", async () => {
     const live = await dial(device);
     live.link.send(HELLO);
