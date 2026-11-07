@@ -1,4 +1,6 @@
+import { HELLO_REQUEST_LINE } from "@doriface/client";
 import {
+  type ByteLink,
   CloseCode,
   generateX25519,
   type KeyPair,
@@ -9,6 +11,7 @@ import {
   pairingSlotOf,
   parsePairingUrl,
   SecureLinkError,
+  secureLink,
   SessionKind,
 } from "@doriface/crypto";
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
@@ -116,6 +119,47 @@ const dial = (staticKey: KeyPair, pairingWith?: PairingSecret) =>
     remoteStatic: pairing.noiseStaticPub,
     pairing: pairingWith,
   });
+
+/**
+ * A session whose client never confirms the keys, as a replayed message 1 would be: every send after message 1 is
+ * dropped. `early` rides in message 1. Resolves with what the host sent back after message 2, and the close code.
+ */
+async function unconfirmed(early: Uint8Array): Promise<{ readonly answer: Uint8Array[]; readonly code: number }> {
+  const socket = new WebSocket(endpoint().url);
+  socket.binaryType = "arraybuffer";
+  const closed = new Promise<number>((resolve) => socket.addEventListener("close", (event) => resolve(event.code)));
+  await new Promise<void>((resolve) => socket.addEventListener("open", () => resolve(), { once: true }));
+  let sent = 0;
+  const answer: Uint8Array[] = [];
+  const link: ByteLink = {
+    send: (bytes) => {
+      sent += 1;
+      if (sent === 1) socket.send(bytes);
+    },
+    onData(listener) {
+      const handle = (event: MessageEvent<unknown>): void => {
+        if (event.data instanceof ArrayBuffer) listener(new Uint8Array(event.data));
+      };
+      socket.addEventListener("message", handle);
+      return () => socket.removeEventListener("message", handle);
+    },
+    onClose: () => () => undefined,
+    close: (code, reason) => socket.close(code, reason),
+  };
+  const secure = await secureLink(link, {
+    role: "initiator",
+    hostId: pairing.hostId,
+    staticKey: rawStaticKey(device),
+    remoteStatic: pairing.noiseStaticPub,
+    early,
+  });
+  secure.onData((bytes) => answer.push(bytes));
+  return { answer, code: await closed };
+}
+
+/** A plain-mode JSON-RPC line that is not a hello. */
+const rpcFrameLine = (method: string): Uint8Array =>
+  new TextEncoder().encode(`${JSON.stringify({ jsonrpc: "2.0", id: 7, method })}\n`);
 
 async function refusal(attempt: Promise<E2eeClient>): Promise<number | undefined> {
   const error = await attempt.then(
@@ -258,6 +302,19 @@ describe("/v1/e2ee against a real hc", () => {
     client.link.send(HELLO);
     expect(JSON.parse(new TextDecoder().decode(await client.reader.line())).result.framed).toBe(true);
     client.link.close();
+  });
+
+  test("hc's hello in message 1 is answered with message 2, before the keys are confirmed (#1271)", async () => {
+    const { answer, code } = await unconfirmed(new TextEncoder().encode(HELLO_REQUEST_LINE));
+    const reply = JSON.parse(new TextDecoder().decode(Buffer.concat(answer)).split("\n")[0] ?? "");
+    expect(reply.result.framed).toBe(true);
+    expect(code).toBe(CloseCode.IdleTimeout);
+  });
+
+  test("early bytes other than the hello line still wait for the confirmation, so an unconfirmed session gets nothing", async () => {
+    const { answer, code } = await unconfirmed(rpcFrameLine("terminal.list"));
+    expect(answer).toEqual([]);
+    expect(code).toBe(CloseCode.IdleTimeout);
   });
 
   test("devices revoke closes the live session with 4401 and refuses the next one", async () => {

@@ -15,6 +15,10 @@
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
 
+### Connection
+
+- Connecting to a machine, and reconnecting after a drop or a wake, takes one round trip less: the first terminal call rides in the encrypted handshake and its answer comes back with the host's reply, about 0.2 s sooner on a far machine. The host acts on nothing else before the keys are confirmed. (#1271)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window

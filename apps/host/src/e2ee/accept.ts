@@ -11,6 +11,7 @@ import {
   secureLink,
   SessionKind,
 } from "@doriface/crypto";
+import { HELLO_REQUEST_LINE } from "@doriface/client";
 import { OPEN_POLICY, type PlanPolicy, requireFeature, requireWithin } from "@doriface/policy";
 import type { AuthorizeIndex } from "../mesh/authorize-index.ts";
 import type { DeviceStore } from "../state/devices.ts";
@@ -41,6 +42,16 @@ export interface E2eeDeps {
 }
 
 const refuse = (closeCode: number, reason: string): Authorization => ({ accept: false, closeCode, reason });
+
+const HELLO_LINE = new TextEncoder().encode(HELLO_REQUEST_LINE);
+
+/**
+ * The one early payload this host acts on before the client confirms the keys: the exact framed hello every client
+ * sends first, which names no core and so changes nothing in hc. A replayed message 1 gets at most this hello run on a
+ * fresh `hc connect`, an answer sealed to keys it cannot derive, and a close at the confirmation deadline (#1271).
+ */
+const isHelloLine = (early: Uint8Array): boolean =>
+  early.byteLength === HELLO_LINE.byteLength && early.every((byte, index) => byte === HELLO_LINE[index]);
 
 /** A withdrawal the plan caused: the person reads the plan's own words, and the host's log records them. */
 const planRefusal = (deps: E2eeDeps, code: number, what: string, message: string): Authorization => {
@@ -128,6 +139,7 @@ export async function acceptE2ee(
       authorize,
       lanUrls: deps.lanUrls,
       rekeyInterval: deps.rekeyInterval,
+      earlyBeforeConfirm: isHelloLine,
     });
   } catch (error) {
     deps.log(`e2ee handshake refused: ${error instanceof Error ? error.message : String(error)}`);
