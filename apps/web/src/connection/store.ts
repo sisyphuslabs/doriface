@@ -31,8 +31,11 @@ export type ConnectionState =
       readonly connection: HcConnection;
       readonly path: ConnectionPath;
       readonly directReason?: DirectReason | undefined;
-      /** How long this attempt took to open the session, measured on this device from its start (#637). */
-      readonly connectMs: number;
+      /**
+       * How long this attempt took to open the session, measured on this device from its start (#637). Absent when this
+       * store did not dial the session itself (one pairing proved and handed over, #1271): no figure rather than a guess.
+       */
+      readonly connectMs?: number | undefined;
     }
   /** This computer's host did not start: nothing is tried until a start succeeds. */
   | { readonly phase: "host-failed"; readonly failure: HostStartFailure }
@@ -192,28 +195,8 @@ export class ConnectionStore {
         this.#connect(this.#settings, abort.signal, undefined, relayFirst ? { skipDirect: true } : {}),
         abort,
       );
-      const { connection } = opened;
-      if (abort.signal.aborted) return connection.close();
-      this.#rememberName(connection);
-      connection.onClose((error) => {
-        if (this.#abort !== abort) return;
-        if (opened.path === "direct") this.#relayFirst = true;
-        this.#stale = connection;
-        const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
-        this.#closedFor = null;
-        const reason = error ?? closedFor ?? new Error("the host closed the connection");
-        this.#retry(reason, this.#stable ? 0 : attempt + 1);
-      });
-      this.#stale = null;
-      this.#budget.reset();
-      this.#armStable();
-      this.#set({
-        phase: "open",
-        connection,
-        path: opened.path,
-        ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
-        connectMs: Date.now() - started,
-      });
+      if (abort.signal.aborted) return opened.connection.close();
+      this.#opened(opened, abort, attempt, Date.now() - started);
     } catch (error) {
       if (this.#abort !== abort) return;
       if (error instanceof AttemptTimeoutError) {
@@ -224,6 +207,46 @@ export class ConnectionStore {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * Takes a session that is already open as this store's connection, as a dial that just succeeded: pairing proves one,
+   * and dialing again for the workspace cost a relay socket, a Noise handshake and a hello more (#1271). A drop then
+   * reconnects as any other drop does.
+   */
+  adopt(opened: OpenConnection, settings?: ConnectionSettings): void {
+    this.stop();
+    if (settings !== undefined) this.#settings = lockRelay(settings);
+    this.#relayFirst = false;
+    const abort = new AbortController();
+    this.#abort = abort;
+    this.#current = 0;
+    this.#opened(opened, abort, 0);
+  }
+
+  /** A connection this store now runs on: named, watched for its drop, and shown open with its open time when measured. */
+  #opened(opened: OpenConnection, abort: AbortController, attempt: number, connectMs?: number): void {
+    const { connection } = opened;
+    this.#rememberName(connection);
+    connection.onClose((error) => {
+      if (this.#abort !== abort) return;
+      if (opened.path === "direct") this.#relayFirst = true;
+      this.#stale = connection;
+      const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
+      this.#closedFor = null;
+      const reason = error ?? closedFor ?? new Error("the host closed the connection");
+      this.#retry(reason, this.#stable ? 0 : attempt + 1);
+    });
+    this.#stale = null;
+    this.#budget.reset();
+    this.#armStable();
+    this.#set({
+      phase: "open",
+      connection,
+      path: opened.path,
+      ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
+      ...(connectMs === undefined ? {} : { connectMs }),
+    });
   }
 
   /**

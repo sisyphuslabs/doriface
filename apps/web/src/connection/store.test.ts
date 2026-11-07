@@ -90,6 +90,14 @@ test("an open session carries how long its own attempt took to open it, measured
   store.stop();
 });
 
+test("a session pairing proved and handed over has no open time: this store did not dial it (#637, #1271)", () => {
+  const { connection } = standIn();
+  const store = new ConnectionStore(SETTINGS, () => Promise.reject(new Error("no dial: the session is adopted")));
+  store.adopt({ connection, path: "relay" });
+  expect(store.state).toEqual({ phase: "open", connection, path: "relay" });
+  store.stop();
+});
+
 test("a local host that did not start holds its cause and cancels the waiting retry, so no link is tried", async () => {
   jest.useFakeTimers();
   let attempts = 0;
