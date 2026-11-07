@@ -15,6 +15,10 @@
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
 
+### Pairing
+
+- Typing a pairing code looks its host up as soon as the first three characters are in, so the key check shows the moment the code is complete instead of most of a second later on a far relay; Pair asks the relay nothing more. (#1271)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
