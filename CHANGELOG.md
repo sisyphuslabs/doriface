@@ -8,6 +8,7 @@
 
 ### Terminal
 
+- Closing a pane or a tab takes it off the screen at once, also on a machine reached through the relay: the program still ends behind it, and if it does not, a notice says so and the session keeps running. Before, the tab stayed until the host had answered two round trips, a second or more on a far machine. (#1271)
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 - On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
 
