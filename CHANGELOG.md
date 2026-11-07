@@ -15,6 +15,10 @@
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
 
+### Settings
+
+- A disabled field, number stepper, switch or menu item is dimmed with its own colours instead of fading as a whole, so its text stays readable and a switch still shows whether it is on, in every theme. (#1034)
+
 ### Pairing
 
 - Typing a pairing code looks its host up as soon as the first three characters are in, so the key check shows the moment the code is complete instead of most of a second later on a far relay; Pair asks the relay nothing more. (#1271)
