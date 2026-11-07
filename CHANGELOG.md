@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Connection
+
+- When the app wakes and the host does not answer its check in time, the reconnect note says that check went unanswered instead of claiming the host sent no heartbeat. (#779)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
