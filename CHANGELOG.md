@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### First run
+
+- The first-run guide's last step, "See it in the agents list", completes when the terminal you started or opened on this device is in the list, not on any terminal the host already had, and a screen reader hears each step complete and "You're set". (#834)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
