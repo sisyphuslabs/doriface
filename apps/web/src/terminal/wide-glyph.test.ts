@@ -19,9 +19,9 @@ describe("wideGlyphScale", () => {
     expect(15 * wideGlyphScale(linear(15), jetbrains)).toBeCloseTo(20.8125, 2);
   });
 
-  test("the ideograph width is the smaller of the ASCII ink height and the two cells, as Ghostty takes it (#410)", () => {
-    expect(15 * wideGlyphScale(linear(15), capped)).toBeCloseTo(20.1, 2);
-    expect(23 * wideGlyphScale(linear(23), capped)).toBeCloseTo(20.1, 2);
+  test("the ideograph width is the two cells, whatever the ASCII ink height is (#410, prototype)", () => {
+    expect(15 * wideGlyphScale(linear(15), capped)).toBeCloseTo(20.8125, 2);
+    expect(23 * wideGlyphScale(linear(23), capped)).toBeCloseTo(20.8125, 2);
   });
 
   test("the ideograph width follows two primary cells when the ASCII ink is taller than them", () => {

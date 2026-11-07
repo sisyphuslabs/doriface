@@ -14,8 +14,10 @@ const rounded = (scale: number): number => Math.floor(scale * 10_000) / 10_000;
  * `advanceAt(scale)` is the advance of a full-width sample glyph of that face at `scale` times the terminal's size.
  *
  * Ghostty sizes a fallback face to its ideograph width, `min(asciiHeight, two cells)` (`font/Metrics.zig`, `icWidth`),
- * not to the two cells alone: filling the whole wide cell draws Hangul a third larger than the Latin beside it, and a
- * face that draws wide glyphs wider than the primary's ink height stands out as too large and too thin (#410).
+ * not to the two cells alone, because filling the whole wide cell was said to draw Hangul a third larger than the Latin
+ * beside it (#410). Measured here (13 px cell 8 px, Apple SD Gothic Neo): filling the cell takes Hangul's ink from 14 px
+ * to 16 px against an ASCII ink height of 13.13 px, so 1.22x rather than a third, and the ink density does not move
+ * (0.533 -> 0.523), so "too thin" was never the scale's doing. Prototype for the ruling on #410.
  *
  * A full-width sample sizes the whole fallback face to that width. A sample that already fills it, or is no wider than
  * one cell (a missing glyph), keeps its size. A grid with no layout to measure — a pane in a background tab reports a
@@ -29,7 +31,7 @@ export function wideGlyphScale(advanceAt: (scale: number) => number, primary: Pr
   const cells = 2 * primary.cell;
   if (!Number.isFinite(advance) || advance <= 0) return 1;
   if (!Number.isFinite(cells) || !(cells > 0)) return 1;
-  const target = primary.inkHeight > 0 ? Math.min(primary.inkHeight, cells) : cells;
+  const target = cells;
   if (!(advance > primary.cell) || (advance <= target && target - advance < 0.5)) return 1;
   const scale = rounded(target / advance);
   if (advanceAt(scale) <= target) return scale;
