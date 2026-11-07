@@ -34,6 +34,7 @@ test("production deploys only from dev, after staging was deployed and probed, f
   ]);
   expect(runs(staging)).not.toContain('bunx "$WRANGLER" deploy --env ""');
   expect(runs(production)).toEqual([
+    'bun .github/scripts/deploy-target.ts apps/web/wrangler.jsonc "" doriface-web app.doriterm.com doriface.omo.dev',
     'bunx "$WRANGLER" deploy --env ""',
     "bun .github/scripts/probe-web.ts https://app.doriterm.com",
     "bun .github/scripts/probe-web.ts https://doriface.omo.dev",
