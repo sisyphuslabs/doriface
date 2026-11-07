@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Pairing
 
 - A broken link made by `doriface-host mesh pair` says to run `doriface-host mesh pair` again, not `doriface-host pair`, and a typed code the host refuses says it may be a mesh invite, which `doriface-host mesh join` takes, instead of only that it was used. (#727)
