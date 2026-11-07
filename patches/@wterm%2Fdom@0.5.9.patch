@@ -23,7 +23,7 @@ index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02
      private handleCompositionEnd;
      private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651d45b3e0d 100644
+index 78a86ffd96eec03222777f40e9db6a0561684c3f..3093af6ad76416bd4d7fac79b86abaecfd6f055f 100644
 --- a/dist/input.js
 +++ b/dist/input.js
 @@ -70,6 +70,12 @@ const COMPOSITION_INPUT_DEDUP_MS = 250;
@@ -80,14 +80,14 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
          }
 -        if (this.composing || e.isComposing || e.keyCode === 229) {
 +        const composingKey = this.composing || e.isComposing || e.keyCode === 229;
-+        if (composingKey && !isComposingCtrlChord(e)) {
++        if (composingKey && !(isComposingCtrlChord(e) && this.chordEndsComposition())) {
              this.tabExitArmed = false;
              this.positionTextarea();
              this.suppressedKeyUps.add(keyId);
              return;
          }
 -        this.recentCompositionCommit = null;
-+        // A Ctrl chord on a letter key belongs to the program even while a syllable composes: the syllable is
++        // A Ctrl chord on a letter key belongs to the program even while a Korean syllable composes: the syllable is
 +        // committed first, as the Korean input method commits it for a native terminal, and then the chord is sent.
 +        const preedit = composingKey ? this.takeComposition() : "";
 +        if (preedit !== "")
@@ -173,7 +173,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
          this.composing = false;
          this.hideComposition();
          this.resetInputValue();
-@@ -485,6 +540,31 @@ export class InputHandler {
+@@ -485,6 +540,44 @@ export class InputHandler {
              this.onData(e.data);
          }
      }
@@ -190,10 +190,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
 +        }
 +        if (!this.composing)
 +            return "";
-+        const raw = this.textarea.value;
-+        const text = this.touchPrimary && raw.startsWith(TOUCH_INPUT_PLACEHOLDER)
-+            ? raw.slice(TOUCH_INPUT_PLACEHOLDER.length)
-+            : raw;
++        const text = this.composingText();
 +        this.composing = false;
 +        this.takenComposition = text;
 +        // A browser that commits the dropped composition as ordinary input repeats the text: that repeat is dropped.
@@ -202,10 +199,26 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
 +        this.resetInputValue();
 +        return text;
 +    }
++    /** The field's text while a composition is in progress: the input method's preedit. */
++    composingText() {
++        const raw = this.textarea.value;
++        return this.touchPrimary && raw.startsWith(TOUCH_INPUT_PLACEHOLDER)
++            ? raw.slice(TOUCH_INPUT_PLACEHOLDER.length)
++            : raw;
++    }
++    /**
++     * Whether a Ctrl chord pressed now ends what is composing rather than editing it. A Korean syllable is finished by
++     * any key that is not a jamo, so the chord is the program's; other input methods use Ctrl+letter on their own text
++     * (Japanese: Ctrl+K on macOS, Ctrl+U/I/O/P in Microsoft IME convert the word), so their chord stays with them. With
++     * no composition left (WebKit ends it before the key's keydown) the chord is the program's too.
++     */
++    chordEndsComposition() {
++        return !this.composing || HANGUL.test(this.composingText());
++    }
      hideComposition() {
          this.compositionWidth = 0;
          const s = this.textarea.style;
-@@ -502,7 +582,7 @@ export class InputHandler {
+@@ -502,7 +595,7 @@ export class InputHandler {
          if (!bridge || !cellSize || !firstRow || !bridge.getCursor) {
              this.textarea.style.left = "0px";
              this.textarea.style.top = "0px";
@@ -214,7 +227,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
                  this.textarea.style.width = `${Math.max(1, this.compositionWidth)}px`;
                  this.textarea.style.height = `${cellSize?.rowHeight ?? 17}px`;
              }
-@@ -519,7 +599,7 @@ export class InputHandler {
+@@ -519,7 +612,7 @@ export class InputHandler {
          const s = this.textarea.style;
          s.left = `${rowRect.left - hostRect.left - this.element.clientLeft + this.element.scrollLeft + col * charWidth}px`;
          s.top = `${rowRect.top - hostRect.top - this.element.clientTop + this.element.scrollTop + row * rowHeight}px`;
@@ -223,7 +236,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
              s.width = `${Math.min((bridge.getCols() - col) * charWidth, Math.max(charWidth, this.compositionWidth))}px`;
              s.height = `${rowHeight}px`;
          }
-@@ -536,6 +616,57 @@ export class InputHandler {
+@@ -536,6 +629,57 @@ export class InputHandler {
              : charWidth;
          this.positionTextarea();
      }
@@ -281,7 +294,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
      resetInputValue() {
          this.textarea.value = this.touchPrimary ? TOUCH_INPUT_PLACEHOLDER : "";
          if (this.touchPrimary)
-@@ -565,6 +696,18 @@ export class InputHandler {
+@@ -565,6 +709,18 @@ export class InputHandler {
          const value = this.touchPrimary && rawValue.startsWith(TOUCH_INPUT_PLACEHOLDER)
              ? rawValue.slice(TOUCH_INPUT_PLACEHOLDER.length)
              : rawValue;
@@ -300,7 +313,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
          this.resetInputValue();
          const recent = this.recentCompositionCommit;
          this.recentCompositionCommit = null;
-@@ -821,7 +964,7 @@ export class InputHandler {
+@@ -821,7 +977,7 @@ export class InputHandler {
                  return other;
          }
          if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -309,13 +322,13 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..883db21b9c039b2456db925694f06651
              if (control !== null)
                  return control;
              if (e.key === "Backspace")
-@@ -855,6 +998,24 @@ export class InputHandler {
+@@ -855,6 +1011,24 @@ export class InputHandler {
          return null;
      }
  }
 +/**
 + * A Ctrl chord on a physical letter key, which the browser reports as an input method's key (keyCode 229, or
-+ * `isComposing`) while a syllable composes: Chromium sends it before the input method's commit, WebKit after it.
++ * `isComposing`) while a word composes: Chromium sends it before the input method's commit, WebKit after it.
 + */
 +function isComposingCtrlChord(e) {
 +    return e.ctrlKey && !e.altKey && !e.metaKey && /^Key[A-Z]$/.test(e.code ?? "");
