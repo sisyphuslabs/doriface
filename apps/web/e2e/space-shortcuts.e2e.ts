@@ -8,6 +8,7 @@ import { expect, test } from "./fixtures.ts";
 import { paneOf, seedSpaces } from "./layout-doc.ts";
 import { hcOn } from "./machine-switch.ts";
 import { endOwnTerminals } from "./own-terminals.ts";
+import { pagePlatform, shortcut } from "./platform-keys.ts";
 
 test.use({ serviceWorkers: "block", viewport: { width: 1440, height: 900 } });
 
@@ -20,14 +21,14 @@ const spaceRow = (page: Page, name: string) =>
     .getByRole("complementary", { name: "Workspace" })
     .getByRole("region", { name: "Spaces" })
     .getByRole("button", { name: new RegExp(`^${name}\\b`) });
-const mac = (page: Page) => page.evaluate(() => /mac/i.test(navigator.platform));
+const mac = async (page: Page): Promise<boolean> => (await pagePlatform(page)) === "mac";
 
-/** The space number chord's modifier as the platform binds it: Ctrl on a Mac, Alt elsewhere (#702). */
-const numberMod = async (page: Page): Promise<string> => ((await mac(page)) ? "Control" : "Alt");
+/** The number chord that shows a space by its place, as the platform binds it: Ctrl+N on a Mac, Alt+N elsewhere (#702). */
+const spaceNumberChord = (page: Page, place: number): Promise<string> => shortcut(page, `space.select:${place}`);
 
-/** The cycle chord as the platform binds it: Cmd+Alt+[ / ] on a Mac, Ctrl+Alt+[ / ] elsewhere. */
-const cycle = async (page: Page, side: "[" | "]"): Promise<string> =>
-  `${(await mac(page)) ? "Meta" : "Control"}+Alt+${side}`;
+/** The cycle chord as the platform binds it: Cmd+Alt+[ / ] on a Mac, Ctrl+Shift+PageUp / PageDown elsewhere (#702). */
+const cycle = (page: Page, side: "[" | "]"): Promise<string> =>
+  shortcut(page, side === "]" ? "space.next" : "space.prev");
 
 /** A plain shell started straight on the core in `cwd`, named, so its tab reads that name. */
 function shellIn(cwd: string, name: string): string {
@@ -68,19 +69,18 @@ test("1: the number chord 2 shows the second space, and a number with no space i
   threeSpaces();
   await page.goto("/");
   await expect(tabBar(page)).toHaveText([/alpha-one/], { timeout: 20_000 });
-  const mod = await numberMod(page);
 
-  await pressOutsideTerminal(page, `${mod}+2`);
+  await pressOutsideTerminal(page, await spaceNumberChord(page, 2));
   await expect(tabBar(page)).toHaveText([/beta-one/]);
   await expect(selected(page)).toHaveText(/beta-one/);
 
   // herdr-app's space.select: an index with no space behind it leaves the space in view alone.
-  await pressOutsideTerminal(page, `${mod}+9`);
+  await pressOutsideTerminal(page, await spaceNumberChord(page, 9));
   await expect(tabBar(page)).toHaveText([/beta-one/]);
 
-  await pressOutsideTerminal(page, `${mod}+1`);
+  await pressOutsideTerminal(page, await spaceNumberChord(page, 1));
   await expect(tabBar(page)).toHaveText([/alpha-one/]);
-  await pressOutsideTerminal(page, `${mod}+3`);
+  await pressOutsideTerminal(page, await spaceNumberChord(page, 3));
   await expect(tabBar(page)).toHaveText([/gamma-one/]);
 });
 
@@ -153,7 +153,7 @@ test("3: a focused terminal program keeps the space number chord: the key reache
     });
   });
   const onMac = await mac(page);
-  await page.keyboard.press(onMac ? "Control+1" : "Alt+1");
+  await page.keyboard.press(await spaceNumberChord(page, 1));
   // Reaching this listener at all means the app left the key alone: a key it takes stops there. The terminal's own input
   // cancels Alt+1 itself, as it sends it to the program as a Meta digit, so only Ctrl+1 arrives uncancelled.
   expect(await page.evaluate(() => Reflect.get(window, "spaceKeySeen"))).toEqual({
@@ -177,7 +177,8 @@ test("4: Settings lists the space keys with the keys that run them, and says a t
     .click();
   const row = (action: string) => page.locator(`[id="keybinding-${action}"]`).locator("xpath=../..");
   const chips = (await mac(page))
-    ? { select: "⌃2", next: "⌘⌥]", previous: "⌘⌥[", ninth: "⌃9" }
+    ? // A Mac lists modifiers in its own order, Control, Option, Shift, Command (⌃⌥⇧⌘), whatever order they are typed in.
+      { select: "⌃2", next: "⌥⌘]", previous: "⌥⌘[", ninth: "⌃9" }
     : { select: "Alt2", next: "CtrlShiftPgDn", previous: "CtrlShiftPgUp", ninth: "Alt9" };
 
   await expect(row("space.select:2")).toContainText("Go to space 2");
