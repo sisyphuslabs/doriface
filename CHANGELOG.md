@@ -9,8 +9,13 @@
 
 ### Terminal
 
+- Closing a pane or a tab takes it off the screen at once, also on a machine reached through the relay: the program still ends behind it, and if it does not, a notice says so and the session keeps running. Before, the tab stayed until the host had answered two round trips, a second or more on a far machine. (#1271)
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 - On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
+
+### Workspace
+
+- Terminals a space takes in as tabs line up in the order they started: `t10` no longer comes before `t9`, so a terminal opened from the sidebar shows in the tab it started in. (#1269)
 
 ### Notifications
 
@@ -30,6 +35,10 @@
 ### Pairing
 
 - After you confirm a pairing, the workspace opens on the session the pairing just proved instead of reconnecting through the relay, so a newly added machine shows its terminals about a round trip and a handshake sooner (most of a second on a far machine). (#1271)
+
+### Settings
+
+- Settings is one place per question: this device, your machines, and pairing sit on their own screens with the same names everywhere, so each machine shows whether this host has a session open to it now, and this device shows how it reaches the host. (#772)
 
 ### Connection
 
