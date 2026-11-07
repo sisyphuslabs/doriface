@@ -124,11 +124,23 @@ afterEach(() => {
 });
 
 describe("one connection per member", () => {
-  it("starts every member again when asked, which is what the first-connect Try now button calls", () => {
+  it("starts a failed member again when asked, which is what the first-connect Try now button calls", () => {
     const { mesh, made } = running(settingsWith([member("a")], "a"));
     expect(made[0]?.started).toBe(1);
+    made[0]?.fail();
     mesh.start();
     expect(made[0]?.started).toBe(2);
+  });
+
+  it("a second start leaves an open member and a connecting one alone (#1005)", () => {
+    const { mesh, made } = running(settingsWith([member("a"), member("b"), member("c")], "a"));
+    const [failed, open, connecting] = made;
+    failed?.fail();
+    connecting?.connecting();
+    mesh.start();
+    expect(failed?.started).toBe(2);
+    expect([open?.started, open?.stopped, open?.state.phase]).toEqual([1, 0, "open"]);
+    expect([connecting?.started, connecting?.stopped, connecting?.state.phase]).toEqual([1, 0, "connecting"]);
   });
 
   it("dials again after restoring stops it, even when the endpoint did not change", () => {
