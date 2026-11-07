@@ -15,6 +15,10 @@
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
 
+### Settings
+
+- A disabled field, number stepper, switch or menu item is dimmed with its own colours instead of fading as a whole, so its text stays readable and a switch still shows whether it is on, in every theme. (#1034)
+
 ### Connection
 
 - Connecting to a machine, and reconnecting after a drop or a wake, takes one round trip less: the first terminal call rides in the encrypted handshake and its answer comes back with the host's reply, about 0.2 s sooner on a far machine. The host acts on nothing else before the keys are confirmed. (#1271)
