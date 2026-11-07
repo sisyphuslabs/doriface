@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Settings
 
 - In a browser, the text-size keys Settings > Appearance shows step the terminals' text while Settings is open, as they do in the desktop app, and resizing the window between the Settings dialog and the full-screen sheet keeps the open section and a shortcut being recorded. (#859)
