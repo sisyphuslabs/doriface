@@ -10,6 +10,7 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 - On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
+- Ctrl+C, Ctrl+A and every other Ctrl+letter chord pressed in the middle of a Korean syllable reach the program: the syllable is committed first, then the chord's control byte, in Chromium's order (the key before the input method's commit) and in Safari's (the commit before the key). Another input method's Ctrl keys, such as Japanese conversion, stay with it. (#748)
 
 ### Notifications
 
