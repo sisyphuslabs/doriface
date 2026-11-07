@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cmd+/ (Ctrl+? on Linux and Windows) opens a Keyboard shortcuts dialog listing your own keys, grouped as in Settings > Keybindings; the same chord closes it, and the command palette lists it too. (#733)
+
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
