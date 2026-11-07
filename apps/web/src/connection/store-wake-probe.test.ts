@@ -265,6 +265,10 @@ test("a probe's reason stays with its own connection: a later plain close is not
   const failed = settled(store, "failed");
   second.hostCloses();
   await failed;
-  expect(store.state.phase === "failed" && store.state.error.name).not.toBe("HcLinkSilentError");
+  // Neither the wake probe's reason nor a silent link: the later close carries its own reason.
+  const error = store.state.phase === "failed" ? store.state.error : undefined;
+  expect(error).toBeDefined();
+  expect(error).not.toBeInstanceOf(WakeProbeUnansweredError);
+  expect(error?.name).not.toBe("HcLinkSilentError");
   store.stop();
 });
