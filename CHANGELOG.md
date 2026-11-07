@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Notifications
+
+- A gateway that is not an address no longer leaves notifications silently behind: Settings, Notifications says the move to the new host failed, and notifications stay with the host they were on. (#890)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
