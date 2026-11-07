@@ -33,7 +33,9 @@ test("a run that answers after a menu was opened leaves the keyboard in the menu
   await expect.poll(writes, { timeout: 15_000 }).toBeGreaterThan(writesBefore);
   const address = await page.evaluate(() => {
     const ids = [...document.querySelectorAll("[data-terminal]")].map((el) => el.getAttribute("data-terminal") ?? "");
-    return ids.toSorted((a, b) => Number(b.slice(1)) - Number(a.slice(1)))[0] ?? "";
+    // hc numbers terminals t1 ... t19, t1b, t1c ... (digits, then letters in order): a longer id is newer, and ids of
+    // one length order as text. Number("1b") is NaN, so a numeric sort picks any of them once a core passes t19.
+    return ids.toSorted((a, b) => b.length - a.length || (a < b ? 1 : a > b ? -1 : 0))[0] ?? "";
   });
   await expect(page.locator(`[data-terminal="${address}"][data-ready="true"]`).first()).toContainText("$", {
     timeout: 15_000,
