@@ -12,6 +12,10 @@
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 - On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
 
+### Workspace
+
+- Terminals a space takes in as tabs line up in the order they started: `t10` no longer comes before `t9`, so a terminal opened from the sidebar shows in the tab it started in. (#1269)
+
 ### Notifications
 
 - The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
