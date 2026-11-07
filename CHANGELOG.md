@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Phone
+
+- Tapping a notification while a terminal is open on a phone switches to its terminal in place, so one Back reaches the list instead of an extra list entry. (#999)
+
 ### From the phone
 
 - Back in the installed app walks out of a terminal to your agents list and only leaves the app from the list, so a
