@@ -67,7 +67,9 @@ export function classify(ocrText: string): Verdict {
   return { ok: findings.length === 0, findings };
 }
 
-async function ocr(path: string): Promise<string> {
+/** The text a capture shows: an SVG's own character data (OCR cannot read one), any other image's OCR. */
+export async function captureText(path: string): Promise<string> {
+  if (/\.svg$/i.test(path)) return (await Bun.file(path).text()).replace(/<[^>]*>/g, " ");
   const result = await $`tesseract ${path} -`
     .env({ ...process.env, OMP_THREAD_LIMIT: "1" })
     .quiet()
@@ -99,7 +101,7 @@ if (import.meta.main) {
   const limit = Math.max(1, Math.min(8, cpus().length));
   const verdicts = await mapWithLimit(images, limit, async (image) => ({
     image,
-    verdict: classify(await ocr(image)),
+    verdict: classify(await captureText(image)),
   }));
   let failed = 0;
   for (const { image, verdict } of verdicts) {

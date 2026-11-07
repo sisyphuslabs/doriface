@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Adding a machine
 
 - A machine that joins through **Add a machine** while the host's own line to its core is reconnecting is shown as joined once the line is back, instead of the offer reading expired, and a computer clock set back during the offer no longer leaves its link up past the offer's end. (#834)
