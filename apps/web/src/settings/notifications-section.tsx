@@ -44,7 +44,7 @@ const desktop = desktopNotices !== null;
 const REMEDY =
   "Allow Doriterm in your system's notification settings (on macOS: System Settings > Notifications > Doriterm), then check again.";
 
-/** The agents already in a wanted state when the feed was read: the trigger announces changes from now on, never these. */
+/** The agents in a wanted state as the feed last told, kept live: the trigger announces changes, never a state already held. */
 function waitingText(view: PushView): string {
   if (view.waiting === null) return "";
   if (view.waiting === 0) return " No agent is waiting right now; you hear about changes from now on.";
@@ -179,7 +179,13 @@ export function NotificationsSection() {
         />
         <SettingRow
           title="Send a test notification"
-          description={view.tested ? "Sent. It should appear in a moment." : "Checks that this device gets them."}
+          description={
+            view.tested
+              ? "Sent. It should appear in a moment."
+              : desktop
+                ? "Runs the checks an agent's notification from this computer passes, then shows one."
+                : "Checks that this device gets them."
+          }
           control={
             <Button disabled={off} onClick={() => void settings.test()}>
               Send test
