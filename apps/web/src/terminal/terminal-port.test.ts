@@ -15,7 +15,8 @@ function composing(syllable: string) {
   };
   const handle = { current: { instance } as unknown as TerminalHandle };
   const send = (data: unknown): void => void order.push(`send:${String(data)}`);
-  const pasteFiles = (files: readonly File[]): void => void order.push(`files:${files.map((file) => file.name).join(",")}`);
+  const pasteFiles = (files: readonly File[]): void =>
+    void order.push(`files:${files.map((file) => file.name).join(",")}`);
   return { port: portOf(handle, send, pasteFiles), order };
 }
 

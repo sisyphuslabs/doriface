@@ -121,7 +121,7 @@ describe("putFiles", () => {
 
   test("a refused size never reads as the limit or under it (#827)", async () => {
     const { connection } = core();
-    const sizes = [MAX_PUT_BYTES + 1, MAX_PUT_BYTES + (1 << 20) / 10, 9 << 20];
+    const sizes = [MAX_PUT_BYTES + 1, MAX_PUT_BYTES + 104_857, 9 << 20];
     const sent = await putFiles(
       connection,
       "t1",
