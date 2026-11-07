@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Machine mesh
+
+- When the desktop app restarts this computer's own host, only that connection is dialled again: the sessions open on your other machines stay open instead of closing and reconnecting. (#1140)
+
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
