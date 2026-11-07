@@ -1,8 +1,19 @@
 import { HcConnection } from "@doriface/client";
 import { HcRpcError, type JsonValue, MESH_OFFER_DOC, parseMeshOfferDoc } from "@doriface/protocol";
+import { type Clock, monotonicClock } from "./clock.ts";
 import { type ChildByteLink, type HcTarget, spawnHcLink } from "./hc-machines.ts";
 
-const RETRY_MS = 5_000;
+export const RETRY_MS = 5_000;
+
+/** The service's two clocks, injectable so a test drives them. */
+export interface MeshOfferTime {
+  /** Wall time: an offer's `expiresAt` is a wall time, and a join is admitted while this is before it (join-dial). */
+  readonly wallNow: () => number;
+  /** Runs the expiry and reconnect timers. */
+  readonly clock: Clock;
+}
+
+const systemTime: MeshOfferTime = { wallNow: () => Date.now(), clock: monotonicClock };
 
 export interface MeshOffer {
   /** The mesh link `doriface-host mesh join` takes. */
@@ -33,10 +44,10 @@ async function write(connection: HcConnection, value: JsonValue, version: number
 
 // An answered link whose offer has expired becomes `expired`; read on every connect and doc event too, so a timer
 // lost with its connection or its host still ends with the link gone.
-async function dropIfExpired(connection: HcConnection): Promise<void> {
+async function dropIfExpired(connection: HcConnection, now: number): Promise<void> {
   const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
   const current = parseMeshOfferDoc(doc.value);
-  if (current === undefined || !("link" in current) || current.expiresAt > Date.now()) return;
+  if (current === undefined || !("link" in current) || current.expiresAt > now) return;
   await write(connection, { request: current.request, expired: true }, doc.version);
 }
 
@@ -55,32 +66,30 @@ export function serveMeshOffers(
   ) => () => void,
   open: () => Promise<MeshOffer>,
   openLink: (core: HcTarget) => OfferLink = spawnHcLink,
+  time: MeshOfferTime = systemTime,
 ): MeshOfferService {
   const first = Promise.withResolvers<void>();
   let stopped = false;
   let link: OfferLink | undefined;
   let linkOpen = false;
   let exited: Promise<void> = Promise.resolve();
-  let retryTimer: ReturnType<typeof setTimeout> | undefined;
-  const expiries = new Set<ReturnType<typeof setTimeout>>();
+  let cancelRetry: (() => void) | undefined;
+  const expiries = new Set<() => void>();
   const follows = new Set<() => void>();
   let answering: string | undefined;
   // The line timers and joins write through: the one up now, so a reconnect does not strand them on a closed one.
   let live: HcConnection | undefined;
 
   const expire = (expiresAt: number, unfollow: () => void): void => {
-    const timer = setTimeout(
-      () => {
-        expiries.delete(timer);
-        unfollow();
-        if (live !== undefined)
-          void dropIfExpired(live).catch((error: unknown) =>
-            log(`mesh offer: cannot drop the expired link: ${String(error)}`),
-          );
-      },
-      Math.max(0, expiresAt - Date.now()),
-    );
-    expiries.add(timer);
+    const cancel = time.clock.after(Math.max(0, expiresAt - time.wallNow()), () => {
+      expiries.delete(cancel);
+      unfollow();
+      if (live !== undefined)
+        void dropIfExpired(live, time.wallNow()).catch((error: unknown) =>
+          log(`mesh offer: cannot drop the expired link: ${String(error)}`),
+        );
+    });
+    expiries.add(cancel);
   };
 
   // The offer admits once: the first join on it replaces the link with who joined, so the asking client can say so.
@@ -106,7 +115,7 @@ export function serveMeshOffers(
   };
 
   const answer = async (connection: HcConnection): Promise<void> => {
-    await dropIfExpired(connection);
+    await dropIfExpired(connection, time.wallNow());
     const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
     const current = parseMeshOfferDoc(doc.value);
     if (current === undefined || Object.keys(current).length > 1 || answering === current.request) return;
@@ -130,7 +139,7 @@ export function serveMeshOffers(
   };
 
   const retry = (): void => {
-    if (!stopped) retryTimer = setTimeout(() => void connect(), RETRY_MS);
+    if (!stopped) cancelRetry = time.clock.after(RETRY_MS, () => void connect());
   };
 
   const connect = async (): Promise<void> => {
@@ -175,8 +184,8 @@ export function serveMeshOffers(
     ready: first.promise,
     stop() {
       stopped = true;
-      clearTimeout(retryTimer);
-      for (const timer of expiries) clearTimeout(timer);
+      cancelRetry?.();
+      for (const cancel of expiries) cancel();
       expiries.clear();
       for (const stop of follows) stop();
       follows.clear();
