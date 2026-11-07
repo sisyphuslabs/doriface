@@ -31,6 +31,11 @@ export interface BenchRun {
     /** From selecting the tab again to every pane showing the hidden phase's last line. */
     readonly showCatchUpMs: number;
   };
+  /** The same workload again with the panes in view, while the bench tab's Close is clicked (#560, #986). */
+  readonly prompt: {
+    /** Each click's time from its pointerdown to the Close question on screen, in the page's own clock. */
+    readonly closeMs: readonly number[];
+  };
   /** Every pane in view while each program prints a fixed byte count as fast as it can. */
   readonly unpaced: {
     /** The programs' bytes over the time from the start until every pane shows its last line: drawing throughput. */
@@ -100,6 +105,8 @@ export interface Limit {
   readonly ratio: number;
   readonly floor: number;
   readonly ceiling?: number;
+  /** A product budget the candidate's median must stay within whatever the baseline measured (Close prompt: 200 ms). */
+  readonly max?: number;
 }
 
 export const GATED = [
@@ -111,6 +118,7 @@ export const GATED = [
   "heapMB",
   "hiddenBusyShare",
   "showCatchUpMs",
+  "closePromptMs",
 ] as const;
 export type Gated = (typeof GATED)[number];
 export type Thresholds = Readonly<Record<Gated, Limit>>;
@@ -119,6 +127,7 @@ const read = (run: BenchRun, metric: Gated): number => {
   if (metric === "hiddenBusyShare") return run.hidden.busyShare;
   if (metric === "showCatchUpMs") return run.hidden.showCatchUpMs;
   if (metric === "drawnBytesPerSec") return run.unpaced.drawnBytesPerSec;
+  if (metric === "closePromptMs") return median(run.prompt.closeMs);
   return run.visible[metric];
 };
 
@@ -145,11 +154,11 @@ export function compareRuns(
     if (base.length === 0) throw new Error(`no baseline run with ${panes} panes to compare with`);
     const cand = candidate.filter((run) => run.panes === panes);
     return GATED.map((metric): Row => {
-      const { ratio, floor, ceiling } = thresholds[metric];
+      const { ratio, floor, ceiling, max = Number.POSITIVE_INFINITY } = thresholds[metric];
       const b = median(base.map((run) => read(run, metric)));
       const c = median(cand.map((run) => read(run, metric)));
       const shrinks = ratio < 1;
-      const limit = shrinks ? b * ratio : Math.max(b * ratio, b + floor);
+      const limit = shrinks ? b * ratio : Math.min(Math.max(b * ratio, b + floor), max);
       const gated = ceiling === undefined || limit < ceiling;
       const regressed = gated && (shrinks ? c < limit : c > limit);
       return { panes, metric, baseline: b, candidate: c, limit, gated, regressed };
@@ -163,9 +172,9 @@ const fixed = (value: number, digits: number): string => value.toFixed(digits);
 /** The bench's table: one row per run. */
 export function renderTable(runs: readonly BenchRun[]): string {
   const head =
-    "| Build | Panes | Frame p50 ms | Frame p95 ms | Frame max ms | Main busy | Long tasks (ms) | Drawn KiB/s | Catch-up ms | Heap MB | DOM nodes | Hidden busy | Show catch-up ms |";
-  const rule = `|${" --- |".repeat(13)}`;
-  const rows = runs.map(({ build, panes, visible: v, hidden: h, unpaced: u }) =>
+    "| Build | Panes | Frame p50 ms | Frame p95 ms | Frame max ms | Main busy | Long tasks (ms) | Drawn KiB/s | Catch-up ms | Heap MB | DOM nodes | Hidden busy | Show catch-up ms | Close prompt ms |";
+  const rule = `|${" --- |".repeat(14)}`;
+  const rows = runs.map(({ build, panes, visible: v, hidden: h, unpaced: u, prompt }) =>
     [
       build,
       panes,
@@ -180,6 +189,7 @@ export function renderTable(runs: readonly BenchRun[]): string {
       v.domNodes,
       `${fixed(h.busyShare * 100, 1)}%`,
       Math.round(h.showCatchUpMs),
+      `${Math.round(median(prompt.closeMs))} (${prompt.closeMs.map((ms) => Math.round(ms)).join(", ")})`,
     ].join(" | "),
   );
   return [head, rule, ...rows.map((row) => `| ${row} |`)].join("\n");

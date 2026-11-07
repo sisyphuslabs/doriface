@@ -1,15 +1,18 @@
 // The render bench (#670): N live panes (1, 15, 50 by default) in one tab, each pane's program writing the same fixed
 // workload, measured from outside the app (Chromium's own metrics over CDP and a probe added before the page loads), so
 // the same spec measures the last release's build and the candidate's. A second phase repeats the workload with the
-// panes' tab not selected: the hidden-tab cost. A third prints a fixed byte count per pane as fast as it can: drawing
-// throughput, which the paced phases cannot show (#844). One JSON file per pane count lands in BENCH_OUT.
+// panes' tab not selected: the hidden-tab cost. A third clicks the tab's Close while the panes write: the Close prompt
+// budget (#986). The last prints a fixed byte count per pane as fast as it can: drawing throughput, which the paced
+// phases cannot show (#844). One JSON file per pane count lands in BENCH_OUT.
 import type { CDPSession, Page } from "@playwright/test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "../e2e/fixtures.ts";
 import { clearLayout, seedLayout, type Tree } from "../e2e/layout-doc.ts";
+import { setConfirmClose } from "../e2e/close-confirm.ts";
 import { hcOn } from "../e2e/machine-switch.ts";
+import { CLOSE_CLICKS, closePrompt } from "./close-prompt.ts";
 import { type BenchRun, type Workload, frameStats, gridOf, workloadBytes } from "./render-stats.ts";
 
 const PANES = (process.env["BENCH_PANES"] ?? "1,15,50").split(",").map(Number);
@@ -26,11 +29,15 @@ const WORKLOAD: Workload = { chunk: CHUNK, ticks: 60 };
 const TICK_SECONDS = "0.1";
 /** The unpaced phase: ten times the paced workload, about 480 KB per pane, printed with no pause. */
 const UNPACED: Workload = { chunk: CHUNK, ticks: 600 };
+/** The prompt phase's cap: 2 minutes of the workload, far past what the clicks take; it normally ends at the stop file. */
+const PROMPT_TICKS = 1200;
 
 /**
  * Pane `pane`'s program: says it is ready, then for each phase waits for that phase's go file, writes the workload, its
- * end line and a done file, and keeps the terminal open. Phases 1 and 2 pace the workload with one `sleep` per tick (the
- * only process it starts); phase 3 prints the unpaced workload without one.
+ * end line and a done file, and keeps the terminal open. The paced phases (1, 2 and `prompt`) start one `sleep` per
+ * tick (the only process it starts); phase 3 prints the unpaced workload without one. The `prompt` phase writes the
+ * same chunks until the bench's stop file (at most `PROMPT_TICKS`), so every Close click lands while the panes write,
+ * however long the clicks take on the runner.
  */
 const program = (dir: string, pane: number): string[] => [
   "sh",
@@ -38,10 +45,11 @@ const program = (dir: string, pane: number): string[] => [
   [
     `d='${dir}'; i=${pane}; chunk=$(cat "$d/chunk")`,
     `printf 'bench-ready-%s\\n' "$i"`,
-    "for phase in 1 2 3; do",
+    "for phase in 1 2 prompt 3; do",
     `  while [ ! -e "$d/go$phase" ]; do sleep 0.05; done`,
     `  if [ "$phase" = 3 ]; then ticks=${UNPACED.ticks}; pause=0; else ticks=${WORKLOAD.ticks}; pause=${TICK_SECONDS}; fi`,
-    `  n=0; while [ "$n" -lt "$ticks" ]; do printf '%s\\n' "$chunk"; [ "$pause" = 0 ] || sleep "$pause"; n=$((n+1)); done`,
+    `  [ "$phase" = prompt ] && ticks=${PROMPT_TICKS}`,
+    `  n=0; while [ "$n" -lt "$ticks" ] && [ ! -e "$d/stop$phase" ]; do printf '%s\\n' "$chunk"; [ "$pause" = 0 ] || sleep "$pause"; n=$((n+1)); done`,
     `  printf 'bench-end-%s-%s\\n' "$phase" "$i"; : > "$d/done$phase-$i"`,
     "done",
     "exec sleep 3600",
@@ -86,7 +94,7 @@ const busy = (before: Metrics, after: Metrics): number =>
   ((after["Timestamp"] ?? 0) - (before["Timestamp"] ?? 0));
 
 /** Resolves once every pane's program has written its done file for `phase`. */
-async function producersDone(dir: string, panes: number, phase: number): Promise<void> {
+async function producersDone(dir: string, panes: number, phase: number | "prompt"): Promise<void> {
   const deadline = Date.now() + 120_000;
   const pending = new Set(Array.from({ length: panes }, (_, pane) => pane));
   while (pending.size > 0) {
@@ -105,6 +113,24 @@ const allShow = (page: Page, addresses: readonly string[], text: string) =>
         (document.querySelector(`[data-terminal="${address}"]`)?.textContent ?? "").includes(wanted),
       ),
     { addresses, text },
+    { polling: 50, timeout: 120_000 },
+  );
+
+/** Every listed terminal's text as the page shows it now. */
+const shownText = (page: Page, addresses: readonly string[]) =>
+  page.evaluate(
+    (list) => list.map((address) => document.querySelector(`[data-terminal="${address}"]`)?.textContent ?? ""),
+    addresses,
+  );
+
+/** Resolves once every listed terminal's text differs from `before`: output written since then is on the page. */
+const allChanged = (page: Page, addresses: readonly string[], before: readonly string[]) =>
+  page.waitForFunction(
+    ({ addresses: list, before: was }) =>
+      list.every(
+        (address, at) => (document.querySelector(`[data-terminal="${address}"]`)?.textContent ?? "") !== was[at],
+      ),
+    { addresses, before },
     { polling: 50, timeout: 120_000 },
   );
 
@@ -147,7 +173,8 @@ for (const panes of PANES) {
         { id: "tb-idle", name: "idle", root: [{ pane: "bench-idle", terminal: idle }] },
       ]);
       await addProbe(page);
-      await page.goto("/");
+      // The question comes every time, whatever hc last reported running in the panes (confirm-close-surface).
+      await setConfirmClose(page, "always");
       await allShow(page, addresses, "bench-ready-");
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("Performance.enable");
@@ -181,6 +208,20 @@ for (const panes of PANES) {
       await allShow(page, addresses, "bench-end-2-");
       const caughtUp = performance.now();
 
+      // Prompt: the workload once more, every pane in view, and the bench tab's Close clicked while it runs. The first
+      // click waits until every pane shows output of this phase, so no click lands before the page is drawing it.
+      const idleText = await shownText(page, addresses);
+      writeFileSync(join(dir, "goprompt"), "");
+      await allChanged(page, addresses, idleText);
+      const closeMs: number[] = [];
+      for (let click = 0; click < CLOSE_CLICKS; click += 1) {
+        // oxlint-disable-next-line no-await-in-loop -- one click at a time, each answered before the next
+        closeMs.push(await closePrompt(page));
+      }
+      writeFileSync(join(dir, "stopprompt"), "");
+      await producersDone(dir, panes, "prompt");
+      await allShow(page, addresses, "bench-end-prompt-");
+
       // Unpaced: every pane in view while each program prints its bytes as fast as the core takes them.
       const flood = performance.now();
       writeFileSync(join(dir, "go3"), "");
@@ -204,6 +245,7 @@ for (const panes of PANES) {
           domNodes: kept["Nodes"] ?? 0,
         },
         hidden: { busyShare: busy(hiddenBefore, hiddenAfter), showCatchUpMs: caughtUp - shown },
+        prompt: { closeMs },
         unpaced: { drawnBytesPerSec: bytes / ((drawn - flood) / 1000) },
       };
       mkdirSync(OUT, { recursive: true });
