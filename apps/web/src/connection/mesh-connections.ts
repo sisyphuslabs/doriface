@@ -147,19 +147,9 @@ export class MeshConnections {
     // already dialled are left alone; one that was stopped (by `restoring()`) is dialled again, which is the boot case where the
     // endpoint never changed and nothing else would start it (review of #994).
     this.#running = true;
-    this.#sync();
-    if (opened !== undefined) this.#adopt(opened);
+    this.#sync(opened);
     this.#startAll();
     this.#notify();
-  }
-
-  /** Hands the selected member's store a session that is already open; with no such store the session is closed, never leaked. */
-  #adopt(opened: OpenConnection): void {
-    const hostId = this.#settings.hostId;
-    const store = this.#stores.get(hostId);
-    if (store === undefined) return opened.connection.close();
-    this.#started.add(hostId);
-    store.adopt(opened);
   }
 
   /** Shows another member's connection without touching any connection: the others stay open while this app looks elsewhere. */
@@ -247,7 +237,8 @@ export class MeshConnections {
     return hostId === "" && this.#settings.mode !== "loopback" ? [] : [selected];
   }
 
-  #sync(): void {
+  /** `opened` goes to the selected member's store, which then runs on it and dials nothing; unused, it is closed. */
+  #sync(opened?: OpenConnection): void {
     const roster = this.#roster();
     const keep = new Set(roster.map((member) => member.hostId));
     for (const [hostId, unsubscribe] of this.#unsubscribes) {
@@ -267,10 +258,18 @@ export class MeshConnections {
         // does not concern it.
         const scoped = this.#scoped(member);
         if (!sameTarget(existing.settings, scoped)) existing.update(scoped);
+        if (member.hostId === this.#settings.hostId && opened !== undefined) {
+          this.#started.add(member.hostId);
+          existing.adopt(opened);
+          opened = undefined;
+        }
         continue;
       }
-      this.#stores.set(member.hostId, this.#dial(member));
+      const proved = member.hostId === this.#settings.hostId ? opened : undefined;
+      if (proved !== undefined) opened = undefined;
+      this.#stores.set(member.hostId, this.#dial(member, proved));
     }
+    opened?.connection.close();
   }
 
   /** One member's settings: the shared ones, with that member's own address and a roster of just itself. */
@@ -285,13 +284,16 @@ export class MeshConnections {
     };
   }
 
-  #dial(member: MemberTarget): MemberConnection {
+  #dial(member: MemberTarget, proved?: OpenConnection): MemberConnection {
     const scoped = this.#scoped(member);
     // A member's store holds a slice of a roster this object owns, so it must not write: saving its slice would replace the
     // roster with one member.
     const store = this.#make(scoped, () => undefined);
     if (this.#localHost !== null) store.restartsLocalHost(this.#localHost);
-    if (this.#running) {
+    if (proved !== undefined) {
+      this.#started.add(member.hostId);
+      store.adopt(proved);
+    } else if (this.#running) {
       this.#started.add(member.hostId);
       store.start();
     }
