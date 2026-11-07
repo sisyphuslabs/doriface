@@ -240,7 +240,7 @@ export const SHOTS: readonly Shot[] = [
     start: "connected",
     run: async (page) => {
       await page.goto("/settings");
-      await expect(page.getByRole("heading", { name: "Connection", level: 2 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "This device", level: 2 }).first()).toBeVisible();
     },
   },
   ...SETTINGS.map((label): Shot => ({
