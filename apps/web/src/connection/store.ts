@@ -419,6 +419,11 @@ export function useConnection(store: Pick<MeshConnections, "subscribe" | "state"
   return useSyncExternalStore(store.subscribe, () => store.state);
 }
 
+/** The saved connection settings, drawn again whenever they change: a view that reads them subscribes here (#813). */
+export function useConnectionSettings(): ConnectionSettings {
+  return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.settings);
+}
+
 /** Every member and its own connection state, for a list that marks one machine offline rather than the whole app. */
 export function useMeshMembers(): readonly MemberEntry[] {
   return useSyncExternalStore(connectionStore.subscribe, () => connectionStore.entries());

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Settings
+
+- The Connect a machine tab draws a plug instead of a server, matching what it offers, and the Pair a device offer follows a change of connection mode on every screen that shows it. (#813)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window

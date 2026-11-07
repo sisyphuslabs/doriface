@@ -1,5 +1,5 @@
 import { Button, IconButton, ScrollArea, Tab, TabList, Tabs, cn } from "@doriface/ui";
-import { ArrowLeft, Bell, Keyboard, Mic, Network, Palette, PanelBottom, Server, SquareTerminal } from "lucide-react";
+import { ArrowLeft, Bell, Keyboard, Mic, Network, Palette, PanelBottom, Plug, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import { currentPlatform, triggerKeys } from "../keys/trigger.ts";
@@ -27,7 +27,7 @@ import { VoiceSection } from "../settings/voice-section.tsx";
 const SECTIONS = [
   { id: "device", label: "This device", icon: <MonitorSmartphone /> },
   { id: "machines", label: "Machines", icon: <Network /> },
-  { id: "pair", label: "Connect a machine", icon: <Server /> },
+  { id: "pair", label: "Connect a machine", icon: <Plug /> },
   { id: "terminal", label: "Terminal", icon: <SquareTerminal /> },
   { id: "keyboard", label: "Keyboard", icon: <PanelBottom /> },
   { id: "notifications", label: "Notifications", icon: <Bell /> },
