@@ -11,6 +11,7 @@ import { acceptE2ee, type E2eeDeps, type E2eeTransport } from "./e2ee/accept.ts"
 import { meshPeer } from "./e2ee/authorize.ts";
 import { firstLineRefusal, gateHello } from "./e2ee/first-line.ts";
 import { type E2eeWire, plaintextLink, WsByteLink } from "./e2ee/links.ts";
+import { helloOnly } from "./e2ee/pairing-session.ts";
 import { type SpeculativeHello, withoutFirstLine } from "./e2ee/speculative-hello.ts";
 import type { LiveSessions } from "./e2ee/sessions.ts";
 import type { Link } from "./link.ts";
@@ -188,12 +189,22 @@ export function createGateway(options: GatewayOptions): Gateway {
     e2ee.meshPresence?.(secure);
     if (secure.stream === "mesh") return serveMesh(secure);
     if (secure.stream === "push") return servePush(secure);
+    // A pairing session is not gated by authorize's session limit, yet the new device keeps it as its workspace.
+    const room =
+      secure.kind === SessionKind.Session ? undefined : requireWithin(e2ee.policy, "sessions", e2ee.sessions.count());
     if (!admitHc(secure)) return;
     const gate = hcGate(secure);
     if (gate === undefined) return;
     const link = gate(plaintextLink(secure, wire));
     const answered = options.speculative?.settle(secure) === "answered";
-    pipeTo(answered ? withoutFirstLine(link) : link, (code, reason) => secure.close(code, reason));
+    const hc = answered ? withoutFirstLine(link) : link;
+    const close = (code: number, reason: string): void => secure.close(code, reason);
+    if (room === undefined || room.allowed) return pipeTo(hc, close);
+    log(`plan: a pairing session ends after its hello: ${room.message}`);
+    pipeTo(
+      helloOnly(hc, () => close(CloseCode.RateLimited, room.message)),
+      close,
+    );
   };
 
   /**
