@@ -23,7 +23,7 @@ index 3bc52a7d1baf0c827e0effa4ad2388e63876f0ed..8b31842ac8259bbca5ca3baae7d9ab02
      private handleCompositionEnd;
      private hideComposition;
 diff --git a/dist/input.js b/dist/input.js
-index 78a86ffd96eec03222777f40e9db6a0561684c3f..ca0447617d18967c418aba8d8fe551cc510a9fff 100644
+index 78a86ffd96eec03222777f40e9db6a0561684c3f..a8894c0d31f70405f0b3efa8212887c54fb859b5 100644
 --- a/dist/input.js
 +++ b/dist/input.js
 @@ -70,6 +70,12 @@ const COMPOSITION_INPUT_DEDUP_MS = 250;
@@ -206,10 +206,37 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..ca0447617d18967c418aba8d8fe551cc
              s.width = `${Math.min((bridge.getCols() - col) * charWidth, Math.max(charWidth, this.compositionWidth))}px`;
              s.height = `${rowHeight}px`;
          }
-@@ -536,6 +608,57 @@ export class InputHandler {
-             : charWidth;
-         this.positionTextarea();
-     }
+@@ -528,13 +600,78 @@ export class InputHandler {
+         const charWidth = this.getCellSize()?.charWidth;
+         if (!charWidth || charWidth <= 0)
+             return;
+-        // With wrapping disabled, scrollWidth measures the full preedit even when
+-        // it is longer than the field. Leave a cell for the IME caret.
+         this.textarea.style.width = "1px";
+-        this.compositionWidth = this.textarea.value
+-            ? Math.max(charWidth, this.textarea.scrollWidth + charWidth)
+-            : charWidth;
++        this.compositionWidth = this.compositionCells(charWidth);
++        this.positionTextarea();
++    }
++    /**
++     * The preedit's width in whole cells, rounded up: a syllable the grid draws two cells wide covers at least 1.4
++     * cells even in a proportional fallback, so the box spans the cells it will take instead of its advance (#1245).
++     */
++    compositionCells(charWidth) {
++        const value = this.textarea.value;
++        if (!value)
++            return charWidth;
++        const context = document.createElement("canvas").getContext("2d");
++        if (context === null)
++            return Math.max(charWidth, this.textarea.scrollWidth + charWidth);
++        const style = getComputedStyle(this.textarea);
++        context.font = `${style.fontSize} ${style.fontFamily}`;
++        let cells = 0;
++        for (const ch of value)
++            cells += Math.max(1, Math.ceil(context.measureText(ch).width / charWidth));
++        return Math.max(charWidth, cells * charWidth);
++    }
 +    /** Sends the syllable still being typed in a WebKit Korean run, and ends the run. */
 +    commitLocalPreedit() {
 +        if (this.localPreedit !== "")
@@ -258,13 +285,12 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..ca0447617d18967c418aba8d8fe551cc
 +        s.caretColor = "var(--term-preedit-fg, var(--term-fg, currentColor))";
 +        // A syllable takes two cells; one more is left for the caret. Only the end of the field shows.
 +        this.compositionWidth = 3 * (this.getCellSize()?.charWidth ?? 0);
-+        this.positionTextarea();
+         this.positionTextarea();
 +        this.textarea.scrollLeft = this.textarea.scrollWidth;
-+    }
+     }
      resetInputValue() {
          this.textarea.value = this.touchPrimary ? TOUCH_INPUT_PLACEHOLDER : "";
-         if (this.touchPrimary)
-@@ -565,6 +688,18 @@ export class InputHandler {
+@@ -565,6 +702,18 @@ export class InputHandler {
          const value = this.touchPrimary && rawValue.startsWith(TOUCH_INPUT_PLACEHOLDER)
              ? rawValue.slice(TOUCH_INPUT_PLACEHOLDER.length)
              : rawValue;
@@ -283,7 +309,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..ca0447617d18967c418aba8d8fe551cc
          this.resetInputValue();
          const recent = this.recentCompositionCommit;
          this.recentCompositionCommit = null;
-@@ -821,7 +956,7 @@ export class InputHandler {
+@@ -821,7 +970,7 @@ export class InputHandler {
                  return other;
          }
          if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -292,7 +318,7 @@ index 78a86ffd96eec03222777f40e9db6a0561684c3f..ca0447617d18967c418aba8d8fe551cc
              if (control !== null)
                  return control;
              if (e.key === "Backspace")
-@@ -855,6 +990,17 @@ export class InputHandler {
+@@ -855,6 +1004,17 @@ export class InputHandler {
          return null;
      }
  }

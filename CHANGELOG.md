@@ -9,6 +9,7 @@
 ### Terminal
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
+- The box drawn under a Korean syllable still being composed spans the two cells the syllable takes, instead of the advance of whatever face covers Hangul, which left it covering the cursor cell on macOS. (#1245)
 
 ### Notifications
 
