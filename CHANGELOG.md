@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Terminal
+
+- A program that left a synchronized update open (killed mid-frame) no longer keeps the screen frozen while a split divider is dragged: the screen paints one second after the update opened, however many resizes happen meanwhile. (#853)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
