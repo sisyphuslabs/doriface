@@ -20,6 +20,12 @@ archives="${PLAYWRIGHT_APT_ARCHIVES:-/var/cache/apt/archives}"
 conf="${PLAYWRIGHT_APT_CONF:-/etc/apt/apt.conf.d/99-playwright-ci}"
 save=false
 
+# A configuration file rather than -o options, so the limits reach the apt-get calls install-deps makes itself. The
+# archive is emptied first and kept afterwards, so what is in it is exactly the cached files plus what this run downloaded.
+printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "15";' 'Acquire::https::Timeout "15";' \
+  'APT::Keep-Downloaded-Packages "true";' | sudo tee "$conf" >/dev/null
+sudo apt-get clean
+
 if compgen -G "$debs/*.deb" >/dev/null; then
   echo "apt cache hit: installing $(find "$debs" -name '*.deb' | wc -l) cached packages without the mirror"
   # Not `apt-get install <files>`: with the runner's package lists present, apt fetches the repository's copy of a
@@ -32,25 +38,34 @@ if compgen -G "$debs/*.deb" >/dev/null; then
     echo "save-debs=$save" >> "$GITHUB_OUTPUT"
     exit 0
   fi
-  # doriterm#1022: an archive update since the cache was filled makes its versions stale. The mirror install below then
-  # saves a fresh set under a new key, so the next run restores packages that cover the list again.
-  echo "::warning::the cached packages do not cover Playwright's list; installing it from the apt mirror and caching what it downloads"
+  # doriterm#1022: an archive update since the cache was filled makes its versions stale, and a list that grew (a
+  # runner image that stops shipping a package) needs one the cache never held. The cached files stay in the archive,
+  # so the mirror install below downloads only what they do not cover.
+  echo "::warning::the cached packages do not cover Playwright's list; installing the rest from the apt mirror and caching the whole set"
 fi
 
-# A configuration file rather than -o options, so the limits reach the apt-get calls install-deps makes itself. The
-# archive is emptied first and kept afterwards, so what is left in it is exactly what this install downloaded.
-printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "15";' 'Acquire::https::Timeout "15";' \
-  'APT::Keep-Downloaded-Packages "true";' | sudo tee "$conf" >/dev/null
-sudo apt-get clean
 timeout 300 bunx playwright install-deps chromium
 
-# What the mirror install downloaded replaces the cache, empty or stale; the workflow saves it under a key of its own
-# (one per run), and restoring by the key's prefix picks the newest set.
-if compgen -G "$archives/*.deb" >/dev/null; then
+# The new cache is every file in the archive whose version is the one now installed: the cached files that still count
+# and what the mirror added, without a version an update replaced. Saving only the mirror's downloads would cut the
+# cache down to the missing packages, so the next run would fall back again and the set would flip between the two.
+# The workflow saves it under a key of its own (one per run), and restoring by the key's prefix picks the newest set.
+fresh="$debs.next"
+rm -rf "$fresh"
+mkdir -p "$fresh"
+for f in "$archives"/*.deb; do
+  [ -e "$f" ] || continue
+  package=$(dpkg-deb -f "$f" Package)
+  if [ "$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null)" = "$(dpkg-deb -f "$f" Version)" ]; then
+    cp "$f" "$fresh"/
+  fi
+done
+if compgen -G "$fresh/*.deb" >/dev/null; then
   rm -rf "$debs"
-  mkdir -p "$debs"
-  cp "$archives"/*.deb "$debs"/
+  mv "$fresh" "$debs"
   echo "caching $(find "$debs" -name '*.deb' | wc -l) packages for the next run"
   save=true
+else
+  rm -rf "$fresh"
 fi
 echo "save-debs=$save" >> "$GITHUB_OUTPUT"
