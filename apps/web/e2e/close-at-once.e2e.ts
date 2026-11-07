@@ -2,6 +2,7 @@
 // the tab (#1271). The kill is held at the page's socket, so the order is decided by the code, not by a clock.
 import type { Page } from "@playwright/test";
 import { expect, openNewTerminal, terminalCount, test } from "./fixtures.ts";
+import { runSleep } from "./close-confirm.ts";
 import { routeHcSocket } from "./hc-socket.ts";
 import { hcOn } from "./machine-switch.ts";
 
@@ -34,6 +35,28 @@ test("closing a pane takes it away while its kill is still on the way", async ({
   release();
   await running(page, before - 1);
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("a close the person confirmed leaves with its question, while its kill is still on the way", async ({ page }) => {
+  const link = await routeHcSocket(page);
+  await page.goto("/");
+  await openNewTerminal(page);
+  const terminal = await openNewTerminal(page);
+  const address = (await terminal.getAttribute("data-terminal")) ?? "";
+  await runSleep(page, terminal);
+  const { before } = await terminalCount(page);
+  const release = link.hold("terminal.kill");
+  await terminal.getByRole("textbox").focus();
+  await page.keyboard.press(CLOSE_PANE);
+  await page
+    .getByRole("dialog", { name: /^Close .+\?$/ })
+    .getByRole("button", { name: "Close" })
+    .click();
+  await expect(pane(page, address)).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await running(page, before);
+  release();
+  await running(page, before - 1);
 });
 
 test("closing a tab of two panes takes the tab away while its kills are still on the way, and a failed End says so", async ({
