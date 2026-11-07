@@ -42,7 +42,7 @@ const program = (dir: string, pane: number): string[] => [
     `printf 'bench-ready-%s\\n' "$i"`,
     "for phase in 1 2 prompt; do",
     `  while [ ! -e "$d/go$phase" ]; do sleep 0.05; done`,
-    `  ticks=${WORKLOAD.ticks}; [ "$phase" = prompt ] && { ticks=${PROMPT_TICKS}; : > "$d/startedprompt-$i"; }`,
+    `  ticks=${WORKLOAD.ticks}; [ "$phase" = prompt ] && ticks=${PROMPT_TICKS}`,
     `  n=0; while [ "$n" -lt "$ticks" ] && [ ! -e "$d/stop$phase" ]; do printf '%s\\n' "$chunk"; sleep ${TICK_SECONDS}; n=$((n+1)); done`,
     `  printf 'bench-end-%s-%s\\n' "$phase" "$i"; : > "$d/done$phase-$i"`,
     "done",
@@ -87,14 +87,13 @@ const busy = (before: Metrics, after: Metrics): number =>
   ((after["TaskDuration"] ?? 0) - (before["TaskDuration"] ?? 0)) /
   ((after["Timestamp"] ?? 0) - (before["Timestamp"] ?? 0));
 
-/** Resolves once every pane's program has written its `file` file (done by default) for `phase`. */
-async function producersDone(dir: string, panes: number, phase: number | "prompt", file = "done"): Promise<void> {
+/** Resolves once every pane's program has written its done file for `phase`. */
+async function producersDone(dir: string, panes: number, phase: number | "prompt"): Promise<void> {
   const deadline = Date.now() + 120_000;
   const pending = new Set(Array.from({ length: panes }, (_, pane) => pane));
   while (pending.size > 0) {
-    for (const pane of pending) if (existsSync(join(dir, `${file}${phase}-${pane}`))) pending.delete(pane);
-    if (Date.now() > deadline)
-      throw new Error(`${pending.size} panes' programs did not write ${file} for phase ${phase}`);
+    for (const pane of pending) if (existsSync(join(dir, `done${phase}-${pane}`))) pending.delete(pane);
+    if (Date.now() > deadline) throw new Error(`${pending.size} panes' programs did not finish phase ${phase}`);
     // oxlint-disable-next-line no-await-in-loop -- the programs are other processes: their files are read again
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -108,6 +107,24 @@ const allShow = (page: Page, addresses: readonly string[], text: string) =>
         (document.querySelector(`[data-terminal="${address}"]`)?.textContent ?? "").includes(wanted),
       ),
     { addresses, text },
+    { polling: 50, timeout: 120_000 },
+  );
+
+/** Every listed terminal's text as the page shows it now. */
+const shownText = (page: Page, addresses: readonly string[]) =>
+  page.evaluate(
+    (list) => list.map((address) => document.querySelector(`[data-terminal="${address}"]`)?.textContent ?? ""),
+    addresses,
+  );
+
+/** Resolves once every listed terminal's text differs from `before`: output written since then is on the page. */
+const allChanged = (page: Page, addresses: readonly string[], before: readonly string[]) =>
+  page.waitForFunction(
+    ({ addresses: list, before: was }) =>
+      list.every(
+        (address, at) => (document.querySelector(`[data-terminal="${address}"]`)?.textContent ?? "") !== was[at],
+      ),
+    { addresses, before },
     { polling: 50, timeout: 120_000 },
   );
 
@@ -187,9 +204,11 @@ for (const panes of PANES) {
       await allShow(page, addresses, "bench-end-2-");
       const caughtUp = performance.now();
 
-      // Prompt: the workload once more, every pane in view, and the bench tab's Close clicked while it runs.
+      // Prompt: the workload once more, every pane in view, and the bench tab's Close clicked while it runs. The first
+      // click waits until every pane shows output of this phase, so no click lands before the page is drawing it.
+      const idleText = await shownText(page, addresses);
       writeFileSync(join(dir, "goprompt"), "");
-      await producersDone(dir, panes, "prompt", "started");
+      await allChanged(page, addresses, idleText);
       const closeMs: number[] = [];
       for (let click = 0; click < CLOSE_CLICKS; click += 1) {
         // oxlint-disable-next-line no-await-in-loop -- one click at a time, each answered before the next
