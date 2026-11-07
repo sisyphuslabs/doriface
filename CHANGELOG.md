@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Settings
+
+- In a browser, the text-size keys Settings > Appearance shows step the terminals' text while Settings is open, as they do in the desktop app, and resizing the window between the Settings dialog and the full-screen sheet keeps the open section and a shortcut being recorded. (#859)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window

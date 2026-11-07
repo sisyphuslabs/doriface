@@ -155,7 +155,9 @@ test.describe("Settings across the md breakpoint, and its zoom keys (#859)", () 
 
   test("the hinted text-size key steps the terminals' text while Settings is open in a browser", async ({ page }) => {
     await page.goto("/settings#appearance");
-    const size = settingsDialog(page).locator("output").filter({ hasText: /\d+ pt$/ });
+    const size = settingsDialog(page)
+      .locator("output")
+      .filter({ hasText: /\d+ pt$/ });
     await expect(size).toBeVisible({ timeout: 15_000 });
     const before = Number.parseFloat((await size.textContent()) ?? "");
     await page.keyboard.press("ControlOrMeta+Equal");
@@ -168,7 +170,10 @@ test.describe("Settings across the md breakpoint, and its zoom keys (#859)", () 
     await page.goto("/settings");
     await expect(settingsDialog(page)).toBeVisible({ timeout: 15_000 });
     await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Keybindings" }).click();
-    await page.getByRole("button", { name: /^Record a shortcut for / }).first().click();
+    await page
+      .getByRole("button", { name: /^Record a shortcut for / })
+      .first()
+      .click();
     const recorder = page.locator("[data-captures-keys]");
     await expect(recorder).toBeFocused();
 
@@ -179,10 +184,9 @@ test.describe("Settings across the md breakpoint, and its zoom keys (#859)", () 
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(settingsDialog(page)).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Keybindings" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    await expect(
+      page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Keybindings" }),
+    ).toHaveAttribute("aria-current", "page");
     await expect(recorder).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(recorder).toHaveCount(0);
