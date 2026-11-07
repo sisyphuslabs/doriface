@@ -8,6 +8,7 @@
 
 ### Terminal
 
+- Many panes drawing output at once render as fast as in v0.1.2 again: a pane's link menu and held-selection menu no longer run while closed, which at 50 panes had raised the time the page spent in long tasks about threefold. (#842)
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 - On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
 
