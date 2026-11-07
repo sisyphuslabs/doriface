@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Workspace
+
+- The command palette lists Filter the sidebar with its key, and choosing it opens the filter with the keyboard in it. (#848)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window

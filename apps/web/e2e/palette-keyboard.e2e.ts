@@ -47,7 +47,9 @@ test("the palette offers Split right as the toolbar does, and runs the same acti
   await expect(tabs).toHaveCount(before);
 });
 
-test("the palette runs Filter the sidebar: it closes and the filter field takes the keyboard (#848)", async ({ page }) => {
+test("the palette runs Filter the sidebar: it closes and the filter field takes the keyboard (#848)", async ({
+  page,
+}) => {
   await page.goto("/");
   await openNewTerminal(page);
   const row = page.getByRole("option", { name: /^Filter the sidebar/ });
