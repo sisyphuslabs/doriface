@@ -189,27 +189,8 @@ export class ConnectionStore {
         this.#connect(this.#settings, abort.signal, undefined, relayFirst ? { skipDirect: true } : {}),
         abort,
       );
-      const { connection } = opened;
-      if (abort.signal.aborted) return connection.close();
-      this.#rememberName(connection);
-      connection.onClose((error) => {
-        if (this.#abort !== abort) return;
-        if (opened.path === "direct") this.#relayFirst = true;
-        this.#stale = connection;
-        const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
-        this.#closedFor = null;
-        const reason = error ?? closedFor ?? new Error("the host closed the connection");
-        this.#retry(reason, this.#stable ? 0 : attempt + 1);
-      });
-      this.#stale = null;
-      this.#budget.reset();
-      this.#armStable();
-      this.#set({
-        phase: "open",
-        connection,
-        path: opened.path,
-        ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
-      });
+      if (abort.signal.aborted) return opened.connection.close();
+      this.#opened(opened, abort, attempt);
     } catch (error) {
       if (this.#abort !== abort) return;
       if (error instanceof AttemptTimeoutError) {
@@ -220,6 +201,44 @@ export class ConnectionStore {
       if (abort.signal.aborted) return;
       this.#retry(error instanceof Error ? error : new Error(String(error)), attempt + 1);
     }
+  }
+
+  /**
+   * Takes a session that is already open as this store's connection, as a dial that just succeeded: pairing proves one,
+   * and dialing again for the workspace cost a relay socket, a Noise handshake and a hello more (#1271). A drop then
+   * reconnects as any other drop does.
+   */
+  adopt(opened: OpenConnection): void {
+    this.stop();
+    this.#relayFirst = false;
+    const abort = new AbortController();
+    this.#abort = abort;
+    this.#current = 0;
+    this.#opened(opened, abort, 0);
+  }
+
+  /** A connection this store now runs on: named, watched for its drop, and shown open. */
+  #opened(opened: OpenConnection, abort: AbortController, attempt: number): void {
+    const { connection } = opened;
+    this.#rememberName(connection);
+    connection.onClose((error) => {
+      if (this.#abort !== abort) return;
+      if (opened.path === "direct") this.#relayFirst = true;
+      this.#stale = connection;
+      const closedFor = this.#closedFor?.connection === connection ? this.#closedFor.reason : undefined;
+      this.#closedFor = null;
+      const reason = error ?? closedFor ?? new Error("the host closed the connection");
+      this.#retry(reason, this.#stable ? 0 : attempt + 1);
+    });
+    this.#stale = null;
+    this.#budget.reset();
+    this.#armStable();
+    this.#set({
+      phase: "open",
+      connection,
+      path: opened.path,
+      ...(opened.directReason === undefined ? {} : { directReason: opened.directReason }),
+    });
   }
 
   /**

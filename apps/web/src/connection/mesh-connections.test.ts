@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import type { HcConnection } from "@doriface/client";
+import type { OpenConnection } from "./connect.ts";
 import { MeshConnections, type MemberConnection, type StoreFactory } from "./mesh-connections.ts";
 import { DEFAULT_SETTINGS, loadSettings, type ConnectionSettings, type MemberTarget } from "./settings.ts";
 
@@ -26,6 +28,7 @@ class FakeConnection implements MemberConnection {
   started = 0;
   stopped = 0;
   retries = 0;
+  adopted: OpenConnection[] = [];
 
   connecting(): void {
     this.#state = { phase: "connecting", attempt: 1, stale: null };
@@ -49,6 +52,12 @@ class FakeConnection implements MemberConnection {
   start(): void {
     this.started += 1;
     this.#state = { phase: "open", connection: undefined as never, path: "relay" };
+    this.#emit();
+  }
+
+  adopt(opened: OpenConnection): void {
+    this.adopted.push(opened);
+    this.#state = { phase: "open", connection: opened.connection, path: opened.path };
     this.#emit();
   }
 
@@ -121,6 +130,30 @@ const running = (initial: ConnectionSettings) => {
 
 afterEach(() => {
   globalThis.localStorage?.clear?.();
+});
+
+/** A session pairing proved, standing in for the open HcConnection: only close is ever called on it here. */
+function provedSession(): { readonly opened: OpenConnection; readonly closed: () => number } {
+  let closes = 0;
+  const connection = {
+    close: () => {
+      closes += 1;
+    },
+  } as unknown as HcConnection;
+  return { opened: { connection, path: "relay" }, closed: () => closes };
+}
+
+describe("pairing hands its session on (#1271)", () => {
+  it("the paired machine's connection runs on the session pairing proved, and dials nothing", () => {
+    const { mesh, made } = running(settingsWith([member("a")], "a"));
+    const { opened, closed } = provedSession();
+    mesh.pair(settingsWith([member("b")], "b"), opened);
+    const paired = made.find((connection) => connection.settings.hostId === "b");
+    expect(paired?.adopted).toEqual([opened]);
+    expect(paired?.started).toBe(0);
+    expect(mesh.state.phase).toBe("open");
+    expect(closed()).toBe(0);
+  });
 });
 
 describe("one connection per member", () => {

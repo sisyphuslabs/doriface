@@ -1,3 +1,4 @@
+import type { OpenConnection } from "./connect.ts";
 import type { ConnectionState } from "./store.ts";
 import type { HostStartFailure } from "../desktop/bridge.ts";
 import type { LocalHostStarter } from "./store.ts";
@@ -13,6 +14,8 @@ export interface MemberConnection {
   readonly state: ConnectionState;
   subscribe(listener: () => void): () => void;
   start(): void;
+  /** Runs on a session that is already open instead of dialing one. */
+  adopt(opened: OpenConnection): void;
   stop(): void;
   retryNow(): void;
   update(settings: ConnectionSettings): void;
@@ -130,13 +133,14 @@ export class MeshConnections {
    * Pairing is an intent, not something to infer from the host id: the roster exists so a client reaches every member of a
    * mesh, and a machine the person paired away from must not stay in it and be dialled forever after (review of #994).
    */
-  pair(settings: ConnectionSettings): void {
+  pair(settings: ConnectionSettings, opened?: OpenConnection): void {
     // The name belongs to the host that said it (#496): the machine just paired has not said one yet, so the previous
     // machine's name must not travel with the rest of the settings (review of #994).
-    this.#apply({ ...settings, hostName: "", members: [] });
+    this.#apply({ ...settings, hostName: "", members: [] }, opened);
   }
 
-  #apply(settings: ConnectionSettings): void {
+  /** `opened` is a session to the selected member that pairing already proved: its store runs on it instead of dialing. */
+  #apply(settings: ConnectionSettings, opened?: OpenConnection): void {
     this.#settings = normalizeSettings(settings);
     saveSettings(this.#settings);
     // A settings change is the app asking to dial with them, which is how the boot path replaces a stale saved port. Members that
@@ -144,8 +148,18 @@ export class MeshConnections {
     // endpoint never changed and nothing else would start it (review of #994).
     this.#running = true;
     this.#sync();
+    if (opened !== undefined) this.#adopt(opened);
     this.#startAll();
     this.#notify();
+  }
+
+  /** Hands the selected member's store a session that is already open; with no such store the session is closed, never leaked. */
+  #adopt(opened: OpenConnection): void {
+    const hostId = this.#settings.hostId;
+    const store = this.#stores.get(hostId);
+    if (store === undefined) return opened.connection.close();
+    this.#started.add(hostId);
+    store.adopt(opened);
   }
 
   /** Shows another member's connection without touching any connection: the others stay open while this app looks elsewhere. */
