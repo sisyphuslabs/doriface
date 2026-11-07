@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Website
+
+- The doriterm.com landing page has a Pause animations button beside the theme switch: it stops the mesh scenes, the relay pipe and the pairing loop on their still frames, and the page remembers it. (#928)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
