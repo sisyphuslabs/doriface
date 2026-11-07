@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Machines
+
+- While a machine is held as connected through a redial, a tab opened, closed or moved on it says the machine is reconnecting, matching its row, instead of calling it not connected. (#918)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
