@@ -6,7 +6,7 @@ import {
   type ReactElement,
   type ReactNode,
   type SyntheticEvent,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -137,13 +137,17 @@ export interface PointMenuProps {
  * Closed, it mounts nothing. A closed Base UI menu root still runs its floating, dismiss and list-navigation hooks each
  * time its parent renders, and every terminal pane holds two of these menus (a link's and a held selection's), so 50
  * panes streaming output re-ran 100 closed menus on every pane render (#842). The root is mounted from the moment the
- * menu opens until its close has finished, so the close still animates.
+ * menu opens until its close has finished.
+ *
+ * Base UI runs a menu's enter transition only when its root goes from closed to open, not when it mounts open, so an
+ * opening menu first commits its root closed and opens it in a layout effect, before the browser paints: the popup
+ * still scales and fades in, and the close still animates out.
  */
 export function PointMenu({ at, onClose, children, label }: PointMenuProps) {
   const open = at !== null;
-  /** The menu has opened and its close has not finished yet. */
-  const [shown, setShown] = useState(open);
-  useEffect(() => {
+  /** The root has been committed for this opening and its close has not finished yet. */
+  const [shown, setShown] = useState(false);
+  useLayoutEffect(() => {
     if (open) setShown(true);
   }, [open]);
   if (!open && !shown) return null;
@@ -151,9 +155,9 @@ export function PointMenu({ at, onClose, children, label }: PointMenuProps) {
     at === null ? null : { getBoundingClientRect: () => DOMRect.fromRect({ x: at.x, y: at.y, width: 0, height: 0 }) };
   return (
     <BaseMenu.Root
-      open={open}
+      open={open && shown}
       onOpenChange={(next) => !next && onClose()}
-      onOpenChangeComplete={(next) => !next && setShown(false)}
+      onOpenChangeComplete={(next) => !next && !open && setShown(false)}
     >
       <BaseMenu.Portal>
         <BaseMenu.Positioner anchor={anchor} sideOffset={6} positionMethod="fixed">
