@@ -83,6 +83,9 @@ export function serveMeshOffers(
   const expire = (expiresAt: number, unfollow: () => void): void => {
     const cancel = time.clock.after(Math.max(0, expiresAt - time.wallNow()), () => {
       expiries.delete(cancel);
+      // The wall clock stepped back since the timer was set: the offer still admits until expiresAt, so the link and
+      // the join it may bring wait for that (#834).
+      if (time.wallNow() < expiresAt) return expire(expiresAt, unfollow);
       unfollow();
       if (live !== undefined)
         void dropIfExpired(live, time.wallNow()).catch((error: unknown) =>
@@ -92,6 +95,27 @@ export function serveMeshOffers(
     expiries.add(cancel);
   };
 
+  // A join waits here until it is written, so one admitted while the line is down is written on the next connect (#834).
+  const joins = new Map<string, { readonly name: string; readonly hostId: string }>();
+  const writeJoin = async (
+    connection: HcConnection,
+    request: string,
+    joined: { readonly name: string; readonly hostId: string },
+  ): Promise<void> => {
+    const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
+    const current = parseMeshOfferDoc(doc.value);
+    const owed = current?.request === request && !("joined" in current);
+    // Lost to another write: its doc event brings the document back, and the join is written then.
+    if (owed && !(await write(connection, { request, joined }, doc.version))) return;
+    joins.delete(request);
+  };
+  // One after another: each write is made at the version the one before it left.
+  const writeJoins = (connection: HcConnection): Promise<void> =>
+    [...joins].reduce<Promise<void>>(
+      (chain, [request, joined]) => chain.then(() => writeJoin(connection, request, joined)),
+      Promise.resolve(),
+    );
+
   // The offer admits once: the first join on it replaces the link with who joined, so the asking client can say so.
   // A join belongs to this offer when it shares the offer's expiry, which a pending join takes from the offer it came on.
   const follow = (request: string, expiresAt: number): (() => void) => {
@@ -99,13 +123,9 @@ export function serveMeshOffers(
       if (join.expiresAt !== expiresAt) return;
       stop();
       follows.delete(stop);
-      const connection = live;
-      if (connection === undefined) return;
-      void (async () => {
-        const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
-        if (parseMeshOfferDoc(doc.value)?.request !== request) return;
-        await write(connection, { request, joined: { name: join.name, hostId: join.hostId } }, doc.version);
-      })().catch((error: unknown) => log(`mesh offer: cannot write the join: ${String(error)}`));
+      joins.set(request, { name: join.name, hostId: join.hostId });
+      if (live !== undefined)
+        void writeJoins(live).catch((error: unknown) => log(`mesh offer: cannot write the join: ${String(error)}`));
     });
     follows.add(stop);
     return () => {
@@ -115,6 +135,8 @@ export function serveMeshOffers(
   };
 
   const answer = async (connection: HcConnection): Promise<void> => {
+    // A join is written before the expiry is read: an offer that admitted a machine did not expire unused.
+    await writeJoins(connection);
     await dropIfExpired(connection, time.wallNow());
     const doc = await connection.call("doc.get", { name: MESH_OFFER_DOC });
     const current = parseMeshOfferDoc(doc.value);
