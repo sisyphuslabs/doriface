@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Host
+
+- `doriface-host --version` prints the host's version, and `/healthz` and the start-up line report the release the host was built from instead of 0.1.0 on every release. (#1039)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
