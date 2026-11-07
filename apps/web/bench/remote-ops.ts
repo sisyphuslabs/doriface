@@ -3,12 +3,17 @@
 // (apps/web connect(), pairWithHost(), endSession() and the client SDK under them), and prints one JSON line.
 //
 //   bun apps/web/bench/remote-ops.ts pair --code <code> [--relay <url>]
-//     One typed-code pairing as the Add machine screen runs it: lookup, pairing session, then the first IK session.
+//     One typed-code pairing as the Add machine screen runs it: lookup, pairing session, then the workspace's first
+//     calls on that same session (the app opens its workspace on the session the pairing proved).
 //   bun apps/web/bench/remote-ops.ts ops --code <code> [--relay <url>] [--runs 30]
 //     Pairs one device with that code, then repeats the session operations `--runs` times on it.
+//   bun apps/web/bench/remote-ops.ts pair-staged --code <code> [--relay <url>]
+//     The pairing in stages: the lookup twice (first and repeat), then socket, handshake and hello.
 //
 // Every sample is milliseconds of wall time on the client. Stage samples (`*.socket`, `*.noise`, `*.hello`) split a
-// connect into the relay socket, the Noise IK handshake and hc's framed hello.
+// connect into the relay socket, the Noise IK handshake and hc's framed hello. The line carries the run's mode, relay
+// URL and start time, the samples, and each failed step's error message (which may name the relay path and host id).
+// Whatever a round opens (sockets, sessions, feeds, streams, the terminal it started) is closed or ended on every path.
 import { HcConnection, type TerminalStream } from "@doriface/client";
 import { base64urlDecode, base64urlEncode, generateX25519, rawStaticKey, secureLink } from "@doriface/crypto";
 import { connectRelayClient } from "@doriface/relay-client";
@@ -20,6 +25,7 @@ import { pairWithHost } from "../src/pair/handshake.ts";
 import { slotOf } from "../src/pair/code.ts";
 import { lookupCode } from "../src/pair/lookup.ts";
 import { endSession, sessionCalls } from "../src/workspace/session-actions.ts";
+import { echo, firstOutput, inTurn, quiet } from "./remote-ops-stream.ts";
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -32,8 +38,14 @@ const { values, positionals } = parseArgs({
 });
 const mode = positionals[0];
 const code = values.code;
-if ((mode !== "pair" && mode !== "ops" && mode !== "pair-staged") || code === undefined) {
-  process.stderr.write("usage: remote-ops.ts pair|ops --code <code> [--relay <url>] [--runs N]\n");
+const runs = Number(values.runs);
+if (
+  (mode !== "pair" && mode !== "ops" && mode !== "pair-staged") ||
+  code === undefined ||
+  !Number.isInteger(runs) ||
+  runs < 1
+) {
+  process.stderr.write("usage: remote-ops.ts pair|ops|pair-staged --code <code> [--relay <url>] [--runs N, N >= 1]\n");
   process.exit(2);
 }
 const relayUrl = values.relay;
@@ -87,70 +99,52 @@ async function appConnect(settings: ConnectionSettings, op: string): Promise<HcC
 async function stagedConnect(settings: ConnectionSettings): Promise<void> {
   const started = now();
   const link = await timed("connect.socket", () => connectRelayClient({ relayUrl, hostId: settings.hostId }));
-  const secure = await timed("connect.noise", () =>
-    secureLink(link, {
-      role: "initiator",
-      hostId: settings.hostId,
-      staticKey: device,
-      remoteStatic: base64urlDecode(settings.hostKey),
-    }),
-  );
-  const connection = await timed("connect.hello", () => HcConnection.open(secure));
-  note("connect.staged", now() - started);
-  connection.close();
+  try {
+    const secure = await timed("connect.noise", () =>
+      secureLink(link, {
+        role: "initiator",
+        hostId: settings.hostId,
+        staticKey: device,
+        remoteStatic: base64urlDecode(settings.hostKey),
+      }),
+    );
+    const connection = await timed("connect.hello", () => HcConnection.open(secure));
+    note("connect.staged", now() - started);
+    connection.close();
+  } finally {
+    link.close();
+  }
 }
 
 /** What the workspace asks for as it opens: the terminal list, the event feed and the machine list, in parallel. */
+async function listWorkspace(connection: HcConnection, started: number): Promise<void> {
+  const feed = connection.subscribe();
+  try {
+    await Promise.all([
+      timed("workspace.terminal.list", () => connection.call("terminal.list", { all: true })),
+      timed("workspace.subscribe", () => feed),
+      timed("workspace.machine.list", () => connection.call("machine.list")),
+    ]);
+    note("workspace.open", now() - started);
+  } finally {
+    void feed.then(
+      (opened) => opened.close(),
+      () => undefined,
+    );
+  }
+}
+
+/** The workspace on a fresh connect; the connection is closed when its first calls fail. */
 async function openWorkspace(settings: ConnectionSettings): Promise<HcConnection> {
   const started = now();
   const connection = await appConnect(settings, "workspace.connect");
-  const feed = connection.subscribe();
-  await Promise.all([
-    timed("workspace.terminal.list", () => connection.call("terminal.list", { all: true })),
-    timed("workspace.subscribe", () => feed),
-    timed("workspace.machine.list", () => connection.call("machine.list")),
-  ]);
-  note("workspace.open", now() - started);
-  (await feed).close();
+  try {
+    await listWorkspace(connection, started);
+  } catch (error) {
+    connection.close();
+    throw error;
+  }
   return connection;
-}
-
-const decoder = new TextDecoder();
-
-/** Resolves when `stream` has been quiet for `quietMs`, or after `capMs`. */
-function quiet(stream: TerminalStream, quietMs: number, capMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    let timer = setTimeout(done, quietMs);
-    const cap = setTimeout(done, capMs);
-    const off = stream.onData(() => {
-      clearTimeout(timer);
-      timer = setTimeout(done, quietMs);
-    });
-    function done(): void {
-      clearTimeout(timer);
-      clearTimeout(cap);
-      off();
-      resolve();
-    }
-  });
-}
-
-/** Types one character and resolves when the terminal echoes it. */
-function echo(stream: TerminalStream, char: string, timeoutMs: number): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const started = now();
-    const timer = setTimeout(() => {
-      off();
-      reject(new Error(`no echo of ${char} within ${timeoutMs} ms`));
-    }, timeoutMs);
-    const off = stream.onData((bytes) => {
-      if (!decoder.decode(bytes).includes(char)) return;
-      clearTimeout(timer);
-      off();
-      resolve(now() - started);
-    });
-    stream.write(char);
-  });
 }
 
 async function sessionRound(connection: HcConnection): Promise<void> {
@@ -158,31 +152,27 @@ async function sessionRound(connection: HcConnection): Promise<void> {
   await timed("list.terminals", () => connection.call("terminal.list", { all: true }));
   await timed("list.machines", () => connection.call("machine.list"));
   const { address } = await timed("create.terminal.run", () => connection.call("terminal.run", {}));
-  await timed("list.after_create", () => connection.call("terminal.list", { all: true }));
-  const attachStarted = now();
-  const firstData = Promise.withResolvers<void>();
-  const stream = await timed("attach.reply", () =>
-    connection.attach({ terminal: address, cols: 120, rows: 32, history: 2000 }),
-  );
-  const off = stream.onData(() => firstData.resolve());
-  await firstData.promise;
-  note("attach.first_paint", now() - attachStarted);
-  off();
-  await quiet(stream, 400, 5000);
-  await inTurn(["q", "z", "x"], (char) =>
-    step("type.echo", async () => note("type.echo", await echo(stream, char, 5000))),
-  );
-  stream.write("\u0015");
-  await timed("close.end_session", () => endSession(sessionCalls(connection), address));
-  await stream.close().catch(() => undefined);
-}
-
-/** Runs `run` for each item, one after another: every sample is one operation alone on the link. */
-async function inTurn<T>(items: readonly T[], run: (item: T) => Promise<void>): Promise<void> {
-  const [first, ...rest] = items;
-  if (first === undefined) return;
-  await run(first);
-  return inTurn(rest, run);
+  let stream: TerminalStream | undefined;
+  try {
+    await timed("list.after_create", () => connection.call("terminal.list", { all: true }));
+    const attachStarted = now();
+    const attached = await timed("attach.reply", () =>
+      connection.attach({ terminal: address, cols: 120, rows: 32, history: 2000 }),
+    );
+    stream = attached;
+    note("attach.first_paint", await firstOutput(attached, attachStarted, 10_000));
+    await quiet(attached, 400, 5000);
+    await inTurn(["q", "z", "x"], (char) =>
+      step("type.echo", async () => note("type.echo", await echo(attached, char, 5000))),
+    );
+    attached.write("\u0015");
+  } finally {
+    // The terminal this round started ends whatever failed, so no run leaves one behind for the next to measure beside.
+    await step("close.end_session", () =>
+      timed("close.end_session", () => endSession(sessionCalls(connection), address)),
+    );
+    await stream?.close().catch(() => undefined);
+  }
 }
 
 async function step(op: string, run: () => Promise<void>): Promise<void> {
@@ -224,35 +214,39 @@ if (mode === "pair-staged") {
     const connection = paired;
     if (connection === undefined) throw new Error("pairing returned no session");
     const started = now();
-    const feed = connection.subscribe();
-    await Promise.all([
-      timed("workspace.terminal.list", () => connection.call("terminal.list", { all: true })),
-      timed("workspace.subscribe", () => feed),
-      timed("workspace.machine.list", () => connection.call("machine.list")),
-    ]);
-    note("workspace.open", now() - started);
-    note("pair.to_workspace", now() - started + (samples["pair.total"]?.at(-1) ?? 0));
-    (await feed).close();
-    connection.close();
+    try {
+      await listWorkspace(connection, started);
+      note("pair.to_workspace", now() - started + (samples["pair.total"]?.at(-1) ?? 0));
+    } finally {
+      connection.close();
+    }
   });
 } else {
-  const settings = await pairOnce();
+  let settings: ConnectionSettings | undefined;
+  await step("pair", async () => {
+    settings = await pairOnce();
+  });
   paired?.close();
-  const round = async (): Promise<void> => {
-    await step("connect.staged", () => stagedConnect(settings));
+  const round = async (host: ConnectionSettings): Promise<void> => {
+    await step("connect.staged", () => stagedConnect(host));
     let connection: HcConnection | undefined;
     await step("workspace", async () => {
-      connection = await openWorkspace(settings);
+      connection = await openWorkspace(host);
     });
     if (connection === undefined) return;
     const open = connection;
-    await step("session", () => sessionRound(open));
-    open.close();
+    try {
+      await step("session", () => sessionRound(open));
+    } finally {
+      open.close();
+    }
   };
-  await inTurn(
-    Array.from({ length: Number(values.runs) }, (_, run) => run),
-    round,
-  );
+  const target = settings;
+  if (target !== undefined)
+    await inTurn(
+      Array.from({ length: runs }, (_, run) => run),
+      () => round(target),
+    );
 }
 process.stdout.write(`${JSON.stringify({ mode, relayUrl, startedAt, samples, failures })}\n`);
 process.exit(0);
