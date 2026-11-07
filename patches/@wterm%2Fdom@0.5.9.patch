@@ -487,7 +487,7 @@ index a6746f499859ba9da2d7884dfd71694205c6d819..7ef2bfcb6c94d74a4e6ff9aec76a6e41
      /**
       * Hands the core the theme colors the page's CSS resolves to, unless the
 diff --git a/dist/wterm.js b/dist/wterm.js
-index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..511ad62d637d99328759f7f04ec47a25e99f95d6 100644
+index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..6bc99f758b618cdd2ce2176944aea0fa8b176239 100644
 --- a/dist/wterm.js
 +++ b/dist/wterm.js
 @@ -131,6 +131,11 @@ export class WTerm {
@@ -612,7 +612,7 @@ index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..511ad62d637d99328759f7f04ec47a25
          this._searchReveal = false;
          this._pendingResizeScrollTop = target * this._rowHeight;
          this._doRender();
-@@ -1127,9 +1171,11 @@ export class WTerm {
+@@ -1127,14 +1171,20 @@ export class WTerm {
              this._synchronizedOutputState = "idle";
              return false;
          }
@@ -625,7 +625,17 @@ index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..511ad62d637d99328759f7f04ec47a25
              return true;
          }
          else if (this._synchronizedOutputState === "passthrough" &&
-@@ -1144,9 +1190,10 @@ export class WTerm {
+             generation !== this._synchronizedOutputGeneration) {
+-            this._synchronizedOutputState = "idle";
++            // A resize's reopen is the same update its hold already released: it stays released, or every resize of a
++            // drag would freeze the screen for another second (review of #1097). A new update the program opens holds.
++            this._synchronizedOutputGeneration = generation;
++            if (!continues)
++                this._synchronizedOutputState = "idle";
+         }
+         if (this._synchronizedOutputState !== "idle") {
+             return this._synchronizedOutputState === "held";
+@@ -1144,9 +1194,10 @@ export class WTerm {
          this._armSynchronizedOutputFallback(generation);
          return true;
      }
@@ -637,7 +647,7 @@ index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..511ad62d637d99328759f7f04ec47a25
          this._synchronizedOutputTimer = setTimeout(() => {
              if (this._synchronizedOutputState !== "held" ||
                  this._synchronizedOutputGeneration !== generation) {
-@@ -1157,7 +1204,7 @@ export class WTerm {
+@@ -1157,7 +1208,7 @@ export class WTerm {
              this._setupRendererIfNeeded();
              this._cancelScheduledRender();
              this._doRender();
@@ -646,7 +656,7 @@ index 6f31f07b5bed9eb2abf7bd3c157df387cd19b41d..511ad62d637d99328759f7f04ec47a25
      }
      _cancelSynchronizedOutputFallback() {
          if (this._synchronizedOutputTimer == null)
-@@ -1576,14 +1623,15 @@ export class WTerm {
+@@ -1576,14 +1627,15 @@ export class WTerm {
          const height = this._visibleContentHeight(contentHeight);
          const newCols = Math.max(1, Math.floor(containerRect.width / charWidth));
          const newRows = Math.max(1, Math.floor(height / rowHeight));
