@@ -26,6 +26,10 @@
 
 - Typing a pairing code looks its host up as soon as the first three characters are in, so the key check shows the moment the code is complete instead of most of a second later on a far relay; Pair asks the relay nothing more. (#1271)
 
+### Pairing
+
+- After you confirm a pairing, the workspace opens on the session the pairing just proved instead of reconnecting through the relay, so a newly added machine shows its terminals about a round trip and a handshake sooner (most of a second on a far machine). (#1271)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
