@@ -1,7 +1,7 @@
 import { Button, Field, Input, Notice } from "@doriface/ui";
 import { useState } from "react";
 import { connectionStore } from "../connection/store.ts";
-import { formatCode, normalizeCode, typedSlot } from "./code.ts";
+import { formatCode, normalizeCode } from "./code.ts";
 import type { PairingOffer } from "./fragment.ts";
 import { parsePairingFragment } from "./fragment.ts";
 import { ScanButton } from "./scan-button.tsx";
@@ -77,7 +77,7 @@ export function PairStep({
             onValueChange={(value: string) => {
               const code = normalizeCode(value);
               setText(code === null ? value : formatCode(code));
-              if (!value.includes("#")) lookups.typed(typedSlot(value));
+              if (!value.includes("#")) lookups.typed(value);
               setError(null);
             }}
           />
