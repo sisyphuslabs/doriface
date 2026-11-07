@@ -14,8 +14,8 @@ export interface MemberConnection {
   readonly state: ConnectionState;
   subscribe(listener: () => void): () => void;
   start(): void;
-  /** Runs on a session that is already open instead of dialing one. */
-  adopt(opened: OpenConnection): void;
+  /** Runs on a session that is already open instead of dialing one; `settings`, when given, replace its own first. */
+  adopt(opened: OpenConnection, settings?: ConnectionSettings): void;
   stop(): void;
   retryNow(): void;
   update(settings: ConnectionSettings): void;
@@ -249,27 +249,28 @@ export class MeshConnections {
       this.#stores.delete(hostId);
       this.#targets.delete(hostId);
     }
+    // The store the proved session goes to, adopted once every store is listened to: its first open must reach #onMember.
+    let adoption: (() => void) | undefined;
     for (const member of roster) {
       const existing = this.#stores.get(member.hostId);
       this.#targets.set(member.hostId, member);
+      const proved = member.hostId === this.#settings.hostId ? opened : undefined;
       if (existing !== undefined) {
         // The shared settings can change under a member that is already dialled: a new relay, another mode, a fresh loopback
         // token. Only the members whose slice changed are told, so an untouched connection is not torn down for an edit that
-        // does not concern it.
+        // does not concern it. A member taking a proved session gets its slice with it, so it does not dial first.
         const scoped = this.#scoped(member);
-        if (!sameTarget(existing.settings, scoped)) existing.update(scoped);
-        if (member.hostId === this.#settings.hostId && opened !== undefined) {
-          this.#started.add(member.hostId);
-          existing.adopt(opened);
-          opened = undefined;
-        }
+        if (proved !== undefined) adoption = () => existing.adopt(proved, scoped);
+        else if (!sameTarget(existing.settings, scoped)) existing.update(scoped);
         continue;
       }
-      const proved = member.hostId === this.#settings.hostId ? opened : undefined;
-      if (proved !== undefined) opened = undefined;
-      this.#stores.set(member.hostId, this.#dial(member, proved));
+      const store = this.#dial(member, proved !== undefined);
+      this.#stores.set(member.hostId, store);
+      if (proved !== undefined) adoption = () => store.adopt(proved);
     }
-    opened?.connection.close();
+    if (adoption === undefined) return opened?.connection.close();
+    this.#started.add(this.#settings.hostId);
+    adoption();
   }
 
   /** One member's settings: the shared ones, with that member's own address and a roster of just itself. */
@@ -284,16 +285,14 @@ export class MeshConnections {
     };
   }
 
-  #dial(member: MemberTarget, proved?: OpenConnection): MemberConnection {
+  /** `adopting`: the store is about to take a proved session, so it is not started. */
+  #dial(member: MemberTarget, adopting = false): MemberConnection {
     const scoped = this.#scoped(member);
     // A member's store holds a slice of a roster this object owns, so it must not write: saving its slice would replace the
     // roster with one member.
     const store = this.#make(scoped, () => undefined);
     if (this.#localHost !== null) store.restartsLocalHost(this.#localHost);
-    if (proved !== undefined) {
-      this.#started.add(member.hostId);
-      store.adopt(proved);
-    } else if (this.#running) {
+    if (!adopting && this.#running) {
       this.#started.add(member.hostId);
       store.start();
     }
