@@ -73,6 +73,8 @@ export class Reconciler {
   #cancelRetry: () => void = () => undefined;
 
   #listed: readonly MeshEntry[] = [];
+  /** An earlier entry a migration removed, kept for its member until the line is added, by whichever attempt (#728). */
+  readonly #replaced = new Map<string, MeshReplacedMachine>();
 
   constructor(options: ReconcilerOptions) {
     this.#options = options;
@@ -175,6 +177,7 @@ export class Reconciler {
     const others = inView ? machinesOf(view).filter((m) => m.hostId !== selfHostId) : [];
     const desired = new Map(others.map((m) => [m.hostId, m]));
     this.#retries.clearExcept((hostId) => desired.has(hostId));
+    for (const hostId of this.#replaced.keys()) if (!desired.has(hostId)) this.#replaced.delete(hostId);
     const entries = await this.#entries();
     const stale = entries.filter(
       (entry) => !desired.has(entry.hostId) || (entry.machine.why ?? "").includes(DIFFERENT_CORE),
@@ -221,8 +224,12 @@ export class Reconciler {
     try {
       await this.#reservedAdd(member, name, attempt.via);
       this.#retries.clear(member.hostId);
-      this.status.set(member.hostId, { state: "ok" });
-      this.#options.log(`mesh: added machine ${name}`);
+      const replaced = this.#replaced.get(member.hostId);
+      this.#replaced.delete(member.hostId);
+      this.status.set(member.hostId, replaced === undefined ? { state: "ok" } : { state: "ok", replaced });
+      this.#options.log(
+        `mesh: added machine ${name}${replaced === undefined ? "" : `, ${replacedMachineText(replaced)}`}`,
+      );
     } catch (error) {
       const kind = kindOf(error);
       if (kind === "name_taken") return this.#addAs(member, attempt, rest);
@@ -253,10 +260,14 @@ export class Reconciler {
     const names = [member.name, ...fallbacks(member.name, member.hostId)];
     const parts = { machines, log, reserve: reserve === undefined ? undefined : () => reserve(member.hostId) };
     const done = await migrate(parts, old, names, attempt.via);
+    // Out of the list (added, or lost with its add-back): the line's later add is the replacement. Back in it: not yet.
+    if (done.kind === "added" || done.kind === "lost") this.#replaced.set(member.hostId, replacedOf(old));
+    else this.#replaced.delete(member.hostId);
     if (done.kind === "copied") return this.#stick(member, attempt.key, copied);
     if (done.kind === "added") {
       this.#retries.clear(member.hostId);
       const replaced = replacedOf(old);
+      this.#replaced.delete(member.hostId);
       this.status.set(member.hostId, { state: "ok", replaced });
       return log(`mesh: added machine ${done.name}, ${replacedMachineText(replaced)}`);
     }
