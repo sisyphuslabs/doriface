@@ -6,6 +6,10 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 
+### Notifications
+
+- The push bridge for the phone apps answers 429 once one device token gets more than 120 pushes a minute, so someone who learns a token cannot make that phone show alerts without bound. (#830)
+
 ### Settings
 
 - On a phone, Settings > Machines opens on the machines and Add a machine: the explanation of what each state means sits under the list instead of filling the first screen. (#1007)
