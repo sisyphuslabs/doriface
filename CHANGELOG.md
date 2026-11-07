@@ -10,6 +10,7 @@
 
 - A file pasted with the phone's Paste key while a Korean syllable is still composing lands after that syllable, as pasted text does, and a file refused for size says a size visibly above the 8 MB limit. (#827)
 - On an iPhone or iPad Korean keyboard, a syllable still being typed is sent before Cmd+Backspace kills the line, so it no longer reaches the program after the kill, and a paste a browser inserts with no paste event sends only the pasted text. (#978, #988)
+- A syllable an input method is still composing is drawn as cells at the cursor, as Ghostty draws it: a wide one over two cells at the size it will have once committed (it no longer jumps on commit), underlined over the cells it covers, shifted left at the end of the row, following the cursor if output moves it, and with no cursor drawn meanwhile. (#674)
 
 ### Notifications
 
