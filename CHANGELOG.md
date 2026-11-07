@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### From the phone
+
+- Back in the installed app walks out of a terminal to your agents list and only leaves the app from the list, so a
+  terminal is no longer one Back gesture from closing Doriterm. (#975)
+- An agent row's pin says what it pins: Pin <agent> to the top, on the button and as its tooltip. (#879)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
