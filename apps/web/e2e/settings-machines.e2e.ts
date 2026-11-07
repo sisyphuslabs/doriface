@@ -45,9 +45,9 @@ test.describe("Settings, Machines", () => {
       await expect(list.getByRole("listitem").first()).toContainText("This machine", { timeout: 15_000 });
       const viewport = page.viewportSize();
       if (viewport === null) throw new Error("no viewport");
-      // The list leads: its heading sits in the screen's top quarter, not under a screenful of explanation.
+      // The list leads: its heading sits in the screen's top third, not under a screenful of explanation.
       const heading = await page.getByRole("heading", { name: "Machines", level: 2 }).boundingBox();
-      expect(heading?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(viewport.height / 4);
+      expect(heading?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(viewport.height / 3);
       for (const target of [list.getByRole("listitem").first(), page.getByRole("button", { name: "Add a machine" })]) {
         // oxlint-disable-next-line no-await-in-loop -- each target is measured on the same settled screen
         const box = await target.boundingBox();

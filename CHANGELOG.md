@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Settings
+
+- On a phone, Settings > Machines opens on the machines and Add a machine: the explanation of what each state means sits under the list instead of filling the first screen. (#1007)
+
 ## v0.1.5 - 2026-11-07
 
 ### Desktop window
