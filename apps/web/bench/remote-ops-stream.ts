@@ -22,17 +22,29 @@ export function quiet(stream: TerminalStream, quietMs: number, capMs: number): P
 }
 
 /** Resolves with the time to the stream's first output, or rejects after `timeoutMs`. */
-export function firstOutput(stream: TerminalStream, started: number, timeoutMs: number): Promise<number> {
+export function firstOutput(
+  stream: Pick<TerminalStream, "onData">,
+  started: number,
+  timeoutMs: number,
+): Promise<number> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let off: (() => void) | undefined;
     const timer = setTimeout(() => {
-      off();
+      if (settled) return;
+      settled = true;
+      off?.();
       reject(new Error(`no first paint within ${timeoutMs} ms`));
     }, timeoutMs);
-    const off = stream.onData(() => {
+    // The first listener on a stream gets the output it held synchronously, inside onData: off is not assigned yet then.
+    off = stream.onData(() => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      off();
+      off?.();
       resolve(now() - started);
     });
+    if (settled) off();
   });
 }
 
